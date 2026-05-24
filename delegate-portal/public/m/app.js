@@ -36,13 +36,6 @@ function fmtDate(v) {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
-function balanceLabel(bal) {
-  const n = Number(bal);
-  if (n < 0) return { text: 'رصيد مدين (عليه)', cls: 'debit' };
-  if (n > 0) return { text: 'رصيد دائن (له)', cls: 'credit' };
-  return { text: 'متزن', cls: '' };
-}
-
 function balClass(b) {
   if (b < 0) return 'debit';
   if (b > 0) return 'credit';
@@ -168,9 +161,6 @@ function renderTrees() {
         <div class="nav-card-name">${esc(t.name1 || '—')}</div>
         <div class="nav-card-sub">${t.directChildren || 0} زبون</div>
       </div>
-      <div class="nav-card-right">
-        <div class="nav-card-bal ${balClass(Number(t.bal))}">${fmtNumAlways(t.bal)}</div>
-      </div>
       <span class="nav-card-arrow">‹</span>
     </button>`).join('');
 
@@ -195,10 +185,6 @@ function renderBranches() {
       <div class="nav-card-body">
         <div class="nav-card-num">${esc(b.num)}</div>
         <div class="nav-card-name">${esc(b.name1 || '—')}</div>
-        <span class="nav-card-badge ${balClass(Number(b.bal))}">${esc(b.summary?.label || b.debtStatus || '')}</span>
-      </div>
-      <div class="nav-card-right">
-        <div class="nav-card-bal ${balClass(Number(b.bal))}">${fmtNumAlways(b.bal)}</div>
       </div>
       <span class="nav-card-arrow">‹</span>
     </button>`).join('');
@@ -242,22 +228,15 @@ async function openBranch(seq) {
     const data = await api(`/accounts/${encodeURIComponent(seq)}/statement`);
     const acc = data.account || state.selectedBranch;
     const branch = state.selectedBranch;
-    const finalBal = data.finalBalance ?? acc.bal ?? 0;
-    const status = balanceLabel(finalBal);
     const lines = data.lines || [];
     const { totalDebit, totalCredit, summary } = data;
 
     document.getElementById('stmtHero').innerHTML = `
       <div class="hero-top">
         <span class="hero-num">${esc(acc.num)}</span>
-        <span class="hero-badge ${status.cls}">${esc(status.text)}</span>
       </div>
       <h2 class="hero-name">${esc(acc.name1)}</h2>
-      ${acc.address ? `<p class="hero-addr">${esc(acc.address)}</p>` : ''}
-      <div class="hero-balance ${status.cls}">
-        <span class="hero-balance-label">الرصيد الحالي</span>
-        <strong class="hero-balance-val">${fmtNumAlways(finalBal)}</strong>
-      </div>`;
+      ${acc.address ? `<p class="hero-addr">${esc(acc.address)}</p>` : ''}`;
 
     document.getElementById('stmtStats').innerHTML = `
       <div class="stat-box stat-debit">
@@ -300,10 +279,6 @@ async function openBranch(seq) {
               <span class="amt-label">دائن</span>
               <span class="amt-val">${r.credit ? fmtNumAlways(r.credit) : '—'}</span>
             </div>
-          </div>
-          <div class="tx-balance-bar ${balClass(r.balance)}">
-            <span>الرصيد</span>
-            <strong>${fmtNumAlways(r.balance)}</strong>
           </div>
         </article>`).join('');
     } else {
