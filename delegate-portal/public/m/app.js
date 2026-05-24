@@ -124,18 +124,21 @@ function goToScreen(name) {
   if (name === 'trees') {
     backBtn.classList.add('hidden');
     toolbarWrap.classList.add('hidden');
+    document.getElementById('headerUser').classList.remove('hidden');
     title.textContent = 'الشجرات';
     crumb.textContent = state.agent?.name ? `مرحباً ${state.agent.name}` : '';
     updateUserChrome();
   } else if (name === 'branches') {
     backBtn.classList.remove('hidden');
     toolbarWrap.classList.remove('hidden');
+    document.getElementById('headerUser').classList.add('hidden');
     title.textContent = state.selectedTree?.name1 || 'الفروع';
     crumb.textContent = state.selectedTree ? `شجرة ${state.selectedTree.num}` : '';
     renderTreeContext();
   } else if (name === 'statement') {
     backBtn.classList.remove('hidden');
     toolbarWrap.classList.add('hidden');
+    document.getElementById('headerUser').classList.add('hidden');
     title.textContent = state.selectedBranch?.name1 || 'كشف الحساب';
     crumb.textContent = state.selectedBranch
       ? `${state.selectedTree?.num || ''} › ${state.selectedBranch.num}`
@@ -204,13 +207,25 @@ function renderTrees() {
   });
 }
 
+function resetBranchFilters() {
+  state.branchFilter = 'all';
+  state.branchSearch = '';
+  document.getElementById('branchSearch').value = '';
+  document.querySelectorAll('.filter-chip').forEach((c) => {
+    c.classList.toggle('active', c.dataset.filter === 'all');
+  });
+}
+
 function renderBranches() {
   const filtered = filterBranches(state.branches);
   document.getElementById('branchesMeta').textContent = `${filtered.length} من ${state.branches.length} فرع`;
 
   const list = document.getElementById('branchesList');
   if (!filtered.length) {
-    list.innerHTML = '<div class="empty-state"><div class="icon">👥</div><p>لا توجد فروع</p></div>';
+    const msg = state.branches.length && (state.branchSearch || state.branchFilter !== 'all')
+      ? 'لا توجد نتائج — جرّب تغيير البحث أو الفلتر'
+      : 'لا توجد فروع في هذه الشجرة';
+    list.innerHTML = `<div class="empty-state"><div class="icon">👥</div><p>${msg}</p></div>`;
     return;
   }
 
@@ -237,8 +252,7 @@ function renderBranches() {
 async function openTree(seq) {
   state.selectedTree = state.trees.find((t) => String(t.seq) === String(seq)) || { seq };
   state.selectedBranch = null;
-  state.branchSearch = '';
-  document.getElementById('branchSearch').value = '';
+  resetBranchFilters();
   setOverlay(true);
 
   try {

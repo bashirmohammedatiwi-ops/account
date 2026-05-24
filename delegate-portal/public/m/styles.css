@@ -399,13 +399,15 @@ body {
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 .screen {
   display: none;
+  flex: 1;
   flex-direction: column;
-  height: 100%;
+  min-height: 0;
   padding: 14px 16px calc(16px + var(--safe-bottom));
   overflow: hidden;
   animation: fadeIn 0.25s ease;
@@ -429,6 +431,7 @@ body {
   border-radius: var(--radius);
   color: #fff;
   box-shadow: 0 8px 24px rgba(29, 78, 216, 0.25);
+  flex-shrink: 0;
 }
 
 .welcome-greet {
@@ -477,6 +480,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
+  flex-shrink: 0;
 }
 
 .tree-context-icon {
@@ -509,10 +513,12 @@ body {
   font-size: 0.78rem;
   color: var(--muted);
   font-weight: 600;
+  flex-shrink: 0;
 }
 
 .cards-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   display: flex;
@@ -524,8 +530,7 @@ body {
 /* ── Nav cards ── */
 .nav-card {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  align-items: stretch;
   width: 100%;
   text-align: right;
   padding: 0;
@@ -536,8 +541,12 @@ body {
   cursor: pointer;
   color: inherit;
   overflow: hidden;
+  font-family: inherit;
+  -webkit-appearance: none;
+  appearance: none;
   transition: transform 0.12s, box-shadow 0.12s, border-color 0.12s;
   animation: cardIn 0.3s ease backwards;
+  flex-shrink: 0;
 }
 
 @keyframes cardIn {
@@ -570,8 +579,8 @@ body {
   align-items: center;
   gap: 14px;
   flex: 1;
-  padding: 15px 14px 15px 12px;
   min-width: 0;
+  padding: 15px 14px 15px 12px;
 }
 
 .nav-card-icon {
@@ -671,6 +680,8 @@ body {
   padding-bottom: calc(24px + var(--safe-bottom));
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  flex: 1;
+  min-height: 0;
 }
 
 .stmt-loading {
