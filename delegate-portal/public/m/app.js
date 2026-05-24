@@ -147,7 +147,7 @@ function goToScreen(name) {
     document.getElementById('headerUser').classList.add('hidden');
     title.textContent = state.selectedBranch?.name1 || 'كشف الحساب';
     crumb.textContent = state.selectedBranch
-      ? `${state.selectedTree?.num || ''} › ${state.selectedBranch.num}`
+      ? `كشف حساب · ${state.selectedBranch.num}`
       : '';
   }
 }
@@ -292,13 +292,12 @@ async function openBranch(seq) {
     const { totalDebit, totalCredit, summary } = data;
     const currentBal = data.finalBalance ?? acc.bal ?? 0;
     const debtLabel = acc.debtStatus || statementDebtLabel(currentBal);
+    const treeLabel = state.selectedTree?.num ? `شجرة ${state.selectedTree.num}` : '';
 
     document.getElementById('stmtHero').innerHTML = `
       <div class="hero-header">
-        <div class="hero-top">
-          <span class="hero-num">${esc(acc.num)}</span>
-          <span class="hero-badge ${balClass(Number(currentBal))}">${esc(debtLabel)}</span>
-        </div>
+        <p class="hero-title">كشف حساب</p>
+        <p class="hero-subtitle">${treeLabel ? `${esc(treeLabel)} · ` : ''}${esc(acc.num)}</p>
         <h2 class="hero-name">${esc(acc.name1)}</h2>
         ${acc.address ? `<p class="hero-addr">${esc(acc.address)}</p>` : ''}
       </div>

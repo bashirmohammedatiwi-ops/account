@@ -707,6 +707,22 @@ body {
   color: #fff;
 }
 
+.hero-title {
+  margin: 0 0 6px;
+  font-size: 0.88rem;
+  font-weight: 800;
+  opacity: 0.95;
+}
+
+.hero-subtitle {
+  margin: 0 0 10px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.82rem;
+  font-weight: 700;
+  opacity: 0.92;
+  letter-spacing: 0.02em;
+}
+
 .hero-top {
   display: flex;
   justify-content: space-between;
@@ -784,9 +800,9 @@ body {
 }
 
 .hero-balance-label {
-  font-size: 0.82rem;
-  color: var(--text-secondary);
-  font-weight: 700;
+  font-size: 1rem;
+  color: var(--text);
+  font-weight: 800;
 }
 
 .hero-balance-val {
