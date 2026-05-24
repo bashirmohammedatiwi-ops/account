@@ -42,10 +42,19 @@ function balClass(b) {
   return '';
 }
 
-function statementDebtLabel(bal) {
+function debtDisplayAmount(bal) {
   const n = Number(bal);
-  if (Number.isNaN(n) || n <= 0) return 'الديون';
-  return 'دائن (له)';
+  if (Number.isNaN(n) || n >= 0) return 0;
+  return Math.abs(n);
+}
+
+function renderDebtField(bal) {
+  const el = document.getElementById('stmtDebtField');
+  const amount = debtDisplayAmount(bal);
+  el.classList.remove('hidden');
+  el.innerHTML = `
+    <span class="debt-field-label">الديون</span>
+    <span class="debt-field-value">${fmtNumAlways(amount)}</span>`;
 }
 
 function agentInitial(name) {
@@ -278,6 +287,8 @@ async function openBranch(seq) {
   goToScreen('statement');
   setOverlay(true);
 
+  document.getElementById('stmtDebtField').classList.add('hidden');
+  document.getElementById('stmtDebtField').innerHTML = '';
   document.getElementById('stmtHero').innerHTML = '<div class="stmt-loading">جاري تحميل الكشف...</div>';
   document.getElementById('stmtStats').innerHTML = '';
   document.getElementById('stmtLines').innerHTML = '';
@@ -291,8 +302,9 @@ async function openBranch(seq) {
     const lines = data.lines || [];
     const { totalDebit, totalCredit, summary } = data;
     const currentBal = data.finalBalance ?? acc.bal ?? 0;
-    const debtLabel = acc.debtStatus || statementDebtLabel(currentBal);
     const treeLabel = state.selectedTree?.num ? `شجرة ${state.selectedTree.num}` : '';
+
+    renderDebtField(currentBal);
 
     document.getElementById('stmtHero').innerHTML = `
       <div class="hero-header">
@@ -300,12 +312,6 @@ async function openBranch(seq) {
         <p class="hero-subtitle">${treeLabel ? `${esc(treeLabel)} · ` : ''}${esc(acc.num)}</p>
         <h2 class="hero-name">${esc(acc.name1)}</h2>
         ${acc.address ? `<p class="hero-addr">${esc(acc.address)}</p>` : ''}
-      </div>
-      <div class="hero-balance-wrap">
-        <div class="hero-balance ${balClass(Number(currentBal))}">
-          <span class="hero-balance-label">${esc(debtLabel)}</span>
-          <span class="hero-balance-val">${fmtNumAlways(Math.abs(Number(currentBal)))}</span>
-        </div>
       </div>`;
 
     document.getElementById('stmtStats').innerHTML = `

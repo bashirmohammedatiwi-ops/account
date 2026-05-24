@@ -684,6 +684,34 @@ body {
   min-height: 0;
 }
 
+.stmt-debt-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 16px 18px;
+  background: linear-gradient(135deg, #fef2f2, #fff);
+  border: 2px solid #fecaca;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  flex-shrink: 0;
+}
+
+.debt-field-label {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--danger);
+}
+
+.debt-field-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--danger);
+  direction: ltr;
+  letter-spacing: -0.02em;
+}
+
 .stmt-loading {
   text-align: center;
   padding: 32px;
