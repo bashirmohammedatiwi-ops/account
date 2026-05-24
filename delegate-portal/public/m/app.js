@@ -196,10 +196,28 @@ function filterBranches(list) {
   });
 }
 
+function renderCountBar(elId, count, title, subtitle) {
+  const el = document.getElementById(elId);
+  if (!count && count !== 0) {
+    el.innerHTML = `<div class="count-bar"><div class="count-bar-text">${esc(subtitle || title || '—')}</div></div>`;
+    return;
+  }
+  el.innerHTML = `
+    <div class="count-bar">
+      <div class="count-bar-num">${count}</div>
+      <div class="count-bar-text">
+        ${esc(title)}
+        ${subtitle ? `<span>${esc(subtitle)}</span>` : ''}
+      </div>
+    </div>`;
+}
+
 function renderTrees() {
-  document.getElementById('treesMeta').textContent = state.trees.length
-    ? `${state.trees.length} شجرة`
-    : 'لا توجد شجرات معيّنة';
+  if (!state.trees.length) {
+    renderCountBar('treesMeta', null, 'لا توجد شجرات', 'تواصل مع الإدارة');
+  } else {
+    renderCountBar('treesMeta', state.trees.length, 'شجرة', 'إجمالي الشجرات المعيّنة');
+  }
 
   const list = document.getElementById('treesList');
   if (!state.trees.length) {
@@ -236,7 +254,13 @@ function resetBranchFilters() {
 
 function renderBranches() {
   const filtered = filterBranches(state.branches);
-  document.getElementById('branchesMeta').textContent = `${filtered.length} من ${state.branches.length} فرع`;
+  if (!state.branches.length) {
+    renderCountBar('branchesMeta', 0, 'فرع', 'لا توجد فروع في هذه الشجرة');
+  } else if (filtered.length === state.branches.length) {
+    renderCountBar('branchesMeta', filtered.length, 'فرع', 'إجمالي الفروع في الشجرة');
+  } else {
+    renderCountBar('branchesMeta', filtered.length, 'فرع', `من ${state.branches.length} فرع`);
+  }
 
   const list = document.getElementById('branchesList');
   if (!filtered.length) {

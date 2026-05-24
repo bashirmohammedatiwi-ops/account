@@ -129,6 +129,20 @@ function runLocalSyncScript(serverUrl, syncKey) {
   });
 }
 
+function getAppIcon() {
+  if (app.isPackaged) {
+    const packaged = path.join(process.resourcesPath, 'icon.png');
+    if (fs.existsSync(packaged)) return packaged;
+  }
+  const devIco = path.join(__dirname, '..', 'icons', 'app-icon.ico');
+  const devPng = path.join(__dirname, '..', 'icons', 'app-icon-256.png');
+  const devSrc = path.join(__dirname, '..', 'icons', 'app-icon.png');
+  if (fs.existsSync(devIco)) return devIco;
+  if (fs.existsSync(devPng)) return devPng;
+  if (fs.existsSync(devSrc)) return devSrc;
+  return undefined;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -136,6 +150,7 @@ function createWindow() {
     minWidth: 1100,
     minHeight: 700,
     title: 'Edari Admin — لوحة التحكم',
+    icon: getAppIcon(),
     backgroundColor: '#f0f4f8',
     webPreferences: {
       contextIsolation: true,

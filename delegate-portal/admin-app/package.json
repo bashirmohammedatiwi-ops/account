@@ -6,13 +6,15 @@
   "author": "Edari",
   "scripts": {
     "start": "electron .",
-    "prepare-build": "node scripts/prepare-build.js",
-    "build": "npm run prepare-build && electron-builder --win portable",
+    "prepare-build": "node scripts/generate-icons.mjs && node scripts/prepare-build.js",
+    "build": "npm run prepare-build && electron-builder --win nsis",
+    "build:portable": "npm run prepare-build && electron-builder --win portable",
     "build:installer": "npm run prepare-build && electron-builder --win nsis"
   },
   "build": {
     "appId": "com.edari.admin",
     "productName": "Edari Admin",
+    "icon": "icons/app-icon.ico",
     "directories": {
       "output": "dist"
     },
@@ -21,28 +23,56 @@
       "package.json"
     ],
     "extraResources": [
-      { "from": "build-resources/portal", "to": "portal" },
-      { "from": "build-resources/edari-reader", "to": "edari-reader" },
-      { "from": "build-resources/node", "to": "node" }
+      {
+        "from": "build-resources/portal",
+        "to": "portal"
+      },
+      {
+        "from": "build-resources/edari-reader",
+        "to": "edari-reader"
+      },
+      {
+        "from": "build-resources/node",
+        "to": "node"
+      },
+      {
+        "from": "icons/app-icon-256.png",
+        "to": "icon.png"
+      }
     ],
     "win": {
       "target": [
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
+      "icon": "icons/app-icon.ico",
       "artifactName": "Edari-Admin-${version}.${ext}",
       "signAndEditExecutable": false
     },
     "portable": {
-      "artifactName": "Edari-Admin-${version}.exe"
+      "artifactName": "Edari-Admin-Portable-${version}.exe"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "Edari-Admin-Setup-${version}.${ext}"
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Edari Admin",
+      "artifactName": "Edari-Admin-Setup-${version}.${ext}",
+      "installerIcon": "icons/app-icon.ico",
+      "uninstallerIcon": "icons/app-icon.ico",
+      "installerHeaderIcon": "icons/app-icon.ico"
     }
   },
   "devDependencies": {
     "electron": "^34.0.0",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.5"
   }
 }
