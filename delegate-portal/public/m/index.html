@@ -4,22 +4,48 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="theme-color" content="#f0f4f8">
+  <meta name="theme-color" content="#1e3a8a">
   <title>Edari — كشف حساب</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <!-- Login -->
   <div id="loginScreen" class="login-screen">
+    <div class="login-bg-pattern" aria-hidden="true"></div>
     <div class="login-card">
-      <div class="login-logo">E</div>
-      <h1>مرحباً</h1>
-      <p>سجّل دخولك لعرض كشوف الزبائن</p>
+      <div class="login-brand">
+        <div class="login-logo">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <p class="login-brand-name">Edari</p>
+          <p class="login-brand-tag">بوابة المندوبين</p>
+        </div>
+      </div>
+      <h1>مرحباً بك</h1>
+      <p class="login-sub">سجّل دخولك لعرض كشوف حسابات الزبائن</p>
       <form id="loginForm">
-        <label>اسم المستخدم<input type="text" id="loginUsername" autocomplete="username" required></label>
-        <label>كلمة المرور<input type="password" id="loginPassword" autocomplete="current-password" required></label>
+        <label class="field">
+          <span class="field-label">اسم المستخدم</span>
+          <input type="text" id="loginUsername" autocomplete="username" placeholder="أدخل اسم المستخدم" required>
+        </label>
+        <label class="field">
+          <span class="field-label">كلمة المرور</span>
+          <input type="password" id="loginPassword" autocomplete="current-password" placeholder="••••••••" required>
+        </label>
         <p class="login-error hidden" id="loginError"></p>
-        <button type="submit" class="btn primary full" id="btnLogin">دخول</button>
+        <button type="submit" class="btn primary full" id="btnLogin">
+          <span>دخول</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
       </form>
     </div>
   </div>
@@ -27,36 +53,67 @@
   <!-- App -->
   <div id="appShell" class="hidden">
     <header class="app-header">
-      <button type="button" class="back-btn hidden" id="btnBack" aria-label="رجوع">→</button>
-      <div class="header-center">
-        <h1 id="screenTitle">الشجرات</h1>
-        <p class="breadcrumb" id="breadcrumb"></p>
+      <div class="header-row">
+        <button type="button" class="back-btn hidden" id="btnBack" aria-label="رجوع">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="header-center">
+          <h1 id="screenTitle">الشجرات</h1>
+          <p class="breadcrumb" id="breadcrumb"></p>
+        </div>
+        <div class="header-actions">
+          <button type="button" class="icon-btn" id="btnRefresh" title="تحديث" aria-label="تحديث">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 12a9 9 0 11-2.64-6.36M21 3v6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button type="button" class="icon-btn icon-btn-danger" id="btnLogout" title="خروج" aria-label="خروج">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
       </div>
-      <div class="header-actions">
-        <button type="button" class="icon-btn" id="btnRefresh" title="تحديث">↻</button>
-        <button type="button" class="icon-btn" id="btnLogout" title="خروج">⎋</button>
+      <div class="header-user hidden" id="headerUser">
+        <div class="user-avatar" id="userAvatar">م</div>
+        <div class="user-info">
+          <span class="user-name" id="userName"></span>
+          <span class="user-role">مندوب مبيعات</span>
+        </div>
       </div>
     </header>
 
-    <div class="search-bar hidden" id="searchBarWrap">
-      <input type="search" id="branchSearch" placeholder="بحث في الفروع...">
-    </div>
-
-    <div class="filter-bar hidden" id="filterBar">
-      <button type="button" class="filter-chip active" data-filter="all">الكل</button>
-      <button type="button" class="filter-chip" data-filter="debit">مدين</button>
-      <button type="button" class="filter-chip" data-filter="credit">دائن</button>
+    <div class="toolbar hidden" id="toolbarWrap">
+      <div class="search-bar" id="searchBarWrap">
+        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+          <path d="M20 20l-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <input type="search" id="branchSearch" placeholder="ابحث بالاسم أو رقم الحساب...">
+      </div>
+      <div class="filter-bar" id="filterBar">
+        <button type="button" class="filter-chip active" data-filter="all">الكل</button>
+        <button type="button" class="filter-chip" data-filter="debit">مدين</button>
+        <button type="button" class="filter-chip" data-filter="credit">دائن</button>
+      </div>
     </div>
 
     <main class="app-main">
       <!-- Trees -->
       <section class="screen active" id="screen-trees">
+        <div class="welcome-banner hidden" id="welcomeBanner">
+          <div class="welcome-text">
+            <p class="welcome-greet">مرحباً</p>
+            <p class="welcome-name" id="welcomeName"></p>
+          </div>
+          <div class="welcome-stat">
+            <span class="welcome-stat-val" id="welcomeTreeCount">0</span>
+            <span class="welcome-stat-lbl">شجرة</span>
+          </div>
+        </div>
         <p class="screen-meta" id="treesMeta">—</p>
         <div class="cards-list" id="treesList"></div>
       </section>
 
       <!-- Branches -->
       <section class="screen" id="screen-branches">
+        <div class="tree-context hidden" id="treeContext"></div>
         <p class="screen-meta" id="branchesMeta">—</p>
         <div class="cards-list" id="branchesList"></div>
       </section>
@@ -66,10 +123,9 @@
         <div class="stmt-hero" id="stmtHero"></div>
         <div class="stmt-stats" id="stmtStats"></div>
         <div class="stmt-table-section hidden" id="stmtTableSection">
-          <div class="stmt-table-head">
-            <span>مدين</span>
-            <span>دائن</span>
-            <span>البيان</span>
+          <div class="section-head">
+            <h3>الحركات</h3>
+            <span class="section-count" id="stmtLineCount"></span>
           </div>
           <div class="stmt-lines" id="stmtLines"></div>
         </div>
@@ -78,7 +134,12 @@
     </main>
   </div>
 
-  <div class="overlay hidden" id="overlay"><div class="spinner"></div></div>
+  <div class="overlay hidden" id="overlay">
+    <div class="loader-card">
+      <div class="spinner"></div>
+      <p>جاري التحميل...</p>
+    </div>
+  </div>
   <script src="app.js"></script>
 </body>
 </html>

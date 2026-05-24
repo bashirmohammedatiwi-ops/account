@@ -42,6 +42,22 @@ function balClass(b) {
   return '';
 }
 
+function agentInitial(name) {
+  const n = String(name || 'م').trim();
+  return n.charAt(0) || 'م';
+}
+
+function updateUserChrome() {
+  const name = state.agent?.name || '';
+  const initial = agentInitial(name);
+  document.getElementById('userAvatar').textContent = initial;
+  document.getElementById('userName').textContent = name;
+  document.getElementById('welcomeName').textContent = name;
+  document.getElementById('welcomeTreeCount').textContent = String(state.trees.length);
+  document.getElementById('headerUser').classList.toggle('hidden', !name);
+  document.getElementById('welcomeBanner').classList.toggle('hidden', !name);
+}
+
 function getToken() {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -101,32 +117,46 @@ function goToScreen(name) {
   document.getElementById(`screen-${name}`).classList.add('active');
 
   const backBtn = document.getElementById('btnBack');
-  const searchWrap = document.getElementById('searchBarWrap');
-  const filterBar = document.getElementById('filterBar');
+  const toolbarWrap = document.getElementById('toolbarWrap');
   const title = document.getElementById('screenTitle');
   const crumb = document.getElementById('breadcrumb');
 
   if (name === 'trees') {
     backBtn.classList.add('hidden');
-    searchWrap.classList.add('hidden');
-    filterBar.classList.add('hidden');
+    toolbarWrap.classList.add('hidden');
     title.textContent = 'الشجرات';
     crumb.textContent = state.agent?.name ? `مرحباً ${state.agent.name}` : '';
+    updateUserChrome();
   } else if (name === 'branches') {
     backBtn.classList.remove('hidden');
-    searchWrap.classList.remove('hidden');
-    filterBar.classList.remove('hidden');
+    toolbarWrap.classList.remove('hidden');
     title.textContent = state.selectedTree?.name1 || 'الفروع';
     crumb.textContent = state.selectedTree ? `شجرة ${state.selectedTree.num}` : '';
+    renderTreeContext();
   } else if (name === 'statement') {
     backBtn.classList.remove('hidden');
-    searchWrap.classList.add('hidden');
-    filterBar.classList.add('hidden');
+    toolbarWrap.classList.add('hidden');
     title.textContent = state.selectedBranch?.name1 || 'كشف الحساب';
     crumb.textContent = state.selectedBranch
       ? `${state.selectedTree?.num || ''} › ${state.selectedBranch.num}`
       : '';
   }
+}
+
+function renderTreeContext() {
+  const el = document.getElementById('treeContext');
+  if (!state.selectedTree) {
+    el.classList.add('hidden');
+    el.innerHTML = '';
+    return;
+  }
+  el.classList.remove('hidden');
+  el.innerHTML = `
+    <div class="tree-context-icon">🌳</div>
+    <div>
+      <div class="tree-context-num">${esc(state.selectedTree.num)}</div>
+      <div class="tree-context-name">${esc(state.selectedTree.name1 || '—')}</div>
+    </div>`;
 }
 
 function filterBranches(list) {
@@ -155,13 +185,18 @@ function renderTrees() {
 
   list.innerHTML = state.trees.map((t) => `
     <button type="button" class="nav-card" data-seq="${esc(t.seq)}">
-      <div class="nav-card-icon tree">🌳</div>
-      <div class="nav-card-body">
-        <div class="nav-card-num">${esc(t.num)}</div>
-        <div class="nav-card-name">${esc(t.name1 || '—')}</div>
-        <div class="nav-card-sub">${t.directChildren || 0} زبون</div>
-      </div>
-      <span class="nav-card-arrow">‹</span>
+      <span class="nav-card-accent tree"></span>
+      <span class="nav-card-inner">
+        <div class="nav-card-icon tree">🌳</div>
+        <div class="nav-card-body">
+          <div class="nav-card-num">${esc(t.num)}</div>
+          <div class="nav-card-name">${esc(t.name1 || '—')}</div>
+          <div class="nav-card-sub">${t.directChildren || 0} زبون</div>
+        </div>
+        <span class="nav-card-arrow">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+      </span>
     </button>`).join('');
 
   list.querySelectorAll('.nav-card').forEach((btn) => {
@@ -181,12 +216,17 @@ function renderBranches() {
 
   list.innerHTML = filtered.map((b) => `
     <button type="button" class="nav-card" data-seq="${esc(b.seq)}">
-      <div class="nav-card-icon branch">👤</div>
-      <div class="nav-card-body">
-        <div class="nav-card-num">${esc(b.num)}</div>
-        <div class="nav-card-name">${esc(b.name1 || '—')}</div>
-      </div>
-      <span class="nav-card-arrow">‹</span>
+      <span class="nav-card-accent branch"></span>
+      <span class="nav-card-inner">
+        <div class="nav-card-icon branch">👤</div>
+        <div class="nav-card-body">
+          <div class="nav-card-num">${esc(b.num)}</div>
+          <div class="nav-card-name">${esc(b.name1 || '—')}</div>
+        </div>
+        <span class="nav-card-arrow">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+      </span>
     </button>`).join('');
 
   list.querySelectorAll('.nav-card').forEach((btn) => {
@@ -234,14 +274,19 @@ async function openBranch(seq) {
     const debtLabel = acc.debtStatus || summary?.label || 'الرصيد الحالي';
 
     document.getElementById('stmtHero').innerHTML = `
-      <div class="hero-top">
-        <span class="hero-num">${esc(acc.num)}</span>
+      <div class="hero-header">
+        <div class="hero-top">
+          <span class="hero-num">${esc(acc.num)}</span>
+          ${debtLabel ? `<span class="hero-badge ${balClass(Number(currentBal))}">${esc(debtLabel)}</span>` : ''}
+        </div>
+        <h2 class="hero-name">${esc(acc.name1)}</h2>
+        ${acc.address ? `<p class="hero-addr">${esc(acc.address)}</p>` : ''}
       </div>
-      <h2 class="hero-name">${esc(acc.name1)}</h2>
-      ${acc.address ? `<p class="hero-addr">${esc(acc.address)}</p>` : ''}
-      <div class="hero-balance ${balClass(Number(currentBal))}">
-        <span class="hero-balance-label">${esc(debtLabel)}</span>
-        <span class="hero-balance-val">${fmtNumAlways(Math.abs(Number(currentBal)))}</span>
+      <div class="hero-balance-wrap">
+        <div class="hero-balance ${balClass(Number(currentBal))}">
+          <span class="hero-balance-label">الرصيد الحالي</span>
+          <span class="hero-balance-val">${fmtNumAlways(Math.abs(Number(currentBal)))}</span>
+        </div>
       </div>`;
 
     document.getElementById('stmtStats').innerHTML = `
@@ -269,8 +314,9 @@ async function openBranch(seq) {
 
     if (lines.length) {
       document.getElementById('stmtTableSection').classList.remove('hidden');
+      document.getElementById('stmtLineCount').textContent = `${lines.length} حركة`;
       document.getElementById('stmtLines').innerHTML = lines.map((r, i) => `
-        <article class="tx-row">
+        <article class="tx-row${r.debit ? ' has-debit' : r.credit ? ' has-credit' : ''}">
           <div class="tx-row-meta">
             <span class="tx-idx">${i + 1}</span>
             <span class="tx-date">${fmtDate(r.date)}</span>
@@ -348,6 +394,7 @@ async function loadTrees() {
     const data = await api('/trees');
     state.trees = data.trees || [];
     renderTrees();
+    updateUserChrome();
     goToScreen('trees');
   } catch (e) {
     alert(e.message);
@@ -382,6 +429,7 @@ async function login(username, password) {
 
     setSession(data.token, data.agent);
     showApp();
+    updateUserChrome();
     await loadTrees();
   } catch (e) {
     errEl.textContent = e.message;
@@ -411,6 +459,7 @@ async function tryRestoreSession() {
     const data = await api('/me');
     setSession(token, data.agent);
     showApp();
+    updateUserChrome();
     await loadTrees();
   } catch {
     showLogin();
