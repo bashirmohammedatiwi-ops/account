@@ -170,7 +170,7 @@ function renderTreeContext() {
   }
   el.classList.remove('hidden');
   el.innerHTML = `
-    <div class="tree-context-icon">🌳</div>
+    <div class="tree-context-icon">ش</div>
     <div>
       <div class="tree-context-num">${esc(state.selectedTree.num)}</div>
       <div class="tree-context-name">${esc(state.selectedTree.name1 || '—')}</div>
@@ -203,17 +203,14 @@ function renderTrees() {
 
   list.innerHTML = state.trees.map((t) => `
     <button type="button" class="nav-card" data-seq="${esc(t.seq)}">
-      <span class="nav-card-accent tree"></span>
-      <span class="nav-card-inner">
-        <div class="nav-card-icon tree">🌳</div>
-        <div class="nav-card-body">
-          <div class="nav-card-num">${esc(t.num)}</div>
-          <div class="nav-card-name">${esc(t.name1 || '—')}</div>
-          <div class="nav-card-sub">${t.directChildren || 0} زبون</div>
-        </div>
-        <span class="nav-card-arrow">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </span>
+      <div class="nav-card-icon tree">ش</div>
+      <div class="nav-card-body">
+        <div class="nav-card-num">${esc(t.num)}</div>
+        <div class="nav-card-name">${esc(t.name1 || '—')}</div>
+        <div class="nav-card-sub">${t.directChildren || 0} زبون</div>
+      </div>
+      <span class="nav-card-arrow">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </span>
     </button>`).join('');
 
@@ -246,16 +243,13 @@ function renderBranches() {
 
   list.innerHTML = filtered.map((b) => `
     <button type="button" class="nav-card" data-seq="${esc(b.seq)}">
-      <span class="nav-card-accent branch"></span>
-      <span class="nav-card-inner">
-        <div class="nav-card-icon branch">👤</div>
-        <div class="nav-card-body">
-          <div class="nav-card-num">${esc(b.num)}</div>
-          <div class="nav-card-name">${esc(b.name1 || '—')}</div>
-        </div>
-        <span class="nav-card-arrow">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </span>
+      <div class="nav-card-icon branch">${esc(agentInitial(b.name1))}</div>
+      <div class="nav-card-body">
+        <div class="nav-card-num">${esc(b.num)}</div>
+        <div class="nav-card-name">${esc(b.name1 || '—')}</div>
+      </div>
+      <span class="nav-card-arrow">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </span>
     </button>`).join('');
 
@@ -316,23 +310,20 @@ async function openBranch(seq) {
 
     document.getElementById('stmtStats').innerHTML = `
       <div class="stat-box stat-debit">
-        <span class="stat-icon">↓</span>
         <div class="stat-body">
-          <div class="k">إجمالي مدين</div>
+          <div class="k">مدين</div>
           <div class="v">${fmtNumAlways(totalDebit)}</div>
         </div>
       </div>
       <div class="stat-box stat-credit">
-        <span class="stat-icon">↑</span>
         <div class="stat-body">
-          <div class="k">إجمالي دائن</div>
+          <div class="k">دائن</div>
           <div class="v">${fmtNumAlways(totalCredit)}</div>
         </div>
       </div>
-      <div class="stat-box stat-count">
-        <span class="stat-icon">#</span>
+      <div class="stat-box">
         <div class="stat-body">
-          <div class="k">عدد الحركات</div>
+          <div class="k">حركات</div>
           <div class="v">${lines.length}</div>
         </div>
       </div>`;
@@ -341,7 +332,7 @@ async function openBranch(seq) {
       document.getElementById('stmtTableSection').classList.remove('hidden');
       document.getElementById('stmtLineCount').textContent = `${lines.length} حركة`;
       document.getElementById('stmtLines').innerHTML = lines.map((r, i) => `
-        <article class="tx-row${r.debit ? ' has-debit' : r.credit ? ' has-credit' : ''}">
+        <article class="tx-row">
           <div class="tx-row-meta">
             <span class="tx-idx">${i + 1}</span>
             <span class="tx-date">${fmtDate(r.date)}</span>
