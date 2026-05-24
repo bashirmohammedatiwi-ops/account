@@ -61,7 +61,7 @@ function getStatementForAccount(accSeq) {
       name2: account.name2,
       address: account.address,
       bal: account.bal,
-      debtStatus: debtStatusFromBalance(account.bal)
+      debtStatus: debtStatusFromBalance(stmt.finalBalance ?? account.bal)
     },
     ...stmt,
     summary: balanceSummaryLabel(stmt.finalBalance)

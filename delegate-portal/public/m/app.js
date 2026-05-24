@@ -42,6 +42,12 @@ function balClass(b) {
   return '';
 }
 
+function statementDebtLabel(bal) {
+  const n = Number(bal);
+  if (Number.isNaN(n) || n <= 0) return 'الديون';
+  return 'دائن (له)';
+}
+
 function agentInitial(name) {
   const n = String(name || 'م').trim();
   return n.charAt(0) || 'م';
@@ -285,20 +291,20 @@ async function openBranch(seq) {
     const lines = data.lines || [];
     const { totalDebit, totalCredit, summary } = data;
     const currentBal = data.finalBalance ?? acc.bal ?? 0;
-    const debtLabel = acc.debtStatus || summary?.label || 'الرصيد الحالي';
+    const debtLabel = acc.debtStatus || statementDebtLabel(currentBal);
 
     document.getElementById('stmtHero').innerHTML = `
       <div class="hero-header">
         <div class="hero-top">
           <span class="hero-num">${esc(acc.num)}</span>
-          ${debtLabel ? `<span class="hero-badge ${balClass(Number(currentBal))}">${esc(debtLabel)}</span>` : ''}
+          <span class="hero-badge ${balClass(Number(currentBal))}">${esc(debtLabel)}</span>
         </div>
         <h2 class="hero-name">${esc(acc.name1)}</h2>
         ${acc.address ? `<p class="hero-addr">${esc(acc.address)}</p>` : ''}
       </div>
       <div class="hero-balance-wrap">
         <div class="hero-balance ${balClass(Number(currentBal))}">
-          <span class="hero-balance-label">الرصيد الحالي</span>
+          <span class="hero-balance-label">${esc(debtLabel)}</span>
           <span class="hero-balance-val">${fmtNumAlways(Math.abs(Number(currentBal)))}</span>
         </div>
       </div>`;
