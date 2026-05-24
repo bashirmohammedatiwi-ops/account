@@ -2,62 +2,75 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="theme-color" content="#0a0f1a">
+  <meta name="theme-color" content="#f0f4f8">
   <title>Edari — كشف حساب</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="header">
-    <div class="header-top">
-      <h1>كشف حساب</h1>
-      <button class="icon-btn" id="btnRefresh" title="تحديث">🔄</button>
+  <!-- Login -->
+  <div id="loginScreen" class="login-screen">
+    <div class="login-card">
+      <div class="login-logo">E</div>
+      <h1>مرحباً</h1>
+      <p>سجّل دخولك لعرض كشوف الزبائن</p>
+      <form id="loginForm">
+        <label>اسم المستخدم<input type="text" id="loginUsername" autocomplete="username" required></label>
+        <label>كلمة المرور<input type="password" id="loginPassword" autocomplete="current-password" required></label>
+        <p class="login-error hidden" id="loginError"></p>
+        <button type="submit" class="btn primary full" id="btnLogin">دخول</button>
+      </form>
     </div>
-    <input type="search" id="globalSearch" placeholder="بحث برقم أو اسم الزبون...">
-  </header>
+  </div>
 
-  <nav class="tabs">
-    <button class="tab active" data-tab="trees">الشجرات</button>
-    <button class="tab" data-tab="customers">الزبائن</button>
-    <button class="tab" data-tab="statement">الكشف</button>
-  </nav>
-
-  <main class="main">
-    <section class="pane active" id="pane-trees">
-      <p class="meta" id="treesMeta">—</p>
-      <div id="treesList" class="list"></div>
-    </section>
-
-    <section class="pane" id="pane-customers">
-      <p class="meta" id="customersMeta">—</p>
-      <div class="filters">
-        <button class="chip active" data-filter="all">الكل</button>
-        <button class="chip" data-filter="debit">مدين</button>
-        <button class="chip" data-filter="credit">دائن</button>
+  <!-- App -->
+  <div id="appShell" class="hidden">
+    <header class="app-header">
+      <button type="button" class="back-btn hidden" id="btnBack" aria-label="رجوع">→</button>
+      <div class="header-center">
+        <h1 id="screenTitle">الشجرات</h1>
+        <p class="breadcrumb" id="breadcrumb"></p>
       </div>
-      <div id="customersList" class="list"></div>
-    </section>
-
-    <section class="pane" id="pane-statement">
-      <div id="stmtEmpty" class="empty">
-        <p>اختر زبوناً لعرض كشف حسابه</p>
+      <div class="header-actions">
+        <button type="button" class="icon-btn" id="btnRefresh" title="تحديث">↻</button>
+        <button type="button" class="icon-btn" id="btnLogout" title="خروج">⎋</button>
       </div>
-      <div id="stmtContent" class="hidden">
-        <div class="stmt-header" id="stmtHeader"></div>
-        <div class="stmt-summary" id="stmtSummary"></div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>مدين</th><th>دائن</th><th>البيان</th><th>التاريخ</th><th>الرصيد</th></tr></thead>
-            <tbody id="stmtBody"></tbody>
-            <tfoot id="stmtFoot"></tfoot>
-          </table>
-        </div>
-      </div>
-    </section>
-  </main>
+    </header>
 
-  <footer class="footer" id="statusBar">جاهز</footer>
+    <div class="search-bar hidden" id="searchBarWrap">
+      <input type="search" id="branchSearch" placeholder="بحث في الفروع...">
+    </div>
+
+    <div class="filter-bar hidden" id="filterBar">
+      <button type="button" class="filter-chip active" data-filter="all">الكل</button>
+      <button type="button" class="filter-chip" data-filter="debit">مدين</button>
+      <button type="button" class="filter-chip" data-filter="credit">دائن</button>
+    </div>
+
+    <main class="app-main">
+      <!-- Trees -->
+      <section class="screen active" id="screen-trees">
+        <p class="screen-meta" id="treesMeta">—</p>
+        <div class="cards-list" id="treesList"></div>
+      </section>
+
+      <!-- Branches -->
+      <section class="screen" id="screen-branches">
+        <p class="screen-meta" id="branchesMeta">—</p>
+        <div class="cards-list" id="branchesList"></div>
+      </section>
+
+      <!-- Statement -->
+      <section class="screen" id="screen-statement">
+        <div class="stmt-hero" id="stmtHero"></div>
+        <div class="stmt-stats" id="stmtStats"></div>
+        <div class="stmt-lines" id="stmtLines"></div>
+        <div class="stmt-totals" id="stmtTotals"></div>
+      </section>
+    </main>
+  </div>
+
   <div class="overlay hidden" id="overlay"><div class="spinner"></div></div>
   <script src="app.js"></script>
 </body>

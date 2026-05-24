@@ -22,6 +22,10 @@ router.post('/login', (req, res) => {
   res.json({ ok: true, token, agent: { id: agent.id, name: agent.name, username: agent.username } });
 });
 
+router.get('/me', authAgent, (req, res) => {
+  res.json({ ok: true, agent: { id: req.agent.id, name: req.agent.name, username: req.agent.username } });
+});
+
 router.get('/trees', authAgent, (req, res) => {
   const roots = db.prepare(`
     SELECT at.account_seq AS seq FROM agent_trees at WHERE at.agent_id = ?

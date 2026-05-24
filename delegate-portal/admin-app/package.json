@@ -29,7 +29,8 @@
       "target": [
         { "target": "portable", "arch": ["x64"] }
       ],
-      "artifactName": "Edari-Admin-${version}.${ext}"
+      "artifactName": "Edari-Admin-${version}.${ext}",
+      "signAndEditExecutable": false
     },
     "portable": {
       "artifactName": "Edari-Admin-${version}.exe"
