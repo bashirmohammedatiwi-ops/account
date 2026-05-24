@@ -1,0 +1,12 @@
+{
+  "name": "edari-accounts",
+  "version": "1.0.0",
+  "description": "EdariNX dedicated accounts viewer — tree, branches, debts, journal",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^34.0.0"
+  }
+}

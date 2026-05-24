@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edari Dashboard - لوحة بيانات إداري</title>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">E</div>
+        <div>
+          <h1>Edari Dashboard</h1>
+          <p>قاعدة 2025</p>
+        </div>
+      </div>
+      <nav class="nav" id="mainNav">
+        <button class="nav-item active" data-view="overview">📊 نظرة عامة</button>
+        <button class="nav-item" data-view="accounts">🌳 شجرة الحسابات</button>
+        <button class="nav-item" data-view="materials">📦 شجرة المواد</button>
+        <button class="nav-item" data-view="items">📦 المواد بالتفصيل</button>
+        <button class="nav-item" data-view="invoices">🧾 الفواتير</button>
+        <button class="nav-item" data-view="receipts">🛒 إيصالات POS</button>
+        <button class="nav-item" data-view="journal">📒 القيود المحاسبية</button>
+        <button class="nav-item" data-view="cash">👤 مستخدمو الصندوق</button>
+      </nav>
+      <div class="sidebar-foot" id="connStatus">جاري الاتصال...</div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h2 id="viewTitle">نظرة عامة</h2>
+          <p id="viewSubtitle">ملخص بيانات EdariNX</p>
+        </div>
+        <div class="topbar-actions">
+          <input type="search" id="globalSearch" class="search" placeholder="بحث..." hidden>
+          <button class="btn" id="refreshBtn">تحديث</button>
+        </div>
+      </header>
+
+      <section class="view active" id="view-overview">
+        <div class="stats-grid" id="statsGrid"></div>
+        <div class="cards-row">
+          <div class="card">
+            <h3>آخر الفواتير</h3>
+            <div class="mini-table-wrap"><table><thead><tr><th>رقم</th><th>التاريخ</th><th>الإجمالي</th></tr></thead><tbody id="recentInvoices"></tbody></table></div>
+          </div>
+          <div class="card">
+            <h3>آخر إيصالات POS</h3>
+            <div class="mini-table-wrap"><table><thead><tr><th>رقم</th><th>التاريخ</th><th>المبلغ</th></tr></thead><tbody id="recentReceipts"></tbody></table></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-accounts">
+        <div class="split">
+          <div class="panel tree-panel">
+            <div class="panel-head"><h3>شجرة الحسابات</h3><input type="search" id="accountSearch" placeholder="بحث حساب..."></div>
+            <div class="tree" id="accountsTree"></div>
+          </div>
+          <div class="panel detail-panel">
+            <h3>تفاصيل الحساب</h3>
+            <div id="accountDetail" class="detail-box empty-detail">اختر حساباً من الشجرة</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-materials">
+        <div class="split">
+          <div class="panel tree-panel">
+            <div class="panel-head"><h3>شجرة المواد</h3><button class="btn small" id="matRootBtn">الجذر</button></div>
+            <div class="breadcrumb" id="matBreadcrumb"></div>
+            <div class="tree" id="materialsTree"></div>
+          </div>
+          <div class="panel detail-panel">
+            <h3>محتويات المجموعة / الصنف</h3>
+            <div id="materialDetail" class="detail-box empty-detail">اختر مجموعة أو صنفاً</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-items">
+        <div class="info-banner">
+          الأسماء العربية تعمل الآن. الجدول يحمّل 50 مادة في كل مرة — استخدم «تحميل المزيد» أو «تصدير CSV» لجميع الأصناف. سعر البيع الفعلي غالباً في عمود «سعر البيع» (SellPr4).
+        </div>
+        <div class="toolbar">
+          <input type="search" id="itemSearch" placeholder="بحث بالاسم أو الرقم أو الباركود...">
+          <button class="btn primary" id="itemSearchBtn">بحث</button>
+          <button class="btn" id="itemsExportBtn">تصدير Excel/CSV</button>
+          <span class="items-count" id="itemsCount"></span>
+        </div>
+        <div class="table-wrap wide-table-wrap">
+          <table id="itemsTable">
+            <thead id="itemsHead"></thead>
+            <tbody id="itemsBody"></tbody>
+          </table>
+        </div>
+        <div class="pager"><button class="btn" id="itemsMoreBtn" hidden>تحميل المزيد</button></div>
+        <div class="drawer" id="itemDrawer">
+          <div class="drawer-inner drawer-wide" id="itemDrawerContent"></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-invoices">
+        <div class="toolbar">
+          <input type="search" id="invoiceSearch" placeholder="بحث برقم الفاتورة...">
+          <button class="btn primary" id="invoiceSearchBtn">بحث</button>
+        </div>
+        <div class="split invoices-split">
+          <div class="table-wrap"><table><thead><tr><th>رقم</th><th>التاريخ</th><th>الإجمالي</th><th>الخصم</th><th>البنود</th><th></th></tr></thead><tbody id="invoicesBody"></tbody></table></div>
+          <div class="panel detail-panel">
+            <h3>بنود الفاتورة</h3>
+            <div id="invoiceLines" class="detail-box empty-detail">اختر فاتورة</div>
+          </div>
+        </div>
+        <div class="pager"><button class="btn" id="invoicesMoreBtn" hidden>تحميل المزيد</button></div>
+      </section>
+
+      <section class="view" id="view-receipts">
+        <div class="split invoices-split">
+          <div class="table-wrap"><table><thead><tr><th>رقم</th><th>التاريخ</th><th>الإجمالي</th><th>المدفوع</th><th>الفرع</th><th></th></tr></thead><tbody id="receiptsBody"></tbody></table></div>
+          <div class="panel detail-panel">
+            <h3>بنود الإيصال</h3>
+            <div id="receiptItems" class="detail-box empty-detail">اختر إيصالاً</div>
+          </div>
+        </div>
+        <div class="pager"><button class="btn" id="receiptsMoreBtn" hidden>تحميل المزيد</button></div>
+      </section>
+
+      <section class="view" id="view-journal">
+        <div class="table-wrap"><table><thead><tr><th>Seq</th><th>الحساب</th><th>المبلغ</th><th>مدين</th><th>البيان</th><th>الفاتورة</th><th>التاريخ</th></tr></thead><tbody id="journalBody"></tbody></table></div>
+        <div class="pager"><button class="btn" id="journalMoreBtn" hidden>تحميل المزيد</button></div>
+      </section>
+
+      <section class="view" id="view-cash">
+        <div class="table-wrap"><table><thead><tr><th>Seq</th><th>الاسم</th><th>الفرع</th><th>المجموعة</th><th>من</th><th>إلى</th></tr></thead><tbody id="cashBody"></tbody></table></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+  <script src="dashboard.js?v=2"></script>
+</body>
+</html>

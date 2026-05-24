@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edari Desktop</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="titlebar">
+      <div class="titlebar-brand">
+        <div class="logo">E</div>
+        <div>
+          <h1>Edari Desktop</h1>
+          <p id="dbLabel">قاعدة بيانات 2025</p>
+        </div>
+      </div>
+      <div class="titlebar-actions">
+        <button class="btn primary" id="btnSyncAll">تحديث كل البيانات</button>
+        <span class="conn-badge" id="connBadge">جاري الاتصال...</span>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="sidebar">
+        <nav class="nav" id="mainNav">
+          <button class="nav-btn active" data-view="overview"><span class="ico">◉</span> نظرة عامة</button>
+          <button class="nav-btn" data-view="materials"><span class="ico">▣</span> المواد والمخزون</button>
+          <button class="nav-btn" data-view="accounts"><span class="ico">☷</span> دليل الحسابات</button>
+          <button class="nav-btn" data-view="invoices"><span class="ico">🧾</span> الفواتير</button>
+          <button class="nav-btn" data-view="receipts"><span class="ico">🛒</span> إيصالات POS</button>
+          <button class="nav-btn" data-view="journal"><span class="ico">📒</span> القيود المحاسبية</button>
+          <button class="nav-btn" data-view="cash"><span class="ico">👤</span> مستخدمو الصندوق</button>
+        </nav>
+        <div class="sidebar-meta" id="cacheMeta"></div>
+      </aside>
+
+      <main class="content">
+        <div class="view active" id="view-overview">
+          <div class="view-head">
+            <div>
+              <h2>نظرة عامة</h2>
+              <p>ملخص شامل لبيانات EdariNX</p>
+            </div>
+          </div>
+          <div class="stats-grid" id="statsGrid"></div>
+          <div class="panels-2">
+            <section class="panel">
+              <h3>آخر الفواتير</h3>
+              <div class="table-scroll"><table><thead><tr><th>الرقم</th><th>التاريخ</th><th>الإجمالي</th></tr></thead><tbody id="recentInvoices"></tbody></table></div>
+            </section>
+            <section class="panel">
+              <h3>آخر إيصالات POS</h3>
+              <div class="table-scroll"><table><thead><tr><th>الرقم</th><th>التاريخ</th><th>المبلغ</th></tr></thead><tbody id="recentReceipts"></tbody></table></div>
+            </section>
+          </div>
+        </div>
+
+        <div class="view" id="view-materials">
+          <div class="view-head">
+            <div>
+              <h2>المواد والمخزون</h2>
+              <p>جميع الأصناف مع الكميات وأسعار الشراء والبيع</p>
+            </div>
+            <div class="toolbar">
+              <input type="search" id="materialsSearch" placeholder="بحث بالاسم، الرقم، الباركود...">
+              <button class="btn" id="materialsExport">تصدير CSV</button>
+            </div>
+          </div>
+          <div class="split-3">
+            <section class="panel tree-panel">
+              <h3>شجرة التصنيفات</h3>
+              <div class="breadcrumb" id="matBreadcrumb"></div>
+              <div class="tree-list" id="materialsTree"></div>
+            </section>
+            <section class="panel table-panel">
+              <div class="table-meta" id="materialsMeta"></div>
+              <div class="table-scroll tall"><table><thead id="materialsHead"></thead><tbody id="materialsBody"></tbody></table></div>
+              <div class="pager" id="materialsPager"></div>
+            </section>
+            <section class="panel detail-panel">
+              <h3>تفاصيل الصنف</h3>
+              <div id="materialDetail" class="detail-box empty">اختر صنفاً من الجدول</div>
+            </section>
+          </div>
+        </div>
+
+        <div class="view" id="view-accounts">
+          <div class="view-head">
+            <div>
+              <h2>دليل الحسابات</h2>
+              <p>شجرة كاملة مع تفاصيل كل حساب وفروعه</p>
+            </div>
+            <div class="toolbar">
+              <input type="search" id="accountsSearch" placeholder="بحث بالاسم أو الرقم...">
+              <button class="btn" id="accountsExport">تصدير CSV</button>
+            </div>
+          </div>
+          <div class="split-3 accounts-split">
+            <section class="panel tree-panel">
+              <h3>شجرة الحسابات</h3>
+              <div class="table-meta" id="accountsMeta"></div>
+              <div class="tree-list" id="accountsTree"></div>
+            </section>
+            <section class="panel detail-panel">
+              <h3>تفاصيل الحساب</h3>
+              <div id="accountDetail" class="detail-box empty">اختر حساباً من الشجرة</div>
+            </section>
+            <section class="panel table-panel">
+              <h3 id="accountBranchesTitle">الفروع التابعة</h3>
+              <div class="table-scroll tall"><table>
+                <thead><tr><th>المستوى</th><th>الرقم</th><th>الاسم</th><th>الرصيد</th><th>إجمالي 1</th><th>إجمالي 2</th><th>فروع</th><th>ملاحظات</th></tr></thead>
+                <tbody id="accountBranchesBody"></tbody>
+              </table></div>
+            </section>
+          </div>
+        </div>
+
+        <div class="view" id="view-invoices">
+          <div class="view-head">
+            <div>
+              <h2>الفواتير</h2>
+              <p>فواتير المبيعات والمشتريات مع البنود</p>
+            </div>
+            <div class="toolbar">
+              <input type="search" id="invoicesSearch" placeholder="بحث برقم الفاتورة...">
+              <button class="btn" id="invoicesExport">تصدير CSV</button>
+            </div>
+          </div>
+          <div class="split-2">
+            <section class="panel table-panel">
+              <div class="table-meta" id="invoicesMeta"></div>
+              <div class="table-scroll tall"><table><thead><tr><th>Seq</th><th>الرقم</th><th>النوع</th><th>التاريخ</th><th>الإجمالي</th><th>الدفع</th><th>ملاحظات</th></tr></thead><tbody id="invoicesBody"></tbody></table></div>
+              <div class="pager" id="invoicesPager"></div>
+            </section>
+            <section class="panel detail-panel">
+              <h3>بنود الفاتورة</h3>
+              <div id="invoiceDetail" class="detail-box empty">اختر فاتورة</div>
+              <div class="table-scroll" id="invoiceLinesWrap" hidden><table><thead><tr><th>#</th><th>المادة</th><th>الاسم</th><th>الكمية</th><th>السعر</th></tr></thead><tbody id="invoiceLines"></tbody></table></div>
+            </section>
+          </div>
+        </div>
+
+        <div class="view" id="view-receipts">
+          <div class="view-head">
+            <div>
+              <h2>إيصالات POS</h2>
+              <p>مبيعات نقاط البيع</p>
+            </div>
+            <div class="toolbar">
+              <input type="search" id="receiptsSearch" placeholder="بحث...">
+              <button class="btn" id="receiptsExport">تصدير CSV</button>
+            </div>
+          </div>
+          <div class="split-2">
+            <section class="panel table-panel">
+              <div class="table-meta" id="receiptsMeta"></div>
+              <div class="table-scroll tall"><table><thead><tr><th>ID</th><th>الرقم</th><th>التاريخ</th><th>الإجمالي</th><th>الدفع</th><th>الفرع</th></tr></thead><tbody id="receiptsBody"></tbody></table></div>
+              <div class="pager" id="receiptsPager"></div>
+            </section>
+            <section class="panel detail-panel">
+              <h3>بنود الإيصال</h3>
+              <div id="receiptDetail" class="detail-box empty">اختر إيصالاً</div>
+              <div class="table-scroll" id="receiptItemsWrap" hidden><table><thead><tr><th>المادة</th><th>الكمية</th><th>السعر</th><th>خصم</th></tr></thead><tbody id="receiptItems"></tbody></table></div>
+            </section>
+          </div>
+        </div>
+
+        <div class="view" id="view-journal">
+          <div class="view-head">
+            <div>
+              <h2>القيود المحاسبية</h2>
+              <p>حركات دفتر الأستاذ</p>
+            </div>
+            <div class="toolbar">
+              <input type="search" id="journalSearch" placeholder="بحث...">
+              <button class="btn" id="journalExport">تصدير CSV</button>
+            </div>
+          </div>
+          <section class="panel table-panel full">
+            <div class="table-meta" id="journalMeta"></div>
+            <div class="table-scroll tall"><table><thead><tr><th>Seq</th><th>الحساب</th><th>المبلغ</th><th>مدين</th><th>البيان</th><th>الفاتورة</th><th>التاريخ</th></tr></thead><tbody id="journalBody"></tbody></table></div>
+            <div class="pager" id="journalPager"></div>
+          </section>
+        </div>
+
+        <div class="view" id="view-cash">
+          <div class="view-head">
+            <div>
+              <h2>مستخدمو الصندوق</h2>
+              <p>Cashier / الصندوق</p>
+            </div>
+          </div>
+          <section class="panel table-panel full">
+            <div class="table-scroll tall"><table><thead><tr><th>Seq</th><th>الاسم</th><th>الفرع</th><th>المجموعة</th><th>من</th><th>إلى</th></tr></thead><tbody id="cashBody"></tbody></table></div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <footer class="statusbar">
+      <span id="statusText">جاهز</span>
+      <span id="statusProgress"></span>
+      <span id="statusTime"></span>
+    </footer>
+  </div>
+
+  <div class="overlay" id="syncOverlay" hidden>
+    <div class="sync-modal">
+      <h3>جاري تحميل البيانات</h3>
+      <p id="syncMessage">بدء الاتصال...</p>
+      <div class="progress-track"><div class="progress-fill" id="syncBar"></div></div>
+      <ul class="sync-log" id="syncLog"></ul>
+      <p class="sync-hint">يتم تحميل المواد والحسابات والفواتير. إيصالات POS والقيود تُحمّل عند فتح قسمها.</p>
+      <button class="btn" id="syncCloseBtn" hidden>إغلاق</button>
+    </div>
+  </div>
+
+  <script src="app.js?v=5"></script>
+</body>
+</html>

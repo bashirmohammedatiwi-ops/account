@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>Edari Delegate — كشف حساب</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo-sm">م</div>
+        <div>
+          <h1>Edari Delegate</h1>
+          <p id="serverStatus">—</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <input type="url" id="serverUrl" class="server-input" value="http://127.0.0.1:4100" title="عنوان السيرفر">
+        <button class="btn" id="btnConnect">اتصال</button>
+        <input type="search" id="globalSearch" placeholder="بحث زبون (رقم أو اسم)...">
+        <button class="btn primary" id="btnRefresh">تحديث F5</button>
+      </div>
+    </header>
+
+    <div class="main-grid">
+      <aside class="panel trees-panel">
+        <h2>شجرات الحسابات</h2>
+        <p class="meta" id="treesMeta">—</p>
+        <div class="scroll" id="treesList"></div>
+      </aside>
+
+      <section class="panel branches-panel">
+        <h2 id="branchesTitle">الزبائن / الفروع</h2>
+        <div class="filter-row">
+          <input type="search" id="branchSearch" placeholder="بحث في القائمة...">
+          <div class="chips">
+            <button class="chip active" data-filter="all">الكل</button>
+            <button class="chip" data-filter="debit">مدين</button>
+            <button class="chip" data-filter="credit">دائن</button>
+          </div>
+        </div>
+        <p class="meta" id="branchesMeta">—</p>
+        <div class="scroll branch-scroll" id="branchList"></div>
+      </section>
+
+      <section class="panel detail-panel">
+        <div id="detailEmpty" class="detail-empty">
+          <div class="icon">📋</div>
+          <h3>اختر زبوناً</h3>
+          <p>ستظهر تفاصيل الحساب وكشف الحركات هنا</p>
+        </div>
+        <div id="detailContent" class="detail-content hidden">
+          <div class="detail-header" id="detailHeader"></div>
+          <div class="detail-cards" id="detailCards"></div>
+          <div class="statement-wrap">
+            <div class="statement-title">
+              <h3>كشف الحساب</h3>
+              <span id="stmtMeta"></span>
+            </div>
+            <div class="scroll table-scroll">
+              <table>
+                <thead><tr><th>مدين</th><th>دائن</th><th>البيان</th><th>التاريخ</th><th>حركة الرصيد</th></tr></thead>
+                <tbody id="stmtBody"></tbody>
+                <tfoot id="stmtFoot"></tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="statusbar"><span id="statusText">جاهز</span></footer>
+  </div>
+
+  <div class="overlay hidden" id="overlay"><div class="spinner"></div><p id="overlayMsg">...</p></div>
+  <script src="app.js"></script>
+</body>
+</html>

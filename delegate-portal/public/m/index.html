@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0a0f1a">
+  <title>Edari — كشف حساب</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="header">
+    <div class="header-top">
+      <h1>كشف حساب</h1>
+      <button class="icon-btn" id="btnRefresh" title="تحديث">🔄</button>
+    </div>
+    <input type="search" id="globalSearch" placeholder="بحث برقم أو اسم الزبون...">
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="trees">الشجرات</button>
+    <button class="tab" data-tab="customers">الزبائن</button>
+    <button class="tab" data-tab="statement">الكشف</button>
+  </nav>
+
+  <main class="main">
+    <section class="pane active" id="pane-trees">
+      <p class="meta" id="treesMeta">—</p>
+      <div id="treesList" class="list"></div>
+    </section>
+
+    <section class="pane" id="pane-customers">
+      <p class="meta" id="customersMeta">—</p>
+      <div class="filters">
+        <button class="chip active" data-filter="all">الكل</button>
+        <button class="chip" data-filter="debit">مدين</button>
+        <button class="chip" data-filter="credit">دائن</button>
+      </div>
+      <div id="customersList" class="list"></div>
+    </section>
+
+    <section class="pane" id="pane-statement">
+      <div id="stmtEmpty" class="empty">
+        <p>اختر زبوناً لعرض كشف حسابه</p>
+      </div>
+      <div id="stmtContent" class="hidden">
+        <div class="stmt-header" id="stmtHeader"></div>
+        <div class="stmt-summary" id="stmtSummary"></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>مدين</th><th>دائن</th><th>البيان</th><th>التاريخ</th><th>الرصيد</th></tr></thead>
+            <tbody id="stmtBody"></tbody>
+            <tfoot id="stmtFoot"></tfoot>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer" id="statusBar">جاهز</footer>
+  <div class="overlay hidden" id="overlay"><div class="spinner"></div></div>
+  <script src="app.js"></script>
+</body>
+</html>

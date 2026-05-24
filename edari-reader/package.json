@@ -1,0 +1,20 @@
+{
+  "name": "edari-desktop",
+  "version": "2.0.0",
+  "description": "EdariNX desktop reader — organized NexusDB data viewer",
+  "main": "electron/main.js",
+  "scripts": {
+    "desktop": "electron .",
+    "start": "electron .",
+    "server": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "electron": "^34.0.0"
+  }
+}

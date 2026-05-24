@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>لوحة تحكم المندوبين — Edari</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <div id="app" class="app">
+    <aside class="sidebar">
+      <div class="sidebar-brand">Edari Admin</div>
+      <nav>
+        <button class="nav-item active" data-page="dashboard">📊 لوحة المعلومات</button>
+        <button class="nav-item" data-page="sync">☁️ رفع البيانات</button>
+        <button class="nav-item" data-page="agents">👥 المندوبون</button>
+        <button class="nav-item" data-page="trees">🌳 الحسابات وكشوف</button>
+      </nav>
+      <div class="sidebar-foot">
+        <span class="muted">لوحة التحكم</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <!-- Dashboard -->
+      <section class="page active" id="page-dashboard">
+        <header class="page-header"><h2>لوحة المعلومات</h2></header>
+        <div class="stats-grid" id="dashStats"></div>
+        <div class="card">
+          <h3>آخر مزامنة</h3>
+          <div id="lastSyncInfo" class="muted">—</div>
+        </div>
+        <div class="card info-card">
+          <h3>تطبيق المندوب (الهاتف)</h3>
+          <p class="page-desc">افتح الرابط من متصفح الهاتف على نفس الشبكة — بدون تسجيل دخول</p>
+          <div class="link-row">
+            <a class="btn primary" id="mobileAppLink" href="/m" target="_blank">📱 فتح تطبيق المندوب</a>
+            <button class="btn sm" type="button" id="btnCopyMobileUrl">نسخ الرابط</button>
+          </div>
+          <p class="muted" id="mobileUrlDisplay">—</p>
+        </div>
+      </section>
+
+      <!-- Sync -->
+      <section class="page" id="page-sync">
+        <header class="page-header">
+          <h2>رفع البيانات إلى السيرفر</h2>
+          <button class="btn primary" id="btnSyncNow">🔄 تحديث ورفع البيانات</button>
+        </header>
+        <div class="card info-card">
+          <h3>كيف تعمل المزامنة؟</h3>
+          <ol>
+            <li>زر <strong>تحديث ورفع البيانات</strong> يشغّل أداة المزامنة المحلية التي تقرأ من EdariNX على هذا الجهاز</li>
+            <li>تُرفع الحسابات وكشوف الحركات إلى السيرفر</li>
+            <li>المندوبون يرون فقط الشجرات المصرّح لهم بها في تطبيق الهاتف</li>
+          </ol>
+        </div>
+        <div class="card">
+          <h3>إعدادات الاتصال</h3>
+          <div class="settings-grid">
+            <label>عنوان السيرفر<input type="text" id="syncServerUrl" value="http://localhost:5005"></label>
+            <label>مفتاح المزامنة<input type="text" id="syncApiKey" placeholder="SYNC_API_KEY"></label>
+          </div>
+        </div>
+        <div class="card">
+          <h3>سجل المزامنة</h3>
+          <div class="table-wrap"><table><thead><tr><th>#</th><th>البداية</th><th>النهاية</th><th>الحالة</th><th>حسابات</th><th>حركات</th><th>رسالة</th></tr></thead><tbody id="syncLogsBody"></tbody></table></div>
+        </div>
+        <div class="sync-progress hidden" id="syncProgress">
+          <div class="spinner"></div>
+          <p id="syncProgressMsg">جاري الرفع...</p>
+        </div>
+      </section>
+
+      <!-- Agents -->
+      <section class="page" id="page-agents">
+        <header class="page-header">
+          <h2>المندوبون</h2>
+          <button class="btn primary" id="btnAddAgent">+ إضافة مندوب</button>
+        </header>
+        <div class="table-wrap"><table>
+          <thead><tr><th>الاسم</th><th>الهاتف</th><th>المستخدم</th><th>الشجرات</th><th>الحالة</th><th></th></tr></thead>
+          <tbody id="agentsBody"></tbody>
+        </table></div>
+      </section>
+
+      <!-- Accounts explorer -->
+      <section class="page" id="page-trees">
+        <header class="page-header">
+          <h2>شجرات الحسابات وكشوف الفروع</h2>
+          <input type="search" id="explorerSearch" class="search-input" placeholder="بحث برقم أو اسم الزبون...">
+        </header>
+        <p class="page-desc">اختر شجرة ← فرع/زبون ← يظهر كشف الحساب المفصل</p>
+        <div class="explorer-grid">
+          <div class="explorer-panel">
+            <h3>الشجرات</h3>
+            <p class="meta" id="explorerTreesMeta">—</p>
+            <div class="explorer-list" id="explorerTrees"></div>
+          </div>
+          <div class="explorer-panel">
+            <h3 id="explorerBranchesTitle">الفروع / الزبائن</h3>
+            <div class="filter-row">
+              <input type="search" id="branchSearch" placeholder="تصفية الفروع...">
+              <div class="chips">
+                <button class="chip active" data-filter="all">الكل</button>
+                <button class="chip" data-filter="debit">مدين</button>
+                <button class="chip" data-filter="credit">دائن</button>
+              </div>
+            </div>
+            <p class="meta" id="explorerBranchesMeta">—</p>
+            <div class="explorer-list" id="explorerBranches"></div>
+          </div>
+          <div class="explorer-panel explorer-statement">
+            <div id="explorerStmtEmpty" class="stmt-empty">
+              <div class="icon">📋</div>
+              <p>اختر فرعاً أو زبوناً لعرض كشف الحساب</p>
+            </div>
+            <div id="explorerStmtContent" class="hidden stmt-content">
+              <div class="stmt-header" id="explorerStmtHeader"></div>
+              <div class="stmt-cards" id="explorerStmtCards"></div>
+              <div class="statement-title">
+                <h3>كشف حساب</h3>
+                <span id="explorerStmtMeta">—</span>
+              </div>
+              <div class="table-wrap stmt-table">
+                <table>
+                  <thead><tr><th>مدين</th><th>دائن</th><th>البيان</th><th>التاريخ</th><th>الرصيد</th></tr></thead>
+                  <tbody id="explorerStmtBody"></tbody>
+                  <tfoot id="explorerStmtFoot"></tfoot>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Agent modal -->
+  <div class="modal hidden" id="agentModal">
+    <div class="modal-box">
+      <h3 id="agentModalTitle">إضافة مندوب</h3>
+      <form id="agentForm">
+        <input type="hidden" id="agentId">
+        <label>الاسم<input type="text" id="agentName" required></label>
+        <label>الهاتف<input type="text" id="agentPhone"></label>
+        <label>اسم المستخدم<input type="text" id="agentUsername" required></label>
+        <label>كلمة المرور<input type="password" id="agentPassword" placeholder="اتركها فارغة للإبقاء"></label>
+        <label class="checkbox"><input type="checkbox" id="agentActive" checked> نشط</label>
+        <fieldset>
+          <legend>صلاحية الوصول للشجرات</legend>
+          <div class="tree-checks" id="agentTreeChecks"></div>
+        </fieldset>
+        <div class="modal-actions">
+          <button type="button" class="btn" id="agentCancel">إلغاء</button>
+          <button type="submit" class="btn primary">حفظ</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="admin.js"></script>
+</body>
+</html>

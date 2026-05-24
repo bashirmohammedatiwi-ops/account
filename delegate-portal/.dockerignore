@@ -1,0 +1,13 @@
+node_modules
+data
+.env
+.env.*
+!.env.example
+admin-app
+delegate-app
+sync-client
+*.vbs
+.git
+.gitignore
+README.md
+npm-debug.log*

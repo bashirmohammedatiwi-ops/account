@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>Edari Accounts — دليل الحسابات</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">ح</div>
+        <div>
+          <h1>Edari Accounts</h1>
+          <p>دليل الحسابات — شجرة • فروع • كشوف حساب</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <input type="search" id="globalSearch" placeholder="بحث في كل الحسابات...">
+        <input type="text" id="quickNum" placeholder="رقم حساب + Enter" class="quick-num">
+        <button class="btn primary" id="btnReload">تحديث F5</button>
+        <button class="btn" id="btnExport">تصدير CSV</button>
+        <span class="badge" id="connBadge">...</span>
+      </div>
+    </header>
+
+    <div class="stats-row" id="statsRow"></div>
+
+    <div class="main-grid">
+      <aside class="tree-panel panel">
+        <div class="panel-head">
+          <h2>شجرة الحسابات</h2>
+          <span class="chip" id="treeMeta">—</span>
+        </div>
+        <div class="tree-scroll" id="accountsTree"></div>
+      </aside>
+
+      <section class="workspace panel">
+        <nav class="breadcrumb" id="breadcrumb"></nav>
+
+        <div class="account-banner empty" id="accountBanner">
+          <div class="banner-icon">📋</div>
+          <div>
+            <h2>اختر حساباً من الشجرة</h2>
+            <p>أو اكتب رقم حساب في الأعلى واضغط Enter — مثل <strong>12106</strong></p>
+          </div>
+        </div>
+
+        <div class="view-tabs" id="viewTabs">
+          <button class="view-tab active" data-view="branches">الفروع والكشوف</button>
+          <button class="view-tab" data-view="info">التفاصيل الكاملة</button>
+          <button class="view-tab" data-view="group">ملخص المجموعة</button>
+        </div>
+
+        <!-- الفروع والكشوف: قائمة + تفاصيل -->
+        <div class="view-pane active" id="view-branches">
+          <div class="split-layout">
+            <div class="split-list panel-inner">
+              <div class="split-list-head">
+                <input type="search" id="branchSearch" placeholder="بحث في الفروع...">
+                <div class="filter-chips">
+                  <button class="chip-btn active" data-filter="all">الكل</button>
+                  <button class="chip-btn" data-filter="debit">مدين</button>
+                  <button class="chip-btn" data-filter="credit">دائن</button>
+                  <button class="chip-btn" data-filter="moves">له حركات</button>
+                </div>
+              </div>
+              <div class="split-list-meta" id="branchesMeta">—</div>
+              <div class="branch-list" id="branchList"></div>
+            </div>
+            <div class="split-detail panel-inner">
+              <div class="detail-placeholder" id="branchPlaceholder">
+                <div class="placeholder-icon">👈</div>
+                <h3>اختر فرعاً من القائمة</h3>
+                <p>ستظهر هنا تفاصيل الحساب وكشف الحركات كاملاً</p>
+              </div>
+              <div class="branch-detail hidden" id="branchDetail">
+                <div class="detail-header" id="branchDetailHeader"></div>
+                <div class="detail-cards" id="branchDetailCards"></div>
+                <div class="statement-block">
+                  <div class="statement-head">
+                    <h3>كشف الحساب</h3>
+                    <span id="statementMeta"></span>
+                  </div>
+                  <div class="table-scroll statement-scroll">
+                    <table class="statement-table">
+                      <thead id="statementHead"></thead>
+                      <tbody id="statementBody"></tbody>
+                      <tfoot id="statementFoot"></tfoot>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- التفاصيل الكاملة -->
+        <div class="view-pane" id="view-info">
+          <div class="info-scroll" id="accountSections"></div>
+        </div>
+
+        <!-- ملخص المجموعة -->
+        <div class="view-pane" id="view-group">
+          <div class="group-summary" id="groupSummary"></div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="statusbar"><span id="statusText">جاهز</span></footer>
+  </div>
+
+  <div class="overlay" id="loadOverlay">
+    <div class="load-box">
+      <div class="spinner"></div>
+      <h3 id="loadTitle">جاري التحميل</h3>
+      <p id="loadMsg">الاتصال بقاعدة EdariNX...</p>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

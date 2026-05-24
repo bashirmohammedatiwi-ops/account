@@ -1,0 +1,98 @@
+require('dotenv').config();
+const Database = require('better-sqlite3');
+const path = require('path');
+const fs = require('fs');
+const bcrypt = require('bcryptjs');
+
+const dbPath = path.resolve(process.env.DATABASE_PATH || './data/portal.db');
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+
+const db = new Database(dbPath);
+db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
+
+function initSchema() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS admins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS agents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      phone TEXT,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS accounts (
+      seq TEXT PRIMARY KEY,
+      num TEXT NOT NULL,
+      name1 TEXT,
+      name2 TEXT,
+      master_seq TEXT,
+      sub_count INTEGER DEFAULT 0,
+      bal REAL DEFAULT 0,
+      tot1 REAL DEFAULT 0,
+      tot2 REAL DEFAULT 0,
+      address TEXT,
+      remarks TEXT,
+      official_name TEXT,
+      synced_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_accounts_master ON accounts(master_seq);
+    CREATE INDEX IF NOT EXISTS idx_accounts_num ON accounts(num);
+
+    CREATE TABLE IF NOT EXISTS journal (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      seq TEXT NOT NULL,
+      acc_seq TEXT NOT NULL,
+      tx_date TEXT,
+      am REAL DEFAULT 0,
+      is_debit INTEGER DEFAULT 0,
+      exp1 TEXT,
+      bill_num TEXT,
+      UNIQUE(seq, acc_seq)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_journal_acc ON journal(acc_seq);
+    CREATE INDEX IF NOT EXISTS idx_journal_date ON journal(tx_date);
+
+    CREATE TABLE IF NOT EXISTS agent_trees (
+      agent_id INTEGER NOT NULL,
+      account_seq TEXT NOT NULL,
+      PRIMARY KEY (agent_id, account_seq),
+      FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
+      FOREIGN KEY (account_seq) REFERENCES accounts(seq) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS sync_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      started_at TEXT,
+      finished_at TEXT,
+      status TEXT,
+      accounts_count INTEGER DEFAULT 0,
+      journal_count INTEGER DEFAULT 0,
+      message TEXT
+    );
+  `);
+
+  const adminUser = process.env.ADMIN_USER || 'admin';
+  const adminPass = process.env.ADMIN_PASS || 'admin123';
+  const exists = db.prepare('SELECT id FROM admins WHERE username = ?').get(adminUser);
+  if (!exists) {
+    const hash = bcrypt.hashSync(adminPass, 10);
+    db.prepare('INSERT INTO admins (username, password_hash) VALUES (?, ?)').run(adminUser, hash);
+    console.log(`Default admin created: ${adminUser}`);
+  }
+}
+
+initSchema();
+
+module.exports = db;

@@ -1,0 +1,9 @@
+{
+  "name": "edari-admin-desktop",
+  "version": "1.0.0",
+  "description": "Edari admin desktop — sync data and manage delegates",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron ."
+  }
+}
