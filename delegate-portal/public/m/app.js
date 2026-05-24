@@ -230,13 +230,19 @@ async function openBranch(seq) {
     const branch = state.selectedBranch;
     const lines = data.lines || [];
     const { totalDebit, totalCredit, summary } = data;
+    const currentBal = data.finalBalance ?? acc.bal ?? 0;
+    const debtLabel = acc.debtStatus || summary?.label || 'الرصيد الحالي';
 
     document.getElementById('stmtHero').innerHTML = `
       <div class="hero-top">
         <span class="hero-num">${esc(acc.num)}</span>
       </div>
       <h2 class="hero-name">${esc(acc.name1)}</h2>
-      ${acc.address ? `<p class="hero-addr">${esc(acc.address)}</p>` : ''}`;
+      ${acc.address ? `<p class="hero-addr">${esc(acc.address)}</p>` : ''}
+      <div class="hero-balance ${balClass(Number(currentBal))}">
+        <span class="hero-balance-label">${esc(debtLabel)}</span>
+        <span class="hero-balance-val">${fmtNumAlways(Math.abs(Number(currentBal)))}</span>
+      </div>`;
 
     document.getElementById('stmtStats').innerHTML = `
       <div class="stat-box stat-debit">
