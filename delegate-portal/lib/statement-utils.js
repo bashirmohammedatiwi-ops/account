@@ -45,7 +45,7 @@ function debtStatusFromBalance(bal) {
   const n = parseAmount(bal);
   if (n < 0) return 'مدين (عليه)';
   if (n > 0) return 'دائن (له)';
-  return 'متزن';
+  return 'الديون';
 }
 
 module.exports = {
