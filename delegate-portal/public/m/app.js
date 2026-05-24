@@ -36,6 +36,13 @@ function fmtDate(v) {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
+function balanceLabel(bal) {
+  const n = Number(bal);
+  if (n < 0) return { text: 'رصيد مدين (عليه)', cls: 'debit' };
+  if (n > 0) return { text: 'رصيد دائن (له)', cls: 'credit' };
+  return { text: 'متزن', cls: '' };
+}
+
 function balClass(b) {
   if (b < 0) return 'debit';
   if (b > 0) return 'credit';
@@ -225,59 +232,116 @@ async function openBranch(seq) {
   goToScreen('statement');
   setOverlay(true);
 
-  document.getElementById('stmtHero').innerHTML = '<p style="opacity:.8">جاري التحميل...</p>';
+  document.getElementById('stmtHero').innerHTML = '<div class="stmt-loading">جاري تحميل الكشف...</div>';
   document.getElementById('stmtStats').innerHTML = '';
   document.getElementById('stmtLines').innerHTML = '';
   document.getElementById('stmtTotals').innerHTML = '';
+  document.getElementById('stmtTableSection').classList.add('hidden');
 
   try {
     const data = await api(`/accounts/${encodeURIComponent(seq)}/statement`);
     const acc = data.account || state.selectedBranch;
     const branch = state.selectedBranch;
+    const finalBal = data.finalBalance ?? acc.bal ?? 0;
+    const status = balanceLabel(finalBal);
+    const lines = data.lines || [];
+    const { totalDebit, totalCredit, summary } = data;
 
     document.getElementById('stmtHero').innerHTML = `
-      <div class="num">${esc(acc.num)}</div>
-      <h2>${esc(acc.name1)}</h2>
-      ${acc.address ? `<div class="addr">${esc(acc.address)}</div>` : ''}
-      <div class="stmt-hero-bal">
-        <span>${esc(acc.debtStatus || data.summary?.label || '')}</span>
-        <strong>${fmtNumAlways(data.finalBalance ?? acc.bal)}</strong>
+      <div class="hero-top">
+        <span class="hero-num">${esc(acc.num)}</span>
+        <span class="hero-badge ${status.cls}">${esc(status.text)}</span>
+      </div>
+      <h2 class="hero-name">${esc(acc.name1)}</h2>
+      ${acc.address ? `<p class="hero-addr">${esc(acc.address)}</p>` : ''}
+      <div class="hero-balance ${status.cls}">
+        <span class="hero-balance-label">الرصيد الحالي</span>
+        <strong class="hero-balance-val">${fmtNumAlways(finalBal)}</strong>
       </div>`;
 
-    document.getElementById('stmtStats').innerHTML = [
-      ['إجمالي مدين', fmtNumAlways(data.totalDebit)],
-      ['إجمالي دائن', fmtNumAlways(data.totalCredit)],
-      ['الحركات', String(data.lines?.length || 0)]
-    ].map(([k, v]) => `<div class="stat-box"><div class="k">${k}</div><div class="v">${esc(v)}</div></div>`).join('');
+    document.getElementById('stmtStats').innerHTML = `
+      <div class="stat-box stat-debit">
+        <span class="stat-icon">↓</span>
+        <div class="stat-body">
+          <div class="k">إجمالي مدين</div>
+          <div class="v">${fmtNumAlways(totalDebit)}</div>
+        </div>
+      </div>
+      <div class="stat-box stat-credit">
+        <span class="stat-icon">↑</span>
+        <div class="stat-body">
+          <div class="k">إجمالي دائن</div>
+          <div class="v">${fmtNumAlways(totalCredit)}</div>
+        </div>
+      </div>
+      <div class="stat-box stat-count">
+        <span class="stat-icon">#</span>
+        <div class="stat-body">
+          <div class="k">عدد الحركات</div>
+          <div class="v">${lines.length}</div>
+        </div>
+      </div>`;
 
-    const lines = data.lines || [];
-    document.getElementById('stmtLines').innerHTML = lines.length
-      ? `<p class="stmt-section-title">حركات الحساب (${lines.length})</p>`
-        + lines.map((r) => `
-          <div class="tx-card">
-            <div class="tx-top">
-              <span class="tx-date">${fmtDate(r.date)}</span>
-              <span class="tx-bal ${balClass(r.balance)}">${fmtNumAlways(r.balance)}</span>
+    if (lines.length) {
+      document.getElementById('stmtTableSection').classList.remove('hidden');
+      document.getElementById('stmtLines').innerHTML = lines.map((r, i) => `
+        <article class="tx-row">
+          <div class="tx-row-meta">
+            <span class="tx-idx">${i + 1}</span>
+            <span class="tx-date">${fmtDate(r.date)}</span>
+          </div>
+          <p class="tx-desc">${esc(r.description) || '—'}</p>
+          <div class="tx-amounts-grid">
+            <div class="tx-amt debit-amt${r.debit ? ' has-val' : ''}">
+              <span class="amt-label">مدين</span>
+              <span class="amt-val">${r.debit ? fmtNumAlways(r.debit) : '—'}</span>
             </div>
-            <div class="tx-desc">${esc(r.description) || '—'}</div>
-            <div class="tx-amounts">
-              ${r.debit ? `<span class="tx-debit">مدين: ${fmtNum(r.debit)}</span>` : ''}
-              ${r.credit ? `<span class="tx-credit">دائن: ${fmtNum(r.credit)}</span>` : ''}
+            <div class="tx-amt credit-amt${r.credit ? ' has-val' : ''}">
+              <span class="amt-label">دائن</span>
+              <span class="amt-val">${r.credit ? fmtNumAlways(r.credit) : '—'}</span>
             </div>
-          </div>`).join('')
-      : '<div class="empty-state"><div class="icon">📋</div><p>لا توجد حركات</p></div>';
+          </div>
+          <div class="tx-balance-bar ${balClass(r.balance)}">
+            <span>الرصيد</span>
+            <strong>${fmtNumAlways(r.balance)}</strong>
+          </div>
+        </article>`).join('');
+    } else {
+      document.getElementById('stmtLines').innerHTML = `
+        <div class="empty-state"><div class="icon">📋</div><p>لا توجد حركات لهذا الحساب</p></div>`;
+    }
 
-    const { totalDebit, totalCredit, summary } = data;
     document.getElementById('stmtTotals').innerHTML = lines.length
-      ? `<div class="total-row">
-          <span>مجموع المدين</span><span class="val debit">${fmtNumAlways(totalDebit)}</span>
-        </div>
-        <div class="total-row">
-          <span>مجموع الدائن</span><span class="val credit">${fmtNumAlways(totalCredit)}</span>
-        </div>
-        <div class="total-row final">
-          <span>${esc(summary.label)}</span>
-          <span class="val">${fmtNumAlways(summary.amount)}</span>
+      ? `<div class="totals-card">
+          <h3 class="totals-title">ملخص الكشف</h3>
+          <div class="totals-grid">
+            <div class="totals-cell">
+              <span class="lbl">مجموع المدين</span>
+              <span class="val debit">${fmtNumAlways(totalDebit)}</span>
+            </div>
+            <div class="totals-cell">
+              <span class="lbl">مجموع الدائن</span>
+              <span class="val credit">${fmtNumAlways(totalCredit)}</span>
+            </div>
+          </div>
+          <div class="totals-final ${summary.side === 'debit' ? 'debit-side' : summary.side === 'credit' ? 'credit-side' : ''}">
+            <div class="final-label">${esc(summary.label)}</div>
+            <div class="final-amounts">
+              <div class="final-slot">
+                <span>مدين</span>
+                <strong class="debit">${summary.side === 'debit' ? fmtNumAlways(summary.amount) : summary.amount === 0 ? '0' : '—'}</strong>
+              </div>
+              <div class="final-slot">
+                <span>دائن</span>
+                <strong class="credit">${summary.side === 'credit' ? fmtNumAlways(summary.amount) : '—'}</strong>
+              </div>
+            </div>
+          </div>
+          ${branch.tot1 != null || branch.tot2 != null ? `
+          <div class="totals-extra">
+            ${branch.tot1 != null ? `<span>إجمالي 1: <b dir="ltr">${fmtNumAlways(branch.tot1)}</b></span>` : ''}
+            ${branch.tot2 != null ? `<span>إجمالي 2: <b dir="ltr">${fmtNumAlways(branch.tot2)}</b></span>` : ''}
+          </div>` : ''}
         </div>`
       : '';
   } catch (e) {
