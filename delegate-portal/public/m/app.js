@@ -17,6 +17,12 @@ function esc(v) {
   return String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+const ICONS = {
+  tree: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M3 12l9 5 9-5M3 17l9 5 9-5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`,
+  branch: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M5 21v-1.5a7 7 0 0114 0V21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+  chevron: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+};
+
 function fmtNum(v) {
   const n = Number(v);
   if (Number.isNaN(n) || n === 0) return '';
@@ -170,7 +176,7 @@ function renderTreeContext() {
   }
   el.classList.remove('hidden');
   el.innerHTML = `
-    <div class="tree-context-icon">ش</div>
+    <div class="tree-context-icon">${ICONS.tree}</div>
     <div>
       <div class="tree-context-num">${esc(state.selectedTree.num)}</div>
       <div class="tree-context-name">${esc(state.selectedTree.name1 || '—')}</div>
@@ -203,15 +209,15 @@ function renderTrees() {
 
   list.innerHTML = state.trees.map((t) => `
     <button type="button" class="nav-card" data-seq="${esc(t.seq)}">
-      <div class="nav-card-icon tree">ش</div>
+      <div class="nav-card-icon tree">${ICONS.tree}</div>
       <div class="nav-card-body">
-        <div class="nav-card-num">${esc(t.num)}</div>
-        <div class="nav-card-name">${esc(t.name1 || '—')}</div>
+        <div class="nav-card-top">
+          <div class="nav-card-name">${esc(t.name1 || '—')}</div>
+          <span class="nav-card-num">${esc(t.num)}</span>
+        </div>
         <div class="nav-card-sub">${t.directChildren || 0} زبون</div>
       </div>
-      <span class="nav-card-arrow">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </span>
+      <span class="nav-card-arrow">${ICONS.chevron}</span>
     </button>`).join('');
 
   list.querySelectorAll('.nav-card').forEach((btn) => {
@@ -243,14 +249,14 @@ function renderBranches() {
 
   list.innerHTML = filtered.map((b) => `
     <button type="button" class="nav-card" data-seq="${esc(b.seq)}">
-      <div class="nav-card-icon branch">${esc(agentInitial(b.name1))}</div>
+      <div class="nav-card-icon branch">${ICONS.branch}</div>
       <div class="nav-card-body">
-        <div class="nav-card-num">${esc(b.num)}</div>
-        <div class="nav-card-name">${esc(b.name1 || '—')}</div>
+        <div class="nav-card-top">
+          <div class="nav-card-name">${esc(b.name1 || '—')}</div>
+          <span class="nav-card-num">${esc(b.num)}</span>
+        </div>
       </div>
-      <span class="nav-card-arrow">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </span>
+      <span class="nav-card-arrow">${ICONS.chevron}</span>
     </button>`).join('');
 
   list.querySelectorAll('.nav-card').forEach((btn) => {
