@@ -1,9 +1,47 @@
 {
   "name": "edari-admin-desktop",
   "version": "1.0.0",
-  "description": "Edari admin desktop — sync data and manage delegates",
+  "description": "Edari Admin — لوحة تحكم الحسابات والمندوبين",
   "main": "electron/main.js",
+  "author": "Edari",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "prepare-build": "node scripts/prepare-build.js",
+    "build": "npm run prepare-build && electron-builder --win portable",
+    "build:installer": "npm run prepare-build && electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "com.edari.admin",
+    "productName": "Edari Admin",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      { "from": "build-resources/portal", "to": "portal" },
+      { "from": "build-resources/edari-reader", "to": "edari-reader" },
+      { "from": "build-resources/node", "to": "node" }
+    ],
+    "win": {
+      "target": [
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "artifactName": "Edari-Admin-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Edari-Admin-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Edari-Admin-Setup-${version}.${ext}"
+    }
+  },
+  "devDependencies": {
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8"
   }
 }

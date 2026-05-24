@@ -8,7 +8,7 @@ services:
       PORT: 5005
       HOST: 0.0.0.0
       DATABASE_PATH: /app/data/portal.db
-      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:5005}
+      PUBLIC_URL: ${PUBLIC_URL:-http://187.124.23.65:5005}
       SYNC_API_KEY: ${SYNC_API_KEY:-edari-sync-local-key-2025}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       ADMIN_USER: ${ADMIN_USER:-admin}

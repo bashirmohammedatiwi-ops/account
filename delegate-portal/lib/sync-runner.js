@@ -9,11 +9,18 @@ async function runLocalSync(serverUrl, syncKey) {
   const env = {
     ...process.env,
     SYNC_SERVER: serverUrl,
-    SYNC_API_KEY: syncKey
+    SYNC_API_KEY: syncKey,
+    EDARI_READER_ROOT: process.env.EDARI_READER_ROOT
+      || path.join(__dirname, '..', '..', 'edari-reader')
   };
 
+  const nodeBin = process.env.NODE_BIN
+    || (String(process.execPath).toLowerCase().includes('electron')
+      ? (process.platform === 'win32' ? 'node.exe' : 'node')
+      : process.execPath);
+
   const { stdout, stderr } = await execFileAsync(
-    process.execPath,
+    nodeBin,
     [script, '--server', serverUrl, '--key', syncKey],
     {
       env,

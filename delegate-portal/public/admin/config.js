@@ -1,0 +1,4 @@
+window.ADMIN_CONFIG = {
+  BACKEND_URL: 'http://187.124.23.65:5005',
+  DEFAULT_SYNC_SERVER: 'http://187.124.23.65:5005'
+};

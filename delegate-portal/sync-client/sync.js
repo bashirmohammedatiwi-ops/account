@@ -5,11 +5,13 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
 const path = require('path');
-const odbcBridge = require(path.join(__dirname, '..', '..', 'edari-reader', 'lib', 'odbc-bridge'));
+const edariRoot = process.env.EDARI_READER_ROOT
+  || path.join(__dirname, '..', '..', 'edari-reader');
+const odbcBridge = require(path.join(edariRoot, 'lib', 'odbc-bridge'));
 
 const SERVER = process.argv.includes('--server')
   ? process.argv[process.argv.indexOf('--server') + 1]
-  : (process.env.SYNC_SERVER || 'http://localhost:5005');
+  : (process.env.SYNC_SERVER || 'http://187.124.23.65:5005');
 
 const SYNC_KEY = process.argv.includes('--key')
   ? process.argv[process.argv.indexOf('--key') + 1]

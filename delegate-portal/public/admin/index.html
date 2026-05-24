@@ -9,7 +9,13 @@
 <body>
   <div id="app" class="app">
     <aside class="sidebar">
-      <div class="sidebar-brand">Edari Admin</div>
+      <div class="sidebar-brand">
+        <div class="brand-icon">E</div>
+        <div class="brand-text">
+          <strong>Edari Admin</strong>
+          <span>لوحة تحكم الحسابات</span>
+        </div>
+      </div>
       <nav>
         <button class="nav-item active" data-page="dashboard">📊 لوحة المعلومات</button>
         <button class="nav-item" data-page="sync">☁️ رفع البيانات</button>
@@ -17,7 +23,11 @@
         <button class="nav-item" data-page="trees">🌳 الحسابات وكشوف</button>
       </nav>
       <div class="sidebar-foot">
-        <span class="muted">لوحة التحكم</span>
+        <div class="server-status" id="serverStatus">
+          <span class="status-dot off" id="statusDot"></span>
+          <span id="statusText">جاري الاتصال...</span>
+        </div>
+        <span class="muted" id="backendUrlLabel">—</span>
       </div>
     </aside>
 
@@ -58,9 +68,11 @@
         <div class="card">
           <h3>إعدادات الاتصال</h3>
           <div class="settings-grid">
-            <label>عنوان السيرفر<input type="text" id="syncServerUrl" value="http://localhost:5005"></label>
+            <label>عنوان السيرفر<input type="text" id="syncServerUrl" value="http://187.124.23.65:5005"></label>
             <label>مفتاح المزامنة<input type="text" id="syncApiKey" placeholder="SYNC_API_KEY"></label>
+            <label class="full">عنوان الباك اند (API)<input type="text" id="backendUrl" value="http://187.124.23.65:5005"></label>
           </div>
+          <p class="muted">غيّر عنوان الباك اند واضغط Enter للحفظ — يُستخدم عند فتح اللوحة محلياً</p>
         </div>
         <div class="card">
           <h3>سجل المزامنة</h3>
@@ -159,6 +171,7 @@
     </div>
   </div>
 
+<script src="config.js"></script>
   <script src="admin.js"></script>
 </body>
 </html>

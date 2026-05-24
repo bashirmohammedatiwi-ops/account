@@ -26,7 +26,6 @@ desktop.ini
 .idea/
 *.swp
 
-# Build / cache
-dist/
-build/
-.cache/
+# Build output
+**/dist/
+**/admin-app/build-resources/

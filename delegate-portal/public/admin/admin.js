@@ -1,4 +1,48 @@
-const API = '';
+const API = resolveApiBase();
+
+function resolveApiBase() {
+  const saved = localStorage.getItem('backendUrl');
+  if (saved) return saved.replace(/\/$/, '');
+
+  const configured = String(window.ADMIN_CONFIG?.BACKEND_URL || '').trim();
+  if (configured) {
+    try {
+      const cfgOrigin = new URL(configured).origin;
+      if (window.location.origin && window.location.origin !== 'null' && window.location.origin === cfgOrigin) {
+        return '';
+      }
+    } catch { /* ignore */ }
+    return configured.replace(/\/$/, '');
+  }
+
+  return '';
+}
+
+function getBackendDisplayUrl() {
+  return resolveApiBase() || window.location.origin || window.ADMIN_CONFIG?.BACKEND_URL || '—';
+}
+
+function setServerStatus(state, text) {
+  const dot = document.getElementById('statusDot');
+  const label = document.getElementById('statusText');
+  if (!dot || !label) return;
+  dot.className = `status-dot ${state}`;
+  label.textContent = text;
+}
+
+async function checkBackendHealth() {
+  const base = resolveApiBase();
+  const url = `${base}/api/health`;
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error('offline');
+    setServerStatus('on', 'متصل بالسيرفر');
+    return true;
+  } catch {
+    setServerStatus('err', 'غير متصل');
+    return false;
+  }
+}
 let treesCache = [];
 
 const explorer = {
@@ -366,12 +410,15 @@ async function runSync() {
   msg.textContent = 'جاري قراءة البيانات من EdariNX...';
 
   try {
-    const res = await fetch('/api/admin/trigger-sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ serverUrl, syncKey })
-    });
-    const data = await res.json();
+    let data;
+    if (window.edariDesktop?.runLocalSync) {
+      data = await window.edariDesktop.runLocalSync(serverUrl, syncKey);
+    } else {
+      data = await api('/api/admin/trigger-sync', {
+        method: 'POST',
+        body: JSON.stringify({ serverUrl, syncKey })
+      });
+    }
     if (!data.ok) throw new Error(data.error || 'فشل الرفع');
 
     msg.textContent = `تم! ${data.accounts} حساب، ${data.journal} حركة`;
@@ -422,7 +469,8 @@ document.querySelectorAll('.nav-item').forEach((btn) => {
 
 async function loadConfig() {
   const data = await api('/api/admin/config');
-  const mobileUrl = data.mobileUrl || `${window.location.origin}/m`;
+  const base = resolveApiBase() || data.serverUrl || window.ADMIN_CONFIG?.BACKEND_URL || '';
+  const mobileUrl = data.mobileUrl || `${base}/m`;
   document.getElementById('mobileAppLink').href = mobileUrl;
   document.getElementById('mobileUrlDisplay').textContent = mobileUrl;
 
@@ -430,12 +478,29 @@ async function loadConfig() {
   if (!localStorage.getItem('syncApiKey') && data.syncApiKey) {
     syncKeyEl.value = data.syncApiKey;
   }
-  if (!localStorage.getItem('syncServerUrl') && data.serverUrl) {
-    document.getElementById('syncServerUrl').value = data.serverUrl;
+  const defaultServer = window.ADMIN_CONFIG?.DEFAULT_SYNC_SERVER || data.serverUrl || base;
+  if (!localStorage.getItem('syncServerUrl') && defaultServer) {
+    document.getElementById('syncServerUrl').value = defaultServer;
   }
+  if (!localStorage.getItem('backendUrl')) {
+    const backendEl = document.getElementById('backendUrl');
+    if (backendEl && window.ADMIN_CONFIG?.BACKEND_URL) {
+      backendEl.value = window.ADMIN_CONFIG.BACKEND_URL;
+    }
+  }
+  const urlLabel = document.getElementById('backendUrlLabel');
+  if (urlLabel) urlLabel.textContent = getBackendDisplayUrl();
+}
+
+function saveBackendUrl() {
+  const url = document.getElementById('backendUrl').value.trim().replace(/\/$/, '');
+  if (!url) return alert('أدخل عنوان الباك اند');
+  localStorage.setItem('backendUrl', url);
+  location.reload();
 }
 
 async function refreshAll() {
+  await checkBackendHealth();
   await loadConfig();
   await loadTrees();
   await loadDashboard();
@@ -445,8 +510,15 @@ async function refreshAll() {
 
 const savedUrl = localStorage.getItem('syncServerUrl');
 const savedKey = localStorage.getItem('syncApiKey');
+const savedBackend = localStorage.getItem('backendUrl');
 if (savedUrl) document.getElementById('syncServerUrl').value = savedUrl;
 if (savedKey) document.getElementById('syncApiKey').value = savedKey;
+if (savedBackend) document.getElementById('backendUrl').value = savedBackend;
+
+document.getElementById('backendUrl')?.addEventListener('change', saveBackendUrl);
+document.getElementById('backendUrl')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') saveBackendUrl();
+});
 
 document.getElementById('btnCopyMobileUrl').addEventListener('click', async () => {
   const url = document.getElementById('mobileUrlDisplay').textContent;
