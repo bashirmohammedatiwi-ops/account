@@ -57,6 +57,20 @@ function migrateSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_invoice_lines_bill ON invoice_lines(bill_seq);
   `);
+  if (columnExists('invoice_lines', 'id')) {
+    if (!columnExists('invoice_lines', 'mat_num')) {
+      db.exec('ALTER TABLE invoice_lines ADD COLUMN mat_num TEXT');
+    }
+    if (!columnExists('invoice_lines', 'bonus')) {
+      db.exec('ALTER TABLE invoice_lines ADD COLUMN bonus REAL DEFAULT 0');
+    }
+    if (!columnExists('invoice_lines', 'line_total')) {
+      db.exec('ALTER TABLE invoice_lines ADD COLUMN line_total REAL DEFAULT 0');
+    }
+    if (!columnExists('invoice_lines', 'remarks')) {
+      db.exec('ALTER TABLE invoice_lines ADD COLUMN remarks TEXT');
+    }
+  }
 }
 
 function initSchema() {
@@ -135,9 +149,13 @@ function initSchema() {
       bill_seq TEXT NOT NULL,
       bill_no INTEGER,
       mat TEXT,
+      mat_num TEXT,
       mat_name TEXT,
       quant REAL DEFAULT 0,
+      bonus REAL DEFAULT 0,
       price REAL DEFAULT 0,
+      line_total REAL DEFAULT 0,
+      remarks TEXT,
       kind TEXT,
       UNIQUE(bill_seq, bill_no, mat)
     );

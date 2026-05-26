@@ -103,10 +103,12 @@ function importSyncData({ accounts = [], journal = [], invoices = [], invoiceLin
   `);
 
   const upsertInvoiceLine = db.prepare(`
-    INSERT INTO invoice_lines (bill_seq, bill_no, mat, mat_name, quant, price, kind)
-    VALUES (@bill_seq, @bill_no, @mat, @mat_name, @quant, @price, @kind)
+    INSERT INTO invoice_lines (bill_seq, bill_no, mat, mat_num, mat_name, quant, bonus, price, line_total, remarks, kind)
+    VALUES (@bill_seq, @bill_no, @mat, @mat_num, @mat_name, @quant, @bonus, @price, @line_total, @remarks, @kind)
     ON CONFLICT(bill_seq, bill_no, mat) DO UPDATE SET
-      mat_name=excluded.mat_name, quant=excluded.quant, price=excluded.price, kind=excluded.kind
+      mat_num=excluded.mat_num, mat_name=excluded.mat_name, quant=excluded.quant,
+      bonus=excluded.bonus, price=excluded.price, line_total=excluded.line_total,
+      remarks=excluded.remarks, kind=excluded.kind
   `);
 
   const tx = db.transaction(() => {
@@ -164,13 +166,22 @@ function importSyncData({ accounts = [], journal = [], invoices = [], invoiceLin
     for (const line of invoiceLines) {
       const billSeq = String(line.BillSeq ?? line.bill_seq ?? '').replace(/[^0-9]/g, '');
       if (!billSeq) continue;
+      const quant = Number(line.Quant ?? line.quant ?? 0);
+      const price = Number(line.Price ?? line.price ?? 0);
+      const bonus = Number(line.OBonus ?? line.bonus ?? 0);
+      const storedTotal = Number(line.sum ?? line.line_total ?? 0);
+      const lineTotal = storedTotal > 0 ? storedTotal : quant * price;
       upsertInvoiceLine.run({
         bill_seq: billSeq,
         bill_no: Number(line.BillNo ?? line.bill_no ?? 0),
         mat: String(line.Mat ?? line.mat ?? ''),
-        mat_name: line.MatName ?? line.mat_name ?? '',
-        quant: Number(line.Quant ?? line.quant ?? 0),
-        price: Number(line.Price ?? line.price ?? 0),
+        mat_num: String(line.MatNum ?? line.mat_num ?? line.Num ?? ''),
+        mat_name: line.MatName ?? line.mat_name ?? line.Name1 ?? '',
+        quant,
+        bonus,
+        price,
+        line_total: lineTotal,
+        remarks: line.MatRem ?? line.remarks ?? '',
         kind: String(line.Kind ?? line.kind ?? '')
       });
     }

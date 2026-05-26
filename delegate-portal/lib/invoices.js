@@ -3,13 +3,15 @@ const { canAgentAccess } = require('./accounts');
 
 function invoiceKindLabel(kind) {
   const map = {
-    0: 'مبيعات',
-    1: 'مشتريات',
+    0: 'فاتورة',
+    1: 'فاتورة مبيعات',
     2: 'مرتجع مبيعات',
-    3: 'مرتجع مشتريات'
+    3: 'فاتورة مشتريات',
+    4: 'فاتورة مبيعات',
+    5: 'مرتجع'
   };
   const k = Number(kind);
-  return map[k] ?? (kind != null && kind !== '' ? `نوع ${kind}` : '—');
+  return map[k] ?? (kind != null && kind !== '' ? `فاتورة (${kind})` : 'فاتورة مبيعات');
 }
 
 function normalizeBillSeq(value) {
@@ -31,31 +33,50 @@ function resolveBillSeq(row) {
   return hit ? String(hit.seq) : '';
 }
 
-function mapInvoiceRow(row) {
+function lineTotal(quant, price, stored) {
+  const total = Number(stored);
+  if (!Number.isNaN(total) && total > 0) return total;
+  return Number(quant || 0) * Number(price || 0);
+}
+
+function mapInvoiceRow(row, account) {
   if (!row) return null;
+  const total = Number(row.total || 0);
+  const discount = Number(row.discount || 0);
+  const payment = Number(row.payment || 0);
+  const netPay = payment > 0 ? payment : Math.max(total - discount, 0);
   return {
     seq: row.seq,
     num: row.num,
     kind: row.kind,
     kindLabel: invoiceKindLabel(row.kind),
     date: row.inv_date,
-    total: row.total,
-    payment: row.payment,
-    discount: row.discount,
+    total,
+    payment,
+    discount,
+    netPay,
     lineCount: row.line_count,
     remarks: row.remarks,
-    accSeq: row.acc_seq
+    accSeq: row.acc_seq,
+    accountNum: account?.num || '',
+    accountName: account?.name1 || ''
   };
 }
 
 function mapInvoiceLineRow(row) {
+  const quant = Number(row.quant || 0);
+  const price = Number(row.price || 0);
+  const bonus = Number(row.bonus || 0);
   return {
     billNo: row.bill_no,
     mat: row.mat,
-    matName: row.mat_name,
-    quant: row.quant,
-    price: row.price,
-    lineTotal: Number(row.quant || 0) * Number(row.price || 0),
+    matNum: row.mat_num || row.mat || '',
+    matName: row.mat_name || '',
+    quant,
+    bonus,
+    price,
+    lineTotal: lineTotal(quant, price, row.line_total),
+    remarks: row.remarks || '',
     kind: row.kind
   };
 }
@@ -65,12 +86,22 @@ function getInvoiceByBillSeq(billSeq) {
   if (!seq) return null;
   const invoice = db.prepare('SELECT * FROM invoices WHERE seq = ?').get(seq);
   if (!invoice) return null;
+  const account = invoice.acc_seq
+    ? db.prepare('SELECT seq, num, name1 FROM accounts WHERE seq = ?').get(String(invoice.acc_seq))
+    : null;
   const lines = db.prepare(`
     SELECT * FROM invoice_lines WHERE bill_seq = ? ORDER BY bill_no
   `).all(seq);
+  const mappedLines = lines.map(mapInvoiceLineRow);
+  const computedTotal = mappedLines.reduce((s, l) => s + l.lineTotal, 0);
+  const mappedInvoice = mapInvoiceRow(invoice, account);
+  if (!mappedInvoice.total && computedTotal) mappedInvoice.total = computedTotal;
+  if (!mappedInvoice.netPay && mappedInvoice.total) {
+    mappedInvoice.netPay = Math.max(mappedInvoice.total - mappedInvoice.discount, 0);
+  }
   return {
-    invoice: mapInvoiceRow(invoice),
-    lines: lines.map(mapInvoiceLineRow)
+    invoice: mappedInvoice,
+    lines: mappedLines
   };
 }
 

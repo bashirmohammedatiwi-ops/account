@@ -88,13 +88,45 @@ async function fetchInvoiceLines(billSeqs) {
   for (const part of chunk(billSeqs, 40)) {
     const ids = part.join(',');
     const rows = await query(
-      `SELECT BillSeq, BillNo, Mat, MatName, Quant, Price, Kind FROM file14n WHERE BillSeq IN (${ids}) ORDER BY BillSeq, BillNo`
+      `SELECT BillSeq, BillNo, Mat, MatName, Quant, Price, OBonus, MatRem, Kind FROM file14n WHERE BillSeq IN (${ids}) ORDER BY BillSeq, BillNo`
     );
     all.push(...rows);
     process.stdout.write(`\rبنود الفواتير: ${all.length}`);
   }
   console.log('');
-  return all;
+  return enrichInvoiceLines(all);
+}
+
+async function fetchMaterialMap(matSeqs) {
+  const map = new Map();
+  if (!matSeqs.length) return map;
+  for (const part of chunk(matSeqs, 80)) {
+    const ids = part.join(',');
+    const rows = await query(
+      `SELECT Seq, Num, Name1 FROM File13n WHERE Seq IN (${ids})`
+    );
+    for (const row of rows) {
+      map.set(String(row.Seq), { num: String(row.Num || ''), name1: row.Name1 || '' });
+    }
+  }
+  return map;
+}
+
+async function enrichInvoiceLines(lines) {
+  const matSeqs = [...new Set(lines.map((l) => String(l.Mat || '').replace(/[^0-9]/g, '')).filter(Boolean))];
+  console.log(`جاري جلب أسماء ${matSeqs.length} مادة...`);
+  const materials = await fetchMaterialMap(matSeqs);
+  return lines.map((line) => {
+    const mat = materials.get(String(line.Mat));
+    const quant = Number(line.Quant || 0);
+    const price = Number(line.Price || 0);
+    return {
+      ...line,
+      MatNum: mat?.num || '',
+      MatName: (line.MatName || '').trim() || mat?.name1 || '',
+      line_total: quant * price
+    };
+  });
 }
 
 async function main() {
