@@ -513,6 +513,13 @@ legend {
   margin: 0;
 }
 
+.sync-tree-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
 .modal-actions {
   display: flex;
   gap: 10px;

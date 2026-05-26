@@ -60,13 +60,25 @@
         <div class="card info-card">
           <h3>كيف تعمل المزامنة؟</h3>
           <ol>
-            <li>زر <strong>تحديث ورفع البيانات</strong> يشغّل أداة المزامنة المحلية التي تقرأ من EdariNX على هذا الجهاز</li>
-            <li>تُرفع الحسابات وكشوف الحركات إلى السيرفر</li>
+            <li>حدّد الشجرات التي تريد رفع بياناتها من EdariNX</li>
+            <li>زر <strong>تحديث ورفع البيانات</strong> يقرأ الحسابات والكشوفات للشجرات المحددة فقط</li>
+            <li>يُرفع الحسابات والفروع للشجرات المحددة، وحركات البيع (مدين) المرتبطة بفاتورة فقط</li>
             <li>المندوبون يرون فقط الشجرات المصرّح لهم بها في تطبيق الهاتف</li>
           </ol>
         </div>
         <div class="card">
-          <h3>إعدادات الاتصال</h3>
+          <h3>الشجرات المراد رفعها</h3>
+          <p class="muted">يُرفع الحسابات والفروع للشجرات المحددة، وحركات البيع (مدين) المرتبطة بفاتورة مع تفاصيل الفاتورة.</p>
+          <div class="sync-tree-actions">
+            <button type="button" class="btn ghost sm" id="btnSyncTreesAll">تحديد الكل</button>
+            <button type="button" class="btn ghost sm" id="btnSyncTreesNone">إلغاء الكل</button>
+            <button type="button" class="btn ghost sm" id="btnSyncTreesReload">تحديث القائمة من EdariNX</button>
+          </div>
+          <div class="tree-checks" id="syncTreeChecks">
+            <p class="muted">جاري تحميل الشجرات...</p>
+          </div>
+        </div>
+        <div class="card">
           <div class="settings-grid">
             <label>عنوان السيرفر<input type="text" id="syncServerUrl" value="http://187.124.23.65:5005"></label>
             <label>مفتاح المزامنة<input type="text" id="syncApiKey" placeholder="SYNC_API_KEY"></label>

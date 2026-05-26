@@ -362,6 +362,53 @@ async function loadSyncLogs() {
     </tr>`).join('') || '<tr><td colspan="7">لا يوجد سجل</td></tr>';
 }
 
+function getSelectedSyncTreeSeqs() {
+  return [...document.querySelectorAll('#syncTreeChecks input[name=syncTreeSeq]:checked')]
+    .map((c) => c.value);
+}
+
+function saveSyncTreeSelection() {
+  localStorage.setItem('syncTreeSeqs', JSON.stringify(getSelectedSyncTreeSeqs()));
+}
+
+function renderSyncTreeChecks(trees, selected = []) {
+  const el = document.getElementById('syncTreeChecks');
+  if (!el) return;
+  if (!trees.length) {
+    el.innerHTML = '<p class="muted">لا توجد شجرات — تأكد أن EdariNX يعمل أو ارفع بيانات كاملة مرة واحدة</p>';
+    return;
+  }
+  el.innerHTML = trees.map((t) => `
+    <label>
+      <input type="checkbox" name="syncTreeSeq" value="${esc(t.seq)}" ${selected.includes(String(t.seq)) ? 'checked' : ''}>
+      ${esc(t.num)} — ${esc(t.name1 || '')} (${t.sub_count || 0} فرع)
+    </label>`).join('');
+
+  el.querySelectorAll('input[name=syncTreeSeq]').forEach((input) => {
+    input.addEventListener('change', saveSyncTreeSelection);
+  });
+}
+
+async function loadSyncTrees() {
+  const saved = JSON.parse(localStorage.getItem('syncTreeSeqs') || '[]');
+  const el = document.getElementById('syncTreeChecks');
+  if (el) el.innerHTML = '<p class="muted">جاري تحميل الشجرات من EdariNX...</p>';
+
+  try {
+    let trees = [];
+    if (window.edariDesktop?.listEdariTrees) {
+      const data = await window.edariDesktop.listEdariTrees();
+      trees = data.trees || [];
+    } else {
+      const data = await api('/api/admin/edari/trees').catch(() => api('/api/admin/trees'));
+      trees = data.trees || [];
+    }
+    renderSyncTreeChecks(trees, saved.map(String));
+  } catch (e) {
+    if (el) el.innerHTML = `<p class="muted">تعذّر تحميل الشجرات: ${esc(e.message)}</p>`;
+  }
+}
+
 function renderTreeChecks(selected = []) {
   const el = document.getElementById('agentTreeChecks');
   if (!treesCache.length) {
@@ -419,8 +466,15 @@ function applySyncProgressLine(line) {
 async function runSync() {
   const serverUrl = document.getElementById('syncServerUrl').value.trim();
   const syncKey = document.getElementById('syncApiKey').value.trim();
+  const treeSeqs = getSelectedSyncTreeSeqs();
+  if (!treeSeqs.length) {
+    alert('حدد شجرة واحدة على الأقل للرفع');
+    return;
+  }
+
   localStorage.setItem('syncServerUrl', serverUrl);
   localStorage.setItem('syncApiKey', syncKey);
+  saveSyncTreeSelection();
 
   const prog = document.getElementById('syncProgress');
   const bar = document.getElementById('syncProgressBar');
@@ -440,11 +494,11 @@ async function runSync() {
   try {
     let data;
     if (window.edariDesktop?.runLocalSync) {
-      data = await window.edariDesktop.runLocalSync(serverUrl, syncKey);
+      data = await window.edariDesktop.runLocalSync(serverUrl, syncKey, treeSeqs);
     } else {
       data = await api('/api/admin/trigger-sync', {
         method: 'POST',
-        body: JSON.stringify({ serverUrl, syncKey })
+        body: JSON.stringify({ serverUrl, syncKey, treeSeqs })
       });
     }
     if (!data.ok) throw new Error(data.error || 'فشل الرفع');
@@ -472,6 +526,15 @@ async function runSync() {
 document.getElementById('btnAddAgent').addEventListener('click', () => openAgentModal());
 document.getElementById('agentCancel').addEventListener('click', () => document.getElementById('agentModal').classList.add('hidden'));
 document.getElementById('btnSyncNow').addEventListener('click', runSync);
+document.getElementById('btnSyncTreesAll')?.addEventListener('click', () => {
+  document.querySelectorAll('#syncTreeChecks input[name=syncTreeSeq]').forEach((c) => { c.checked = true; });
+  saveSyncTreeSelection();
+});
+document.getElementById('btnSyncTreesNone')?.addEventListener('click', () => {
+  document.querySelectorAll('#syncTreeChecks input[name=syncTreeSeq]').forEach((c) => { c.checked = false; });
+  saveSyncTreeSelection();
+});
+document.getElementById('btnSyncTreesReload')?.addEventListener('click', loadSyncTrees);
 
 document.getElementById('agentForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -537,6 +600,7 @@ async function refreshAll() {
   await checkBackendHealth();
   await loadConfig();
   await loadTrees();
+  await loadSyncTrees();
   await loadDashboard();
   await loadAgents();
   await loadSyncLogs();

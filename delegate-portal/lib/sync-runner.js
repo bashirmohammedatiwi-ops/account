@@ -12,12 +12,16 @@ function parseSyncResult(stdout) {
   };
 }
 
-async function runLocalSync(serverUrl, syncKey, onProgress) {
+function parseTreesResult(stdout) {
+  const line = stdout.split(/\r?\n/).reverse().find((row) => row.startsWith('@TREES|'));
+  if (!line) throw new Error('تعذّر قراءة الشجرات من EdariNX');
+  return JSON.parse(line.slice('@TREES|'.length));
+}
+
+function spawnScript(args, { onProgress } = {}) {
   const script = path.join(__dirname, '..', 'sync-client', 'sync.js');
   const env = {
     ...process.env,
-    SYNC_SERVER: serverUrl,
-    SYNC_API_KEY: syncKey,
     EDARI_READER_ROOT: process.env.EDARI_READER_ROOT
       || path.join(__dirname, '..', '..', 'edari-reader')
   };
@@ -29,7 +33,7 @@ async function runLocalSync(serverUrl, syncKey, onProgress) {
 
   return new Promise((resolve, reject) => {
     let stdout = '';
-    const child = spawn(nodeBin, [script, '--server', serverUrl, '--key', syncKey], {
+    const child = spawn(nodeBin, [script, ...args], {
       env,
       cwd: path.join(__dirname, '..'),
       windowsHide: true
@@ -58,9 +62,24 @@ async function runLocalSync(serverUrl, syncKey, onProgress) {
       if (code !== 0) {
         return reject(new Error(stdout.trim() || `Sync exit ${code}`));
       }
-      resolve(parseSyncResult(stdout));
+      resolve(stdout);
     });
   });
 }
 
-module.exports = { runLocalSync, parseSyncResult };
+async function listEdariTrees() {
+  const stdout = await spawnScript(['--list-trees']);
+  return parseTreesResult(stdout);
+}
+
+async function runLocalSync(serverUrl, syncKey, treeSeqs = [], onProgress) {
+  if (!Array.isArray(treeSeqs) || !treeSeqs.length) {
+    throw new Error('حدد شجرة واحدة على الأقل للرفع');
+  }
+
+  const args = ['--server', serverUrl, '--key', syncKey, '--trees', treeSeqs.join(',')];
+  const stdout = await spawnScript(args, { onProgress });
+  return parseSyncResult(stdout);
+}
+
+module.exports = { runLocalSync, listEdariTrees, parseSyncResult };

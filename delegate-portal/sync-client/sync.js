@@ -1,6 +1,7 @@
 /**
  * Local sync client — reads EdariNX via ODBC and pushes to delegate portal server.
- * Usage: node sync-client/sync.js [--server URL] [--key KEY]
+ * Usage: node sync-client/sync.js [--server URL] [--key KEY] [--trees seq1,seq2]
+ *        node sync-client/sync.js --list-trees
  */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
@@ -50,6 +51,105 @@ function chunk(arr, size) {
 function reportProgress(step, totalSteps, pct, message) {
   const safePct = Math.max(0, Math.min(100, Math.round(pct)));
   console.log(`@PROGRESS|${step}|${totalSteps}|${safePct}|${message}`);
+}
+
+function parseArgvFlag(name) {
+  const idx = process.argv.indexOf(name);
+  return idx >= 0 && process.argv[idx + 1] ? process.argv[idx + 1] : '';
+}
+
+function parseTreeSeqs() {
+  const fromArg = parseArgvFlag('--trees');
+  if (fromArg) {
+    return fromArg.split(',').map((s) => s.replace(/[^0-9]/g, '')).filter(Boolean);
+  }
+  if (process.env.SYNC_TREE_SEQS) {
+    return process.env.SYNC_TREE_SEQS.split(',').map((s) => s.replace(/[^0-9]/g, '')).filter(Boolean);
+  }
+  return [];
+}
+
+function accountSeq(row) {
+  return String(row.Seq ?? row.seq ?? '').replace(/[^0-9]/g, '');
+}
+
+function buildChildrenMap(accounts) {
+  const children = new Map();
+  for (const a of accounts) {
+    const seq = accountSeq(a);
+    const master = String(a.Master ?? a.master ?? '0').replace(/[^0-9]/g, '') || '0';
+    if (!children.has(master)) children.set(master, []);
+    children.get(master).push(seq);
+  }
+  return children;
+}
+
+function collectDescendantSeqs(rootSeq, children) {
+  const root = String(rootSeq).replace(/[^0-9]/g, '');
+  const out = new Set([root]);
+  const queue = [root];
+  while (queue.length) {
+    const seq = queue.shift();
+    for (const kid of children.get(seq) || []) {
+      if (!out.has(kid)) {
+        out.add(kid);
+        queue.push(kid);
+      }
+    }
+  }
+  return out;
+}
+
+function filterAccountsByTrees(allAccounts, treeSeqs) {
+  if (!treeSeqs.length) {
+    throw new Error('حدد شجرة واحدة على الأقل للرفع');
+  }
+  const children = buildChildrenMap(allAccounts);
+  const allowed = new Set();
+  for (const root of treeSeqs) {
+    for (const seq of collectDescendantSeqs(root, children)) allowed.add(seq);
+  }
+  return allAccounts.filter((a) => allowed.has(accountSeq(a)));
+}
+
+function isDebitRow(row) {
+  const dept = row.Dept ?? row.is_debit;
+  return dept === 'True' || dept === true || dept === 1 || dept === '1';
+}
+
+function normalizeBillSeq(value) {
+  const seq = String(value ?? '').replace(/[^0-9]/g, '');
+  return seq && seq !== '0' ? seq : '';
+}
+
+function normalizeBillNum(value) {
+  const num = String(value ?? '').replace(/[^0-9]/g, '');
+  return num && num !== '0' ? num : '';
+}
+
+function extractBillNumFromText(text) {
+  const s = String(text || '').trim();
+  if (!s) return '';
+  const patterns = [
+    /(?:فات?[او]?رة?|فت?[او]?رة?)\s*(\d+)/i,
+    /(?:invoice|bill)\s*#?\s*(\d+)/i,
+    /(\d+)\s*[-–—]?\s*$/
+  ];
+  for (const re of patterns) {
+    const m = s.match(re);
+    if (m?.[1]) return normalizeBillNum(m[1]);
+  }
+  return '';
+}
+
+function hasInvoiceRef(row) {
+  if (normalizeBillSeq(row.BillSeq ?? row.bill_seq)) return true;
+  if (normalizeBillNum(row.BillNum ?? row.bill_num)) return true;
+  return Boolean(extractBillNumFromText(row.Exp1 ?? row.exp1));
+}
+
+function isSalesInvoiceMovement(row) {
+  return isDebitRow(row) && hasInvoiceRef(row);
 }
 
 async function postJson(urlPath, body, timeoutMs = 600000) {
@@ -106,6 +206,7 @@ async function postJsonWithRetry(urlPath, body, retries = 3) {
 }
 
 async function fetchAllJournal(accSeqs) {
+  if (!accSeqs.length) return [];
   const all = [];
   const parts = chunk(accSeqs, 60);
   let done = 0;
@@ -117,7 +218,7 @@ async function fetchAllJournal(accSeqs) {
     all.push(...rows);
     done += part.length;
     const pct = Math.round((done / accSeqs.length) * 100);
-    reportProgress(2, 6, pct, `حركات: ${all.length.toLocaleString('ar-EG')} (${done}/${accSeqs.length} حساب)`);
+    reportProgress(2, 6, pct, `حركات: ${all.length} (${done}/${accSeqs.length} حساب)`);
   }
   return all;
 }
@@ -125,8 +226,8 @@ async function fetchAllJournal(accSeqs) {
 function collectBillSeqs(journal) {
   const seqs = new Set();
   for (const row of journal) {
-    const seq = String(row.BillSeq ?? '').replace(/[^0-9]/g, '');
-    if (seq && seq !== '0') seqs.add(seq);
+    const seq = normalizeBillSeq(row.BillSeq ?? row.bill_seq);
+    if (seq) seqs.add(seq);
   }
   return [...seqs];
 }
@@ -142,7 +243,7 @@ async function fetchInvoices(billSeqs) {
     );
     all.push(...rows);
     const pct = Math.round(((i + 1) / parts.length) * 100);
-    reportProgress(3, 6, pct, `فواتير: ${all.length.toLocaleString('ar-EG')}/${billSeqs.length.toLocaleString('ar-EG')}`);
+    reportProgress(3, 6, pct, `فواتير بيع: ${all.length}/${billSeqs.length}`);
   }
   return all;
 }
@@ -173,7 +274,7 @@ async function fetchInvoiceLines(billSeqs) {
     );
     all.push(...rows);
     const pct = Math.round(((i + 1) / parts.length) * 100);
-    reportProgress(4, 6, pct, `بنود الفواتير: ${all.length.toLocaleString('ar-EG')} (${i + 1}/${parts.length})`);
+    reportProgress(4, 6, pct, `بنود الفواتير: ${all.length} (${i + 1}/${parts.length})`);
   }
 
   const missingNameMats = [...new Set(
@@ -185,7 +286,7 @@ async function fetchInvoiceLines(billSeqs) {
 
   let materials = new Map();
   if (missingNameMats.length) {
-    reportProgress(4, 6, 95, `جلب أسماء ${missingNameMats.length.toLocaleString('ar-EG')} مادة...`);
+    reportProgress(4, 6, 95, `جلب أسماء ${missingNameMats.length} مادة...`);
     materials = await fetchMaterialMap(missingNameMats);
   }
 
@@ -267,33 +368,67 @@ async function uploadChunked(payload) {
   return postJsonWithRetry('/api/sync/finish', { syncId, stats });
 }
 
+async function listEdariTrees() {
+  const rows = await query(`SELECT Seq, Num, Name1, SubCount, Bal FROM File11n WHERE SubCount > 0 ORDER BY Num`);
+  return rows.map((r) => ({
+    seq: accountSeq(r),
+    num: String(r.Num || ''),
+    name1: r.Name1 || '',
+    sub_count: Number(r.SubCount || 0),
+    bal: Number(r.Bal || 0)
+  }));
+}
+
 async function main() {
+  const treeSeqs = parseTreeSeqs();
+  if (!treeSeqs.length) {
+    throw new Error('حدد شجرة واحدة على الأقل للرفع');
+  }
+
   reportProgress(1, 6, 0, 'جاري قراءة الحسابات من EdariNX...');
-  const accounts = await query(`SELECT ${ACCOUNT_COLS} FROM File11n ORDER BY Num`);
-  reportProgress(1, 6, 100, `تم: ${accounts.length.toLocaleString('ar-EG')} حساب`);
+  const allAccounts = await query(`SELECT ${ACCOUNT_COLS} FROM File11n ORDER BY Num`);
+  const accounts = filterAccountsByTrees(allAccounts, treeSeqs);
+  reportProgress(1, 6, 100, `تم: ${accounts.length} حساب (${treeSeqs.length} شجرة)`);
 
   const leafSeqs = accounts
     .filter((a) => Number(a.SubCount) === 0)
-    .map((a) => String(a.Seq).replace(/[^0-9]/g, ''));
+    .map((a) => accountSeq(a));
 
-  reportProgress(2, 6, 0, `جاري قراءة حركات ${leafSeqs.length.toLocaleString('ar-EG')} حساب...`);
-  const journal = await fetchAllJournal(leafSeqs);
-  reportProgress(2, 6, 100, `تم: ${journal.length.toLocaleString('ar-EG')} حركة`);
+  reportProgress(2, 6, 0, `جاري قراءة حركات ${leafSeqs.length} حساب...`);
+  const allJournal = await fetchAllJournal(leafSeqs);
+  const journal = allJournal.filter(isSalesInvoiceMovement);
+  reportProgress(
+    2,
+    6,
+    100,
+    `تم: ${journal.length} حركة بيع (مدين + فاتورة) من ${allJournal.length}`
+  );
 
   const billSeqs = collectBillSeqs(journal);
-  reportProgress(3, 6, 0, `جاري قراءة ${billSeqs.length.toLocaleString('ar-EG')} فاتورة...`);
+  reportProgress(3, 6, 0, `جاري قراءة ${billSeqs.length} فاتورة بيع...`);
   const invoices = await fetchInvoices(billSeqs);
-  reportProgress(3, 6, 100, `تم: ${invoices.length.toLocaleString('ar-EG')} فاتورة`);
+  reportProgress(3, 6, 100, `تم: ${invoices.length} فاتورة`);
 
-  reportProgress(4, 6, 0, 'جاري قراءة بنود الفواتير...');
+  reportProgress(4, 6, 0, 'جاري قراءة بنود فواتير البيع...');
   const invoiceLines = await fetchInvoiceLines(billSeqs);
-  reportProgress(4, 6, 100, `تم: ${invoiceLines.length.toLocaleString('ar-EG')} بند`);
+  reportProgress(4, 6, 100, `تم: ${invoiceLines.length} بند`);
 
   const result = await uploadChunked({ accounts, journal, invoices, invoiceLines });
   console.log('✓ تمت المزامنة:', result.accounts, 'حساب،', result.journal, 'حركة،', result.invoices, 'فاتورة،', result.invoiceLines, 'بند');
 }
 
-main().catch((e) => {
-  console.error('✗', e.message);
-  process.exit(1);
-});
+if (process.argv.includes('--list-trees')) {
+  listEdariTrees()
+    .then((trees) => {
+      console.log(`@TREES|${JSON.stringify({ ok: true, trees })}`);
+    })
+    .catch((e) => {
+      console.error('✗', e.message);
+      process.exit(1);
+    });
+} else {
+  main().catch((e) => {
+    console.error('✗', e.message);
+    process.exit(1);
+  });
+}

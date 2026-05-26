@@ -112,14 +112,23 @@ function parseSyncResult(stdout) {
   };
 }
 
-function runLocalSyncScript(serverUrl, syncKey) {
+function runLocalSyncScript(serverUrl, syncKey, treeSeqs = []) {
   return new Promise((resolve, reject) => {
+    if (!Array.isArray(treeSeqs) || !treeSeqs.length) {
+      return reject(new Error('حدد شجرة واحدة على الأقل للرفع'));
+    }
+
     const portalDir = getPortalDir();
     const script = path.join(portalDir, 'sync-client', 'sync.js');
     const nodeBin = getNodeBin();
     let stdout = '';
 
-    const child = spawn(nodeBin, [script, '--server', serverUrl, '--key', syncKey], {
+    const child = spawn(nodeBin, [
+      script,
+      '--server', serverUrl,
+      '--key', syncKey,
+      '--trees', treeSeqs.join(',')
+    ], {
       cwd: portalDir,
       env: {
         ...process.env,
@@ -201,13 +210,11 @@ function createWindow() {
       submenu: [
         {
           label: 'رفع من EdariNX إلى السيرفر',
-          click: async () => {
-            try {
-              await runLocalSyncScript(BACKEND_URL, process.env.SYNC_API_KEY || 'edari-sync-local-key-2025');
-              mainWindow?.reload();
-            } catch (e) {
-              console.error(e);
-            }
+          click: () => {
+            mainWindow?.webContents.executeJavaScript(`
+              document.querySelector('.nav-item[data-page="sync"]')?.click();
+              alert('حدّد الشجرات من صفحة رفع البيانات ثم اضغط «تحديث ورفع البيانات»');
+            `);
           }
         }
       ]
@@ -216,8 +223,45 @@ function createWindow() {
   ]));
 }
 
-ipcMain.handle('run-local-sync', (_e, { serverUrl, syncKey }) => {
-  return runLocalSyncScript(serverUrl, syncKey);
+function runListEdariTreesScript() {
+  return new Promise((resolve, reject) => {
+    const portalDir = getPortalDir();
+    const script = path.join(portalDir, 'sync-client', 'sync.js');
+    const nodeBin = getNodeBin();
+    let stdout = '';
+
+    const child = spawn(nodeBin, [script, '--list-trees'], {
+      cwd: portalDir,
+      env: {
+        ...process.env,
+        EDARI_READER_ROOT: getEdariReaderRoot(),
+        NODE_BIN: nodeBin
+      },
+      windowsHide: true
+    });
+
+    child.stdout.on('data', (d) => { stdout += d.toString(); });
+    child.stderr.on('data', (d) => { stdout += d.toString(); });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code !== 0) return reject(new Error(stdout.trim() || `List trees exit ${code}`));
+      const line = stdout.split(/\r?\n/).reverse().find((row) => row.startsWith('@TREES|'));
+      if (!line) return reject(new Error('تعذّر قراءة الشجرات من EdariNX'));
+      try {
+        resolve(JSON.parse(line.slice('@TREES|'.length)));
+      } catch (err) {
+        reject(err);
+      }
+    });
+  });
+}
+
+ipcMain.handle('run-local-sync', (_e, { serverUrl, syncKey, treeSeqs }) => {
+  return runLocalSyncScript(serverUrl, syncKey, treeSeqs);
+});
+
+ipcMain.handle('list-edari-trees', () => {
+  return runListEdariTreesScript();
 });
 
 app.whenReady().then(async () => {

@@ -11,7 +11,7 @@ const {
 } = require('../lib/accounts');
 const { debtStatusFromBalance, balanceSummaryLabel } = require('../lib/statement-utils');
 const { getPublicBaseUrl } = require('../lib/public-url');
-const { runLocalSync } = require('../lib/sync-runner');
+const { runLocalSync, listEdariTrees } = require('../lib/sync-runner');
 
 const router = express.Router();
 
@@ -157,11 +157,21 @@ router.get('/sync/logs', (_req, res) => {
   res.json({ ok: true, logs });
 });
 
+router.get('/edari/trees', async (_req, res) => {
+  try {
+    const result = await listEdariTrees();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 router.post('/trigger-sync', async (req, res) => {
   const serverUrl = req.body?.serverUrl || getPublicBaseUrl(req);
   const syncKey = req.body?.syncKey || process.env.SYNC_API_KEY;
+  const treeSeqs = Array.isArray(req.body?.treeSeqs) ? req.body.treeSeqs : [];
   try {
-    const result = await runLocalSync(serverUrl, syncKey);
+    const result = await runLocalSync(serverUrl, syncKey, treeSeqs);
     res.json({ ok: true, ...result, status: getSyncStatus() });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message, stderr: err.stderr });
