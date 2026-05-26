@@ -769,6 +769,32 @@ body {
   font-weight: 800;
 }
 
+.export-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.btn-export-pdf {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #99f6e4;
+  background: linear-gradient(180deg, #ffffff 0%, #ecfdf5 100%);
+  color: #0f766e;
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.12);
+}
+
+.btn-export-pdf:active {
+  transform: translateY(1px);
+}
+
 .section-count {
   font-size: 0.78rem;
   font-weight: 800;

@@ -10,6 +10,7 @@ const state = {
   branches: [],
   selectedBranch: null,
   selectedInvoice: null,
+  invoiceExportRef: null,
   branchFilter: 'all',
   branchSearch: ''
 };
@@ -50,8 +51,8 @@ function fmtNumAlways(v) {
 }
 
 function isPurchaseLine(line) {
-  if (!line?.invoiceRef && !line?.billSeq && !line?.billNum) return false;
-  return Number(line.debit) > 0 || Number(line.credit) > 0;
+  if (Number(line?.debit) <= 0) return false;
+  return Boolean(line?.invoiceRef || line?.billSeq || line?.billNum);
 }
 
 function invoiceRefFor(line) {
@@ -153,6 +154,62 @@ async function api(path, opts = {}) {
   }
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
+}
+
+async function downloadAuthenticatedPdf(path, filename) {
+  setOverlay(true);
+  try {
+    const token = getToken();
+    const res = await fetch(`${API}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+
+    if (res.status === 401) {
+      clearSession();
+      showLogin();
+      throw new Error('انتهت الجلسة');
+    }
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'فشل تصدير PDF');
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } finally {
+    setOverlay(false);
+  }
+}
+
+async function exportStatementPdf() {
+  if (!state.selectedBranch?.seq) return;
+  const treeQs = state.selectedTree?.num
+    ? `?tree=${encodeURIComponent(`شجرة ${state.selectedTree.num}`)}`
+    : '';
+  const num = state.selectedBranch.num || state.selectedBranch.seq;
+  await downloadAuthenticatedPdf(
+    `/accounts/${encodeURIComponent(state.selectedBranch.seq)}/statement.pdf${treeQs}`,
+    `statement-${num}.pdf`
+  );
+}
+
+async function exportInvoicePdf() {
+  const ref = state.invoiceExportRef
+    || state.selectedInvoice?.num
+    || state.selectedInvoice?.seq;
+  if (!ref) return;
+  await downloadAuthenticatedPdf(
+    `/invoices/${encodeURIComponent(ref)}.pdf`,
+    `invoice-${ref}.pdf`
+  );
 }
 
 function goToScreen(name) {
@@ -469,6 +526,7 @@ async function openBranch(seq) {
 async function openInvoice(ref) {
   if (!ref) return;
   state.selectedInvoice = { ref };
+  state.invoiceExportRef = ref;
   goToScreen('invoice');
 
   const loading = document.getElementById('invoiceLoading');
@@ -483,6 +541,7 @@ async function openInvoice(ref) {
     const inv = data.invoice || {};
     const lines = data.lines || [];
     state.selectedInvoice = inv;
+    state.invoiceExportRef = inv.num || inv.seq || ref;
 
     document.getElementById('invoiceHero').innerHTML = `
       <p class="hero-title">${esc(inv.kindLabel || 'فاتورة مبيعات')}</p>
@@ -659,6 +718,12 @@ function init() {
   document.getElementById('btnLogout').addEventListener('click', logout);
   document.getElementById('btnBack').addEventListener('click', goBack);
   document.getElementById('btnRefresh').addEventListener('click', refresh);
+  document.getElementById('btnExportStatementPdf')?.addEventListener('click', () => {
+    exportStatementPdf().catch((e) => alert(e.message));
+  });
+  document.getElementById('btnExportInvoicePdf')?.addEventListener('click', () => {
+    exportInvoicePdf().catch((e) => alert(e.message));
+  });
 
   document.getElementById('branchSearch').addEventListener('input', (e) => {
     state.branchSearch = e.target.value;

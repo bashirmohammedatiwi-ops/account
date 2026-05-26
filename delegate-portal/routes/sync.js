@@ -12,9 +12,10 @@ const {
 const router = express.Router();
 const VALID_KINDS = new Set(['accounts', 'journal', 'invoices', 'invoiceLines']);
 
-router.post('/start', authSync, (_req, res) => {
+router.post('/start', authSync, (req, res) => {
   try {
-    const syncId = startSyncSession();
+    const accountSeqs = Array.isArray(req.body?.accountSeqs) ? req.body.accountSeqs : [];
+    const syncId = startSyncSession(accountSeqs);
     res.json({ ok: true, syncId });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });

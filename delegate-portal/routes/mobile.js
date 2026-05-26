@@ -10,6 +10,7 @@ const {
 } = require('../lib/accounts');
 const { debtStatusFromBalance, balanceSummaryLabel } = require('../lib/statement-utils');
 const { getInvoiceByRef, canAgentAccessInvoice } = require('../lib/invoices');
+const { buildStatementPdf, buildInvoicePdf } = require('../lib/pdf-export');
 
 const router = express.Router();
 
@@ -88,6 +89,24 @@ router.get('/accounts/:seq/children', authAgent, (req, res) => {
   res.json({ ok: true, children });
 });
 
+router.get('/accounts/:seq/statement.pdf', authAgent, async (req, res) => {
+  if (!canAgentAccess(req.agent.id, req.params.seq)) {
+    return res.status(403).json({ ok: false, error: 'لا تملك صلاحية هذا الحساب' });
+  }
+  const stmt = getStatementForAccount(req.params.seq);
+  if (!stmt) return res.status(404).json({ ok: false, error: 'الحساب غير موجود' });
+  try {
+    const treeLabel = String(req.query.tree || '').trim();
+    const buffer = await buildStatementPdf(stmt, { treeLabel });
+    const num = stmt.account?.num || req.params.seq;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="statement-${num}.pdf"`);
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 router.get('/accounts/:seq/statement', authAgent, (req, res) => {
   if (!canAgentAccess(req.agent.id, req.params.seq)) {
     return res.status(403).json({ ok: false, error: 'لا تملك صلاحية هذا الحساب' });
@@ -95,6 +114,29 @@ router.get('/accounts/:seq/statement', authAgent, (req, res) => {
   const stmt = getStatementForAccount(req.params.seq);
   if (!stmt) return res.status(404).json({ ok: false, error: 'الحساب غير موجود' });
   res.json({ ok: true, ...stmt });
+});
+
+router.get('/invoices/:ref.pdf', authAgent, async (req, res) => {
+  const ref = String(req.params.ref || '').trim();
+  if (!ref) {
+    return res.status(400).json({ ok: false, error: 'رقم الفاتورة غير صالح' });
+  }
+  if (!canAgentAccessInvoice(req.agent.id, ref)) {
+    return res.status(403).json({ ok: false, error: 'لا تملك صلاحية هذه الفاتورة' });
+  }
+  const data = getInvoiceByRef(ref);
+  if (!data) {
+    return res.status(404).json({ ok: false, error: 'الفاتورة غير موجودة — قد تحتاج مزامنة جديدة' });
+  }
+  try {
+    const buffer = await buildInvoicePdf(data);
+    const num = data.invoice?.num || ref;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="invoice-${num}.pdf"`);
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 router.get('/invoices/:ref', authAgent, (req, res) => {

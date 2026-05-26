@@ -205,7 +205,7 @@ async function postJsonWithRetry(urlPath, body, retries = 3) {
   throw lastErr;
 }
 
-async function fetchAllJournal(accSeqs) {
+async function fetchSalesInvoiceJournal(accSeqs) {
   if (!accSeqs.length) return [];
   const all = [];
   const parts = chunk(accSeqs, 60);
@@ -213,12 +213,23 @@ async function fetchAllJournal(accSeqs) {
   for (const part of parts) {
     const ids = part.join(',');
     const rows = await query(
-      `SELECT Seq, Acc, "Date", Am, Dept, Exp1, BillNum, BillSeq, BillKind FROM File12n WHERE Acc IN (${ids}) ORDER BY Acc, "Date", Seq`
+      `SELECT Seq, Acc, "Date", Am, Dept, Exp1, BillNum, BillSeq, BillKind FROM File12n
+       WHERE Acc IN (${ids})
+         AND Dept = 'True'
+         AND (
+           (BillSeq IS NOT NULL AND BillSeq <> 0)
+           OR (BillNum IS NOT NULL AND BillNum <> 0)
+           OR Exp1 LIKE '%فات%'
+           OR Exp1 LIKE '%Invoice%'
+           OR Exp1 LIKE '%invoice%'
+         )
+       ORDER BY Acc, "Date", Seq`
     );
-    all.push(...rows);
+    const filtered = rows.filter(isSalesInvoiceMovement);
+    all.push(...filtered);
     done += part.length;
     const pct = Math.round((done / accSeqs.length) * 100);
-    reportProgress(2, 6, pct, `حركات: ${all.length} (${done}/${accSeqs.length} حساب)`);
+    reportProgress(2, 6, pct, `حركات بيع (مدين + فاتورة): ${all.length} (${done}/${accSeqs.length} حساب)`);
   }
   return all;
 }
@@ -310,7 +321,7 @@ async function uploadLegacy(payload) {
   return data;
 }
 
-async function uploadChunked(payload) {
+async function uploadChunked(payload, accountSeqs = []) {
   const stats = {
     accounts: payload.accounts.length,
     journal: payload.journal.length,
@@ -321,7 +332,7 @@ async function uploadChunked(payload) {
   reportProgress(5, 6, 0, 'بدء الرفع إلى السيرفر...');
   let start;
   try {
-    start = await postJson('/api/sync/start', {}, 120000);
+    start = await postJson('/api/sync/start', { accountSeqs }, 120000);
   } catch (err) {
     if (/404|Cannot POST|Not Found/i.test(err.message)) {
       return uploadLegacy(payload);
@@ -394,15 +405,9 @@ async function main() {
     .filter((a) => Number(a.SubCount) === 0)
     .map((a) => accountSeq(a));
 
-  reportProgress(2, 6, 0, `جاري قراءة حركات ${leafSeqs.length} حساب...`);
-  const allJournal = await fetchAllJournal(leafSeqs);
-  const journal = allJournal.filter(isSalesInvoiceMovement);
-  reportProgress(
-    2,
-    6,
-    100,
-    `تم: ${journal.length} حركة بيع (مدين + فاتورة) من ${allJournal.length}`
-  );
+  reportProgress(2, 6, 0, `جاري قراءة حركات البيع (مدين + فاتورة) لـ ${leafSeqs.length} حساب...`);
+  const journal = await fetchSalesInvoiceJournal(leafSeqs);
+  reportProgress(2, 6, 100, `تم: ${journal.length} حركة بيع (مدين + فاتورة)`);
 
   const billSeqs = collectBillSeqs(journal);
   reportProgress(3, 6, 0, `جاري قراءة ${billSeqs.length} فاتورة بيع...`);
@@ -413,7 +418,7 @@ async function main() {
   const invoiceLines = await fetchInvoiceLines(billSeqs);
   reportProgress(4, 6, 100, `تم: ${invoiceLines.length} بند`);
 
-  const result = await uploadChunked({ accounts, journal, invoices, invoiceLines });
+  const result = await uploadChunked({ accounts, journal, invoices, invoiceLines }, leafSeqs);
   console.log('✓ تمت المزامنة:', result.accounts, 'حساب،', result.journal, 'حركة،', result.invoices, 'فاتورة،', result.invoiceLines, 'بند');
 }
 

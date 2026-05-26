@@ -17,7 +17,7 @@ function buildStatementLines(rows) {
     balance = balance - debit + credit;
     const billNum = resolveBillNum(row);
     const billSeq = resolveBillSeq(row) || null;
-    const hasInvoice = isInvoiceMovement(row);
+    const hasInvoice = isInvoiceMovement(row) && debit > 0;
     const invoiceRef = billSeq || billNum || null;
     return {
       seq: row.seq ?? row.Seq,
@@ -28,9 +28,9 @@ function buildStatementLines(rows) {
       billNum: billNum || null,
       billSeq,
       billKind: row.bill_kind ?? row.BillKind ?? null,
-      invoiceRef,
+      invoiceRef: hasInvoice ? invoiceRef : null,
       hasInvoice,
-      clickable: Boolean(invoiceRef && (debit > 0 || credit > 0)),
+      clickable: Boolean(hasInvoice && invoiceRef && debit > 0),
       balance
     };
   });

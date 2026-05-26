@@ -180,12 +180,56 @@ function mapInvoiceLineRow(line) {
   };
 }
 
-function startSyncSession() {
+function startSyncSession(accountSeqs = []) {
   const started = new Date().toISOString();
   const logId = db.prepare(
     'INSERT INTO sync_logs (started_at, status, message) VALUES (?, ?, ?)'
   ).run(started, 'running', 'جاري الاستيراد').lastInsertRowid;
+
+  if (accountSeqs.length) {
+    purgeSyncScope(accountSeqs);
+  }
+
   return logId;
+}
+
+function purgeSyncScope(accountSeqs = []) {
+  const seqs = [...new Set(accountSeqs.map((s) => String(s)).filter(Boolean))];
+  if (!seqs.length) return { purgedAccounts: 0, purgedJournal: 0, purgedInvoices: 0 };
+
+  const placeholders = seqs.map(() => '?').join(',');
+  const billRows = db.prepare(`
+    SELECT DISTINCT bill_seq FROM journal
+    WHERE acc_seq IN (${placeholders}) AND bill_seq IS NOT NULL AND bill_seq != ''
+  `).all(...seqs);
+  const billSeqs = billRows.map((r) => String(r.bill_seq)).filter(Boolean);
+
+  const tx = db.transaction(() => {
+    const journalResult = db.prepare(`
+      DELETE FROM journal WHERE acc_seq IN (${placeholders})
+    `).run(...seqs);
+
+    let invoiceLinesResult = { changes: 0 };
+    let invoicesResult = { changes: 0 };
+    if (billSeqs.length) {
+      const billPlaceholders = billSeqs.map(() => '?').join(',');
+      invoiceLinesResult = db.prepare(`
+        DELETE FROM invoice_lines WHERE bill_seq IN (${billPlaceholders})
+      `).run(...billSeqs);
+      invoicesResult = db.prepare(`
+        DELETE FROM invoices WHERE seq IN (${billPlaceholders})
+      `).run(...billSeqs);
+    }
+
+    return {
+      purgedAccounts: seqs.length,
+      purgedJournal: journalResult.changes || 0,
+      purgedInvoices: invoicesResult.changes || 0,
+      purgedInvoiceLines: invoiceLinesResult.changes || 0
+    };
+  });
+
+  return tx();
 }
 
 function importSyncChunk(kind, rows = []) {
@@ -293,6 +337,7 @@ module.exports = {
   getStatementForAccount,
   importSyncData,
   startSyncSession,
+  purgeSyncScope,
   importSyncChunk,
   finishSyncSession,
   failSyncSession,
