@@ -11,6 +11,54 @@ const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
+function columnExists(table, column) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  return cols.some((c) => c.name === column);
+}
+
+function migrateSchema() {
+  const journalExists = db.prepare(`
+    SELECT name FROM sqlite_master WHERE type='table' AND name='journal'
+  `).get();
+  if (journalExists) {
+    if (!columnExists('journal', 'bill_seq')) {
+      db.exec('ALTER TABLE journal ADD COLUMN bill_seq TEXT');
+    }
+    if (!columnExists('journal', 'bill_kind')) {
+      db.exec('ALTER TABLE journal ADD COLUMN bill_kind TEXT');
+    }
+    db.exec('CREATE INDEX IF NOT EXISTS idx_journal_bill ON journal(bill_seq)');
+  }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS invoices (
+      seq TEXT PRIMARY KEY,
+      num TEXT,
+      kind TEXT,
+      inv_date TEXT,
+      total REAL DEFAULT 0,
+      payment REAL DEFAULT 0,
+      discount REAL DEFAULT 0,
+      line_count INTEGER DEFAULT 0,
+      remarks TEXT,
+      acc_seq TEXT,
+      synced_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_invoices_num ON invoices(num);
+    CREATE TABLE IF NOT EXISTS invoice_lines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bill_seq TEXT NOT NULL,
+      bill_no INTEGER,
+      mat TEXT,
+      mat_name TEXT,
+      quant REAL DEFAULT 0,
+      price REAL DEFAULT 0,
+      kind TEXT,
+      UNIQUE(bill_seq, bill_no, mat)
+    );
+    CREATE INDEX IF NOT EXISTS idx_invoice_lines_bill ON invoice_lines(bill_seq);
+  `);
+}
+
 function initSchema() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS admins (
@@ -58,11 +106,43 @@ function initSchema() {
       is_debit INTEGER DEFAULT 0,
       exp1 TEXT,
       bill_num TEXT,
+      bill_seq TEXT,
+      bill_kind TEXT,
       UNIQUE(seq, acc_seq)
     );
 
     CREATE INDEX IF NOT EXISTS idx_journal_acc ON journal(acc_seq);
     CREATE INDEX IF NOT EXISTS idx_journal_date ON journal(tx_date);
+
+    CREATE TABLE IF NOT EXISTS invoices (
+      seq TEXT PRIMARY KEY,
+      num TEXT,
+      kind TEXT,
+      inv_date TEXT,
+      total REAL DEFAULT 0,
+      payment REAL DEFAULT 0,
+      discount REAL DEFAULT 0,
+      line_count INTEGER DEFAULT 0,
+      remarks TEXT,
+      acc_seq TEXT,
+      synced_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_invoices_num ON invoices(num);
+
+    CREATE TABLE IF NOT EXISTS invoice_lines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bill_seq TEXT NOT NULL,
+      bill_no INTEGER,
+      mat TEXT,
+      mat_name TEXT,
+      quant REAL DEFAULT 0,
+      price REAL DEFAULT 0,
+      kind TEXT,
+      UNIQUE(bill_seq, bill_no, mat)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_invoice_lines_bill ON invoice_lines(bill_seq);
 
     CREATE TABLE IF NOT EXISTS agent_trees (
       agent_id INTEGER NOT NULL,
@@ -82,6 +162,8 @@ function initSchema() {
       message TEXT
     );
   `);
+
+  migrateSchema();
 
   const adminUser = process.env.ADMIN_USER || 'admin';
   const adminPass = process.env.ADMIN_PASS || 'admin123';

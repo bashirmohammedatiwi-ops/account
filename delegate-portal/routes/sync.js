@@ -6,11 +6,16 @@ const router = express.Router();
 
 router.post('/push', authSync, (req, res) => {
   try {
-    const { accounts = [], journal = [] } = req.body || {};
+    const {
+      accounts = [],
+      journal = [],
+      invoices = [],
+      invoiceLines = []
+    } = req.body || {};
     if (!accounts.length) {
       return res.status(400).json({ ok: false, error: 'لا توجد حسابات للرفع' });
     }
-    const result = importSyncData({ accounts, journal });
+    const result = importSyncData({ accounts, journal, invoices, invoiceLines });
     res.json({ ok: true, ...result, status: getSyncStatus() });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });

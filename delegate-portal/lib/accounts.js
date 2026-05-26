@@ -68,7 +68,7 @@ function getStatementForAccount(accSeq) {
   };
 }
 
-function importSyncData({ accounts = [], journal = [] }) {
+function importSyncData({ accounts = [], journal = [], invoices = [], invoiceLines = [] }) {
   const started = new Date().toISOString();
   const logId = db.prepare(
     'INSERT INTO sync_logs (started_at, status, message) VALUES (?, ?, ?)'
@@ -84,11 +84,29 @@ function importSyncData({ accounts = [], journal = [] }) {
   `);
 
   const upsertJournal = db.prepare(`
-    INSERT INTO journal (seq, acc_seq, tx_date, am, is_debit, exp1, bill_num)
-    VALUES (@seq, @acc_seq, @tx_date, @am, @is_debit, @exp1, @bill_num)
+    INSERT INTO journal (seq, acc_seq, tx_date, am, is_debit, exp1, bill_num, bill_seq, bill_kind)
+    VALUES (@seq, @acc_seq, @tx_date, @am, @is_debit, @exp1, @bill_num, @bill_seq, @bill_kind)
     ON CONFLICT(seq, acc_seq) DO UPDATE SET
       tx_date=excluded.tx_date, am=excluded.am, is_debit=excluded.is_debit,
-      exp1=excluded.exp1, bill_num=excluded.bill_num
+      exp1=excluded.exp1, bill_num=excluded.bill_num,
+      bill_seq=excluded.bill_seq, bill_kind=excluded.bill_kind
+  `);
+
+  const upsertInvoice = db.prepare(`
+    INSERT INTO invoices (seq, num, kind, inv_date, total, payment, discount, line_count, remarks, acc_seq, synced_at)
+    VALUES (@seq, @num, @kind, @inv_date, @total, @payment, @discount, @line_count, @remarks, @acc_seq, @synced_at)
+    ON CONFLICT(seq) DO UPDATE SET
+      num=excluded.num, kind=excluded.kind, inv_date=excluded.inv_date,
+      total=excluded.total, payment=excluded.payment, discount=excluded.discount,
+      line_count=excluded.line_count, remarks=excluded.remarks,
+      acc_seq=excluded.acc_seq, synced_at=excluded.synced_at
+  `);
+
+  const upsertInvoiceLine = db.prepare(`
+    INSERT INTO invoice_lines (bill_seq, bill_no, mat, mat_name, quant, price, kind)
+    VALUES (@bill_seq, @bill_no, @mat, @mat_name, @quant, @price, @kind)
+    ON CONFLICT(bill_seq, bill_no, mat) DO UPDATE SET
+      mat_name=excluded.mat_name, quant=excluded.quant, price=excluded.price, kind=excluded.kind
   `);
 
   const tx = db.transaction(() => {
@@ -112,6 +130,10 @@ function importSyncData({ accounts = [], journal = [] }) {
     }
     for (const j of journal) {
       const dept = j.Dept ?? j.is_debit;
+      const billSeqRaw = j.BillSeq ?? j.bill_seq;
+      const billSeq = billSeqRaw != null && String(billSeqRaw).replace(/[^0-9]/g, '') !== '0'
+        ? String(billSeqRaw).replace(/[^0-9]/g, '')
+        : '';
       upsertJournal.run({
         seq: String(j.Seq ?? j.seq),
         acc_seq: String(j.Acc ?? j.acc_seq),
@@ -119,7 +141,37 @@ function importSyncData({ accounts = [], journal = [] }) {
         am: Number(j.Am ?? j.am ?? 0),
         is_debit: dept === 'True' || dept === true || dept === 1 ? 1 : 0,
         exp1: j.Exp1 ?? j.exp1 ?? '',
-        bill_num: String(j.BillNum ?? j.bill_num ?? '')
+        bill_num: String(j.BillNum ?? j.bill_num ?? ''),
+        bill_seq: billSeq,
+        bill_kind: String(j.BillKind ?? j.bill_kind ?? '')
+      });
+    }
+    for (const inv of invoices) {
+      upsertInvoice.run({
+        seq: String(inv.Seq ?? inv.seq),
+        num: String(inv.Num ?? inv.num ?? ''),
+        kind: String(inv.Kind ?? inv.kind ?? ''),
+        inv_date: inv.Date ?? inv.inv_date ?? '',
+        total: Number(inv.Total ?? inv.total ?? 0),
+        payment: Number(inv.Payment ?? inv.payment ?? 0),
+        discount: Number(inv.DisCnt ?? inv.discount ?? 0),
+        line_count: Number(inv.count ?? inv.line_count ?? 0),
+        remarks: inv.remarks ?? inv.Remarks ?? '',
+        acc_seq: String(inv.Two ?? inv.acc_seq ?? ''),
+        synced_at: now
+      });
+    }
+    for (const line of invoiceLines) {
+      const billSeq = String(line.BillSeq ?? line.bill_seq ?? '').replace(/[^0-9]/g, '');
+      if (!billSeq) continue;
+      upsertInvoiceLine.run({
+        bill_seq: billSeq,
+        bill_no: Number(line.BillNo ?? line.bill_no ?? 0),
+        mat: String(line.Mat ?? line.mat ?? ''),
+        mat_name: line.MatName ?? line.mat_name ?? '',
+        quant: Number(line.Quant ?? line.quant ?? 0),
+        price: Number(line.Price ?? line.price ?? 0),
+        kind: String(line.Kind ?? line.kind ?? '')
       });
     }
   });
@@ -130,8 +182,22 @@ function importSyncData({ accounts = [], journal = [] }) {
     db.prepare(`
       UPDATE sync_logs SET finished_at=?, status=?, accounts_count=?, journal_count=?, message=?
       WHERE id=?
-    `).run(finished, 'success', accounts.length, journal.length, 'تمت المزامنة بنجاح', logId);
-    return { ok: true, accounts: accounts.length, journal: journal.length, logId };
+    `).run(
+      finished,
+      'success',
+      accounts.length,
+      journal.length,
+      `تمت المزامنة: ${accounts.length} حساب، ${journal.length} حركة، ${invoices.length} فاتورة`,
+      logId
+    );
+    return {
+      ok: true,
+      accounts: accounts.length,
+      journal: journal.length,
+      invoices: invoices.length,
+      invoiceLines: invoiceLines.length,
+      logId
+    };
   } catch (err) {
     db.prepare(`
       UPDATE sync_logs SET finished_at=?, status=?, message=? WHERE id=?

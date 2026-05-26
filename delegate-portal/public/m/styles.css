@@ -854,6 +854,132 @@ body {
 .debit-amt.has-val .amt-val { color: var(--danger); }
 .credit-amt.has-val .amt-val { color: var(--success); }
 
+.tx-row-link {
+  width: 100%;
+  text-align: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tx-row-link:active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-soft);
+}
+
+.tx-invoice-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 12px 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.tx-invoice-arrow {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+#screen-invoice {
+  padding-bottom: calc(20px + var(--safe-bottom));
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.invoice-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.invoice-loading,
+.invoice-empty {
+  text-align: center;
+  padding: 24px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.invoice-hero {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.invoice-meta {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.invoice-lines-section { margin-top: 4px; }
+
+.invoice-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inv-line-row {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+
+.inv-line-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.inv-line-idx {
+  font-size: 0.68rem;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.inv-line-mat {
+  flex: 1;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.inv-line-total {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--accent-dark);
+  direction: ltr;
+}
+
+.inv-line-name {
+  margin: 0 0 8px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.inv-line-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.inv-line-meta b {
+  color: var(--text);
+  font-weight: 800;
+}
+
 .stmt-totals { margin-top: 4px; }
 
 .totals-card {

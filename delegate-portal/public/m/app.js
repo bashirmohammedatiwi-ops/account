@@ -9,6 +9,7 @@ const state = {
   selectedTree: null,
   branches: [],
   selectedBranch: null,
+  selectedInvoice: null,
   branchFilter: 'all',
   branchSearch: ''
 };
@@ -29,10 +30,20 @@ function fmtNum(v) {
   return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
+function fmtMoney(v) {
+  const n = Number(v);
+  if (Number.isNaN(n)) return '—';
+  return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
+
 function fmtNumAlways(v) {
   const n = Number(v);
   if (Number.isNaN(n)) return '—';
   return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
+function isPurchaseLine(line) {
+  return Boolean(line?.clickable && line?.billSeq);
 }
 
 function fmtDate(v) {
@@ -163,6 +174,14 @@ function goToScreen(name) {
     title.textContent = state.selectedBranch?.name1 || 'كشف الحساب';
     crumb.textContent = state.selectedBranch
       ? `كشف حساب · ${state.selectedBranch.num}`
+      : '';
+  } else if (name === 'invoice') {
+    backBtn.classList.remove('hidden');
+    toolbarWrap.classList.add('hidden');
+    document.getElementById('headerUser').classList.add('hidden');
+    title.textContent = 'تفاصيل الفاتورة';
+    crumb.textContent = state.selectedInvoice?.num
+      ? `فاتورة ${state.selectedInvoice.num}`
       : '';
   }
 }
@@ -361,13 +380,17 @@ async function openBranch(seq) {
     if (lines.length) {
       document.getElementById('stmtTableSection').classList.remove('hidden');
       document.getElementById('stmtLineCount').textContent = `${lines.length} حركة`;
-      document.getElementById('stmtLines').innerHTML = lines.map((r, i) => `
-        <article class="tx-row">
+      document.getElementById('stmtLines').innerHTML = lines.map((r, i) => {
+        const purchase = isPurchaseLine(r);
+        const clickable = purchase && r.billSeq;
+        return `
+        <${clickable ? 'button type="button"' : 'article'} class="tx-row${clickable ? ' tx-row-link' : ''}"${clickable ? ` data-bill-seq="${esc(r.billSeq)}" aria-label="عرض الفاتورة"` : ''}>
           <div class="tx-row-meta">
             <span class="tx-idx">${i + 1}</span>
             <span class="tx-date">${fmtDate(r.date)}</span>
           </div>
           <p class="tx-desc">${esc(r.description) || '—'}</p>
+          ${clickable ? '<div class="tx-invoice-hint"><span>عرض الفاتورة</span><span class="tx-invoice-arrow">›</span></div>' : ''}
           <div class="tx-amounts-grid">
             <div class="tx-amt debit-amt${r.debit ? ' has-val' : ''}">
               <span class="amt-label">مدين</span>
@@ -378,7 +401,12 @@ async function openBranch(seq) {
               <span class="amt-val">${r.credit ? fmtNumAlways(r.credit) : '—'}</span>
             </div>
           </div>
-        </article>`).join('');
+        </${clickable ? 'button' : 'article'}>`;
+      }).join('');
+
+      document.querySelectorAll('.tx-row-link').forEach((btn) => {
+        btn.addEventListener('click', () => openInvoice(btn.dataset.billSeq));
+      });
     } else {
       document.getElementById('stmtLines').innerHTML = `
         <div class="empty-state"><div class="icon">📋</div><p>لا توجد حركات لهذا الحساب</p></div>`;
@@ -424,8 +452,81 @@ async function openBranch(seq) {
   }
 }
 
+async function openInvoice(billSeq) {
+  if (!billSeq) return;
+  state.selectedInvoice = { billSeq };
+  goToScreen('invoice');
+
+  const loading = document.getElementById('invoiceLoading');
+  const empty = document.getElementById('invoiceEmpty');
+  const content = document.getElementById('invoiceContent');
+  loading.classList.remove('hidden');
+  empty.classList.add('hidden');
+  content.classList.add('hidden');
+
+  try {
+    const data = await api(`/invoices/${encodeURIComponent(billSeq)}`);
+    const inv = data.invoice || {};
+    const lines = data.lines || [];
+    state.selectedInvoice = inv;
+
+    document.getElementById('invoiceHero').innerHTML = `
+      <p class="hero-title">${esc(inv.kindLabel || 'فاتورة')}</p>
+      <p class="hero-subtitle">رقم ${esc(inv.num || billSeq)}</p>
+      <h2 class="hero-name">${fmtMoney(inv.total)}</h2>
+      ${inv.remarks ? `<p class="hero-addr">${esc(inv.remarks)}</p>` : ''}`;
+
+    document.getElementById('invoiceMeta').innerHTML = `
+      <div class="stat-box">
+        <div class="stat-body">
+          <div class="k">التاريخ</div>
+          <div class="v">${fmtDate(inv.date)}</div>
+        </div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-body">
+          <div class="k">المدفوع</div>
+          <div class="v">${fmtMoney(inv.payment)}</div>
+        </div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-body">
+          <div class="k">البنود</div>
+          <div class="v">${lines.length}</div>
+        </div>
+      </div>`;
+
+    document.getElementById('invoiceLineCount').textContent = `${lines.length} بند`;
+    document.getElementById('invoiceLines').innerHTML = lines.length
+      ? lines.map((line, i) => `
+        <article class="inv-line-row">
+          <div class="inv-line-top">
+            <span class="inv-line-idx">${i + 1}</span>
+            <span class="inv-line-mat">${esc(line.mat || '—')}</span>
+            <span class="inv-line-total">${fmtMoney(line.lineTotal)}</span>
+          </div>
+          <p class="inv-line-name">${esc(line.matName || '—')}</p>
+          <div class="inv-line-meta">
+            <span>الكمية: <b dir="ltr">${fmtMoney(line.quant)}</b></span>
+            <span>السعر: <b dir="ltr">${fmtMoney(line.price)}</b></span>
+          </div>
+        </article>`).join('')
+      : '<div class="empty-state"><p>لا توجد بنود لهذه الفاتورة</p></div>';
+
+    loading.classList.add('hidden');
+    content.classList.remove('hidden');
+    goToScreen('invoice');
+  } catch (e) {
+    loading.classList.add('hidden');
+    empty.classList.remove('hidden');
+    empty.innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`;
+  }
+}
+
 function goBack() {
-  if (state.screen === 'statement') {
+  if (state.screen === 'invoice') {
+    goToScreen('statement');
+  } else if (state.screen === 'statement') {
     goToScreen('branches');
   } else if (state.screen === 'branches') {
     state.selectedTree = null;

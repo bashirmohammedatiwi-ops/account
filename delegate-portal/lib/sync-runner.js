@@ -30,11 +30,12 @@ async function runLocalSync(serverUrl, syncKey) {
     }
   );
 
-  const match = stdout.match(/(\d+) حساب، (\d+) حركة/);
+  const match = stdout.match(/(\d+) حساب، (\d+) حركة(?:، (\d+) فاتورة)?/);
   return {
     ok: true,
     accounts: match ? Number(match[1]) : 0,
     journal: match ? Number(match[2]) : 0,
+    invoices: match && match[3] ? Number(match[3]) : 0,
     stdout,
     stderr
   };

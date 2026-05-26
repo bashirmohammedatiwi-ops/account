@@ -48,11 +48,50 @@ async function fetchAllJournal(accSeqs) {
   for (const part of parts) {
     const ids = part.join(',');
     const rows = await query(
-      `SELECT Seq, Acc, "Date", Am, Dept, Exp1, BillNum FROM File12n WHERE Acc IN (${ids}) ORDER BY Acc, "Date", Seq`
+      `SELECT Seq, Acc, "Date", Am, Dept, Exp1, BillNum, BillSeq, BillKind FROM File12n WHERE Acc IN (${ids}) ORDER BY Acc, "Date", Seq`
     );
     all.push(...rows);
     done += part.length;
     process.stdout.write(`\rحركات: ${all.length} (${done}/${accSeqs.length} حساب)`);
+  }
+  console.log('');
+  return all;
+}
+
+function collectBillSeqs(journal) {
+  const seqs = new Set();
+  for (const row of journal) {
+    const seq = String(row.BillSeq ?? '').replace(/[^0-9]/g, '');
+    if (seq && seq !== '0') seqs.add(seq);
+  }
+  return [...seqs];
+}
+
+async function fetchInvoices(billSeqs) {
+  if (!billSeqs.length) return [];
+  const all = [];
+  for (const part of chunk(billSeqs, 80)) {
+    const ids = part.join(',');
+    const rows = await query(
+      `SELECT Seq, Num, Kind, "Date", Total, Payment, DisCnt, "count", Two, remarks FROM File15n WHERE Seq IN (${ids})`
+    );
+    all.push(...rows);
+    process.stdout.write(`\rفواتير: ${all.length}/${billSeqs.length}`);
+  }
+  console.log('');
+  return all;
+}
+
+async function fetchInvoiceLines(billSeqs) {
+  if (!billSeqs.length) return [];
+  const all = [];
+  for (const part of chunk(billSeqs, 40)) {
+    const ids = part.join(',');
+    const rows = await query(
+      `SELECT BillSeq, BillNo, Mat, MatName, Quant, Price, Kind FROM file14n WHERE BillSeq IN (${ids}) ORDER BY BillSeq, BillNo`
+    );
+    all.push(...rows);
+    process.stdout.write(`\rبنود الفواتير: ${all.length}`);
   }
   console.log('');
   return all;
@@ -75,6 +114,14 @@ async function main() {
   const journal = await fetchAllJournal(leafSeqs);
   console.log(`تم: ${journal.length} حركة`);
 
+  const billSeqs = collectBillSeqs(journal);
+  console.log(`جاري قراءة ${billSeqs.length} فاتورة مرتبطة...`);
+  const invoices = await fetchInvoices(billSeqs);
+  console.log(`تم: ${invoices.length} فاتورة`);
+
+  const invoiceLines = await fetchInvoiceLines(billSeqs);
+  console.log(`تم: ${invoiceLines.length} بند`);
+
   console.log('جاري الرفع إلى السيرفر...');
   const res = await fetch(`${SERVER}/api/sync/push`, {
     method: 'POST',
@@ -82,12 +129,12 @@ async function main() {
       'Content-Type': 'application/json',
       'X-Sync-Key': SYNC_KEY
     },
-    body: JSON.stringify({ accounts, journal })
+    body: JSON.stringify({ accounts, journal, invoices, invoiceLines })
   });
 
   const data = await res.json();
   if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
-  console.log('✓ تمت المزامنة:', data.accounts, 'حساب،', data.journal, 'حركة');
+  console.log('✓ تمت المزامنة:', data.accounts, 'حساب،', data.journal, 'حركة،', data.invoices, 'فاتورة');
 }
 
 main().catch((e) => {

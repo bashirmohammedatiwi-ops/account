@@ -9,6 +9,7 @@ const {
   agentAllowedSeqs
 } = require('../lib/accounts');
 const { debtStatusFromBalance, balanceSummaryLabel } = require('../lib/statement-utils');
+const { getInvoiceByBillSeq, canAgentAccessInvoice } = require('../lib/invoices');
 
 const router = express.Router();
 
@@ -94,6 +95,21 @@ router.get('/accounts/:seq/statement', authAgent, (req, res) => {
   const stmt = getStatementForAccount(req.params.seq);
   if (!stmt) return res.status(404).json({ ok: false, error: 'الحساب غير موجود' });
   res.json({ ok: true, ...stmt });
+});
+
+router.get('/invoices/:billSeq', authAgent, (req, res) => {
+  const billSeq = String(req.params.billSeq || '').replace(/[^0-9]/g, '');
+  if (!billSeq) {
+    return res.status(400).json({ ok: false, error: 'رقم الفاتورة غير صالح' });
+  }
+  if (!canAgentAccessInvoice(req.agent.id, billSeq)) {
+    return res.status(403).json({ ok: false, error: 'لا تملك صلاحية هذه الفاتورة' });
+  }
+  const data = getInvoiceByBillSeq(billSeq);
+  if (!data) {
+    return res.status(404).json({ ok: false, error: 'الفاتورة غير موجودة — قد تحتاج مزامنة جديدة' });
+  }
+  res.json({ ok: true, ...data });
 });
 
 router.get('/search', authAgent, (req, res) => {
