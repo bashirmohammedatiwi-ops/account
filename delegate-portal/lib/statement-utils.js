@@ -53,7 +53,7 @@ function buildStatementLines(rows) {
     const billNum = resolveBillNum(row);
     const billSeq = resolveBillSeq(row) || null;
     const hasInvoice = isInvoiceMovement(row) && debit > 0;
-    const invoiceRef = billSeq || billNum || null;
+    const invoiceRef = billNum || billSeq || null;
     const description = row.exp1 || row.Exp1 || row.remarks || row.Remarks || '';
     return {
       seq: row.seq ?? row.Seq,

@@ -55,17 +55,22 @@ function isPurchaseLine(line) {
   return Boolean(line?.invoiceRef || line?.billSeq || line?.billNum);
 }
 
+function invoiceLookupFor(line) {
+  const billNum = String(line?.billNum || '').replace(/[^0-9]/g, '');
+  if (billNum) return { ref: billNum, by: 'num' };
+  const billSeq = String(line?.billSeq || '').replace(/[^0-9]/g, '');
+  if (billSeq) return { ref: billSeq, by: 'seq' };
+  const fallback = String(line?.invoiceRef || '').replace(/[^0-9]/g, '');
+  if (fallback) return { ref: fallback, by: 'auto' };
+  return null;
+}
+
 function invoiceRefFor(line) {
-  if (Number(line?.debit) <= 0) return '';
-  return line?.billSeq || line?.billNum || line?.invoiceRef || '';
+  return invoiceLookupFor(line)?.ref || '';
 }
 
 function invoiceExportRefFor(line) {
-  const billSeq = String(line?.billSeq || '').replace(/[^0-9]/g, '');
-  if (billSeq) return { ref: billSeq, by: 'seq' };
-  const billNum = String(line?.billNum || line?.invoiceRef || '').replace(/[^0-9]/g, '');
-  if (billNum) return { ref: billNum, by: 'num' };
-  return null;
+  return invoiceLookupFor(line);
 }
 
 function fmtDate(v) {
@@ -501,17 +506,18 @@ function renderStatement(data) {
     document.getElementById('stmtLineCount').textContent = `${lines.length} حركة`;
     document.getElementById('stmtLines').innerHTML = lines.map((r, i) => {
       const showInvoiceBtn = isPurchaseLine(r);
-      const exportRef = showInvoiceBtn ? invoiceExportRefFor(r) : null;
+      const invoiceLookup = showInvoiceBtn ? invoiceLookupFor(r) : null;
+      const exportRef = invoiceLookup;
       return `
       <article class="tx-row${r.isReconciliation ? ' tx-row-recon' : ''}">
         <div class="tx-row-meta">
           <span class="tx-idx">${i + 1}</span>
           <span class="tx-date">${fmtDate(r.date)}</span>
           ${r.isReconciliation ? '<span class="tx-recon-badge">ترصيد</span>' : ''}
-          ${showInvoiceBtn ? `
+          ${showInvoiceBtn && invoiceLookup ? `
             <div class="tx-row-actions">
-              <button type="button" class="tx-invoice-btn" data-invoice-ref="${esc(invoiceRefFor(r))}" aria-label="عرض الفاتورة">فاتورة</button>
-              <button type="button" class="tx-pdf-btn" data-export-ref="${esc(exportRef?.ref || '')}" data-export-by="${esc(exportRef?.by || 'seq')}" aria-label="تصدير PDF للفاتورة">PDF</button>
+              <button type="button" class="tx-invoice-btn" data-invoice-ref="${esc(invoiceLookup.ref)}" data-invoice-by="${esc(invoiceLookup.by)}" aria-label="عرض الفاتورة">فاتورة</button>
+              <button type="button" class="tx-pdf-btn" data-export-ref="${esc(exportRef?.ref || '')}" data-export-by="${esc(exportRef?.by || 'num')}" aria-label="تصدير PDF للفاتورة">PDF</button>
             </div>` : ''}
         </div>
         <p class="tx-desc">${esc(r.description) || '—'}</p>
@@ -528,12 +534,12 @@ function renderStatement(data) {
       </article>`;
     }).join('');
 
-    document.querySelectorAll('.tx-invoice-btn').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openInvoice(btn.dataset.invoiceRef);
+      document.querySelectorAll('.tx-invoice-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openInvoice(btn.dataset.invoiceRef, btn.dataset.invoiceBy || 'num');
+        });
       });
-    });
     document.querySelectorAll('.tx-pdf-btn').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -583,7 +589,7 @@ function renderStatement(data) {
     : '';
 }
 
-async function openInvoice(ref) {
+async function openInvoice(ref, by = 'auto') {
   if (!ref) return;
   state.selectedInvoice = null;
   const exportBtn = document.getElementById('btnExportInvoicePdf');
@@ -598,7 +604,7 @@ async function openInvoice(ref) {
   content.classList.add('hidden');
 
   try {
-    const data = await api(`/invoices/${encodeURIComponent(ref)}`);
+    const data = await api(`/invoices/${encodeURIComponent(ref)}?by=${encodeURIComponent(by)}`);
     const inv = data.invoice || {};
     const lines = data.lines || [];
     state.selectedInvoice = inv;

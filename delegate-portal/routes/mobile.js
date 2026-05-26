@@ -9,7 +9,7 @@ const {
   agentAllowedSeqs
 } = require('../lib/accounts');
 const { debtStatusFromBalance, balanceSummaryLabel } = require('../lib/statement-utils');
-const { getInvoiceByRef, getInvoiceForExport, canAgentAccessInvoice } = require('../lib/invoices');
+const { getInvoiceForExport, canAgentAccessInvoice } = require('../lib/invoices');
 const { buildStatementPdf, buildInvoicePdf } = require('../lib/pdf-export');
 
 const router = express.Router();
@@ -144,13 +144,14 @@ router.get('/invoices/:ref.pdf', authAgent, async (req, res) => {
 
 router.get('/invoices/:ref', authAgent, (req, res) => {
   const ref = String(req.params.ref || '').trim();
+  const by = String(req.query.by || 'auto').trim();
   if (!ref) {
     return res.status(400).json({ ok: false, error: 'رقم الفاتورة غير صالح' });
   }
   if (!canAgentAccessInvoice(req.agent.id, ref)) {
     return res.status(403).json({ ok: false, error: 'لا تملك صلاحية هذه الفاتورة' });
   }
-  const data = getInvoiceByRef(ref);
+  const data = getInvoiceForExport(ref, by);
   if (!data) {
     return res.status(404).json({ ok: false, error: 'الفاتورة غير موجودة — قد تحتاج مزامنة جديدة' });
   }

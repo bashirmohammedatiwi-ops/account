@@ -145,11 +145,7 @@ function getInvoiceByNum(billNum) {
 }
 
 function getInvoiceByRef(ref) {
-  const raw = String(ref ?? '').trim();
-  if (!raw) return null;
-  const byNum = getInvoiceByNum(raw);
-  if (byNum) return byNum;
-  return getInvoiceByBillSeq(raw);
+  return getInvoiceForExport(ref, 'auto');
 }
 
 function getInvoiceForExport(ref, mode = 'auto') {
@@ -157,7 +153,13 @@ function getInvoiceForExport(ref, mode = 'auto') {
   if (!raw) return null;
   if (mode === 'seq') return getInvoiceByBillSeq(raw);
   if (mode === 'num') return getInvoiceByNum(raw);
-  return getInvoiceByRef(raw);
+
+  if (db.prepare('SELECT 1 FROM invoices WHERE seq = ?').get(raw)) {
+    return getInvoiceByBillSeq(raw);
+  }
+  const byNum = getInvoiceByNum(raw);
+  if (byNum) return byNum;
+  return getInvoiceByBillSeq(raw);
 }
 
 function canAgentAccessInvoice(agentId, ref) {
