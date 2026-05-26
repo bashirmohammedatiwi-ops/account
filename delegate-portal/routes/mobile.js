@@ -9,7 +9,7 @@ const {
   agentAllowedSeqs
 } = require('../lib/accounts');
 const { debtStatusFromBalance, balanceSummaryLabel } = require('../lib/statement-utils');
-const { getInvoiceByBillSeq, canAgentAccessInvoice } = require('../lib/invoices');
+const { getInvoiceByRef, canAgentAccessInvoice } = require('../lib/invoices');
 
 const router = express.Router();
 
@@ -97,15 +97,15 @@ router.get('/accounts/:seq/statement', authAgent, (req, res) => {
   res.json({ ok: true, ...stmt });
 });
 
-router.get('/invoices/:billSeq', authAgent, (req, res) => {
-  const billSeq = String(req.params.billSeq || '').replace(/[^0-9]/g, '');
-  if (!billSeq) {
+router.get('/invoices/:ref', authAgent, (req, res) => {
+  const ref = String(req.params.ref || '').trim();
+  if (!ref) {
     return res.status(400).json({ ok: false, error: 'رقم الفاتورة غير صالح' });
   }
-  if (!canAgentAccessInvoice(req.agent.id, billSeq)) {
+  if (!canAgentAccessInvoice(req.agent.id, ref)) {
     return res.status(403).json({ ok: false, error: 'لا تملك صلاحية هذه الفاتورة' });
   }
-  const data = getInvoiceByBillSeq(billSeq);
+  const data = getInvoiceByRef(ref);
   if (!data) {
     return res.status(404).json({ ok: false, error: 'الفاتورة غير موجودة — قد تحتاج مزامنة جديدة' });
   }

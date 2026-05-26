@@ -19,18 +19,49 @@ function normalizeBillSeq(value) {
   return seq && seq !== '0' ? seq : '';
 }
 
+function normalizeBillNum(value) {
+  const num = String(value ?? '').replace(/[^0-9]/g, '');
+  return num && num !== '0' ? num : '';
+}
+
+function extractBillNumFromText(text) {
+  const s = String(text || '').trim();
+  if (!s) return '';
+  const patterns = [
+    /(?:فات?[او]?رة?|فت?[او]?رة?)\s*(\d+)/i,
+    /(?:invoice|bill)\s*#?\s*(\d+)/i,
+    /(\d+)\s*[-–—]?\s*$/
+  ];
+  for (const re of patterns) {
+    const m = s.match(re);
+    if (m?.[1]) return normalizeBillNum(m[1]);
+  }
+  return '';
+}
+
+function resolveBillNum(row) {
+  const fromField = normalizeBillNum(row.bill_num ?? row.BillNum);
+  if (fromField) return fromField;
+  return extractBillNumFromText(row.exp1 ?? row.Exp1 ?? row.description);
+}
+
+function lookupBillSeqByNum(billNum) {
+  const num = normalizeBillNum(billNum);
+  if (!num) return '';
+  const hit = db.prepare('SELECT seq FROM invoices WHERE num = ? LIMIT 1').get(num);
+  return hit ? String(hit.seq) : '';
+}
+
 function isInvoiceMovement(row) {
   if (normalizeBillSeq(row.bill_seq ?? row.billSeq)) return true;
-  return Boolean(String(row.bill_num ?? row.billNum ?? '').trim());
+  if (normalizeBillNum(row.bill_num ?? row.BillNum)) return true;
+  return Boolean(extractBillNumFromText(row.exp1 ?? row.Exp1 ?? row.description));
 }
 
 function resolveBillSeq(row) {
   const direct = normalizeBillSeq(row.bill_seq ?? row.billSeq);
   if (direct) return direct;
-  const billNum = String(row.bill_num ?? row.billNum ?? '').trim();
-  if (!billNum) return '';
-  const hit = db.prepare('SELECT seq FROM invoices WHERE num = ? LIMIT 1').get(billNum);
-  return hit ? String(hit.seq) : '';
+  return lookupBillSeqByNum(resolveBillNum(row));
 }
 
 function lineTotal(quant, price, stored) {
@@ -105,17 +136,47 @@ function getInvoiceByBillSeq(billSeq) {
   };
 }
 
-function canAgentAccessInvoice(agentId, billSeq) {
-  const seq = normalizeBillSeq(billSeq);
-  if (!seq) return false;
+function getInvoiceByNum(billNum) {
+  const num = normalizeBillNum(billNum);
+  if (!num) return null;
+  const invoice = db.prepare('SELECT seq FROM invoices WHERE num = ? LIMIT 1').get(num);
+  if (!invoice) return null;
+  return getInvoiceByBillSeq(invoice.seq);
+}
 
-  const journalHit = db.prepare(
-    'SELECT acc_seq FROM journal WHERE bill_seq = ? LIMIT 1'
-  ).get(seq);
-  if (journalHit && canAgentAccess(agentId, journalHit.acc_seq)) return true;
+function getInvoiceByRef(ref) {
+  const raw = String(ref ?? '').trim();
+  if (!raw) return null;
+  const bySeq = getInvoiceByBillSeq(raw);
+  if (bySeq) return bySeq;
+  return getInvoiceByNum(raw);
+}
 
-  const invoice = db.prepare('SELECT acc_seq FROM invoices WHERE seq = ?').get(seq);
-  if (invoice?.acc_seq && canAgentAccess(agentId, invoice.acc_seq)) return true;
+function canAgentAccessInvoice(agentId, ref) {
+  const raw = String(ref ?? '').trim();
+  if (!raw) return false;
+
+  const seq = normalizeBillSeq(raw);
+  if (seq) {
+    const journalBySeq = db.prepare(
+      'SELECT acc_seq FROM journal WHERE bill_seq = ? LIMIT 1'
+    ).get(seq);
+    if (journalBySeq && canAgentAccess(agentId, journalBySeq.acc_seq)) return true;
+
+    const invoice = db.prepare('SELECT acc_seq FROM invoices WHERE seq = ?').get(seq);
+    if (invoice?.acc_seq && canAgentAccess(agentId, invoice.acc_seq)) return true;
+  }
+
+  const num = normalizeBillNum(raw);
+  if (num) {
+    const journalByNum = db.prepare(
+      'SELECT acc_seq FROM journal WHERE bill_num = ? LIMIT 1'
+    ).get(num);
+    if (journalByNum && canAgentAccess(agentId, journalByNum.acc_seq)) return true;
+
+    const invoice = db.prepare('SELECT acc_seq FROM invoices WHERE num = ? LIMIT 1').get(num);
+    if (invoice?.acc_seq && canAgentAccess(agentId, invoice.acc_seq)) return true;
+  }
 
   return false;
 }
@@ -123,9 +184,14 @@ function canAgentAccessInvoice(agentId, billSeq) {
 module.exports = {
   invoiceKindLabel,
   normalizeBillSeq,
+  normalizeBillNum,
+  extractBillNumFromText,
+  resolveBillNum,
   isInvoiceMovement,
   resolveBillSeq,
   getInvoiceByBillSeq,
+  getInvoiceByNum,
+  getInvoiceByRef,
   canAgentAccessInvoice,
   mapInvoiceRow,
   mapInvoiceLineRow

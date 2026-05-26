@@ -50,7 +50,12 @@ function fmtNumAlways(v) {
 }
 
 function isPurchaseLine(line) {
-  return Boolean(line?.billSeq && Number(line.debit) > 0);
+  if (!line?.invoiceRef && !line?.billSeq && !line?.billNum) return false;
+  return Number(line.debit) > 0 || Number(line.credit) > 0;
+}
+
+function invoiceRefFor(line) {
+  return line?.invoiceRef || line?.billSeq || line?.billNum || '';
 }
 
 function fmtDate(v) {
@@ -394,7 +399,7 @@ async function openBranch(seq) {
           <div class="tx-row-meta">
             <span class="tx-idx">${i + 1}</span>
             <span class="tx-date">${fmtDate(r.date)}</span>
-            ${showInvoiceBtn ? `<button type="button" class="tx-invoice-btn" data-bill-seq="${esc(r.billSeq)}" aria-label="عرض الفاتورة">فاتورة</button>` : ''}
+            ${showInvoiceBtn ? `<button type="button" class="tx-invoice-btn" data-invoice-ref="${esc(invoiceRefFor(r))}" aria-label="عرض الفاتورة">فاتورة</button>` : ''}
           </div>
           <p class="tx-desc">${esc(r.description) || '—'}</p>
           <div class="tx-amounts-grid">
@@ -413,7 +418,7 @@ async function openBranch(seq) {
       document.querySelectorAll('.tx-invoice-btn').forEach((btn) => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
-          openInvoice(btn.dataset.billSeq);
+          openInvoice(btn.dataset.invoiceRef);
         });
       });
     } else {
@@ -461,9 +466,9 @@ async function openBranch(seq) {
   }
 }
 
-async function openInvoice(billSeq) {
-  if (!billSeq) return;
-  state.selectedInvoice = { billSeq };
+async function openInvoice(ref) {
+  if (!ref) return;
+  state.selectedInvoice = { ref };
   goToScreen('invoice');
 
   const loading = document.getElementById('invoiceLoading');
@@ -474,14 +479,14 @@ async function openInvoice(billSeq) {
   content.classList.add('hidden');
 
   try {
-    const data = await api(`/invoices/${encodeURIComponent(billSeq)}`);
+    const data = await api(`/invoices/${encodeURIComponent(ref)}`);
     const inv = data.invoice || {};
     const lines = data.lines || [];
     state.selectedInvoice = inv;
 
     document.getElementById('invoiceHero').innerHTML = `
       <p class="hero-title">${esc(inv.kindLabel || 'فاتورة مبيعات')}</p>
-      <p class="hero-subtitle">فاتورة رقم ${esc(inv.num || billSeq)}</p>
+      <p class="hero-subtitle">فاتورة رقم ${esc(inv.num || ref)}</p>
       <h2 class="hero-name">${esc(inv.accountName || state.selectedBranch?.name1 || '—')}</h2>
       ${inv.accountNum ? `<p class="hero-addr">حساب ${esc(inv.accountNum)} · ${fmtDate(inv.date)}</p>` : `<p class="hero-addr">${fmtDate(inv.date)}</p>`}`;
 

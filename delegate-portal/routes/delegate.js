@@ -6,7 +6,7 @@ const {
   getAssignableTrees
 } = require('../lib/accounts');
 const { debtStatusFromBalance, balanceSummaryLabel } = require('../lib/statement-utils');
-const { getInvoiceByBillSeq } = require('../lib/invoices');
+const { getInvoiceByRef } = require('../lib/invoices');
 
 const router = express.Router();
 
@@ -88,12 +88,12 @@ router.get('/accounts/:seq/statement', (req, res) => {
   res.json({ ok: true, ...stmt });
 });
 
-router.get('/invoices/:billSeq', (req, res) => {
-  const billSeq = String(req.params.billSeq || '').replace(/[^0-9]/g, '');
-  if (!billSeq) {
+router.get('/invoices/:ref', (req, res) => {
+  const ref = String(req.params.ref || '').trim();
+  if (!ref) {
     return res.status(400).json({ ok: false, error: 'رقم الفاتورة غير صالح' });
   }
-  const data = getInvoiceByBillSeq(billSeq);
+  const data = getInvoiceByRef(ref);
   if (!data) {
     return res.status(404).json({ ok: false, error: 'الفاتورة غير موجودة — قد تحتاج مزامنة جديدة' });
   }

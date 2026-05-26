@@ -8,26 +8,29 @@ function isDebitRow(row) {
 }
 
 function buildStatementLines(rows) {
-  const { isInvoiceMovement, resolveBillSeq } = require('./invoices');
+  const { isInvoiceMovement, resolveBillSeq, resolveBillNum } = require('./invoices');
   let balance = 0;
   const lines = rows.map((row) => {
     const am = parseAmount(row.am ?? row.Am);
     const debit = isDebitRow(row) ? am : 0;
     const credit = isDebitRow(row) ? 0 : am;
     balance = balance - debit + credit;
-    const billSeq = resolveBillSeq(row);
+    const billNum = resolveBillNum(row);
+    const billSeq = resolveBillSeq(row) || null;
     const hasInvoice = isInvoiceMovement(row);
+    const invoiceRef = billSeq || billNum || null;
     return {
       seq: row.seq ?? row.Seq,
       debit,
       credit,
       description: row.exp1 || row.Exp1 || '',
       date: row.tx_date || row.Date || row.DtCreated,
-      billNum: row.bill_num || row.BillNum,
-      billSeq: billSeq || null,
+      billNum: billNum || null,
+      billSeq,
       billKind: row.bill_kind ?? row.BillKind ?? null,
+      invoiceRef,
       hasInvoice,
-      clickable: Boolean(billSeq && debit > 0),
+      clickable: Boolean(invoiceRef && (debit > 0 || credit > 0)),
       balance
     };
   });
