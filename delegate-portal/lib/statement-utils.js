@@ -43,6 +43,7 @@ function filterRowsSinceLastMatch(rows, cutoff, fixDate) {
 
 function buildStatementLines(rows) {
   const { isInvoiceMovement, resolveBillSeq, resolveBillNum } = require('./invoices');
+  const reconText = /مطابقة|تصفير|ترصيد|دفعة|خصم|حسم/i;
   let balance = 0;
   const lines = rows.map((row) => {
     const am = parseAmount(row.am ?? row.Am);
@@ -53,17 +54,19 @@ function buildStatementLines(rows) {
     const billSeq = resolveBillSeq(row) || null;
     const hasInvoice = isInvoiceMovement(row) && debit > 0;
     const invoiceRef = billSeq || billNum || null;
+    const description = row.exp1 || row.Exp1 || row.remarks || row.Remarks || '';
     return {
       seq: row.seq ?? row.Seq,
       debit,
       credit,
-      description: row.exp1 || row.Exp1 || '',
+      description,
       date: row.tx_date || row.Date || row.DtCreated,
       billNum: billNum || null,
       billSeq,
       billKind: row.bill_kind ?? row.BillKind ?? null,
       invoiceRef: hasInvoice ? invoiceRef : null,
       hasInvoice,
+      isReconciliation: !isDebitRow(row) && reconText.test(description),
       clickable: Boolean(hasInvoice && invoiceRef && debit > 0),
       balance
     };

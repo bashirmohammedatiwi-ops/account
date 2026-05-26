@@ -503,10 +503,11 @@ function renderStatement(data) {
       const showInvoiceBtn = isPurchaseLine(r);
       const exportRef = showInvoiceBtn ? invoiceExportRefFor(r) : null;
       return `
-      <article class="tx-row">
+      <article class="tx-row${r.isReconciliation ? ' tx-row-recon' : ''}">
         <div class="tx-row-meta">
           <span class="tx-idx">${i + 1}</span>
           <span class="tx-date">${fmtDate(r.date)}</span>
+          ${r.isReconciliation ? '<span class="tx-recon-badge">ترصيد</span>' : ''}
           ${showInvoiceBtn ? `
             <div class="tx-row-actions">
               <button type="button" class="tx-invoice-btn" data-invoice-ref="${esc(invoiceRefFor(r))}" aria-label="عرض الفاتورة">فاتورة</button>

@@ -36,11 +36,7 @@ const ACCOUNT_COLS = [
   'Address', 'Remarks', 'OfficialName', 'FixDate'
 ].map((c) => `"${c}"`).join(', ');
 
-const MATCH_EXP_SQL = `(
-  Exp1 LIKE '%مطابقة%'
-  OR Exp1 LIKE '%تصفير%'
-  OR Exp1 LIKE '%دفعة%'
-)`;
+const { MATCH_SQL } = require('../lib/reconciliation-utils');
 
 async function query(sql) {
   const r = await odbcBridge.runQuery({ ...CONN, sql });
@@ -240,6 +236,45 @@ async function fetchSalesInvoiceJournal(accSeqs) {
   return all;
 }
 
+async function fetchReconciliationJournal(accSeqs) {
+  if (!accSeqs.length) return [];
+  const all = [];
+  const parts = chunk(accSeqs, 60);
+  let done = 0;
+  for (const part of parts) {
+    const ids = part.join(',');
+    const rows = await query(
+      `SELECT Seq, Acc, "Date", Am, Dept, Exp1, Remarks, BillNum, BillSeq, BillKind FROM File12n
+       WHERE Acc IN (${ids}) AND Dept = 'False' AND ${MATCH_SQL}
+       ORDER BY Acc, "Date", Seq`
+    );
+    all.push(...rows);
+    done += part.length;
+    const pct = Math.round((done / accSeqs.length) * 100);
+    reportProgress(2, 6, pct, `حركات مطابقة/ترصيد: ${all.length} (${done}/${accSeqs.length} حساب)`);
+  }
+  return all;
+}
+
+function mergeJournalRows(salesRows, reconciliationRows) {
+  const map = new Map();
+  for (const row of [...salesRows, ...reconciliationRows]) {
+    const acc = String(row.Acc ?? row.acc_seq ?? '');
+    const seq = String(row.Seq ?? row.seq ?? '');
+    if (!acc || !seq) continue;
+    map.set(`${acc}:${seq}`, row);
+  }
+  return [...map.values()].sort((a, b) => {
+    const aa = String(a.Acc ?? a.acc_seq ?? '');
+    const bb = String(b.Acc ?? b.acc_seq ?? '');
+    if (aa !== bb) return aa.localeCompare(bb, undefined, { numeric: true });
+    const da = new Date(String(a.Date ?? a.tx_date ?? 0)).getTime();
+    const db = new Date(String(b.Date ?? b.tx_date ?? 0)).getTime();
+    if (da !== db) return da - db;
+    return Number(a.Seq ?? a.seq ?? 0) - Number(b.Seq ?? b.seq ?? 0);
+  });
+}
+
 async function fetchLastMatchByAccount(accSeqs) {
   const map = new Map();
   if (!accSeqs.length) return map;
@@ -247,8 +282,8 @@ async function fetchLastMatchByAccount(accSeqs) {
   for (const part of parts) {
     const ids = part.join(',');
     const rows = await query(
-      `SELECT Acc, Seq, "Date", Exp1 FROM File12n
-       WHERE Acc IN (${ids}) AND Dept = 'False' AND ${MATCH_EXP_SQL}
+      `SELECT Acc, Seq, "Date", Exp1, Remarks FROM File12n
+       WHERE Acc IN (${ids}) AND Dept = 'False' AND ${MATCH_SQL}
        ORDER BY Acc, "Date", Seq`
     );
     for (const row of rows) {
@@ -446,8 +481,13 @@ async function main() {
   const accountsForUpload = enrichAccountsWithMatchInfo(accounts, lastMatchMap);
 
   reportProgress(2, 6, 0, `جاري قراءة حركات البيع (مدين + فاتورة) لـ ${leafSeqs.length} حساب...`);
-  const journal = await fetchSalesInvoiceJournal(leafSeqs);
-  reportProgress(2, 6, 100, `تم: ${journal.length} حركة بيع (مدين + فاتورة)`);
+  const salesJournal = await fetchSalesInvoiceJournal(leafSeqs);
+  reportProgress(2, 6, 100, `تم: ${salesJournal.length} حركة بيع (مدين + فاتورة)`);
+
+  reportProgress(2, 6, 0, `جاري قراءة حركات المطابقة والترصيد لـ ${leafSeqs.length} حساب...`);
+  const reconciliationJournal = await fetchReconciliationJournal(leafSeqs);
+  const journal = mergeJournalRows(salesJournal, reconciliationJournal);
+  reportProgress(2, 6, 100, `تم: ${journal.length} حركة (${salesJournal.length} بيع + ${reconciliationJournal.length} مطابقة/ترصيد)`);
 
   const billSeqs = collectBillSeqs(journal);
   reportProgress(3, 6, 0, `جاري قراءة ${billSeqs.length} فاتورة بيع...`);

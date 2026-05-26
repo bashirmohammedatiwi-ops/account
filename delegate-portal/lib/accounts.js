@@ -57,16 +57,14 @@ function getStatementForAccount(accSeq, options = {}) {
     buildStatementLines,
     balanceSummaryLabel,
     debtStatusFromBalance,
-    filterRowsSinceLastMatch,
-    isValidFixDate
+    filterRowsSinceLastMatch
   } = require('./statement-utils');
+  const { resolveLastMatchCutoff, hasMatchCutoff } = require('./reconciliation-utils');
 
-  const lastMatch = account.last_match_seq
-    ? { seq: account.last_match_seq, date: account.last_match_date || '' }
-    : null;
-  const hasMatchCutoff = Boolean(lastMatch?.seq) || isValidFixDate(account.fix_date);
-  const filteredRows = sinceLastMatch && hasMatchCutoff
-    ? filterRowsSinceLastMatch(rows, lastMatch, account.fix_date)
+  const cutoff = resolveLastMatchCutoff(account, rows);
+  const matchAvailable = hasMatchCutoff(account, rows);
+  const filteredRows = sinceLastMatch && matchAvailable
+    ? filterRowsSinceLastMatch(rows, cutoff?.seq ? cutoff : null, cutoff?.seq ? null : account.fix_date)
     : rows;
 
   const stmt = buildStatementLines(filteredRows);
@@ -85,9 +83,10 @@ function getStatementForAccount(accSeq, options = {}) {
     },
     ...stmt,
     summary: balanceSummaryLabel(stmt.finalBalance),
-    sinceLastMatch: sinceLastMatch && hasMatchCutoff,
-    lastMatch,
-    hasMatchCutoff
+    sinceLastMatch: sinceLastMatch && matchAvailable,
+    lastMatch: cutoff?.seq ? { seq: cutoff.seq, date: cutoff.date || '' } : null,
+    hasMatchCutoff: matchAvailable,
+    matchSource: cutoff?.source || null
   };
 }
 
@@ -162,7 +161,7 @@ function mapJournalRow(j) {
     tx_date: j.Date ?? j.tx_date ?? j.DtCreated ?? '',
     am: Number(j.Am ?? j.am ?? 0),
     is_debit: dept === 'True' || dept === true || dept === 1 ? 1 : 0,
-    exp1: j.Exp1 ?? j.exp1 ?? '',
+    exp1: String(j.Exp1 ?? j.exp1 ?? j.Remarks ?? j.remarks ?? '').trim(),
     bill_num: String(j.BillNum ?? j.bill_num ?? ''),
     bill_seq: billSeq,
     bill_kind: String(j.BillKind ?? j.bill_kind ?? '')
