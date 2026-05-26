@@ -211,8 +211,10 @@ async function exportStatementPdf() {
   }
   if (state.stmtFilter === 'all') {
     params.set('since', 'all');
+  } else {
+    params.set('since', 'match');
   }
-  const qs = params.toString() ? `?${params.toString()}` : '';
+  const qs = `?${params.toString()}`;
   const num = state.selectedBranch.num || state.selectedBranch.seq;
   await downloadAuthenticatedPdf(
     `/accounts/${encodeURIComponent(state.selectedBranch.seq)}/statement.pdf${qs}`,
@@ -221,7 +223,7 @@ async function exportStatementPdf() {
 }
 
 function statementSinceQuery() {
-  return state.stmtFilter === 'all' ? '?since=all' : '';
+  return state.stmtFilter === 'all' ? '?since=all' : '?since=match';
 }
 
 async function exportInvoicePdf(refOverride, byOverride) {
@@ -466,8 +468,8 @@ function renderStatement(data) {
   const treeLabel = state.selectedTree?.num ? `شجرة ${state.selectedTree.num}` : '';
   const matchBanner = data.sinceLastMatch && data.lastMatch?.date
     ? `<p class="hero-match-note">حركات بعد آخر مطابقة · ${fmtDate(data.lastMatch.date)}</p>`
-    : (data.hasMatchCutoff === false && state.stmtFilter === 'since-match'
-      ? '<p class="hero-match-note muted">لا توجد مطابقة مسجلة — يُعرض الكشف كاملاً</p>'
+    : (state.stmtFilter === 'since-match' && !data.hasMatchCutoff
+      ? '<p class="hero-match-note muted">لا توجد مطابقة مسجلة — نفّذ مزامنة جديدة من Admin</p>'
       : '');
 
   renderDebtField(currentBal);

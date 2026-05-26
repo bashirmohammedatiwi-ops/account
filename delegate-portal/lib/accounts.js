@@ -64,7 +64,7 @@ function getStatementForAccount(accSeq, options = {}) {
   const cutoff = resolveLastMatchCutoff(account, rows);
   const matchAvailable = hasMatchCutoff(account, rows);
   const filteredRows = sinceLastMatch && matchAvailable
-    ? filterRowsSinceLastMatch(rows, cutoff?.seq ? cutoff : null, cutoff?.seq ? null : account.fix_date)
+    ? filterRowsSinceLastMatch(rows, cutoff)
     : rows;
 
   const stmt = buildStatementLines(filteredRows);
@@ -84,7 +84,9 @@ function getStatementForAccount(accSeq, options = {}) {
     ...stmt,
     summary: balanceSummaryLabel(stmt.finalBalance),
     sinceLastMatch: sinceLastMatch && matchAvailable,
-    lastMatch: cutoff?.seq ? { seq: cutoff.seq, date: cutoff.date || '' } : null,
+    lastMatch: cutoff
+      ? { seq: cutoff.seq || null, date: cutoff.date || '', source: cutoff.source || null }
+      : null,
     hasMatchCutoff: matchAvailable,
     matchSource: cutoff?.source || null
   };

@@ -1,24 +1,22 @@
-const { journalSortKey, isValidFixDate } = require('./statement-utils');
+const { journalSortKey, isValidFixDate, sortJournalRowsAsc, endOfCalendarDay } = require('./statement-utils');
 
-const MATCH_TEXT_RE = /مطابقة|تصفير|ترصيد|دفعة|خصم|حسم/i;
+const MATCH_TEXT_RE = /مطابقة|تصفير|ترصيد|دفعة/i;
 
 const MATCH_SQL = `(
   Exp1 LIKE '%مطابقة%'
   OR Exp1 LIKE '%تصفير%'
   OR Exp1 LIKE '%ترصيد%'
   OR Exp1 LIKE '%دفعة%'
-  OR Exp1 LIKE '%خصم%'
-  OR Exp1 LIKE '%حسم%'
+  OR (Exp1 LIKE '%خصم%' AND Exp1 NOT LIKE '%فات%')
+  OR (Exp1 LIKE '%حسم%' AND Exp1 LIKE '%مطابقة%')
   OR Remarks LIKE '%مطابقة%'
   OR Remarks LIKE '%تصفير%'
   OR Remarks LIKE '%ترصيد%'
   OR Remarks LIKE '%دفعة%'
-  OR Remarks LIKE '%خصم%'
-  OR Remarks LIKE '%حسم%'
 )`;
 
 function movementText(row) {
-  return String(row?.exp1 || row?.Exp1 || row?.Remarks || row?.remarks || '').trim();
+  return String(row?.exp1 || row?.Exp1 || row?.remarks || row?.Remarks || '').trim();
 }
 
 function isDebitMovement(row) {
@@ -26,25 +24,57 @@ function isDebitMovement(row) {
   return dept === 'True' || dept === true || dept === 1 || dept === '1';
 }
 
-function isReconciliationMovement(row) {
-  if (isDebitMovement(row)) return false;
-  return MATCH_TEXT_RE.test(movementText(row));
+function normalizeBillSeq(value) {
+  const seq = String(value ?? '').replace(/[^0-9]/g, '');
+  return seq && seq !== '0' ? seq : '';
 }
 
-function sameCalendarDay(left, right) {
-  const a = journalSortKey({ tx_date: left }).t;
-  const b = journalSortKey({ tx_date: right }).t;
-  if (!a || !b) return false;
-  const da = new Date(a);
-  const db = new Date(b);
-  return da.getFullYear() === db.getFullYear()
-    && da.getMonth() === db.getMonth()
-    && da.getDate() === db.getDate();
+function isInvoiceLinkedCredit(row) {
+  const text = movementText(row);
+  if (/فات?[او]?رة?|invoice/i.test(text)) return true;
+  if (normalizeBillSeq(row?.bill_seq ?? row?.BillSeq)) {
+    return /حسم|خصم/i.test(text) && !MATCH_TEXT_RE.test(text);
+  }
+  return false;
+}
+
+function isReconciliationMovement(row) {
+  if (isDebitMovement(row)) return false;
+  if (isInvoiceLinkedCredit(row)) return false;
+  const text = movementText(row);
+  if (!text) return false;
+  if (MATCH_TEXT_RE.test(text)) return true;
+  const discountOnly = '\u062E\u0635\u0645';
+  if (text.trim() === discountOnly) return true;
+  if (/حسم\s*\/?\s*مطابقة/i.test(text)) return true;
+  return false;
+}
+
+function cutoffSortKey(cutoff) {
+  if (cutoff?.seq) {
+    return journalSortKey({ tx_date: cutoff.date, seq: cutoff.seq });
+  }
+  if (isValidFixDate(cutoff?.date)) {
+    return { t: endOfCalendarDay(cutoff.date), seq: Number.MAX_SAFE_INTEGER };
+  }
+  return { t: 0, seq: 0 };
+}
+
+function compareCutoffs(a, b) {
+  const ka = cutoffSortKey(a);
+  const kb = cutoffSortKey(b);
+  if (ka.t !== kb.t) return ka.t - kb.t;
+  return ka.seq - kb.seq;
+}
+
+function pickLatestCutoff(candidates = []) {
+  if (!candidates.length) return null;
+  return [...candidates].sort(compareCutoffs).pop();
 }
 
 function findLastMatchInRows(rows = []) {
   let last = null;
-  for (const row of rows) {
+  for (const row of sortJournalRowsAsc(rows)) {
     if (!isReconciliationMovement(row)) continue;
     last = {
       seq: String(row.seq ?? row.Seq ?? ''),
@@ -55,37 +85,30 @@ function findLastMatchInRows(rows = []) {
 }
 
 function resolveLastMatchCutoff(account, rows = []) {
+  const candidates = [];
+
   if (account?.last_match_seq) {
-    return {
+    candidates.push({
       seq: String(account.last_match_seq),
-      date: account.last_match_date || '',
+      date: account.last_match_date || account.fix_date || '',
       source: 'account'
-    };
+    });
   }
 
   const fromJournal = findLastMatchInRows(rows);
   if (fromJournal) {
-    return { ...fromJournal, source: 'journal' };
+    candidates.push({ ...fromJournal, source: 'journal' });
   }
 
   if (isValidFixDate(account?.fix_date)) {
-    const fixDayRows = rows.filter((row) => sameCalendarDay(row.tx_date || row.Date, account.fix_date));
-    if (fixDayRows.length) {
-      const last = fixDayRows[fixDayRows.length - 1];
-      return {
-        seq: String(last.seq ?? last.Seq ?? ''),
-        date: last.tx_date || last.Date || account.fix_date,
-        source: 'fix_date'
-      };
-    }
-    return {
+    candidates.push({
       seq: '',
       date: account.fix_date,
-      source: 'fix_date_only'
-    };
+      source: 'fix_date'
+    });
   }
 
-  return null;
+  return pickLatestCutoff(candidates);
 }
 
 function hasMatchCutoff(account, rows = []) {

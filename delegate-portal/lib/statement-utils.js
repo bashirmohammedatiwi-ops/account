@@ -30,12 +30,33 @@ function isValidFixDate(value) {
   return !Number.isNaN(t);
 }
 
-function filterRowsSinceLastMatch(rows, cutoff, fixDate) {
-  if (cutoff?.seq) {
+function sortJournalRowsAsc(rows) {
+  return [...rows].sort((a, b) => {
+    const ka = journalSortKey(a);
+    const kb = journalSortKey(b);
+    if (ka.t !== kb.t) return ka.t - kb.t;
+    return ka.seq - kb.seq;
+  });
+}
+
+function sortJournalRowsDesc(rows) {
+  return sortJournalRowsAsc(rows).reverse();
+}
+
+function endOfCalendarDay(value) {
+  const d = new Date(String(value).replace(' 00:00:00', ''));
+  if (Number.isNaN(d.getTime())) return 0;
+  d.setHours(23, 59, 59, 999);
+  return d.getTime();
+}
+
+function filterRowsSinceLastMatch(rows, cutoff) {
+  if (!cutoff) return rows;
+  if (cutoff.seq) {
     return rows.filter((row) => isJournalAfter(row, cutoff));
   }
-  if (isValidFixDate(fixDate)) {
-    const marker = new Date(String(fixDate).replace(' 00:00:00', '')).getTime();
+  if (isValidFixDate(cutoff.date)) {
+    const marker = endOfCalendarDay(cutoff.date);
     return rows.filter((row) => journalSortKey(row).t > marker);
   }
   return rows;
@@ -43,9 +64,9 @@ function filterRowsSinceLastMatch(rows, cutoff, fixDate) {
 
 function buildStatementLines(rows) {
   const { isInvoiceMovement, resolveBillSeq, resolveBillNum } = require('./invoices');
-  const reconText = /مطابقة|تصفير|ترصيد|دفعة|خصم|حسم/i;
+  const { isReconciliationMovement } = require('./reconciliation-utils');
   let balance = 0;
-  const lines = rows.map((row) => {
+  const lines = sortJournalRowsAsc(rows).map((row) => {
     const am = parseAmount(row.am ?? row.Am);
     const debit = isDebitRow(row) ? am : 0;
     const credit = isDebitRow(row) ? 0 : am;
@@ -66,18 +87,20 @@ function buildStatementLines(rows) {
       billKind: row.bill_kind ?? row.BillKind ?? null,
       invoiceRef: hasInvoice ? invoiceRef : null,
       hasInvoice,
-      isReconciliation: !isDebitRow(row) && reconText.test(description),
+      isReconciliation: isReconciliationMovement(row),
       clickable: Boolean(hasInvoice && invoiceRef && debit > 0),
       balance
     };
   });
+  const finalBalance = lines.length ? lines[lines.length - 1].balance : 0;
+  lines.reverse();
   const totalDebit = lines.reduce((s, l) => s + l.debit, 0);
   const totalCredit = lines.reduce((s, l) => s + l.credit, 0);
   return {
     lines,
     totalDebit,
     totalCredit,
-    finalBalance: lines.length ? lines[lines.length - 1].balance : 0
+    finalBalance
   };
 }
 
@@ -101,5 +124,8 @@ module.exports = {
   journalSortKey,
   isJournalAfter,
   filterRowsSinceLastMatch,
-  isValidFixDate
+  isValidFixDate,
+  sortJournalRowsAsc,
+  sortJournalRowsDesc,
+  endOfCalendarDay
 };

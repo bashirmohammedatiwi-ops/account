@@ -36,7 +36,7 @@ const ACCOUNT_COLS = [
   'Address', 'Remarks', 'OfficialName', 'FixDate'
 ].map((c) => `"${c}"`).join(', ');
 
-const { MATCH_SQL } = require('../lib/reconciliation-utils');
+const { MATCH_SQL, isReconciliationMovement } = require('../lib/reconciliation-utils');
 
 async function query(sql) {
   const r = await odbcBridge.runQuery({ ...CONN, sql });
@@ -248,7 +248,7 @@ async function fetchReconciliationJournal(accSeqs) {
        WHERE Acc IN (${ids}) AND Dept = 'False' AND ${MATCH_SQL}
        ORDER BY Acc, "Date", Seq`
     );
-    all.push(...rows);
+    all.push(...rows.filter(isReconciliationMovement));
     done += part.length;
     const pct = Math.round((done / accSeqs.length) * 100);
     reportProgress(2, 6, pct, `حركات مطابقة/ترصيد: ${all.length} (${done}/${accSeqs.length} حساب)`);
@@ -287,6 +287,7 @@ async function fetchLastMatchByAccount(accSeqs) {
        ORDER BY Acc, "Date", Seq`
     );
     for (const row of rows) {
+      if (!isReconciliationMovement(row)) continue;
       map.set(String(row.Acc), {
         LastMatchSeq: String(row.Seq),
         LastMatchDate: row.Date || ''
