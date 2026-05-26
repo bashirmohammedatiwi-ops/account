@@ -398,6 +398,24 @@ function openAgentModal(id = null) {
   }
 }
 
+function applySyncProgressLine(line) {
+  const msg = document.getElementById('syncProgressMsg');
+  const bar = document.getElementById('syncProgressBar');
+  const step = document.getElementById('syncProgressStep');
+  if (!msg) return;
+
+  const parsed = String(line || '').match(/^@PROGRESS\|(\d+)\|(\d+)\|(\d+)\|(.+)$/);
+  if (parsed) {
+    const overallPct = Math.round(((Number(parsed[1]) - 1) / Number(parsed[2]) + Number(parsed[3]) / 100 / Number(parsed[2])) * 100);
+    msg.textContent = parsed[4];
+    if (bar) bar.style.width = `${Math.max(0, Math.min(100, overallPct))}%`;
+    if (step) step.textContent = `الخطوة ${parsed[1]} من ${parsed[2]} — ${parsed[3]}%`;
+    return;
+  }
+
+  msg.textContent = line;
+}
+
 async function runSync() {
   const serverUrl = document.getElementById('syncServerUrl').value.trim();
   const syncKey = document.getElementById('syncApiKey').value.trim();
@@ -405,9 +423,19 @@ async function runSync() {
   localStorage.setItem('syncApiKey', syncKey);
 
   const prog = document.getElementById('syncProgress');
-  const msg = document.getElementById('syncProgressMsg');
+  const bar = document.getElementById('syncProgressBar');
+  const step = document.getElementById('syncProgressStep');
   prog.classList.remove('hidden');
-  msg.textContent = 'جاري قراءة البيانات من EdariNX...';
+  if (bar) bar.style.width = '0%';
+  if (step) step.textContent = 'الخطوة 1 من 6';
+  applySyncProgressLine('جاري قراءة الحسابات من EdariNX...');
+
+  let stopProgress = null;
+  if (window.edariDesktop?.onSyncProgress) {
+    stopProgress = window.edariDesktop.onSyncProgress((line) => {
+      if (line) applySyncProgressLine(line);
+    });
+  }
 
   try {
     let data;
@@ -421,17 +449,23 @@ async function runSync() {
     }
     if (!data.ok) throw new Error(data.error || 'فشل الرفع');
 
-    msg.textContent = `تم! ${data.accounts} حساب، ${data.journal} حركة`;
+    const invPart = data.invoices ? `، ${data.invoices} فاتورة` : '';
+    const linesPart = data.invoiceLines ? `، ${data.invoiceLines} بند` : '';
+    applySyncProgressLine(`تم! ${data.accounts} حساب، ${data.journal} حركة${invPart}${linesPart}`);
+    if (bar) bar.style.width = '100%';
+    if (step) step.textContent = 'اكتملت المزامنة';
     await loadDashboard();
     await loadTrees();
     if (explorer.selectedTreeSeq) await selectExplorerTree(explorer.selectedTreeSeq);
     await loadSyncLogs();
     await loadAgents();
   } catch (e) {
-    msg.textContent = `خطأ: ${e.message}`;
+    applySyncProgressLine(`خطأ: ${e.message}`);
+    if (bar) bar.style.width = '0%';
     alert(`فشل الرفع:\n${e.message}\n\nيمكنك تشغيل المزامنة يدوياً:\nnode sync-client/sync.js`);
   } finally {
-    setTimeout(() => prog.classList.add('hidden'), 3000);
+    stopProgress?.();
+    setTimeout(() => prog.classList.add('hidden'), 5000);
   }
 }
 

@@ -95,6 +95,23 @@ function spawnServer() {
   });
 }
 
+function pushSyncProgress(text) {
+  const line = String(text || '').trim();
+  if (!line || !mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('sync-progress', line);
+}
+
+function parseSyncResult(stdout) {
+  const match = stdout.match(/(\d+) حساب، (\d+) حركة(?:، (\d+) فاتورة(?:، (\d+) بند)?)?/);
+  return {
+    ok: true,
+    accounts: match ? Number(match[1]) : 0,
+    journal: match ? Number(match[2]) : 0,
+    invoices: match && match[3] ? Number(match[3]) : 0,
+    invoiceLines: match && match[4] ? Number(match[4]) : 0
+  };
+}
+
 function runLocalSyncScript(serverUrl, syncKey) {
   return new Promise((resolve, reject) => {
     const portalDir = getPortalDir();
@@ -114,17 +131,26 @@ function runLocalSyncScript(serverUrl, syncKey) {
       windowsHide: true
     });
 
-    child.stdout.on('data', (d) => { stdout += d.toString(); });
-    child.stderr.on('data', (d) => { stdout += d.toString(); });
+    child.stdout.on('data', (d) => {
+      const text = d.toString();
+      stdout += text;
+      text.split(/\r?\n/).forEach((line) => {
+        const trimmed = line.replace(/^\r+/, '').trim();
+        if (trimmed) pushSyncProgress(trimmed);
+      });
+    });
+    child.stderr.on('data', (d) => {
+      const text = d.toString();
+      stdout += text;
+      text.split(/\r?\n/).forEach((line) => {
+        const trimmed = line.trim();
+        if (trimmed) pushSyncProgress(trimmed);
+      });
+    });
     child.on('error', reject);
     child.on('close', (code) => {
-      if (code !== 0) return reject(new Error(stdout || `Sync exit ${code}`));
-      const match = stdout.match(/(\d+) حساب، (\d+) حركة/);
-      resolve({
-        ok: true,
-        accounts: match ? Number(match[1]) : 0,
-        journal: match ? Number(match[2]) : 0
-      });
+      if (code !== 0) return reject(new Error(stdout.trim() || `Sync exit ${code}`));
+      resolve(parseSyncResult(stdout));
     });
   });
 }

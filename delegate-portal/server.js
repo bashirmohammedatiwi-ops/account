@@ -15,7 +15,7 @@ const PORT = Number(process.env.PORT || 5005);
 const HOST = process.env.HOST || '0.0.0.0';
 
 app.use(cors());
-app.use(express.json({ limit: '100mb' }));
+app.use(express.json({ limit: '50mb' }));
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'edari-delegate-portal', time: new Date().toISOString() });

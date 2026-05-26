@@ -391,13 +391,39 @@ tbody tr:hover { background: #fafbfc; }
 
 .sync-progress {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 14px;
   padding: 18px;
   background: var(--primary-light);
   border: 1px solid var(--primary-soft);
   border-radius: var(--radius-sm);
   margin-top: 14px;
+}
+
+.sync-progress-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.sync-progress-bar-wrap {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 10px 0 6px;
+}
+
+.sync-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--primary), #2563eb);
+  border-radius: 999px;
+  transition: width 0.35s ease;
+}
+
+.sync-progress-step {
+  font-size: 0.85rem;
+  margin: 0;
 }
 
 .spinner {

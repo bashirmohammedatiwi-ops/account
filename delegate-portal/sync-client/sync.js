@@ -24,6 +24,12 @@ const CONN = {
   port: Number(process.env.EDARI_PORT || 16000)
 };
 
+const UPLOAD_BATCH = {
+  journal: 2500,
+  invoices: 400,
+  invoiceLines: 1500
+};
+
 const ACCOUNT_COLS = [
   'Seq', 'Num', 'Name1', 'Name2', 'Master', 'SubCount', 'Bal', 'Tot1', 'Tot2',
   'Address', 'Remarks', 'OfficialName'
@@ -41,9 +47,67 @@ function chunk(arr, size) {
   return out;
 }
 
+function reportProgress(step, totalSteps, pct, message) {
+  const safePct = Math.max(0, Math.min(100, Math.round(pct)));
+  console.log(`@PROGRESS|${step}|${totalSteps}|${safePct}|${message}`);
+}
+
+async function postJson(urlPath, body, timeoutMs = 600000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${SERVER}${urlPath}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Sync-Key': SYNC_KEY
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(text.includes('Cannot POST') || res.status === 404
+        ? `HTTP ${res.status} Not Found`
+        : (text || `HTTP ${res.status}`));
+    }
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`استجابة غير صالحة من السيرفر (${res.status})`);
+    }
+    if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('انتهت مهلة الاتصال بالسيرفر — حاول مرة أخرى');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function postJsonWithRetry(urlPath, body, retries = 3) {
+  let lastErr;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await postJson(urlPath, body);
+    } catch (err) {
+      lastErr = err;
+      if (attempt < retries) {
+        reportProgress(5, 6, 0, `إعادة محاولة الرفع (${attempt}/${retries - 1})...`);
+        await new Promise((r) => setTimeout(r, 2000 * attempt));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 async function fetchAllJournal(accSeqs) {
   const all = [];
-  const parts = chunk(accSeqs, 40);
+  const parts = chunk(accSeqs, 60);
   let done = 0;
   for (const part of parts) {
     const ids = part.join(',');
@@ -52,9 +116,9 @@ async function fetchAllJournal(accSeqs) {
     );
     all.push(...rows);
     done += part.length;
-    process.stdout.write(`\rحركات: ${all.length} (${done}/${accSeqs.length} حساب)`);
+    const pct = Math.round((done / accSeqs.length) * 100);
+    reportProgress(2, 6, pct, `حركات: ${all.length.toLocaleString('ar-EG')} (${done}/${accSeqs.length} حساب)`);
   }
-  console.log('');
   return all;
 }
 
@@ -70,37 +134,23 @@ function collectBillSeqs(journal) {
 async function fetchInvoices(billSeqs) {
   if (!billSeqs.length) return [];
   const all = [];
-  for (const part of chunk(billSeqs, 80)) {
-    const ids = part.join(',');
+  const parts = chunk(billSeqs, 120);
+  for (let i = 0; i < parts.length; i++) {
+    const ids = parts[i].join(',');
     const rows = await query(
       `SELECT Seq, Num, Kind, "Date", Total, Payment, DisCnt, "count", Two, remarks FROM File15n WHERE Seq IN (${ids})`
     );
     all.push(...rows);
-    process.stdout.write(`\rفواتير: ${all.length}/${billSeqs.length}`);
+    const pct = Math.round(((i + 1) / parts.length) * 100);
+    reportProgress(3, 6, pct, `فواتير: ${all.length.toLocaleString('ar-EG')}/${billSeqs.length.toLocaleString('ar-EG')}`);
   }
-  console.log('');
   return all;
-}
-
-async function fetchInvoiceLines(billSeqs) {
-  if (!billSeqs.length) return [];
-  const all = [];
-  for (const part of chunk(billSeqs, 40)) {
-    const ids = part.join(',');
-    const rows = await query(
-      `SELECT BillSeq, BillNo, Mat, MatName, Quant, Price, OBonus, MatRem, Kind FROM file14n WHERE BillSeq IN (${ids}) ORDER BY BillSeq, BillNo`
-    );
-    all.push(...rows);
-    process.stdout.write(`\rبنود الفواتير: ${all.length}`);
-  }
-  console.log('');
-  return enrichInvoiceLines(all);
 }
 
 async function fetchMaterialMap(matSeqs) {
   const map = new Map();
   if (!matSeqs.length) return map;
-  for (const part of chunk(matSeqs, 80)) {
+  for (const part of chunk(matSeqs, 120)) {
     const ids = part.join(',');
     const rows = await query(
       `SELECT Seq, Num, Name1 FROM File13n WHERE Seq IN (${ids})`
@@ -112,11 +162,34 @@ async function fetchMaterialMap(matSeqs) {
   return map;
 }
 
-async function enrichInvoiceLines(lines) {
-  const matSeqs = [...new Set(lines.map((l) => String(l.Mat || '').replace(/[^0-9]/g, '')).filter(Boolean))];
-  console.log(`جاري جلب أسماء ${matSeqs.length} مادة...`);
-  const materials = await fetchMaterialMap(matSeqs);
-  return lines.map((line) => {
+async function fetchInvoiceLines(billSeqs) {
+  if (!billSeqs.length) return [];
+  const all = [];
+  const parts = chunk(billSeqs, 100);
+  for (let i = 0; i < parts.length; i++) {
+    const ids = parts[i].join(',');
+    const rows = await query(
+      `SELECT BillSeq, BillNo, Mat, MatName, Quant, Price, OBonus, MatRem, Kind FROM file14n WHERE BillSeq IN (${ids}) ORDER BY BillSeq, BillNo`
+    );
+    all.push(...rows);
+    const pct = Math.round(((i + 1) / parts.length) * 100);
+    reportProgress(4, 6, pct, `بنود الفواتير: ${all.length.toLocaleString('ar-EG')} (${i + 1}/${parts.length})`);
+  }
+
+  const missingNameMats = [...new Set(
+    all
+      .filter((line) => !(line.MatName || '').trim())
+      .map((line) => String(line.Mat || '').replace(/[^0-9]/g, ''))
+      .filter(Boolean)
+  )];
+
+  let materials = new Map();
+  if (missingNameMats.length) {
+    reportProgress(4, 6, 95, `جلب أسماء ${missingNameMats.length.toLocaleString('ar-EG')} مادة...`);
+    materials = await fetchMaterialMap(missingNameMats);
+  }
+
+  return all.map((line) => {
     const mat = materials.get(String(line.Mat));
     const quant = Number(line.Quant || 0);
     const price = Number(line.Price || 0);
@@ -129,44 +202,95 @@ async function enrichInvoiceLines(lines) {
   });
 }
 
-async function main() {
-  console.log('Edari Sync Client');
-  console.log('Server:', SERVER);
-  console.log('DB:', CONN.alias);
+async function uploadLegacy(payload) {
+  reportProgress(5, 6, 50, 'رفع دفعة واحدة (وضع قديم)...');
+  const data = await postJson('/api/sync/push', payload, 900000);
+  reportProgress(6, 6, 100, 'اكتمل الرفع');
+  return data;
+}
 
-  console.log('جاري قراءة الحسابات...');
+async function uploadChunked(payload) {
+  const stats = {
+    accounts: payload.accounts.length,
+    journal: payload.journal.length,
+    invoices: payload.invoices.length,
+    invoiceLines: payload.invoiceLines.length
+  };
+
+  reportProgress(5, 6, 0, 'بدء الرفع إلى السيرفر...');
+  let start;
+  try {
+    start = await postJson('/api/sync/start', {}, 120000);
+  } catch (err) {
+    if (/404|Cannot POST|Not Found/i.test(err.message)) {
+      return uploadLegacy(payload);
+    }
+    throw err;
+  }
+  const syncId = start.syncId;
+
+  const uploadPlan = [
+    { kind: 'accounts', rows: payload.accounts, batchSize: Math.max(payload.accounts.length, 1), label: 'حسابات' },
+    { kind: 'journal', rows: payload.journal, batchSize: UPLOAD_BATCH.journal, label: 'حركات' },
+    { kind: 'invoices', rows: payload.invoices, batchSize: UPLOAD_BATCH.invoices, label: 'فواتير' },
+    { kind: 'invoiceLines', rows: payload.invoiceLines, batchSize: UPLOAD_BATCH.invoiceLines, label: 'بنود' }
+  ];
+
+  const jobs = [];
+  for (const item of uploadPlan) {
+    if (!item.rows.length) continue;
+    const parts = chunk(item.rows, item.batchSize);
+    for (let i = 0; i < parts.length; i++) {
+      jobs.push({ ...item, part: parts[i], index: i + 1, total: parts.length });
+    }
+  }
+
+  for (let i = 0; i < jobs.length; i++) {
+    const job = jobs[i];
+    const pct = jobs.length ? Math.round(((i + 1) / jobs.length) * 100) : 100;
+    reportProgress(
+      5,
+      6,
+      pct,
+      `رفع ${job.label}: ${job.index}/${job.total} (${job.part.length} سجل)`
+    );
+    await postJsonWithRetry('/api/sync/chunk', {
+      syncId,
+      kind: job.kind,
+      rows: job.part,
+      batch: job.index,
+      totalBatches: job.total
+    });
+  }
+
+  reportProgress(6, 6, 100, 'جاري إنهاء المزامنة...');
+  return postJsonWithRetry('/api/sync/finish', { syncId, stats });
+}
+
+async function main() {
+  reportProgress(1, 6, 0, 'جاري قراءة الحسابات من EdariNX...');
   const accounts = await query(`SELECT ${ACCOUNT_COLS} FROM File11n ORDER BY Num`);
-  console.log(`تم: ${accounts.length} حساب`);
+  reportProgress(1, 6, 100, `تم: ${accounts.length.toLocaleString('ar-EG')} حساب`);
 
   const leafSeqs = accounts
     .filter((a) => Number(a.SubCount) === 0)
     .map((a) => String(a.Seq).replace(/[^0-9]/g, ''));
 
-  console.log(`جاري قراءة حركات ${leafSeqs.length} حساب نهائي...`);
+  reportProgress(2, 6, 0, `جاري قراءة حركات ${leafSeqs.length.toLocaleString('ar-EG')} حساب...`);
   const journal = await fetchAllJournal(leafSeqs);
-  console.log(`تم: ${journal.length} حركة`);
+  reportProgress(2, 6, 100, `تم: ${journal.length.toLocaleString('ar-EG')} حركة`);
 
   const billSeqs = collectBillSeqs(journal);
-  console.log(`جاري قراءة ${billSeqs.length} فاتورة مرتبطة...`);
+  reportProgress(3, 6, 0, `جاري قراءة ${billSeqs.length.toLocaleString('ar-EG')} فاتورة...`);
   const invoices = await fetchInvoices(billSeqs);
-  console.log(`تم: ${invoices.length} فاتورة`);
+  reportProgress(3, 6, 100, `تم: ${invoices.length.toLocaleString('ar-EG')} فاتورة`);
 
+  reportProgress(4, 6, 0, 'جاري قراءة بنود الفواتير...');
   const invoiceLines = await fetchInvoiceLines(billSeqs);
-  console.log(`تم: ${invoiceLines.length} بند`);
+  reportProgress(4, 6, 100, `تم: ${invoiceLines.length.toLocaleString('ar-EG')} بند`);
 
-  console.log('جاري الرفع إلى السيرفر...');
-  const res = await fetch(`${SERVER}/api/sync/push`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Sync-Key': SYNC_KEY
-    },
-    body: JSON.stringify({ accounts, journal, invoices, invoiceLines })
-  });
-
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
-  console.log('✓ تمت المزامنة:', data.accounts, 'حساب،', data.journal, 'حركة،', data.invoices, 'فاتورة');
+  const result = await uploadChunked({ accounts, journal, invoices, invoiceLines });
+  console.log('✓ تمت المزامنة:', result.accounts, 'حساب،', result.journal, 'حركة،', result.invoices, 'فاتورة،', result.invoiceLines, 'بند');
 }
 
 main().catch((e) => {
