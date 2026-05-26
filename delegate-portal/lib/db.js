@@ -39,6 +39,9 @@ function migrateSchema() {
     if (!columnExists('accounts', 'last_match_date')) {
       db.exec('ALTER TABLE accounts ADD COLUMN last_match_date TEXT');
     }
+    if (!columnExists('accounts', 'fix_bal')) {
+      db.exec('ALTER TABLE accounts ADD COLUMN fix_bal REAL DEFAULT 0');
+    }
   }
   db.exec(`
     CREATE TABLE IF NOT EXISTS invoices (
@@ -116,6 +119,10 @@ function initSchema() {
       address TEXT,
       remarks TEXT,
       official_name TEXT,
+      fix_date TEXT,
+      fix_bal REAL DEFAULT 0,
+      last_match_seq TEXT,
+      last_match_date TEXT,
       synced_at TEXT
     );
 

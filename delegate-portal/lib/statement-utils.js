@@ -62,10 +62,69 @@ function filterRowsSinceLastMatch(rows, cutoff) {
   return rows;
 }
 
-function buildStatementLines(rows) {
+function rowAtOrBeforeCutoff(row, cutoff) {
+  if (!cutoff?.seq) {
+    if (!isValidFixDate(cutoff?.date)) return false;
+    return journalSortKey(row).t <= endOfCalendarDay(cutoff.date);
+  }
+  const current = journalSortKey(row);
+  const marker = journalSortKey({ tx_date: cutoff.date, seq: cutoff.seq });
+  if (current.t !== marker.t) return current.t < marker.t;
+  return current.seq <= marker.seq;
+}
+
+function computeBalanceThroughCutoff(rows, cutoff) {
+  if (!cutoff) return 0;
+  let balance = 0;
+  for (const row of sortJournalRowsAsc(rows)) {
+    if (!rowAtOrBeforeCutoff(row, cutoff)) break;
+    const am = parseAmount(row.am ?? row.Am);
+    const debit = isDebitRow(row) ? am : 0;
+    const credit = isDebitRow(row) ? 0 : am;
+    balance = balance - debit + credit;
+  }
+  return balance;
+}
+
+function computeOpeningBalance(rows, cutoff, account) {
+  if (!cutoff) return 0;
+  const fixBal = parseAmount(account?.fix_bal ?? account?.fixBal);
+  if (cutoff.source === 'fix_date' && isValidFixDate(cutoff.date) && fixBal !== 0) {
+    return fixBal;
+  }
+  if (cutoff.seq || isValidFixDate(cutoff.date)) {
+    return computeBalanceThroughCutoff(rows, cutoff);
+  }
+  return fixBal;
+}
+
+function buildOpeningLine(openingBalance, cutoff) {
+  if (!cutoff) return null;
+  const balance = parseAmount(openingBalance);
+  const debit = balance < 0 ? Math.abs(balance) : 0;
+  const credit = balance > 0 ? balance : 0;
+  return {
+    seq: null,
+    debit,
+    credit,
+    description: 'رصيد من آخر مطابقة',
+    date: cutoff.date || '',
+    billNum: null,
+    billSeq: null,
+    billKind: null,
+    invoiceRef: null,
+    hasInvoice: false,
+    isReconciliation: false,
+    isOpening: true,
+    clickable: false,
+    balance
+  };
+}
+
+function buildStatementLines(rows, options = {}) {
   const { isInvoiceMovement, resolveBillSeq, resolveBillNum } = require('./invoices');
   const { isReconciliationMovement } = require('./reconciliation-utils');
-  let balance = 0;
+  let balance = parseAmount(options.openingBalance);
   const lines = sortJournalRowsAsc(rows).map((row) => {
     const am = parseAmount(row.am ?? row.Am);
     const debit = isDebitRow(row) ? am : 0;
@@ -93,7 +152,6 @@ function buildStatementLines(rows) {
     };
   });
   const finalBalance = lines.length ? lines[lines.length - 1].balance : 0;
-  lines.reverse();
   const totalDebit = lines.reduce((s, l) => s + l.debit, 0);
   const totalCredit = lines.reduce((s, l) => s + l.credit, 0);
   return {
@@ -124,6 +182,9 @@ module.exports = {
   journalSortKey,
   isJournalAfter,
   filterRowsSinceLastMatch,
+  computeBalanceThroughCutoff,
+  computeOpeningBalance,
+  buildOpeningLine,
   isValidFixDate,
   sortJournalRowsAsc,
   sortJournalRowsDesc,

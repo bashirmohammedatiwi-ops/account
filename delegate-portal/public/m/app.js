@@ -88,10 +88,37 @@ function fmtDate(v) {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
-function balClass(b) {
-  if (b < 0) return 'debit';
-  if (b > 0) return 'credit';
-  return '';
+function fmtBalanceDisplay(bal) {
+  const n = Number(bal);
+  if (Number.isNaN(n)) return '—';
+  const abs = fmtNumAlways(Math.abs(n));
+  if (n < 0) return `${abs} مدين`;
+  if (n > 0) return `${abs} دائن`;
+  return '0';
+}
+
+function balanceClassFor(bal) {
+  const n = Number(bal);
+  if (Number.isNaN(n) || n === 0) return '';
+  return n < 0 ? 'debit' : 'credit';
+}
+
+function txTypeLabel(line) {
+  if (line?.isOpening) return 'رصيد مرحّل';
+  if (line?.isReconciliation) return 'ترصيد';
+  if (line?.debit && line?.hasInvoice) return 'فاتورة';
+  if (line?.debit) return 'مدين';
+  if (line?.credit) return 'دائن';
+  return 'حركة';
+}
+
+function txTypeClass(line) {
+  if (line?.isOpening) return 'type-opening';
+  if (line?.isReconciliation) return 'type-recon';
+  if (line?.debit && line?.hasInvoice) return 'type-invoice';
+  if (line?.debit) return 'type-debit';
+  if (line?.credit) return 'type-credit';
+  return 'type-neutral';
 }
 
 function debtDisplayAmount(bal) {
@@ -192,9 +219,18 @@ async function downloadAuthenticatedPdf(path, filename) {
       throw new Error('انتهت الجلسة');
     }
 
+    const contentType = String(res.headers.get('content-type') || '').toLowerCase();
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || 'فشل تصدير PDF');
+      let message = 'فشل تصدير PDF';
+      if (contentType.includes('application/json')) {
+        const data = await res.json().catch(() => ({}));
+        message = data.error || message;
+      }
+      throw new Error(message);
+    }
+
+    if (!contentType.includes('application/pdf')) {
+      throw new Error('استجابة غير صالحة من السيرفر');
     }
 
     const blob = await res.blob();
@@ -236,17 +272,18 @@ function statementSinceQuery() {
 
 async function exportInvoicePdf(refOverride, byOverride, accOverride) {
   const lookup = state.lastInvoiceLookup || {};
-  const ref = refOverride || lookup.ref || state.selectedInvoice?.seq || state.selectedInvoice?.num;
-  const by = byOverride || lookup.by || 'seq';
-  const acc = accOverride || lookup.acc || state.selectedBranch?.seq || '';
+  const inv = state.selectedInvoice || {};
+  const ref = refOverride || lookup.ref || inv.seq || inv.num;
+  const by = byOverride || lookup.by || (inv.seq ? 'seq' : 'num');
+  const acc = accOverride || lookup.acc || state.selectedBranch?.seq || inv.accSeq || '';
   if (!ref) {
     alert('افتح فاتورة محددة أولاً');
     return;
   }
-  const label = state.selectedInvoice?.num || ref;
+  const label = inv.num || ref;
   const qs = invoiceQueryString({ ref, by, acc });
   await downloadAuthenticatedPdf(
-    `/invoices/${encodeURIComponent(ref)}/pdf${qs}`,
+    `/invoices/${encodeURIComponent(ref)}.pdf${qs}`,
     `invoice-${label}.pdf`
   );
 }
@@ -475,8 +512,12 @@ function renderStatement(data) {
   const { totalDebit, totalCredit, summary } = data;
   const currentBal = data.finalBalance ?? acc.bal ?? 0;
   const treeLabel = state.selectedTree?.num ? `شجرة ${state.selectedTree.num}` : '';
+  const openingBal = Number(data.openingBalance ?? 0);
+  const openingNote = data.sinceLastMatch && openingBal !== 0
+    ? ` · رصيد مرحّل ${fmtNumAlways(openingBal < 0 ? Math.abs(openingBal) : openingBal)}`
+    : '';
   const matchBanner = data.sinceLastMatch && data.lastMatch?.date
-    ? `<p class="hero-match-note">حركات بعد آخر مطابقة · ${fmtDate(data.lastMatch.date)}</p>`
+    ? `<p class="hero-match-note">حركات بعد آخر مطابقة · ${fmtDate(data.lastMatch.date)}${openingNote}</p>`
     : (state.stmtFilter === 'since-match' && !data.hasMatchCutoff
       ? '<p class="hero-match-note muted">لا توجد مطابقة مسجلة — نفّذ مزامنة جديدة من Admin</p>'
       : '');
@@ -514,36 +555,56 @@ function renderStatement(data) {
 
   if (lines.length) {
     document.getElementById('stmtTableSection').classList.remove('hidden');
-    document.getElementById('stmtLineCount').textContent = `${lines.length} حركة`;
-    document.getElementById('stmtLines').innerHTML = lines.map((r, i) => {
-      const showInvoiceBtn = isPurchaseLine(r);
+    document.getElementById('stmtLineCount').textContent = `${lines.length} حركة · من الأقدم إلى الأحدث`;
+    document.getElementById('stmtLines').innerHTML = `
+      <div class="stmt-ledger">
+        <div class="stmt-ledger-head" aria-hidden="true">
+          <span class="col-idx">#</span>
+          <span class="col-date">التاريخ</span>
+          <span class="col-desc">البيان</span>
+          <span class="col-debit">مدين</span>
+          <span class="col-credit">دائن</span>
+          <span class="col-bal">الرصيد</span>
+        </div>
+        <div class="stmt-ledger-body">
+          ${(() => {
+      let moveNum = 0;
+      return lines.map((r) => {
+      const showInvoiceBtn = isPurchaseLine(r) && !r.isOpening;
       const invoiceLookup = showInvoiceBtn ? invoiceLookupFor(r, branch.seq) : null;
       const exportRef = invoiceLookup;
+      const idxLabel = r.isOpening ? '∗' : String(++moveNum);
+      const rowClass = [
+        r.isReconciliation ? 'tx-row-recon' : '',
+        r.isOpening ? 'tx-row-opening' : '',
+        r.debit ? 'tx-row-has-debit' : '',
+        r.credit ? 'tx-row-has-credit' : ''
+      ].filter(Boolean).join(' ');
       return `
-      <article class="tx-row${r.isReconciliation ? ' tx-row-recon' : ''}">
-        <div class="tx-row-meta">
-          <span class="tx-idx">${i + 1}</span>
-          <span class="tx-date">${fmtDate(r.date)}</span>
-          ${r.isReconciliation ? '<span class="tx-recon-badge">ترصيد</span>' : ''}
-          ${showInvoiceBtn && invoiceLookup ? `
-            <div class="tx-row-actions">
-              <button type="button" class="tx-invoice-btn" data-invoice-ref="${esc(invoiceLookup.ref)}" data-invoice-by="${esc(invoiceLookup.by)}" data-invoice-acc="${esc(invoiceLookup.acc || branch.seq || '')}" aria-label="عرض الفاتورة">فاتورة</button>
-              <button type="button" class="tx-pdf-btn" data-export-ref="${esc(exportRef?.ref || '')}" data-export-by="${esc(exportRef?.by || 'seq')}" data-export-acc="${esc(exportRef?.acc || branch.seq || '')}" aria-label="تصدير PDF للفاتورة">PDF</button>
-            </div>` : ''}
-        </div>
-        <p class="tx-desc">${esc(r.description) || '—'}</p>
-        <div class="tx-amounts-grid">
-          <div class="tx-amt debit-amt${r.debit ? ' has-val' : ''}">
-            <span class="amt-label">مدين</span>
-            <span class="amt-val">${r.debit ? fmtNumAlways(r.debit) : '—'}</span>
-          </div>
-          <div class="tx-amt credit-amt${r.credit ? ' has-val' : ''}">
-            <span class="amt-label">دائن</span>
-            <span class="amt-val">${r.credit ? fmtNumAlways(r.credit) : '—'}</span>
-          </div>
-        </div>
-      </article>`;
+          <article class="tx-row ${rowClass}">
+            <div class="tx-grid">
+              <span class="col-idx">${idxLabel}</span>
+              <span class="col-date">${fmtDate(r.date)}</span>
+              <div class="col-desc">
+                <div class="tx-desc-top">
+                  <span class="tx-type ${txTypeClass(r)}">${txTypeLabel(r)}</span>
+                  ${showInvoiceBtn && invoiceLookup ? `
+                  <div class="tx-row-actions">
+                    <button type="button" class="tx-invoice-btn" data-invoice-ref="${esc(invoiceLookup.ref)}" data-invoice-by="${esc(invoiceLookup.by)}" data-invoice-acc="${esc(invoiceLookup.acc || branch.seq || '')}" aria-label="عرض الفاتورة">فاتورة</button>
+                    <button type="button" class="tx-pdf-btn" data-export-ref="${esc(exportRef?.ref || '')}" data-export-by="${esc(exportRef?.by || 'seq')}" data-export-acc="${esc(exportRef?.acc || branch.seq || '')}" aria-label="تصدير PDF">PDF</button>
+                  </div>` : ''}
+                </div>
+                <p class="tx-desc">${esc(r.description) || '—'}</p>
+              </div>
+              <span class="col-debit${r.debit ? ' has-val' : ''}">${r.debit ? fmtNumAlways(r.debit) : '—'}</span>
+              <span class="col-credit${r.credit ? ' has-val' : ''}">${r.credit ? fmtNumAlways(r.credit) : '—'}</span>
+              <span class="col-bal ${balanceClassFor(r.balance)}">${fmtBalanceDisplay(r.balance)}</span>
+            </div>
+          </article>`;
     }).join('');
+    })()}
+        </div>
+      </div>`;
 
       document.querySelectorAll('.tx-invoice-btn').forEach((btn) => {
         btn.addEventListener('click', (e) => {
@@ -622,6 +683,11 @@ async function openInvoice(ref, by = 'auto', acc = '') {
     const inv = data.invoice || {};
     const lines = data.lines || [];
     state.selectedInvoice = inv;
+    state.lastInvoiceLookup = {
+      ref: String(inv.seq || ref),
+      by: inv.seq ? 'seq' : by,
+      acc: accSeq || String(inv.accSeq || '')
+    };
 
     if (exportBtn) {
       exportBtn.disabled = false;
@@ -631,43 +697,63 @@ async function openInvoice(ref, by = 'auto', acc = '') {
         تصدير فاتورة ${esc(inv.num || ref)} PDF`;
     }
 
+    const lineTotalSum = lines.reduce((s, line) => s + Number(line.lineTotal || 0), 0);
+    const qtySum = lines.reduce((s, line) => s + Number(line.quant || 0), 0);
+
     document.getElementById('invoiceHero').innerHTML = `
-      <p class="hero-title">${esc(inv.kindLabel || 'فاتورة مبيعات')}</p>
-      <p class="hero-subtitle">فاتورة رقم ${esc(inv.num || ref)}</p>
-      <h2 class="hero-name">${esc(inv.accountName || state.selectedBranch?.name1 || '—')}</h2>
-      ${inv.accountNum ? `<p class="hero-addr">حساب ${esc(inv.accountNum)} · ${fmtDate(inv.date)}</p>` : `<p class="hero-addr">${fmtDate(inv.date)}</p>`}`;
+      <div class="inv-doc-head">
+        <div class="inv-brand">
+          <img class="inv-logo" src="assets/logo.png" alt="" width="52" height="52">
+          <div class="inv-brand-text">
+            <p class="inv-company">شركة ديما الحياة</p>
+            <p class="inv-doc-type">${esc(inv.kindLabel || 'فاتورة مبيعات')}</p>
+          </div>
+        </div>
+        <div class="inv-doc-badge">
+          <span class="inv-badge-label">رقم الفاتورة</span>
+          <strong class="inv-badge-num" dir="ltr">${esc(inv.num || ref)}</strong>
+          <span class="inv-badge-date">${fmtDate(inv.date)}</span>
+        </div>
+      </div>
+      <div class="inv-customer-card">
+        <div class="inv-customer-main">
+          <span class="inv-card-label">الزبون</span>
+          <strong class="inv-customer-name">${esc(inv.accountName || state.selectedBranch?.name1 || '—')}</strong>
+        </div>
+        <div class="inv-customer-meta">
+          ${inv.accountNum ? `<span class="inv-meta-pill">حساب ${esc(inv.accountNum)}</span>` : ''}
+          <span class="inv-meta-pill">${lines.length} بند · ${fmtQty(qtySum)} قطعة</span>
+        </div>
+      </div>`;
 
     document.getElementById('invoiceMeta').innerHTML = `
-      <div class="stat-box">
-        <div class="stat-body">
-          <div class="k">قيمة الفاتورة</div>
-          <div class="v">${fmtMoney(inv.total)}</div>
-        </div>
+      <div class="inv-stat inv-stat-total">
+        <span class="inv-stat-label">قيمة الفاتورة</span>
+        <strong class="inv-stat-value" dir="ltr">${fmtMoney(inv.total || lineTotalSum)}</strong>
       </div>
-      <div class="stat-box">
-        <div class="stat-body">
-          <div class="k">حسميات</div>
-          <div class="v">${fmtMoney(inv.discount)}</div>
-        </div>
+      <div class="inv-stat inv-stat-discount">
+        <span class="inv-stat-label">حسميات</span>
+        <strong class="inv-stat-value" dir="ltr">${fmtMoney(inv.discount)}</strong>
       </div>
-      <div class="stat-box stat-debit">
-        <div class="stat-body">
-          <div class="k">الصافي للدفع</div>
-          <div class="v">${fmtMoney(inv.netPay)}</div>
-        </div>
+      <div class="inv-stat inv-stat-net">
+        <span class="inv-stat-label">الصافي للدفع</span>
+        <strong class="inv-stat-value" dir="ltr">${fmtMoney(inv.netPay)}</strong>
       </div>`;
 
     document.getElementById('invoiceLineCount').textContent = `${lines.length} بند`;
     document.getElementById('invoiceLines').innerHTML = lines.length
-      ? lines.map((line) => `
+      ? lines.map((line, i) => `
         <article class="inv-line-row">
+          <span class="inv-cell inv-idx">${i + 1}</span>
           <span class="inv-cell inv-mat-num" dir="ltr">${esc(line.matNum || line.mat || '—')}</span>
-          <span class="inv-cell inv-mat-name">${esc(line.matName || '—')}</span>
+          <div class="inv-cell inv-mat-name">
+            <strong>${esc(line.matName || '—')}</strong>
+            ${line.remarks ? `<span class="inv-line-note">${esc(line.remarks)}</span>` : ''}
+          </div>
           <span class="inv-cell inv-qty" dir="ltr">${fmtQty(line.quant)}</span>
           <span class="inv-cell inv-bonus" dir="ltr">${fmtQty(line.bonus)}</span>
           <span class="inv-cell inv-price" dir="ltr">${fmtMoney(line.price)}</span>
           <span class="inv-cell inv-total" dir="ltr">${fmtMoney(line.lineTotal)}</span>
-          ${line.remarks ? `<p class="inv-line-note">${esc(line.remarks)}</p>` : ''}
         </article>`).join('')
       : '<div class="empty-state"><p>لا توجد بنود لهذه الفاتورة</p></div>';
 
@@ -675,16 +761,21 @@ async function openInvoice(ref, by = 'auto', acc = '') {
     if (lines.length) {
       totalsEl.classList.remove('hidden');
       totalsEl.innerHTML = `
-        <div class="invoice-totals-card">
-          <div class="invoice-total-row">
-            <span>قيمة الفاتورة</span>
-            <strong dir="ltr">${fmtMoney(inv.total)}</strong>
+        <div class="inv-totals-panel">
+          <div class="inv-totals-head">ملخص الفاتورة</div>
+          <div class="inv-total-row">
+            <span>إجمالي البنود</span>
+            <strong dir="ltr">${fmtMoney(lineTotalSum)}</strong>
           </div>
-          <div class="invoice-total-row">
+          <div class="inv-total-row">
+            <span>قيمة الفاتورة</span>
+            <strong dir="ltr">${fmtMoney(inv.total || lineTotalSum)}</strong>
+          </div>
+          <div class="inv-total-row">
             <span>حسميات</span>
             <strong dir="ltr">${fmtMoney(inv.discount)}</strong>
           </div>
-          <div class="invoice-total-row invoice-total-final">
+          <div class="inv-total-row inv-total-final">
             <span>الصافي للدفع</span>
             <strong dir="ltr">${fmtMoney(inv.netPay)}</strong>
           </div>

@@ -85,30 +85,28 @@ function findLastMatchInRows(rows = []) {
 }
 
 function resolveLastMatchCutoff(account, rows = []) {
-  const candidates = [];
-
   if (account?.last_match_seq) {
-    candidates.push({
+    return {
       seq: String(account.last_match_seq),
       date: account.last_match_date || account.fix_date || '',
       source: 'account'
-    });
+    };
   }
 
   const fromJournal = findLastMatchInRows(rows);
   if (fromJournal) {
-    candidates.push({ ...fromJournal, source: 'journal' });
+    return { ...fromJournal, source: 'journal' };
   }
 
   if (isValidFixDate(account?.fix_date)) {
-    candidates.push({
+    return {
       seq: '',
       date: account.fix_date,
       source: 'fix_date'
-    });
+    };
   }
 
-  return pickLatestCutoff(candidates);
+  return null;
 }
 
 function hasMatchCutoff(account, rows = []) {

@@ -57,17 +57,28 @@ function getStatementForAccount(accSeq, options = {}) {
     buildStatementLines,
     balanceSummaryLabel,
     debtStatusFromBalance,
-    filterRowsSinceLastMatch
+    filterRowsSinceLastMatch,
+    computeOpeningBalance,
+    buildOpeningLine
   } = require('./statement-utils');
   const { resolveLastMatchCutoff, hasMatchCutoff } = require('./reconciliation-utils');
 
   const cutoff = resolveLastMatchCutoff(account, rows);
   const matchAvailable = hasMatchCutoff(account, rows);
-  const filteredRows = sinceLastMatch && matchAvailable
-    ? filterRowsSinceLastMatch(rows, cutoff)
-    : rows;
+  const useSinceMatch = sinceLastMatch && matchAvailable;
+  const filteredRows = useSinceMatch ? filterRowsSinceLastMatch(rows, cutoff) : rows;
+  const openingBalance = useSinceMatch ? computeOpeningBalance(rows, cutoff, account) : 0;
+  const stmt = buildStatementLines(filteredRows, { openingBalance });
 
-  const stmt = buildStatementLines(filteredRows);
+  if (useSinceMatch) {
+    const openingLine = buildOpeningLine(openingBalance, cutoff);
+    if (openingLine) stmt.lines.unshift(openingLine);
+  }
+
+  const finalBalance = Number(account.bal ?? stmt.finalBalance ?? 0);
+  const totalDebit = useSinceMatch ? Number(account.tot1 ?? 0) : stmt.totalDebit;
+  const totalCredit = useSinceMatch ? Number(account.tot2 ?? 0) : stmt.totalCredit;
+
   return {
     account: {
       seq: account.seq,
@@ -79,11 +90,17 @@ function getStatementForAccount(accSeq, options = {}) {
       tot1: account.tot1,
       tot2: account.tot2,
       fixDate: account.fix_date || null,
-      debtStatus: debtStatusFromBalance(stmt.finalBalance ?? account.bal)
+      fixBal: account.fix_bal ?? 0,
+      debtStatus: debtStatusFromBalance(finalBalance)
     },
     ...stmt,
-    summary: balanceSummaryLabel(stmt.finalBalance),
-    sinceLastMatch: sinceLastMatch && matchAvailable,
+    lines: stmt.lines,
+    totalDebit,
+    totalCredit,
+    finalBalance,
+    summary: balanceSummaryLabel(finalBalance),
+    openingBalance: useSinceMatch ? openingBalance : 0,
+    sinceLastMatch: useSinceMatch,
     lastMatch: cutoff
       ? { seq: cutoff.seq || null, date: cutoff.date || '', source: cutoff.source || null }
       : null,
@@ -94,13 +111,13 @@ function getStatementForAccount(accSeq, options = {}) {
 
 const SYNC_UPSERTS = {
   accounts: db.prepare(`
-    INSERT INTO accounts (seq, num, name1, name2, master_seq, sub_count, bal, tot1, tot2, address, remarks, official_name, fix_date, last_match_seq, last_match_date, synced_at)
-    VALUES (@seq, @num, @name1, @name2, @master_seq, @sub_count, @bal, @tot1, @tot2, @address, @remarks, @official_name, @fix_date, @last_match_seq, @last_match_date, @synced_at)
+    INSERT INTO accounts (seq, num, name1, name2, master_seq, sub_count, bal, tot1, tot2, address, remarks, official_name, fix_date, fix_bal, last_match_seq, last_match_date, synced_at)
+    VALUES (@seq, @num, @name1, @name2, @master_seq, @sub_count, @bal, @tot1, @tot2, @address, @remarks, @official_name, @fix_date, @fix_bal, @last_match_seq, @last_match_date, @synced_at)
     ON CONFLICT(seq) DO UPDATE SET
       num=excluded.num, name1=excluded.name1, name2=excluded.name2, master_seq=excluded.master_seq,
       sub_count=excluded.sub_count, bal=excluded.bal, tot1=excluded.tot1, tot2=excluded.tot2,
       address=excluded.address, remarks=excluded.remarks, official_name=excluded.official_name,
-      fix_date=excluded.fix_date, last_match_seq=excluded.last_match_seq, last_match_date=excluded.last_match_date,
+      fix_date=excluded.fix_date, fix_bal=excluded.fix_bal, last_match_seq=excluded.last_match_seq, last_match_date=excluded.last_match_date,
       synced_at=excluded.synced_at
   `),
   journal: db.prepare(`
@@ -145,6 +162,7 @@ function mapAccountRow(a, now) {
     remarks: a.Remarks ?? a.remarks ?? '',
     official_name: a.OfficialName ?? a.official_name ?? '',
     fix_date: a.FixDate ?? a.fix_date ?? '',
+    fix_bal: Number(a.FixBal ?? a.fix_bal ?? 0),
     last_match_seq: String(a.LastMatchSeq ?? a.last_match_seq ?? ''),
     last_match_date: a.LastMatchDate ?? a.last_match_date ?? '',
     synced_at: now

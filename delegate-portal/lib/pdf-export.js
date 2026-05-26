@@ -182,7 +182,7 @@ async function buildStatementPdf(stmt, meta = {}) {
       headerCell('الرصيد', '#1d4ed8')
     ],
     ...lines.map((row, i) => bodyCells([
-      i + 1,
+      row.isOpening ? '∗' : i + 1,
       fmtDate(row.date),
       row.debit ? fmtNum(row.debit) : '—',
       row.credit ? fmtNum(row.credit) : '—',
@@ -194,13 +194,17 @@ async function buildStatementPdf(stmt, meta = {}) {
   const debtAmount = Number(stmt.finalBalance ?? acc.bal ?? 0) < 0
     ? fmtNum(Math.abs(Number(stmt.finalBalance ?? acc.bal ?? 0)))
     : '0';
+  const openingBal = Number(stmt.openingBalance ?? 0);
+  const openingNote = openingBal !== 0
+    ? ` · رصيد مرحّل ${fmtNum(openingBal < 0 ? Math.abs(openingBal) : openingBal)}`
+    : '';
 
   const doc = baseDoc([
     buildHeaderBlock(),
     { text: 'كشف حساب', style: 'docTitle', alignment: 'center' },
     ...(meta.sinceLastMatch && (stmt.lastMatch?.date || stmt.account?.fixDate)
       ? [{
-        text: `حركات بعد آخر مطابقة — ${fmtDate(stmt.lastMatch?.date || stmt.account?.fixDate)}`,
+        text: `حركات بعد آخر مطابقة — ${fmtDate(stmt.lastMatch?.date || stmt.account?.fixDate)}${openingNote}`,
         fontSize: 10,
         color: '#64748b',
         alignment: 'center',
@@ -269,8 +273,11 @@ async function buildStatementPdf(stmt, meta = {}) {
 async function buildInvoicePdf(data) {
   const inv = data.invoice || {};
   const lines = data.lines || [];
+  const lineTotalSum = lines.reduce((s, line) => s + Number(line.lineTotal || 0), 0);
+  const logo = getLogoDataUrl();
   const tableBody = [
     [
+      headerCell('#', '#115e59'),
       headerCell('رقم المادة', '#115e59'),
       headerCell('اسم المادة', '#115e59'),
       headerCell('كمية', '#0f766e'),
@@ -279,61 +286,91 @@ async function buildInvoicePdf(data) {
       headerCell('الإجمالي', '#1d4ed8')
     ],
     ...lines.map((line, i) => bodyCells([
+      i + 1,
       line.matNum || line.mat || '—',
       line.matName || '—',
       fmtNum(line.quant, 2),
       fmtNum(line.bonus, 2),
       fmtMoney(line.price),
       fmtMoney(line.lineTotal)
-    ], i, ['center', 'right', 'center', 'center', 'center', 'center']))
+    ], i, ['center', 'center', 'right', 'center', 'center', 'center', 'center']))
   ];
 
   const doc = baseDoc([
-    buildHeaderBlock(),
-    { text: inv.kindLabel || 'فاتورة مبيعات', style: 'docTitle', alignment: 'center' },
+    {
+      table: {
+        widths: logo ? [68, '*', 120] : ['*', 120],
+        body: [[
+          logo
+            ? { image: logo, width: 58, margin: [0, 4, 8, 0] }
+            : { text: '' },
+          {
+            stack: [
+              { text: COMPANY_NAME, style: 'companyTitle' },
+              { text: inv.kindLabel || 'فاتورة مبيعات', style: 'companySub' }
+            ],
+            alignment: 'right'
+          },
+          {
+            stack: [
+              { text: 'رقم الفاتورة', style: 'metaLabel', alignment: 'center' },
+              { text: String(inv.num || '—'), fontSize: 16, bold: true, color: '#ffffff', alignment: 'center', margin: [0, 2, 0, 2] },
+              { text: fmtDate(inv.date), fontSize: 9, color: '#ecfdf5', alignment: 'center' }
+            ],
+            fillColor: '#0f766e',
+            margin: [6, 8, 6, 8]
+          }
+        ]]
+      },
+      layout: 'noBorders',
+      margin: [0, 0, 0, 12]
+    },
     metaBox([[
-      metaStack('رقم الفاتورة', inv.num),
-      metaStack('التاريخ', fmtDate(inv.date)),
       metaStack('اسم الزبون', inv.accountName),
-      metaStack('رقم الحساب', inv.accountNum)
+      metaStack('رقم الحساب', inv.accountNum),
+      metaStack('عدد البنود', String(lines.length)),
+      metaStack('إجمالي الكميات', fmtNum(lines.reduce((s, l) => s + Number(l.quant || 0), 0), 2))
     ]]),
     {
       table: {
         headerRows: 1,
-        widths: [54, '*', 38, 38, 48, 54],
+        widths: [18, 44, '*', 34, 34, 44, 48],
         body: tableBody
       },
       layout: gridLayout()
     },
     {
       table: {
-        widths: ['*', '*', '*'],
-        body: [[
-          {
-            text: `قيمة الفاتورة\n${fmtMoney(inv.total)}`,
-            style: 'totalLabel',
-            fillColor: '#f8fafc',
-            alignment: 'center',
-            margin: [4, 8, 4, 8]
-          },
-          {
-            text: `حسميات\n${fmtMoney(inv.discount)}`,
-            style: 'totalLabel',
-            fillColor: '#fff7ed',
-            color: '#c2410c',
-            alignment: 'center',
-            margin: [4, 8, 4, 8]
-          },
-          {
-            text: `الصافي للدفع\n${fmtMoney(inv.netPay)}`,
-            style: 'totalValue',
-            fillColor: '#ecfdf5',
-            alignment: 'center',
-            margin: [4, 8, 4, 8]
-          }
-        ]]
+        widths: ['*', 140],
+        body: [
+          [
+            { text: 'إجمالي البنود', style: 'metaLabel', alignment: 'right', margin: [0, 6, 0, 6] },
+            { text: fmtMoney(lineTotalSum), alignment: 'center', margin: [0, 6, 0, 6] }
+          ],
+          [
+            { text: 'قيمة الفاتورة', style: 'metaLabel', alignment: 'right', margin: [0, 6, 0, 6] },
+            { text: fmtMoney(inv.total || lineTotalSum), alignment: 'center', margin: [0, 6, 0, 6] }
+          ],
+          [
+            { text: 'حسميات', style: 'metaLabel', color: '#c2410c', alignment: 'right', margin: [0, 6, 0, 6] },
+            { text: fmtMoney(inv.discount), color: '#c2410c', alignment: 'center', margin: [0, 6, 0, 6] }
+          ],
+          [
+            { text: 'الصافي للدفع', style: 'totalValue', fillColor: '#ecfdf5', alignment: 'right', margin: [0, 8, 0, 8] },
+            { text: fmtMoney(inv.netPay), style: 'totalValue', fillColor: '#ecfdf5', alignment: 'center', margin: [0, 8, 0, 8] }
+          ]
+        ]
       },
-      layout: 'noBorders',
+      layout: {
+        hLineWidth: () => 0.6,
+        vLineWidth: () => 0.6,
+        hLineColor: () => '#cbd5e1',
+        vLineColor: () => '#cbd5e1',
+        paddingLeft: () => 8,
+        paddingRight: () => 8,
+        paddingTop: () => 2,
+        paddingBottom: () => 2
+      },
       margin: [0, 10, 0, 0]
     }
   ]);

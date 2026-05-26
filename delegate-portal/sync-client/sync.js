@@ -33,7 +33,7 @@ const UPLOAD_BATCH = {
 
 const ACCOUNT_COLS = [
   'Seq', 'Num', 'Name1', 'Name2', 'Master', 'SubCount', 'Bal', 'Tot1', 'Tot2',
-  'Address', 'Remarks', 'OfficialName', 'FixDate'
+  'Address', 'Remarks', 'OfficialName', 'FixDate', 'FixBal'
 ].map((c) => `"${c}"`).join(', ');
 
 const { MATCH_SQL, isReconciliationMovement } = require('../lib/reconciliation-utils');
@@ -207,36 +207,7 @@ async function postJsonWithRetry(urlPath, body, retries = 3) {
   throw lastErr;
 }
 
-async function fetchSalesInvoiceJournal(accSeqs) {
-  if (!accSeqs.length) return [];
-  const all = [];
-  const parts = chunk(accSeqs, 60);
-  let done = 0;
-  for (const part of parts) {
-    const ids = part.join(',');
-    const rows = await query(
-      `SELECT Seq, Acc, "Date", Am, Dept, Exp1, BillNum, BillSeq, BillKind FROM File12n
-       WHERE Acc IN (${ids})
-         AND Dept = 'True'
-         AND (
-           (BillSeq IS NOT NULL AND BillSeq <> 0)
-           OR (BillNum IS NOT NULL AND BillNum <> 0)
-           OR Exp1 LIKE '%فات%'
-           OR Exp1 LIKE '%Invoice%'
-           OR Exp1 LIKE '%invoice%'
-         )
-       ORDER BY Acc, "Date", Seq`
-    );
-    const filtered = rows.filter(isSalesInvoiceMovement);
-    all.push(...filtered);
-    done += part.length;
-    const pct = Math.round((done / accSeqs.length) * 100);
-    reportProgress(2, 6, pct, `حركات بيع (مدين + فاتورة): ${all.length} (${done}/${accSeqs.length} حساب)`);
-  }
-  return all;
-}
-
-async function fetchReconciliationJournal(accSeqs) {
+async function fetchAllJournal(accSeqs) {
   if (!accSeqs.length) return [];
   const all = [];
   const parts = chunk(accSeqs, 60);
@@ -245,34 +216,15 @@ async function fetchReconciliationJournal(accSeqs) {
     const ids = part.join(',');
     const rows = await query(
       `SELECT Seq, Acc, "Date", Am, Dept, Exp1, Remarks, BillNum, BillSeq, BillKind FROM File12n
-       WHERE Acc IN (${ids}) AND Dept = 'False' AND ${MATCH_SQL}
+       WHERE Acc IN (${ids})
        ORDER BY Acc, "Date", Seq`
     );
-    all.push(...rows.filter(isReconciliationMovement));
+    all.push(...rows);
     done += part.length;
     const pct = Math.round((done / accSeqs.length) * 100);
-    reportProgress(2, 6, pct, `حركات مطابقة/ترصيد: ${all.length} (${done}/${accSeqs.length} حساب)`);
+    reportProgress(2, 6, pct, `كل حركات الحساب: ${all.length} (${done}/${accSeqs.length} حساب)`);
   }
   return all;
-}
-
-function mergeJournalRows(salesRows, reconciliationRows) {
-  const map = new Map();
-  for (const row of [...salesRows, ...reconciliationRows]) {
-    const acc = String(row.Acc ?? row.acc_seq ?? '');
-    const seq = String(row.Seq ?? row.seq ?? '');
-    if (!acc || !seq) continue;
-    map.set(`${acc}:${seq}`, row);
-  }
-  return [...map.values()].sort((a, b) => {
-    const aa = String(a.Acc ?? a.acc_seq ?? '');
-    const bb = String(b.Acc ?? b.acc_seq ?? '');
-    if (aa !== bb) return aa.localeCompare(bb, undefined, { numeric: true });
-    const da = new Date(String(a.Date ?? a.tx_date ?? 0)).getTime();
-    const db = new Date(String(b.Date ?? b.tx_date ?? 0)).getTime();
-    if (da !== db) return da - db;
-    return Number(a.Seq ?? a.seq ?? 0) - Number(b.Seq ?? b.seq ?? 0);
-  });
 }
 
 async function fetchLastMatchByAccount(accSeqs) {
@@ -481,14 +433,9 @@ async function main() {
   const lastMatchMap = await fetchLastMatchByAccount(leafSeqs);
   const accountsForUpload = enrichAccountsWithMatchInfo(accounts, lastMatchMap);
 
-  reportProgress(2, 6, 0, `جاري قراءة حركات البيع (مدين + فاتورة) لـ ${leafSeqs.length} حساب...`);
-  const salesJournal = await fetchSalesInvoiceJournal(leafSeqs);
-  reportProgress(2, 6, 100, `تم: ${salesJournal.length} حركة بيع (مدين + فاتورة)`);
-
-  reportProgress(2, 6, 0, `جاري قراءة حركات المطابقة والترصيد لـ ${leafSeqs.length} حساب...`);
-  const reconciliationJournal = await fetchReconciliationJournal(leafSeqs);
-  const journal = mergeJournalRows(salesJournal, reconciliationJournal);
-  reportProgress(2, 6, 100, `تم: ${journal.length} حركة (${salesJournal.length} بيع + ${reconciliationJournal.length} مطابقة/ترصيد)`);
+  reportProgress(2, 6, 0, `جاري قراءة كل حركات ${leafSeqs.length} حساب (مثل النظام الإداري)...`);
+  const journal = await fetchAllJournal(leafSeqs);
+  reportProgress(2, 6, 100, `تم: ${journal.length} حركة`);
 
   const billSeqs = collectBillSeqs(journal);
   reportProgress(3, 6, 0, `جاري قراءة ${billSeqs.length} فاتورة بيع...`);
