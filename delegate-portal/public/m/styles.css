@@ -825,14 +825,19 @@ body {
   align-items: center;
   gap: 8px;
   padding: 10px 12px 0;
+  flex-wrap: wrap;
 }
 
-.tx-invoice-btn {
+.tx-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-right: auto;
+}
+
+.tx-invoice-btn,
+.tx-pdf-btn {
   flex-shrink: 0;
-  border: 1px solid var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent-dark);
   border-radius: 999px;
   padding: 5px 12px;
   font-size: 0.72rem;
@@ -841,8 +846,25 @@ body {
   cursor: pointer;
 }
 
+.tx-invoice-btn {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+.tx-pdf-btn {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
 .tx-invoice-btn:active {
   background: var(--accent);
+  color: #fff;
+}
+
+.tx-pdf-btn:active {
+  background: #1d4ed8;
   color: #fff;
 }
 

@@ -10,7 +10,6 @@ const state = {
   branches: [],
   selectedBranch: null,
   selectedInvoice: null,
-  invoiceExportRef: null,
   branchFilter: 'all',
   branchSearch: ''
 };
@@ -56,7 +55,16 @@ function isPurchaseLine(line) {
 }
 
 function invoiceRefFor(line) {
-  return line?.invoiceRef || line?.billSeq || line?.billNum || '';
+  if (Number(line?.debit) <= 0) return '';
+  return line?.billSeq || line?.billNum || line?.invoiceRef || '';
+}
+
+function invoiceExportRefFor(line) {
+  const billSeq = String(line?.billSeq || '').replace(/[^0-9]/g, '');
+  if (billSeq) return { ref: billSeq, by: 'seq' };
+  const billNum = String(line?.billNum || line?.invoiceRef || '').replace(/[^0-9]/g, '');
+  if (billNum) return { ref: billNum, by: 'num' };
+  return null;
 }
 
 function fmtDate(v) {
@@ -201,14 +209,19 @@ async function exportStatementPdf() {
   );
 }
 
-async function exportInvoicePdf() {
-  const ref = state.invoiceExportRef
-    || state.selectedInvoice?.num
-    || state.selectedInvoice?.seq;
-  if (!ref) return;
+async function exportInvoicePdf(refOverride, byOverride) {
+  const billSeq = state.selectedInvoice?.seq;
+  const billNum = state.selectedInvoice?.num;
+  const ref = refOverride || billSeq || billNum;
+  const by = byOverride || (billSeq && !refOverride ? 'seq' : (billNum && !refOverride ? 'num' : 'auto'));
+  if (!ref) {
+    alert('افتح فاتورة محددة أولاً');
+    return;
+  }
+  const label = billNum || ref;
   await downloadAuthenticatedPdf(
-    `/invoices/${encodeURIComponent(ref)}.pdf`,
-    `invoice-${ref}.pdf`
+    `/invoices/${encodeURIComponent(ref)}/pdf?by=${encodeURIComponent(by)}`,
+    `invoice-${label}.pdf`
   );
 }
 
@@ -451,12 +464,17 @@ async function openBranch(seq) {
       document.getElementById('stmtLineCount').textContent = `${lines.length} حركة`;
       document.getElementById('stmtLines').innerHTML = lines.map((r, i) => {
         const showInvoiceBtn = isPurchaseLine(r);
+        const exportRef = showInvoiceBtn ? invoiceExportRefFor(r) : null;
         return `
         <article class="tx-row">
           <div class="tx-row-meta">
             <span class="tx-idx">${i + 1}</span>
             <span class="tx-date">${fmtDate(r.date)}</span>
-            ${showInvoiceBtn ? `<button type="button" class="tx-invoice-btn" data-invoice-ref="${esc(invoiceRefFor(r))}" aria-label="عرض الفاتورة">فاتورة</button>` : ''}
+            ${showInvoiceBtn ? `
+              <div class="tx-row-actions">
+                <button type="button" class="tx-invoice-btn" data-invoice-ref="${esc(invoiceRefFor(r))}" aria-label="عرض الفاتورة">فاتورة</button>
+                <button type="button" class="tx-pdf-btn" data-export-ref="${esc(exportRef?.ref || '')}" data-export-by="${esc(exportRef?.by || 'seq')}" aria-label="تصدير PDF للفاتورة">PDF</button>
+              </div>` : ''}
           </div>
           <p class="tx-desc">${esc(r.description) || '—'}</p>
           <div class="tx-amounts-grid">
@@ -476,6 +494,15 @@ async function openBranch(seq) {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           openInvoice(btn.dataset.invoiceRef);
+        });
+      });
+      document.querySelectorAll('.tx-pdf-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const ref = btn.dataset.exportRef;
+          const by = btn.dataset.exportBy || 'seq';
+          if (!ref) return;
+          exportInvoicePdf(ref, by).catch((err) => alert(err.message));
         });
       });
     } else {
@@ -525,8 +552,9 @@ async function openBranch(seq) {
 
 async function openInvoice(ref) {
   if (!ref) return;
-  state.selectedInvoice = { ref };
-  state.invoiceExportRef = ref;
+  state.selectedInvoice = null;
+  const exportBtn = document.getElementById('btnExportInvoicePdf');
+  if (exportBtn) exportBtn.disabled = true;
   goToScreen('invoice');
 
   const loading = document.getElementById('invoiceLoading');
@@ -541,7 +569,14 @@ async function openInvoice(ref) {
     const inv = data.invoice || {};
     const lines = data.lines || [];
     state.selectedInvoice = inv;
-    state.invoiceExportRef = inv.num || inv.seq || ref;
+
+    if (exportBtn) {
+      exportBtn.disabled = false;
+      exportBtn.textContent = '';
+      exportBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m0 0l4-4m-4 4L8 11M5 21h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        تصدير فاتورة ${esc(inv.num || ref)} PDF`;
+    }
 
     document.getElementById('invoiceHero').innerHTML = `
       <p class="hero-title">${esc(inv.kindLabel || 'فاتورة مبيعات')}</p>
@@ -612,6 +647,7 @@ async function openInvoice(ref) {
   } catch (e) {
     loading.classList.add('hidden');
     empty.classList.remove('hidden');
+    if (exportBtn) exportBtn.disabled = true;
     empty.innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`;
   }
 }

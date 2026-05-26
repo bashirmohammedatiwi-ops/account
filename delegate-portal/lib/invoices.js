@@ -147,9 +147,17 @@ function getInvoiceByNum(billNum) {
 function getInvoiceByRef(ref) {
   const raw = String(ref ?? '').trim();
   if (!raw) return null;
-  const bySeq = getInvoiceByBillSeq(raw);
-  if (bySeq) return bySeq;
-  return getInvoiceByNum(raw);
+  const byNum = getInvoiceByNum(raw);
+  if (byNum) return byNum;
+  return getInvoiceByBillSeq(raw);
+}
+
+function getInvoiceForExport(ref, mode = 'auto') {
+  const raw = String(ref ?? '').trim();
+  if (!raw) return null;
+  if (mode === 'seq') return getInvoiceByBillSeq(raw);
+  if (mode === 'num') return getInvoiceByNum(raw);
+  return getInvoiceByRef(raw);
 }
 
 function canAgentAccessInvoice(agentId, ref) {
@@ -192,6 +200,7 @@ module.exports = {
   getInvoiceByBillSeq,
   getInvoiceByNum,
   getInvoiceByRef,
+  getInvoiceForExport,
   canAgentAccessInvoice,
   mapInvoiceRow,
   mapInvoiceLineRow
