@@ -27,7 +27,7 @@ function buildStatementLines(rows) {
       billSeq: billSeq || null,
       billKind: row.bill_kind ?? row.BillKind ?? null,
       hasInvoice,
-      clickable: Boolean(billSeq),
+      clickable: Boolean(billSeq && debit > 0),
       balance
     };
   });

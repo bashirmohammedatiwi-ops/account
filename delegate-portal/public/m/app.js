@@ -50,9 +50,7 @@ function fmtNumAlways(v) {
 }
 
 function isPurchaseLine(line) {
-  if (!line?.clickable || !line?.billSeq) return false;
-  const desc = String(line.description || '');
-  return /مشتريات|فاتورة|شراء/i.test(desc) || line.hasInvoice;
+  return Boolean(line?.billSeq && Number(line.debit) > 0);
 }
 
 function fmtDate(v) {
@@ -390,16 +388,15 @@ async function openBranch(seq) {
       document.getElementById('stmtTableSection').classList.remove('hidden');
       document.getElementById('stmtLineCount').textContent = `${lines.length} حركة`;
       document.getElementById('stmtLines').innerHTML = lines.map((r, i) => {
-        const purchase = isPurchaseLine(r);
-        const clickable = purchase && r.billSeq;
+        const showInvoiceBtn = isPurchaseLine(r);
         return `
-        <${clickable ? 'button type="button"' : 'article'} class="tx-row${clickable ? ' tx-row-link' : ''}"${clickable ? ` data-bill-seq="${esc(r.billSeq)}" aria-label="عرض الفاتورة"` : ''}>
+        <article class="tx-row">
           <div class="tx-row-meta">
             <span class="tx-idx">${i + 1}</span>
             <span class="tx-date">${fmtDate(r.date)}</span>
+            ${showInvoiceBtn ? `<button type="button" class="tx-invoice-btn" data-bill-seq="${esc(r.billSeq)}" aria-label="عرض الفاتورة">فاتورة</button>` : ''}
           </div>
           <p class="tx-desc">${esc(r.description) || '—'}</p>
-          ${clickable ? '<div class="tx-invoice-hint"><span>عرض فاتورة المبيعات</span><span class="tx-invoice-arrow">›</span></div>' : ''}
           <div class="tx-amounts-grid">
             <div class="tx-amt debit-amt${r.debit ? ' has-val' : ''}">
               <span class="amt-label">مدين</span>
@@ -410,11 +407,14 @@ async function openBranch(seq) {
               <span class="amt-val">${r.credit ? fmtNumAlways(r.credit) : '—'}</span>
             </div>
           </div>
-        </${clickable ? 'button' : 'article'}>`;
+        </article>`;
       }).join('');
 
-      document.querySelectorAll('.tx-row-link').forEach((btn) => {
-        btn.addEventListener('click', () => openInvoice(btn.dataset.billSeq));
+      document.querySelectorAll('.tx-invoice-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openInvoice(btn.dataset.billSeq);
+        });
       });
     } else {
       document.getElementById('stmtLines').innerHTML = `
