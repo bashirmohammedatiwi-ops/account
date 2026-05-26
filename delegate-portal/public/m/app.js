@@ -11,7 +11,8 @@ const state = {
   selectedBranch: null,
   selectedInvoice: null,
   branchFilter: 'all',
-  branchSearch: ''
+  branchSearch: '',
+  stmtFilter: 'since-match'
 };
 
 function esc(v) {
@@ -199,14 +200,23 @@ async function downloadAuthenticatedPdf(path, filename) {
 
 async function exportStatementPdf() {
   if (!state.selectedBranch?.seq) return;
-  const treeQs = state.selectedTree?.num
-    ? `?tree=${encodeURIComponent(`شجرة ${state.selectedTree.num}`)}`
-    : '';
+  const params = new URLSearchParams();
+  if (state.selectedTree?.num) {
+    params.set('tree', `شجرة ${state.selectedTree.num}`);
+  }
+  if (state.stmtFilter === 'all') {
+    params.set('since', 'all');
+  }
+  const qs = params.toString() ? `?${params.toString()}` : '';
   const num = state.selectedBranch.num || state.selectedBranch.seq;
   await downloadAuthenticatedPdf(
-    `/accounts/${encodeURIComponent(state.selectedBranch.seq)}/statement.pdf${treeQs}`,
+    `/accounts/${encodeURIComponent(state.selectedBranch.seq)}/statement.pdf${qs}`,
     `statement-${num}.pdf`
   );
+}
+
+function statementSinceQuery() {
+  return state.stmtFilter === 'all' ? '?since=all' : '';
 }
 
 async function exportInvoicePdf(refOverride, byOverride) {
@@ -409,7 +419,13 @@ async function openTree(seq) {
 
 async function openBranch(seq) {
   state.selectedBranch = state.branches.find((b) => String(b.seq) === String(seq)) || { seq };
+  state.stmtFilter = 'since-match';
+  syncStmtFilterChips();
   goToScreen('statement');
+  await loadStatement(seq);
+}
+
+async function loadStatement(seq) {
   setOverlay(true);
 
   document.getElementById('stmtDebtField').classList.add('hidden');
@@ -421,133 +437,149 @@ async function openBranch(seq) {
   document.getElementById('stmtTableSection').classList.add('hidden');
 
   try {
-    const data = await api(`/accounts/${encodeURIComponent(seq)}/statement`);
-    const acc = data.account || state.selectedBranch;
-    const branch = state.selectedBranch;
-    const lines = data.lines || [];
-    const { totalDebit, totalCredit, summary } = data;
-    const currentBal = data.finalBalance ?? acc.bal ?? 0;
-    const treeLabel = state.selectedTree?.num ? `شجرة ${state.selectedTree.num}` : '';
-
-    renderDebtField(currentBal);
-
-    document.getElementById('stmtHero').innerHTML = `
-      <div class="hero-header">
-        <p class="hero-title">كشف حساب</p>
-        <p class="hero-subtitle">${treeLabel ? `${esc(treeLabel)} · ` : ''}${esc(acc.num)}</p>
-        <h2 class="hero-name">${esc(acc.name1)}</h2>
-        ${acc.address ? `<p class="hero-addr">${esc(acc.address)}</p>` : ''}
-      </div>`;
-
-    document.getElementById('stmtStats').innerHTML = `
-      <div class="stat-box stat-debit">
-        <div class="stat-body">
-          <div class="k">مدين</div>
-          <div class="v">${fmtNumAlways(totalDebit)}</div>
-        </div>
-      </div>
-      <div class="stat-box stat-credit">
-        <div class="stat-body">
-          <div class="k">دائن</div>
-          <div class="v">${fmtNumAlways(totalCredit)}</div>
-        </div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-body">
-          <div class="k">حركات</div>
-          <div class="v">${lines.length}</div>
-        </div>
-      </div>`;
-
-    if (lines.length) {
-      document.getElementById('stmtTableSection').classList.remove('hidden');
-      document.getElementById('stmtLineCount').textContent = `${lines.length} حركة`;
-      document.getElementById('stmtLines').innerHTML = lines.map((r, i) => {
-        const showInvoiceBtn = isPurchaseLine(r);
-        const exportRef = showInvoiceBtn ? invoiceExportRefFor(r) : null;
-        return `
-        <article class="tx-row">
-          <div class="tx-row-meta">
-            <span class="tx-idx">${i + 1}</span>
-            <span class="tx-date">${fmtDate(r.date)}</span>
-            ${showInvoiceBtn ? `
-              <div class="tx-row-actions">
-                <button type="button" class="tx-invoice-btn" data-invoice-ref="${esc(invoiceRefFor(r))}" aria-label="عرض الفاتورة">فاتورة</button>
-                <button type="button" class="tx-pdf-btn" data-export-ref="${esc(exportRef?.ref || '')}" data-export-by="${esc(exportRef?.by || 'seq')}" aria-label="تصدير PDF للفاتورة">PDF</button>
-              </div>` : ''}
-          </div>
-          <p class="tx-desc">${esc(r.description) || '—'}</p>
-          <div class="tx-amounts-grid">
-            <div class="tx-amt debit-amt${r.debit ? ' has-val' : ''}">
-              <span class="amt-label">مدين</span>
-              <span class="amt-val">${r.debit ? fmtNumAlways(r.debit) : '—'}</span>
-            </div>
-            <div class="tx-amt credit-amt${r.credit ? ' has-val' : ''}">
-              <span class="amt-label">دائن</span>
-              <span class="amt-val">${r.credit ? fmtNumAlways(r.credit) : '—'}</span>
-            </div>
-          </div>
-        </article>`;
-      }).join('');
-
-      document.querySelectorAll('.tx-invoice-btn').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          openInvoice(btn.dataset.invoiceRef);
-        });
-      });
-      document.querySelectorAll('.tx-pdf-btn').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const ref = btn.dataset.exportRef;
-          const by = btn.dataset.exportBy || 'seq';
-          if (!ref) return;
-          exportInvoicePdf(ref, by).catch((err) => alert(err.message));
-        });
-      });
-    } else {
-      document.getElementById('stmtLines').innerHTML = `
-        <div class="empty-state"><div class="icon">📋</div><p>لا توجد حركات لهذا الحساب</p></div>`;
-    }
-
-    document.getElementById('stmtTotals').innerHTML = lines.length
-      ? `<div class="totals-card">
-          <h3 class="totals-title">ملخص الكشف</h3>
-          <div class="totals-grid">
-            <div class="totals-cell">
-              <span class="lbl">مجموع المدين</span>
-              <span class="val debit">${fmtNumAlways(totalDebit)}</span>
-            </div>
-            <div class="totals-cell">
-              <span class="lbl">مجموع الدائن</span>
-              <span class="val credit">${fmtNumAlways(totalCredit)}</span>
-            </div>
-          </div>
-          <div class="totals-final ${summary.side === 'debit' ? 'debit-side' : summary.side === 'credit' ? 'credit-side' : ''}">
-            <div class="final-label">${esc(summary.label)}</div>
-            <div class="final-amounts">
-              <div class="final-slot">
-                <span>مدين</span>
-                <strong class="debit">${summary.side === 'debit' ? fmtNumAlways(summary.amount) : summary.amount === 0 ? '0' : '—'}</strong>
-              </div>
-              <div class="final-slot">
-                <span>دائن</span>
-                <strong class="credit">${summary.side === 'credit' ? fmtNumAlways(summary.amount) : '—'}</strong>
-              </div>
-            </div>
-          </div>
-          ${branch.tot1 != null || branch.tot2 != null ? `
-          <div class="totals-extra">
-            ${branch.tot1 != null ? `<span>إجمالي 1: <b dir="ltr">${fmtNumAlways(branch.tot1)}</b></span>` : ''}
-            ${branch.tot2 != null ? `<span>إجمالي 2: <b dir="ltr">${fmtNumAlways(branch.tot2)}</b></span>` : ''}
-          </div>` : ''}
-        </div>`
-      : '';
+    const data = await api(`/accounts/${encodeURIComponent(seq)}/statement${statementSinceQuery()}`);
+    renderStatement(data);
   } catch (e) {
     document.getElementById('stmtLines').innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`;
   } finally {
     setOverlay(false);
   }
+}
+
+function syncStmtFilterChips() {
+  document.querySelectorAll('.stmt-filter-chip').forEach((chip) => {
+    chip.classList.toggle('active', chip.dataset.stmtFilter === state.stmtFilter);
+  });
+}
+
+function renderStatement(data) {
+  const acc = data.account || state.selectedBranch;
+  const branch = state.selectedBranch;
+  const lines = data.lines || [];
+  const { totalDebit, totalCredit, summary } = data;
+  const currentBal = data.finalBalance ?? acc.bal ?? 0;
+  const treeLabel = state.selectedTree?.num ? `شجرة ${state.selectedTree.num}` : '';
+  const matchBanner = data.sinceLastMatch && data.lastMatch?.date
+    ? `<p class="hero-match-note">حركات بعد آخر مطابقة · ${fmtDate(data.lastMatch.date)}</p>`
+    : (data.hasMatchCutoff === false && state.stmtFilter === 'since-match'
+      ? '<p class="hero-match-note muted">لا توجد مطابقة مسجلة — يُعرض الكشف كاملاً</p>'
+      : '');
+
+  renderDebtField(currentBal);
+
+  document.getElementById('stmtHero').innerHTML = `
+    <div class="hero-header">
+      <p class="hero-title">كشف حساب</p>
+      <p class="hero-subtitle">${treeLabel ? `${esc(treeLabel)} · ` : ''}${esc(acc.num)}</p>
+      <h2 class="hero-name">${esc(acc.name1)}</h2>
+      ${acc.address ? `<p class="hero-addr">${esc(acc.address)}</p>` : ''}
+      ${matchBanner}
+    </div>`;
+
+  document.getElementById('stmtStats').innerHTML = `
+    <div class="stat-box stat-debit">
+      <div class="stat-body">
+        <div class="k">مدين</div>
+        <div class="v">${fmtNumAlways(totalDebit)}</div>
+      </div>
+    </div>
+    <div class="stat-box stat-credit">
+      <div class="stat-body">
+        <div class="k">دائن</div>
+        <div class="v">${fmtNumAlways(totalCredit)}</div>
+      </div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-body">
+        <div class="k">حركات</div>
+        <div class="v">${lines.length}</div>
+      </div>
+    </div>`;
+
+  if (lines.length) {
+    document.getElementById('stmtTableSection').classList.remove('hidden');
+    document.getElementById('stmtLineCount').textContent = `${lines.length} حركة`;
+    document.getElementById('stmtLines').innerHTML = lines.map((r, i) => {
+      const showInvoiceBtn = isPurchaseLine(r);
+      const exportRef = showInvoiceBtn ? invoiceExportRefFor(r) : null;
+      return `
+      <article class="tx-row">
+        <div class="tx-row-meta">
+          <span class="tx-idx">${i + 1}</span>
+          <span class="tx-date">${fmtDate(r.date)}</span>
+          ${showInvoiceBtn ? `
+            <div class="tx-row-actions">
+              <button type="button" class="tx-invoice-btn" data-invoice-ref="${esc(invoiceRefFor(r))}" aria-label="عرض الفاتورة">فاتورة</button>
+              <button type="button" class="tx-pdf-btn" data-export-ref="${esc(exportRef?.ref || '')}" data-export-by="${esc(exportRef?.by || 'seq')}" aria-label="تصدير PDF للفاتورة">PDF</button>
+            </div>` : ''}
+        </div>
+        <p class="tx-desc">${esc(r.description) || '—'}</p>
+        <div class="tx-amounts-grid">
+          <div class="tx-amt debit-amt${r.debit ? ' has-val' : ''}">
+            <span class="amt-label">مدين</span>
+            <span class="amt-val">${r.debit ? fmtNumAlways(r.debit) : '—'}</span>
+          </div>
+          <div class="tx-amt credit-amt${r.credit ? ' has-val' : ''}">
+            <span class="amt-label">دائن</span>
+            <span class="amt-val">${r.credit ? fmtNumAlways(r.credit) : '—'}</span>
+          </div>
+        </div>
+      </article>`;
+    }).join('');
+
+    document.querySelectorAll('.tx-invoice-btn').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openInvoice(btn.dataset.invoiceRef);
+      });
+    });
+    document.querySelectorAll('.tx-pdf-btn').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const ref = btn.dataset.exportRef;
+        const by = btn.dataset.exportBy || 'seq';
+        if (!ref) return;
+        exportInvoicePdf(ref, by).catch((err) => alert(err.message));
+      });
+    });
+  } else {
+    document.getElementById('stmtLines').innerHTML = `
+      <div class="empty-state"><div class="icon">📋</div><p>${state.stmtFilter === 'since-match' ? 'لا توجد حركات بعد آخر مطابقة' : 'لا توجد حركات لهذا الحساب'}</p></div>`;
+  }
+
+  document.getElementById('stmtTotals').innerHTML = lines.length
+    ? `<div class="totals-card">
+        <h3 class="totals-title">ملخص الكشف</h3>
+        <div class="totals-grid">
+          <div class="totals-cell">
+            <span class="lbl">مجموع المدين</span>
+            <span class="val debit">${fmtNumAlways(totalDebit)}</span>
+          </div>
+          <div class="totals-cell">
+            <span class="lbl">مجموع الدائن</span>
+            <span class="val credit">${fmtNumAlways(totalCredit)}</span>
+          </div>
+        </div>
+        <div class="totals-final ${summary.side === 'debit' ? 'debit-side' : summary.side === 'credit' ? 'credit-side' : ''}">
+          <div class="final-label">${esc(summary.label)}</div>
+          <div class="final-amounts">
+            <div class="final-slot">
+              <span>مدين</span>
+              <strong class="debit">${summary.side === 'debit' ? fmtNumAlways(summary.amount) : summary.amount === 0 ? '0' : '—'}</strong>
+            </div>
+            <div class="final-slot">
+              <span>دائن</span>
+              <strong class="credit">${summary.side === 'credit' ? fmtNumAlways(summary.amount) : '—'}</strong>
+            </div>
+          </div>
+        </div>
+        ${branch.tot1 != null || branch.tot2 != null ? `
+        <div class="totals-extra">
+          ${branch.tot1 != null ? `<span>إجمالي 1: <b dir="ltr">${fmtNumAlways(branch.tot1)}</b></span>` : ''}
+          ${branch.tot2 != null ? `<span>إجمالي 2: <b dir="ltr">${fmtNumAlways(branch.tot2)}</b></span>` : ''}
+        </div>` : ''}
+      </div>`
+    : '';
 }
 
 async function openInvoice(ref) {
@@ -771,6 +803,17 @@ function init() {
       state.branchFilter = chip.dataset.filter;
       document.querySelectorAll('.filter-chip').forEach((c) => c.classList.toggle('active', c === chip));
       renderBranches();
+    });
+  });
+
+  document.querySelectorAll('.stmt-filter-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      if (state.stmtFilter === chip.dataset.stmtFilter) return;
+      state.stmtFilter = chip.dataset.stmtFilter;
+      syncStmtFilterChips();
+      if (state.selectedBranch?.seq) {
+        loadStatement(state.selectedBranch.seq).catch((e) => alert(e.message));
+      }
     });
   });
 

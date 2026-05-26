@@ -33,8 +33,14 @@ const UPLOAD_BATCH = {
 
 const ACCOUNT_COLS = [
   'Seq', 'Num', 'Name1', 'Name2', 'Master', 'SubCount', 'Bal', 'Tot1', 'Tot2',
-  'Address', 'Remarks', 'OfficialName'
+  'Address', 'Remarks', 'OfficialName', 'FixDate'
 ].map((c) => `"${c}"`).join(', ');
+
+const MATCH_EXP_SQL = `(
+  Exp1 LIKE '%مطابقة%'
+  OR Exp1 LIKE '%تصفير%'
+  OR Exp1 LIKE '%دفعة%'
+)`;
 
 async function query(sql) {
   const r = await odbcBridge.runQuery({ ...CONN, sql });
@@ -234,6 +240,36 @@ async function fetchSalesInvoiceJournal(accSeqs) {
   return all;
 }
 
+async function fetchLastMatchByAccount(accSeqs) {
+  const map = new Map();
+  if (!accSeqs.length) return map;
+  const parts = chunk(accSeqs, 60);
+  for (const part of parts) {
+    const ids = part.join(',');
+    const rows = await query(
+      `SELECT Acc, Seq, "Date", Exp1 FROM File12n
+       WHERE Acc IN (${ids}) AND Dept = 'False' AND ${MATCH_EXP_SQL}
+       ORDER BY Acc, "Date", Seq`
+    );
+    for (const row of rows) {
+      map.set(String(row.Acc), {
+        LastMatchSeq: String(row.Seq),
+        LastMatchDate: row.Date || ''
+      });
+    }
+  }
+  return map;
+}
+
+function enrichAccountsWithMatchInfo(accounts, lastMatchMap) {
+  return accounts.map((account) => {
+    const seq = accountSeq(account);
+    const match = lastMatchMap.get(seq);
+    if (!match) return account;
+    return { ...account, ...match };
+  });
+}
+
 function collectBillSeqs(journal) {
   const seqs = new Set();
   for (const row of journal) {
@@ -405,6 +441,10 @@ async function main() {
     .filter((a) => Number(a.SubCount) === 0)
     .map((a) => accountSeq(a));
 
+  reportProgress(1, 6, 50, 'جاري قراءة آخر مطابقة لكل حساب...');
+  const lastMatchMap = await fetchLastMatchByAccount(leafSeqs);
+  const accountsForUpload = enrichAccountsWithMatchInfo(accounts, lastMatchMap);
+
   reportProgress(2, 6, 0, `جاري قراءة حركات البيع (مدين + فاتورة) لـ ${leafSeqs.length} حساب...`);
   const journal = await fetchSalesInvoiceJournal(leafSeqs);
   reportProgress(2, 6, 100, `تم: ${journal.length} حركة بيع (مدين + فاتورة)`);
@@ -418,7 +458,7 @@ async function main() {
   const invoiceLines = await fetchInvoiceLines(billSeqs);
   reportProgress(4, 6, 100, `تم: ${invoiceLines.length} بند`);
 
-  const result = await uploadChunked({ accounts, journal, invoices, invoiceLines }, leafSeqs);
+  const result = await uploadChunked({ accounts: accountsForUpload, journal, invoices, invoiceLines }, leafSeqs);
   console.log('✓ تمت المزامنة:', result.accounts, 'حساب،', result.journal, 'حركة،', result.invoices, 'فاتورة،', result.invoiceLines, 'بند');
 }
 

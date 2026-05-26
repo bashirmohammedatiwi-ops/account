@@ -93,11 +93,12 @@ router.get('/accounts/:seq/statement.pdf', authAgent, async (req, res) => {
   if (!canAgentAccess(req.agent.id, req.params.seq)) {
     return res.status(403).json({ ok: false, error: 'لا تملك صلاحية هذا الحساب' });
   }
-  const stmt = getStatementForAccount(req.params.seq);
+  const sinceLastMatch = String(req.query.since || 'match').trim().toLowerCase() !== 'all';
+  const stmt = getStatementForAccount(req.params.seq, { sinceLastMatch });
   if (!stmt) return res.status(404).json({ ok: false, error: 'الحساب غير موجود' });
   try {
     const treeLabel = String(req.query.tree || '').trim();
-    const buffer = await buildStatementPdf(stmt, { treeLabel });
+    const buffer = await buildStatementPdf(stmt, { treeLabel, sinceLastMatch: stmt.sinceLastMatch });
     const num = stmt.account?.num || req.params.seq;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="statement-${num}.pdf"`);
@@ -111,7 +112,8 @@ router.get('/accounts/:seq/statement', authAgent, (req, res) => {
   if (!canAgentAccess(req.agent.id, req.params.seq)) {
     return res.status(403).json({ ok: false, error: 'لا تملك صلاحية هذا الحساب' });
   }
-  const stmt = getStatementForAccount(req.params.seq);
+  const sinceLastMatch = String(req.query.since || 'match').trim().toLowerCase() !== 'all';
+  const stmt = getStatementForAccount(req.params.seq, { sinceLastMatch });
   if (!stmt) return res.status(404).json({ ok: false, error: 'الحساب غير موجود' });
   res.json({ ok: true, ...stmt });
 });

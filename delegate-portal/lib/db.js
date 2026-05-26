@@ -29,6 +29,17 @@ function migrateSchema() {
     }
     db.exec('CREATE INDEX IF NOT EXISTS idx_journal_bill ON journal(bill_seq)');
   }
+  if (columnExists('accounts', 'seq')) {
+    if (!columnExists('accounts', 'fix_date')) {
+      db.exec('ALTER TABLE accounts ADD COLUMN fix_date TEXT');
+    }
+    if (!columnExists('accounts', 'last_match_seq')) {
+      db.exec('ALTER TABLE accounts ADD COLUMN last_match_seq TEXT');
+    }
+    if (!columnExists('accounts', 'last_match_date')) {
+      db.exec('ALTER TABLE accounts ADD COLUMN last_match_date TEXT');
+    }
+  }
   db.exec(`
     CREATE TABLE IF NOT EXISTS invoices (
       seq TEXT PRIMARY KEY,

@@ -7,6 +7,40 @@ function isDebitRow(row) {
   return row.is_debit === 1 || row.is_debit === true || row.Dept === 'True' || row.Dept === true;
 }
 
+function journalSortKey(row) {
+  const raw = row.tx_date || row.Date || row.date || '';
+  const d = new Date(String(raw).replace(' 00:00:00', ''));
+  const t = Number.isNaN(d.getTime()) ? 0 : d.getTime();
+  const seq = Number(row.seq ?? row.Seq ?? 0);
+  return { t, seq };
+}
+
+function isJournalAfter(row, cutoff) {
+  if (!cutoff?.seq) return true;
+  const current = journalSortKey(row);
+  const marker = journalSortKey({ tx_date: cutoff.date, seq: cutoff.seq });
+  if (current.t !== marker.t) return current.t > marker.t;
+  return current.seq > marker.seq;
+}
+
+function isValidFixDate(value) {
+  const raw = String(value || '').trim();
+  if (!raw || raw.startsWith('12/30/1899')) return false;
+  const t = new Date(raw.replace(' 00:00:00', '')).getTime();
+  return !Number.isNaN(t);
+}
+
+function filterRowsSinceLastMatch(rows, cutoff, fixDate) {
+  if (cutoff?.seq) {
+    return rows.filter((row) => isJournalAfter(row, cutoff));
+  }
+  if (isValidFixDate(fixDate)) {
+    const marker = new Date(String(fixDate).replace(' 00:00:00', '')).getTime();
+    return rows.filter((row) => journalSortKey(row).t > marker);
+  }
+  return rows;
+}
+
 function buildStatementLines(rows) {
   const { isInvoiceMovement, resolveBillSeq, resolveBillNum } = require('./invoices');
   let balance = 0;
@@ -60,5 +94,9 @@ function debtStatusFromBalance(bal) {
 module.exports = {
   buildStatementLines,
   balanceSummaryLabel,
-  debtStatusFromBalance
+  debtStatusFromBalance,
+  journalSortKey,
+  isJournalAfter,
+  filterRowsSinceLastMatch,
+  isValidFixDate
 };

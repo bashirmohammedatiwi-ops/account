@@ -198,6 +198,15 @@ async function buildStatementPdf(stmt, meta = {}) {
   const doc = baseDoc([
     buildHeaderBlock(),
     { text: 'كشف حساب', style: 'docTitle', alignment: 'center' },
+    ...(meta.sinceLastMatch && stmt.lastMatch?.date
+      ? [{
+        text: `حركات بعد آخر مطابقة — ${fmtDate(stmt.lastMatch.date)}`,
+        fontSize: 10,
+        color: '#64748b',
+        alignment: 'center',
+        margin: [0, 0, 0, 6]
+      }]
+      : []),
     metaBox([[
       metaStack('رقم الحساب', acc.num),
       metaStack('اسم الزبون', acc.name1),

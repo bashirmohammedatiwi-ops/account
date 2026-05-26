@@ -45,14 +45,31 @@ function getAssignableTrees() {
   `).all();
 }
 
-function getStatementForAccount(accSeq) {
+function getStatementForAccount(accSeq, options = {}) {
+  const sinceLastMatch = options.sinceLastMatch !== false;
   const account = db.prepare('SELECT * FROM accounts WHERE seq = ?').get(String(accSeq));
   if (!account) return null;
   const rows = db.prepare(
     'SELECT * FROM journal WHERE acc_seq = ? ORDER BY tx_date, seq'
   ).all(String(accSeq));
-  const { buildStatementLines, balanceSummaryLabel, debtStatusFromBalance } = require('./statement-utils');
-  const stmt = buildStatementLines(rows);
+
+  const {
+    buildStatementLines,
+    balanceSummaryLabel,
+    debtStatusFromBalance,
+    filterRowsSinceLastMatch,
+    isValidFixDate
+  } = require('./statement-utils');
+
+  const lastMatch = account.last_match_seq
+    ? { seq: account.last_match_seq, date: account.last_match_date || '' }
+    : null;
+  const hasMatchCutoff = Boolean(lastMatch?.seq) || isValidFixDate(account.fix_date);
+  const filteredRows = sinceLastMatch && hasMatchCutoff
+    ? filterRowsSinceLastMatch(rows, lastMatch, account.fix_date)
+    : rows;
+
+  const stmt = buildStatementLines(filteredRows);
   return {
     account: {
       seq: account.seq,
@@ -61,21 +78,29 @@ function getStatementForAccount(accSeq) {
       name2: account.name2,
       address: account.address,
       bal: account.bal,
+      tot1: account.tot1,
+      tot2: account.tot2,
+      fixDate: account.fix_date || null,
       debtStatus: debtStatusFromBalance(stmt.finalBalance ?? account.bal)
     },
     ...stmt,
-    summary: balanceSummaryLabel(stmt.finalBalance)
+    summary: balanceSummaryLabel(stmt.finalBalance),
+    sinceLastMatch: sinceLastMatch && hasMatchCutoff,
+    lastMatch,
+    hasMatchCutoff
   };
 }
 
 const SYNC_UPSERTS = {
   accounts: db.prepare(`
-    INSERT INTO accounts (seq, num, name1, name2, master_seq, sub_count, bal, tot1, tot2, address, remarks, official_name, synced_at)
-    VALUES (@seq, @num, @name1, @name2, @master_seq, @sub_count, @bal, @tot1, @tot2, @address, @remarks, @official_name, @synced_at)
+    INSERT INTO accounts (seq, num, name1, name2, master_seq, sub_count, bal, tot1, tot2, address, remarks, official_name, fix_date, last_match_seq, last_match_date, synced_at)
+    VALUES (@seq, @num, @name1, @name2, @master_seq, @sub_count, @bal, @tot1, @tot2, @address, @remarks, @official_name, @fix_date, @last_match_seq, @last_match_date, @synced_at)
     ON CONFLICT(seq) DO UPDATE SET
       num=excluded.num, name1=excluded.name1, name2=excluded.name2, master_seq=excluded.master_seq,
       sub_count=excluded.sub_count, bal=excluded.bal, tot1=excluded.tot1, tot2=excluded.tot2,
-      address=excluded.address, remarks=excluded.remarks, official_name=excluded.official_name, synced_at=excluded.synced_at
+      address=excluded.address, remarks=excluded.remarks, official_name=excluded.official_name,
+      fix_date=excluded.fix_date, last_match_seq=excluded.last_match_seq, last_match_date=excluded.last_match_date,
+      synced_at=excluded.synced_at
   `),
   journal: db.prepare(`
     INSERT INTO journal (seq, acc_seq, tx_date, am, is_debit, exp1, bill_num, bill_seq, bill_kind)
@@ -118,6 +143,9 @@ function mapAccountRow(a, now) {
     address: a.Address ?? a.address ?? '',
     remarks: a.Remarks ?? a.remarks ?? '',
     official_name: a.OfficialName ?? a.official_name ?? '',
+    fix_date: a.FixDate ?? a.fix_date ?? '',
+    last_match_seq: String(a.LastMatchSeq ?? a.last_match_seq ?? ''),
+    last_match_date: a.LastMatchDate ?? a.last_match_date ?? '',
     synced_at: now
   };
 }
