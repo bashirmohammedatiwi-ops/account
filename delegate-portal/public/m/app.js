@@ -107,6 +107,43 @@ function balanceClassFor(bal) {
   return n < 0 ? 'debit' : 'credit';
 }
 
+function amtTd(val, cls) {
+  const n = Number(val);
+  if (!n) return '<td class="num empty">—</td>';
+  return `<td class="num ${cls || ''}" dir="ltr">${fmtNumAlways(n)}</td>`;
+}
+
+function moneyTd(val, cls) {
+  const n = Number(val);
+  if (Number.isNaN(n) || n === 0) return '<td class="num empty">—</td>';
+  return `<td class="num ${cls || ''}" dir="ltr">${fmtMoney(n)}</td>`;
+}
+
+function qtyTd(val) {
+  const n = Number(val);
+  if (Number.isNaN(n) || n === 0) return '<td class="num empty">—</td>';
+  return `<td class="num" dir="ltr">${fmtQty(n)}</td>`;
+}
+
+function bindStatementRowActions(root) {
+  root.querySelectorAll('.tbl-btn-inv').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openInvoice(btn.dataset.invoiceRef, btn.dataset.invoiceBy || 'seq', btn.dataset.invoiceAcc || '');
+    });
+  });
+  root.querySelectorAll('.tbl-btn-pdf').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const ref = btn.dataset.exportRef;
+      const by = btn.dataset.exportBy || 'seq';
+      const acc = btn.dataset.exportAcc || state.selectedBranch?.seq || '';
+      if (!ref) return;
+      exportInvoicePdf(ref, by, acc).catch((err) => alert(err.message));
+    });
+  });
+}
+
 function txTypeLabel(line) {
   if (line?.isOpening) return 'رصيد مرحّل';
   if (line?.isReconciliation) return 'ترصيد';
@@ -526,152 +563,107 @@ function renderStatement(data) {
   const treeLabel = state.selectedTree?.num ? `شجرة ${state.selectedTree.num}` : '';
   const openingBal = Number(data.openingBalance ?? 0);
   const openingNote = data.sinceLastMatch && openingBal !== 0
-    ? ` · رصيد مرحّل ${fmtNumAlways(openingBal < 0 ? Math.abs(openingBal) : openingBal)}`
+    ? ` · مرحّل ${fmtNumAlways(openingBal < 0 ? Math.abs(openingBal) : openingBal)}`
     : '';
-  const matchBanner = data.sinceLastMatch && data.lastMatch?.date
-    ? `<p class="hero-match-note">حركات بعد آخر مطابقة · ${fmtDate(data.lastMatch.date)}${openingNote}</p>`
+  const matchNote = data.sinceLastMatch && data.lastMatch?.date
+    ? `من ${fmtDate(data.lastMatch.date)}${openingNote}`
     : (state.stmtFilter === 'since-match' && !data.hasMatchCutoff
-      ? '<p class="hero-match-note muted">لا توجد مطابقة مسجلة — نفّذ مزامنة جديدة من Admin</p>'
+      ? 'لا مطابقة — نفّذ مزامنة'
       : '');
 
   renderDebtField(currentBal);
 
   document.getElementById('stmtHero').innerHTML = `
-    <div class="hero-header">
-      <p class="hero-title">كشف حساب</p>
-      <p class="hero-subtitle">${treeLabel ? `${esc(treeLabel)} · ` : ''}${esc(acc.num)}</p>
-      <h2 class="hero-name">${esc(acc.name1)}</h2>
-      ${acc.address ? `<p class="hero-addr">${esc(acc.address)}</p>` : ''}
-      ${matchBanner}
+    <div class="doc-panel">
+      <div class="doc-head-row">
+        <div class="doc-head-main">
+          <span class="doc-label">كشف حساب</span>
+          <strong class="doc-title">${esc(acc.name1)}</strong>
+          <span class="doc-meta-line">${treeLabel ? `${esc(treeLabel)} · ` : ''}حساب ${esc(acc.num)}${acc.address ? ` · ${esc(acc.address)}` : ''}${matchNote ? ` · ${esc(matchNote)}` : ''}</span>
+        </div>
+      </div>
+      <table class="doc-meta-table">
+        <tbody>
+          <tr>
+            <th>مدين</th><td class="debit" dir="ltr">${fmtNumAlways(totalDebit)}</td>
+            <th>دائن</th><td class="credit" dir="ltr">${fmtNumAlways(totalCredit)}</td>
+            <th>حركات</th><td dir="ltr">${lines.length}</td>
+            <th>الرصيد</th><td class="${balanceClassFor(currentBal)}" dir="ltr">${fmtBalanceDisplay(currentBal)}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>`;
 
-  document.getElementById('stmtStats').innerHTML = `
-    <div class="stat-box stat-debit">
-      <div class="stat-body">
-        <div class="k">مدين</div>
-        <div class="v">${fmtNumAlways(totalDebit)}</div>
-      </div>
-    </div>
-    <div class="stat-box stat-credit">
-      <div class="stat-body">
-        <div class="k">دائن</div>
-        <div class="v">${fmtNumAlways(totalCredit)}</div>
-      </div>
-    </div>
-    <div class="stat-box">
-      <div class="stat-body">
-        <div class="k">حركات</div>
-        <div class="v">${lines.length}</div>
-      </div>
-    </div>`;
+  document.getElementById('stmtStats').innerHTML = '';
 
   if (lines.length) {
     document.getElementById('stmtTableSection').classList.remove('hidden');
-    document.getElementById('stmtLineCount').textContent = `${lines.length} حركة · من الأقدم إلى الأحدث`;
-    document.getElementById('stmtLines').innerHTML = `
-      <div class="stmt-ledger">
-        <div class="stmt-ledger-head" aria-hidden="true">
-          <span class="col-idx">#</span>
-          <span class="col-date">التاريخ</span>
-          <span class="col-desc">البيان</span>
-          <span class="col-debit">مدين</span>
-          <span class="col-credit">دائن</span>
-          <span class="col-bal">الرصيد</span>
-        </div>
-        <div class="stmt-ledger-body">
-          ${(() => {
-      let moveNum = 0;
-      return lines.map((r) => {
+    document.getElementById('stmtLineCount').textContent = `${lines.length} حركة`;
+    let moveNum = 0;
+    const rows = lines.map((r) => {
       const showInvoiceBtn = isPurchaseLine(r) && !r.isOpening;
       const invoiceLookup = showInvoiceBtn ? invoiceLookupFor(r, branch.seq) : null;
-      const exportRef = invoiceLookup;
       const idxLabel = r.isOpening ? '∗' : String(++moveNum);
       const rowClass = [
-        r.isReconciliation ? 'tx-row-recon' : '',
-        r.isOpening ? 'tx-row-opening' : '',
-        r.debit ? 'tx-row-has-debit' : '',
-        r.credit ? 'tx-row-has-credit' : ''
+        r.isReconciliation ? 'row-recon' : '',
+        r.isOpening ? 'row-opening' : ''
       ].filter(Boolean).join(' ');
-      return `
-          <article class="tx-row ${rowClass}">
-            <div class="tx-grid">
-              <span class="col-idx">${idxLabel}</span>
-              <span class="col-date">${fmtDate(r.date)}</span>
-              <div class="col-desc">
-                <div class="tx-desc-top">
-                  <span class="tx-type ${txTypeClass(r)}">${txTypeLabel(r)}</span>
-                  ${showInvoiceBtn && invoiceLookup ? `
-                  <div class="tx-row-actions">
-                    <button type="button" class="tx-invoice-btn" data-invoice-ref="${esc(invoiceLookup.ref)}" data-invoice-by="${esc(invoiceLookup.by)}" data-invoice-acc="${esc(invoiceLookup.acc || branch.seq || '')}" aria-label="عرض الفاتورة">فاتورة</button>
-                    <button type="button" class="tx-pdf-btn" data-export-ref="${esc(exportRef?.ref || '')}" data-export-by="${esc(exportRef?.by || 'seq')}" data-export-acc="${esc(exportRef?.acc || branch.seq || '')}" aria-label="تصدير PDF">PDF</button>
-                  </div>` : ''}
-                </div>
-                <p class="tx-desc">${esc(r.description) || '—'}</p>
-              </div>
-              <span class="col-debit${r.debit ? ' has-val' : ''}">${r.debit ? fmtNumAlways(r.debit) : '—'}</span>
-              <span class="col-credit${r.credit ? ' has-val' : ''}">${r.credit ? fmtNumAlways(r.credit) : '—'}</span>
-              <span class="col-bal ${balanceClassFor(r.balance)}">${fmtBalanceDisplay(r.balance)}</span>
-            </div>
-          </article>`;
+      const actions = showInvoiceBtn && invoiceLookup
+        ? `<div class="tbl-actions">
+            <button type="button" class="tbl-btn tbl-btn-inv" data-invoice-ref="${esc(invoiceLookup.ref)}" data-invoice-by="${esc(invoiceLookup.by)}" data-invoice-acc="${esc(invoiceLookup.acc || branch.seq || '')}">فاتورة</button>
+            <button type="button" class="tbl-btn tbl-btn-pdf" data-export-ref="${esc(invoiceLookup.ref)}" data-export-by="${esc(invoiceLookup.by || 'seq')}" data-export-acc="${esc(invoiceLookup.acc || branch.seq || '')}">PDF</button>
+          </div>`
+        : '<span class="num empty">—</span>';
+      return `<tr class="${rowClass}">
+        <td class="col-n">${idxLabel}</td>
+        <td class="col-date">${fmtDate(r.date)}</td>
+        <td class="col-desc"><span class="row-tag ${txTypeClass(r)}">${txTypeLabel(r)}</span>${esc(r.description) || '—'}</td>
+        ${amtTd(r.debit, 'debit')}
+        ${amtTd(r.credit, 'credit')}
+        <td class="num ${balanceClassFor(r.balance)}" dir="ltr">${fmtBalanceDisplay(r.balance)}</td>
+        <td class="col-act">${actions}</td>
+      </tr>`;
     }).join('');
-    })()}
-        </div>
-      </div>`;
 
-      document.querySelectorAll('.tx-invoice-btn').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          openInvoice(btn.dataset.invoiceRef, btn.dataset.invoiceBy || 'seq', btn.dataset.invoiceAcc || '');
-        });
-      });
-    document.querySelectorAll('.tx-pdf-btn').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const ref = btn.dataset.exportRef;
-        const by = btn.dataset.exportBy || 'seq';
-        const acc = btn.dataset.exportAcc || state.selectedBranch?.seq || '';
-        if (!ref) return;
-        exportInvoicePdf(ref, by, acc).catch((err) => alert(err.message));
-      });
-    });
+    const extraRow = branch.tot1 != null || branch.tot2 != null
+      ? `<tr class="row-extra"><td colspan="7">${branch.tot1 != null ? `إجمالي 1: <b dir="ltr">${fmtNumAlways(branch.tot1)}</b>` : ''}${branch.tot2 != null ? `${branch.tot1 != null ? ' · ' : ''}إجمالي 2: <b dir="ltr">${fmtNumAlways(branch.tot2)}</b>` : ''}</td></tr>`
+      : '';
+
+    const stmtRoot = document.getElementById('stmtLines');
+    stmtRoot.innerHTML = `
+      <div class="table-scroll">
+        <table class="data-table stmt-table">
+          <thead>
+            <tr>
+              <th class="col-n">#</th>
+              <th class="col-date">التاريخ</th>
+              <th class="col-desc">البيان</th>
+              <th class="col-amt">مدين</th>
+              <th class="col-amt">دائن</th>
+              <th class="col-amt">الرصيد</th>
+              <th class="col-act">إجراء</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+          <tfoot>
+            <tr class="row-total">
+              <td colspan="3" class="total-label">${esc(summary.label)}</td>
+              <td class="num debit" dir="ltr">${fmtNumAlways(totalDebit)}</td>
+              <td class="num credit" dir="ltr">${fmtNumAlways(totalCredit)}</td>
+              <td class="num ${summary.side === 'debit' ? 'debit' : summary.side === 'credit' ? 'credit' : ''}" dir="ltr">${fmtNumAlways(summary.amount)}</td>
+              <td></td>
+            </tr>
+            ${extraRow}
+          </tfoot>
+        </table>
+      </div>`;
+    bindStatementRowActions(stmtRoot);
   } else {
     document.getElementById('stmtLines').innerHTML = `
       <div class="empty-state"><div class="icon">📋</div><p>${state.stmtFilter === 'since-match' ? 'لا توجد حركات بعد آخر مطابقة' : 'لا توجد حركات لهذا الحساب'}</p></div>`;
   }
 
-  document.getElementById('stmtTotals').innerHTML = lines.length
-    ? `<div class="totals-card">
-        <h3 class="totals-title">ملخص الكشف</h3>
-        <div class="totals-grid">
-          <div class="totals-cell">
-            <span class="lbl">مجموع المدين</span>
-            <span class="val debit">${fmtNumAlways(totalDebit)}</span>
-          </div>
-          <div class="totals-cell">
-            <span class="lbl">مجموع الدائن</span>
-            <span class="val credit">${fmtNumAlways(totalCredit)}</span>
-          </div>
-        </div>
-        <div class="totals-final ${summary.side === 'debit' ? 'debit-side' : summary.side === 'credit' ? 'credit-side' : ''}">
-          <div class="final-label">${esc(summary.label)}</div>
-          <div class="final-amounts">
-            <div class="final-slot">
-              <span>مدين</span>
-              <strong class="debit">${summary.side === 'debit' ? fmtNumAlways(summary.amount) : summary.amount === 0 ? '0' : '—'}</strong>
-            </div>
-            <div class="final-slot">
-              <span>دائن</span>
-              <strong class="credit">${summary.side === 'credit' ? fmtNumAlways(summary.amount) : '—'}</strong>
-            </div>
-          </div>
-        </div>
-        ${branch.tot1 != null || branch.tot2 != null ? `
-        <div class="totals-extra">
-          ${branch.tot1 != null ? `<span>إجمالي 1: <b dir="ltr">${fmtNumAlways(branch.tot1)}</b></span>` : ''}
-          ${branch.tot2 != null ? `<span>إجمالي 2: <b dir="ltr">${fmtNumAlways(branch.tot2)}</b></span>` : ''}
-        </div>` : ''}
-      </div>`
-    : '';
+  document.getElementById('stmtTotals').innerHTML = '';
 }
 
 async function openInvoice(ref, by = 'auto', acc = '') {
@@ -709,93 +701,77 @@ async function openInvoice(ref, by = 'auto', acc = '') {
         تصدير فاتورة ${esc(inv.num || ref)} PDF`;
     }
 
-    const lineTotalSum = lines.reduce((s, line) => s + Number(line.lineTotal || 0), 0);
     const qtySum = lines.reduce((s, line) => s + Number(line.quant || 0), 0);
 
     document.getElementById('invoiceHero').innerHTML = `
-      <div class="inv-doc-head">
-        <div class="inv-brand">
-          <img class="inv-logo" src="assets/logo.png" alt="" width="52" height="52">
-          <div class="inv-brand-text">
-            <p class="inv-company">شركة ديما الحياة</p>
-            <p class="inv-doc-type">${esc(inv.kindLabel || 'فاتورة مبيعات')}</p>
+      <div class="doc-panel">
+        <div class="doc-head-row">
+          <img class="doc-logo" src="assets/logo.png" alt="" width="36" height="36">
+          <div class="doc-head-main">
+            <span class="doc-label">${esc(inv.kindLabel || 'فاتورة مبيعات')}</span>
+            <strong class="doc-title">${esc(inv.accountName || state.selectedBranch?.name1 || '—')}</strong>
+            <span class="doc-meta-line">شركة ديما الحياة · رقم ${esc(inv.num || ref)} · ${fmtDate(inv.date)}${inv.accountNum ? ` · حساب ${esc(inv.accountNum)}` : ''}</span>
           </div>
         </div>
-        <div class="inv-doc-badge">
-          <span class="inv-badge-label">رقم الفاتورة</span>
-          <strong class="inv-badge-num" dir="ltr">${esc(inv.num || ref)}</strong>
-          <span class="inv-badge-date">${fmtDate(inv.date)}</span>
-        </div>
-      </div>
-      <div class="inv-customer-card">
-        <div class="inv-customer-main">
-          <span class="inv-card-label">الزبون</span>
-          <strong class="inv-customer-name">${esc(inv.accountName || state.selectedBranch?.name1 || '—')}</strong>
-        </div>
-        <div class="inv-customer-meta">
-          ${inv.accountNum ? `<span class="inv-meta-pill">حساب ${esc(inv.accountNum)}</span>` : ''}
-          <span class="inv-meta-pill">${lines.length} بند · ${fmtQty(qtySum)} قطعة</span>
-        </div>
+        <table class="doc-meta-table">
+          <tbody>
+            <tr>
+              <th>بنود</th><td dir="ltr">${lines.length}</td>
+              <th>كمية</th><td dir="ltr">${fmtQty(qtySum)}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>`;
 
-    document.getElementById('invoiceMeta').innerHTML = `
-      <div class="inv-stat inv-stat-total">
-        <span class="inv-stat-label">قيمة الفاتورة</span>
-        <strong class="inv-stat-value" dir="ltr">${fmtMoney(inv.total || lineTotalSum)}</strong>
-      </div>
-      <div class="inv-stat inv-stat-discount">
-        <span class="inv-stat-label">حسميات</span>
-        <strong class="inv-stat-value" dir="ltr">${fmtMoney(inv.discount)}</strong>
-      </div>
-      <div class="inv-stat inv-stat-net">
-        <span class="inv-stat-label">الصافي للدفع</span>
-        <strong class="inv-stat-value" dir="ltr">${fmtMoney(inv.netPay)}</strong>
-      </div>`;
-
+    document.getElementById('invoiceMeta').innerHTML = '';
     document.getElementById('invoiceLineCount').textContent = `${lines.length} بند`;
     document.getElementById('invoiceLines').innerHTML = lines.length
-      ? lines.map((line, i) => `
-        <article class="inv-line-row">
-          <span class="inv-cell inv-idx">${i + 1}</span>
-          <span class="inv-cell inv-mat-num" dir="ltr">${esc(line.matNum || line.mat || '—')}</span>
-          <div class="inv-cell inv-mat-name">
-            <strong>${esc(line.matName || '—')}</strong>
-            ${line.remarks ? `<span class="inv-line-note">${esc(line.remarks)}</span>` : ''}
-          </div>
-          <span class="inv-cell inv-qty" dir="ltr">${fmtQty(line.quant)}</span>
-          <span class="inv-cell inv-bonus" dir="ltr">${fmtQty(line.bonus)}</span>
-          <span class="inv-cell inv-price" dir="ltr">${fmtMoney(line.price)}</span>
-          <span class="inv-cell inv-total" dir="ltr">${fmtMoney(line.lineTotal)}</span>
-        </article>`).join('')
+      ? `<div class="table-scroll">
+          <table class="data-table inv-table">
+            <thead>
+              <tr>
+                <th class="col-n">#</th>
+                <th class="col-mat">مادة</th>
+                <th class="col-name">الاسم</th>
+                <th class="col-amt">كم</th>
+                <th class="col-amt">هد</th>
+                <th class="col-amt">سعر</th>
+                <th class="col-amt">إجمالي</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${lines.map((line, i) => `
+              <tr>
+                <td class="col-n">${i + 1}</td>
+                <td class="col-mat" dir="ltr">${esc(line.matNum || line.mat || '—')}</td>
+                <td class="col-name">${esc(line.matName || '—')}${line.remarks ? `<span class="row-note">${esc(line.remarks)}</span>` : ''}</td>
+                ${qtyTd(line.quant)}
+                ${qtyTd(line.bonus)}
+                ${moneyTd(line.price)}
+                ${moneyTd(line.lineTotal, 'net')}
+              </tr>`).join('')}
+            </tbody>
+            <tfoot>
+              <tr class="row-sum">
+                <td colspan="6" class="total-label">إجمالي الفاتورة</td>
+                <td class="num" dir="ltr">${fmtMoney(inv.total)}</td>
+              </tr>
+              <tr class="row-sum">
+                <td colspan="6" class="total-label">الحسومات</td>
+                <td class="num discount" dir="ltr">${fmtMoney(inv.discount)}</td>
+              </tr>
+              <tr class="row-total">
+                <td colspan="6" class="total-label">الصافي للدفع</td>
+                <td class="num net" dir="ltr">${fmtMoney(inv.netPay)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>`
       : '<div class="empty-state"><p>لا توجد بنود لهذه الفاتورة</p></div>';
 
     const totalsEl = document.getElementById('invoiceTotals');
-    if (lines.length) {
-      totalsEl.classList.remove('hidden');
-      totalsEl.innerHTML = `
-        <div class="inv-totals-panel">
-          <div class="inv-totals-head">ملخص الفاتورة</div>
-          <div class="inv-total-row">
-            <span>إجمالي البنود</span>
-            <strong dir="ltr">${fmtMoney(lineTotalSum)}</strong>
-          </div>
-          <div class="inv-total-row">
-            <span>قيمة الفاتورة</span>
-            <strong dir="ltr">${fmtMoney(inv.total || lineTotalSum)}</strong>
-          </div>
-          <div class="inv-total-row">
-            <span>حسميات</span>
-            <strong dir="ltr">${fmtMoney(inv.discount)}</strong>
-          </div>
-          <div class="inv-total-row inv-total-final">
-            <span>الصافي للدفع</span>
-            <strong dir="ltr">${fmtMoney(inv.netPay)}</strong>
-          </div>
-        </div>`;
-    } else {
-      totalsEl.classList.add('hidden');
-      totalsEl.innerHTML = '';
-    }
+    totalsEl.classList.add('hidden');
+    totalsEl.innerHTML = '';
 
     loading.classList.add('hidden');
     content.classList.remove('hidden');
