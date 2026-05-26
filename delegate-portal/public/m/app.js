@@ -55,14 +55,22 @@ function isPurchaseLine(line) {
   return Boolean(line?.invoiceRef || line?.billSeq || line?.billNum);
 }
 
-function invoiceLookupFor(line) {
-  const billNum = String(line?.billNum || '').replace(/[^0-9]/g, '');
-  if (billNum) return { ref: billNum, by: 'num' };
+function invoiceLookupFor(line, accSeq) {
   const billSeq = String(line?.billSeq || '').replace(/[^0-9]/g, '');
-  if (billSeq) return { ref: billSeq, by: 'seq' };
+  if (billSeq) return { ref: billSeq, by: 'seq', acc: accSeq || '' };
+  const billNum = String(line?.billNum || '').replace(/[^0-9]/g, '');
+  if (billNum) return { ref: billNum, by: 'num', acc: accSeq || '' };
   const fallback = String(line?.invoiceRef || '').replace(/[^0-9]/g, '');
-  if (fallback) return { ref: fallback, by: 'auto' };
+  if (fallback) return { ref: fallback, by: 'auto', acc: accSeq || '' };
   return null;
+}
+
+function invoiceQueryString(lookup) {
+  if (!lookup?.ref) return '';
+  const params = new URLSearchParams();
+  params.set('by', lookup.by || 'auto');
+  if (lookup.acc) params.set('acc', lookup.acc);
+  return `?${params.toString()}`;
 }
 
 function invoiceRefFor(line) {
@@ -226,18 +234,19 @@ function statementSinceQuery() {
   return state.stmtFilter === 'all' ? '?since=all' : '?since=match';
 }
 
-async function exportInvoicePdf(refOverride, byOverride) {
-  const billSeq = state.selectedInvoice?.seq;
-  const billNum = state.selectedInvoice?.num;
-  const ref = refOverride || billSeq || billNum;
-  const by = byOverride || (billSeq && !refOverride ? 'seq' : (billNum && !refOverride ? 'num' : 'auto'));
+async function exportInvoicePdf(refOverride, byOverride, accOverride) {
+  const lookup = state.lastInvoiceLookup || {};
+  const ref = refOverride || lookup.ref || state.selectedInvoice?.seq || state.selectedInvoice?.num;
+  const by = byOverride || lookup.by || 'seq';
+  const acc = accOverride || lookup.acc || state.selectedBranch?.seq || '';
   if (!ref) {
     alert('افتح فاتورة محددة أولاً');
     return;
   }
-  const label = billNum || ref;
+  const label = state.selectedInvoice?.num || ref;
+  const qs = invoiceQueryString({ ref, by, acc });
   await downloadAuthenticatedPdf(
-    `/invoices/${encodeURIComponent(ref)}/pdf?by=${encodeURIComponent(by)}`,
+    `/invoices/${encodeURIComponent(ref)}/pdf${qs}`,
     `invoice-${label}.pdf`
   );
 }
@@ -508,7 +517,7 @@ function renderStatement(data) {
     document.getElementById('stmtLineCount').textContent = `${lines.length} حركة`;
     document.getElementById('stmtLines').innerHTML = lines.map((r, i) => {
       const showInvoiceBtn = isPurchaseLine(r);
-      const invoiceLookup = showInvoiceBtn ? invoiceLookupFor(r) : null;
+      const invoiceLookup = showInvoiceBtn ? invoiceLookupFor(r, branch.seq) : null;
       const exportRef = invoiceLookup;
       return `
       <article class="tx-row${r.isReconciliation ? ' tx-row-recon' : ''}">
@@ -518,8 +527,8 @@ function renderStatement(data) {
           ${r.isReconciliation ? '<span class="tx-recon-badge">ترصيد</span>' : ''}
           ${showInvoiceBtn && invoiceLookup ? `
             <div class="tx-row-actions">
-              <button type="button" class="tx-invoice-btn" data-invoice-ref="${esc(invoiceLookup.ref)}" data-invoice-by="${esc(invoiceLookup.by)}" aria-label="عرض الفاتورة">فاتورة</button>
-              <button type="button" class="tx-pdf-btn" data-export-ref="${esc(exportRef?.ref || '')}" data-export-by="${esc(exportRef?.by || 'num')}" aria-label="تصدير PDF للفاتورة">PDF</button>
+              <button type="button" class="tx-invoice-btn" data-invoice-ref="${esc(invoiceLookup.ref)}" data-invoice-by="${esc(invoiceLookup.by)}" data-invoice-acc="${esc(invoiceLookup.acc || branch.seq || '')}" aria-label="عرض الفاتورة">فاتورة</button>
+              <button type="button" class="tx-pdf-btn" data-export-ref="${esc(exportRef?.ref || '')}" data-export-by="${esc(exportRef?.by || 'seq')}" data-export-acc="${esc(exportRef?.acc || branch.seq || '')}" aria-label="تصدير PDF للفاتورة">PDF</button>
             </div>` : ''}
         </div>
         <p class="tx-desc">${esc(r.description) || '—'}</p>
@@ -539,7 +548,7 @@ function renderStatement(data) {
       document.querySelectorAll('.tx-invoice-btn').forEach((btn) => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
-          openInvoice(btn.dataset.invoiceRef, btn.dataset.invoiceBy || 'num');
+          openInvoice(btn.dataset.invoiceRef, btn.dataset.invoiceBy || 'seq', btn.dataset.invoiceAcc || '');
         });
       });
     document.querySelectorAll('.tx-pdf-btn').forEach((btn) => {
@@ -547,8 +556,9 @@ function renderStatement(data) {
         e.stopPropagation();
         const ref = btn.dataset.exportRef;
         const by = btn.dataset.exportBy || 'seq';
+        const acc = btn.dataset.exportAcc || state.selectedBranch?.seq || '';
         if (!ref) return;
-        exportInvoicePdf(ref, by).catch((err) => alert(err.message));
+        exportInvoicePdf(ref, by, acc).catch((err) => alert(err.message));
       });
     });
   } else {
@@ -591,8 +601,10 @@ function renderStatement(data) {
     : '';
 }
 
-async function openInvoice(ref, by = 'auto') {
+async function openInvoice(ref, by = 'auto', acc = '') {
   if (!ref) return;
+  const accSeq = acc || state.selectedBranch?.seq || '';
+  state.lastInvoiceLookup = { ref, by, acc: accSeq };
   state.selectedInvoice = null;
   const exportBtn = document.getElementById('btnExportInvoicePdf');
   if (exportBtn) exportBtn.disabled = true;
@@ -606,7 +618,7 @@ async function openInvoice(ref, by = 'auto') {
   content.classList.add('hidden');
 
   try {
-    const data = await api(`/invoices/${encodeURIComponent(ref)}?by=${encodeURIComponent(by)}`);
+    const data = await api(`/invoices/${encodeURIComponent(ref)}${invoiceQueryString({ ref, by, acc: accSeq })}`);
     const inv = data.invoice || {};
     const lines = data.lines || [];
     state.selectedInvoice = inv;

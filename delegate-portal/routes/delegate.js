@@ -91,10 +91,11 @@ router.get('/accounts/:seq/statement', (req, res) => {
 router.get('/invoices/:ref', (req, res) => {
   const ref = String(req.params.ref || '').trim();
   const by = String(req.query.by || 'auto').trim();
+  const accSeq = String(req.query.acc || '').trim();
   if (!ref) {
     return res.status(400).json({ ok: false, error: 'رقم الفاتورة غير صالح' });
   }
-  const data = getInvoiceForExport(ref, by);
+  const data = getInvoiceForExport(ref, by, accSeq);
   if (!data) {
     return res.status(404).json({ ok: false, error: 'الفاتورة غير موجودة — قد تحتاج مزامنة جديدة' });
   }

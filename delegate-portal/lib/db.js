@@ -154,6 +154,7 @@ function initSchema() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_invoices_num ON invoices(num);
+    CREATE INDEX IF NOT EXISTS idx_invoices_num_acc ON invoices(num, acc_seq);
 
     CREATE TABLE IF NOT EXISTS invoice_lines (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

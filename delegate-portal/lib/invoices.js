@@ -45,9 +45,21 @@ function resolveBillNum(row) {
   return extractBillNumFromText(row.exp1 ?? row.Exp1 ?? row.description);
 }
 
-function lookupBillSeqByNum(billNum) {
+function normalizeAccSeq(value) {
+  const seq = String(value ?? '').replace(/[^0-9]/g, '');
+  return seq && seq !== '0' ? seq : '';
+}
+
+function lookupBillSeqByNum(billNum, accSeq) {
   const num = normalizeBillNum(billNum);
   if (!num) return '';
+  const acc = normalizeAccSeq(accSeq);
+  if (acc) {
+    const scoped = db.prepare(
+      'SELECT seq FROM invoices WHERE num = ? AND acc_seq = ? LIMIT 1'
+    ).get(num, acc);
+    if (scoped) return String(scoped.seq);
+  }
   const hit = db.prepare('SELECT seq FROM invoices WHERE num = ? LIMIT 1').get(num);
   return hit ? String(hit.seq) : '';
 }
@@ -61,7 +73,8 @@ function isInvoiceMovement(row) {
 function resolveBillSeq(row) {
   const direct = normalizeBillSeq(row.bill_seq ?? row.billSeq);
   if (direct) return direct;
-  return lookupBillSeqByNum(resolveBillNum(row));
+  const accSeq = normalizeAccSeq(row.acc_seq ?? row.Acc ?? row.accSeq);
+  return lookupBillSeqByNum(resolveBillNum(row), accSeq);
 }
 
 function lineTotal(quant, price, stored) {
@@ -136,10 +149,19 @@ function getInvoiceByBillSeq(billSeq) {
   };
 }
 
-function getInvoiceByNum(billNum) {
+function getInvoiceByNum(billNum, accSeq) {
   const num = normalizeBillNum(billNum);
   if (!num) return null;
-  const invoice = db.prepare('SELECT seq FROM invoices WHERE num = ? LIMIT 1').get(num);
+  const acc = normalizeAccSeq(accSeq);
+  let invoice = null;
+  if (acc) {
+    invoice = db.prepare(
+      'SELECT seq FROM invoices WHERE num = ? AND acc_seq = ? LIMIT 1'
+    ).get(num, acc);
+  }
+  if (!invoice) {
+    invoice = db.prepare('SELECT seq FROM invoices WHERE num = ? LIMIT 1').get(num);
+  }
   if (!invoice) return null;
   return getInvoiceByBillSeq(invoice.seq);
 }
@@ -148,29 +170,35 @@ function getInvoiceByRef(ref) {
   return getInvoiceForExport(ref, 'auto');
 }
 
-function getInvoiceForExport(ref, mode = 'auto') {
+function getInvoiceForExport(ref, mode = 'auto', accSeq) {
   const raw = String(ref ?? '').trim();
   if (!raw) return null;
   if (mode === 'seq') return getInvoiceByBillSeq(raw);
-  if (mode === 'num') return getInvoiceByNum(raw);
+  if (mode === 'num') return getInvoiceByNum(raw, accSeq);
 
   if (db.prepare('SELECT 1 FROM invoices WHERE seq = ?').get(raw)) {
     return getInvoiceByBillSeq(raw);
   }
-  const byNum = getInvoiceByNum(raw);
+  const byNum = getInvoiceByNum(raw, accSeq);
   if (byNum) return byNum;
   return getInvoiceByBillSeq(raw);
 }
 
-function canAgentAccessInvoice(agentId, ref) {
+function canAgentAccessInvoice(agentId, ref, options = {}) {
   const raw = String(ref ?? '').trim();
   if (!raw) return false;
+  const accHint = normalizeAccSeq(options.accSeq);
+  const by = String(options.by || 'auto').trim();
 
   const seq = normalizeBillSeq(raw);
-  if (seq) {
-    const journalBySeq = db.prepare(
-      'SELECT acc_seq FROM journal WHERE bill_seq = ? LIMIT 1'
-    ).get(seq);
+  if (seq && (by === 'auto' || by === 'seq')) {
+    const journalBySeq = accHint
+      ? db.prepare(
+        'SELECT acc_seq FROM journal WHERE bill_seq = ? AND acc_seq = ? LIMIT 1'
+      ).get(seq, accHint)
+      : db.prepare(
+        'SELECT acc_seq FROM journal WHERE bill_seq = ? LIMIT 1'
+      ).get(seq);
     if (journalBySeq && canAgentAccess(agentId, journalBySeq.acc_seq)) return true;
 
     const invoice = db.prepare('SELECT acc_seq FROM invoices WHERE seq = ?').get(seq);
@@ -178,13 +206,21 @@ function canAgentAccessInvoice(agentId, ref) {
   }
 
   const num = normalizeBillNum(raw);
-  if (num) {
-    const journalByNum = db.prepare(
-      'SELECT acc_seq FROM journal WHERE bill_num = ? LIMIT 1'
-    ).get(num);
+  if (num && (by === 'auto' || by === 'num')) {
+    const journalByNum = accHint
+      ? db.prepare(
+        'SELECT acc_seq FROM journal WHERE bill_num = ? AND acc_seq = ? LIMIT 1'
+      ).get(num, accHint)
+      : db.prepare(
+        'SELECT acc_seq FROM journal WHERE bill_num = ? LIMIT 1'
+      ).get(num);
     if (journalByNum && canAgentAccess(agentId, journalByNum.acc_seq)) return true;
 
-    const invoice = db.prepare('SELECT acc_seq FROM invoices WHERE num = ? LIMIT 1').get(num);
+    const invoice = accHint
+      ? db.prepare(
+        'SELECT acc_seq FROM invoices WHERE num = ? AND acc_seq = ? LIMIT 1'
+      ).get(num, accHint)
+      : db.prepare('SELECT acc_seq FROM invoices WHERE num = ? LIMIT 1').get(num);
     if (invoice?.acc_seq && canAgentAccess(agentId, invoice.acc_seq)) return true;
   }
 
@@ -195,6 +231,7 @@ module.exports = {
   invoiceKindLabel,
   normalizeBillSeq,
   normalizeBillNum,
+  normalizeAccSeq,
   extractBillNumFromText,
   resolveBillNum,
   isInvoiceMovement,
