@@ -73,6 +73,10 @@ function invoiceQueryString(lookup) {
   return `?${params.toString()}`;
 }
 
+function invoicePdfPath(ref, qs) {
+  return `/invoices/${encodeURIComponent(ref)}.pdf${qs}`;
+}
+
 function invoiceRefFor(line) {
   return invoiceLookupFor(line)?.ref || '';
 }
@@ -221,19 +225,27 @@ async function downloadAuthenticatedPdf(path, filename) {
 
     const contentType = String(res.headers.get('content-type') || '').toLowerCase();
     if (!res.ok) {
-      let message = 'فشل تصدير PDF';
+      let message = `فشل تصدير PDF (${res.status})`;
       if (contentType.includes('application/json')) {
         const data = await res.json().catch(() => ({}));
         message = data.error || message;
+      } else {
+        const text = await res.text().catch(() => '');
+        if (text && text.length < 200) message = text;
       }
       throw new Error(message);
     }
 
-    if (!contentType.includes('application/pdf')) {
+    const isPdf = contentType.includes('application/pdf')
+      || contentType.includes('application/octet-stream');
+    if (!isPdf) {
       throw new Error('استجابة غير صالحة من السيرفر');
     }
 
     const blob = await res.blob();
+    if (!blob.size) {
+      throw new Error('ملف PDF فارغ');
+    }
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -283,7 +295,7 @@ async function exportInvoicePdf(refOverride, byOverride, accOverride) {
   const label = inv.num || ref;
   const qs = invoiceQueryString({ ref, by, acc });
   await downloadAuthenticatedPdf(
-    `/invoices/${encodeURIComponent(ref)}.pdf${qs}`,
+    invoicePdfPath(ref, qs),
     `invoice-${label}.pdf`
   );
 }

@@ -118,7 +118,7 @@ router.get('/accounts/:seq/statement', authAgent, (req, res) => {
   res.json({ ok: true, ...stmt });
 });
 
-router.get('/invoices/:ref.pdf', authAgent, async (req, res) => {
+async function sendInvoicePdf(req, res) {
   const ref = String(req.params.ref || '').trim();
   const by = String(req.query.by || 'auto').trim();
   const accSeq = String(req.query.acc || '').trim();
@@ -139,9 +139,12 @@ router.get('/invoices/:ref.pdf', authAgent, async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="invoice-${num}.pdf"`);
     res.send(buffer);
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, error: err.message || 'فشل إنشاء PDF' });
   }
-});
+}
+
+router.get('/invoices/:ref.pdf', authAgent, sendInvoicePdf);
+router.get('/invoices/:ref/pdf', authAgent, sendInvoicePdf);
 
 router.get('/invoices/:ref', authAgent, (req, res) => {
   const ref = String(req.params.ref || '').trim();

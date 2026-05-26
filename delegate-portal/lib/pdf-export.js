@@ -46,21 +46,32 @@ function fmtDate(v) {
 
 function buildHeaderBlock() {
   const logo = getLogoDataUrl();
+  const company = {
+    stack: [
+      { text: COMPANY_NAME, style: 'companyTitle' },
+      { text: 'نظام كشوف حسابات المندوبين', style: 'companySub' }
+    ],
+    alignment: 'right'
+  };
+
+  if (logo) {
+    return {
+      table: {
+        widths: [72, '*'],
+        body: [[
+          { image: logo, width: 64, margin: [0, 2, 8, 0] },
+          company
+        ]]
+      },
+      layout: 'noBorders',
+      margin: [0, 0, 0, 10]
+    };
+  }
+
   return {
     table: {
-      widths: logo ? [72, '*'] : ['*'],
-      body: [[
-        logo
-          ? { image: logo, width: 64, margin: [0, 2, 8, 0] }
-          : { text: '' },
-        {
-          stack: [
-            { text: COMPANY_NAME, style: 'companyTitle' },
-            { text: 'نظام كشوف حسابات المندوبين', style: 'companySub' }
-          ],
-          alignment: 'right'
-        }
-      ]]
+      widths: ['*'],
+      body: [[company]]
     },
     layout: 'noBorders',
     margin: [0, 0, 0, 10]
@@ -164,8 +175,67 @@ function baseDoc(content) {
 }
 
 async function createPdfBuffer(docDefinition) {
-  const pdf = pdfmake.createPdf(docDefinition);
-  return pdf.getBuffer();
+  try {
+    const pdf = pdfmake.createPdf(docDefinition);
+    const buffer = await pdf.getBuffer();
+    if (!buffer || !buffer.length) {
+      throw new Error('ملف PDF فارغ');
+    }
+    return Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  } catch (err) {
+    throw new Error(err?.message || 'فشل إنشاء PDF');
+  }
+}
+
+function buildInvoiceHeaderBlock(inv) {
+  const logo = getLogoDataUrl();
+  const badge = {
+    stack: [
+      { text: 'رقم الفاتورة', style: 'metaLabel', alignment: 'center' },
+      {
+        text: String(inv.num || '—'),
+        fontSize: 16,
+        bold: true,
+        color: '#ffffff',
+        alignment: 'center',
+        margin: [0, 2, 0, 2]
+      },
+      { text: fmtDate(inv.date), fontSize: 9, color: '#ecfdf5', alignment: 'center' }
+    ],
+    fillColor: '#0f766e',
+    margin: [6, 8, 6, 8]
+  };
+  const company = {
+    stack: [
+      { text: COMPANY_NAME, style: 'companyTitle' },
+      { text: inv.kindLabel || 'فاتورة مبيعات', style: 'companySub' }
+    ],
+    alignment: 'right'
+  };
+
+  if (logo) {
+    return {
+      table: {
+        widths: [68, '*', 120],
+        body: [[
+          { image: logo, width: 58, margin: [0, 4, 8, 0] },
+          company,
+          badge
+        ]]
+      },
+      layout: 'noBorders',
+      margin: [0, 0, 0, 12]
+    };
+  }
+
+  return {
+    table: {
+      widths: ['*', 120],
+      body: [[company, badge]]
+    },
+    layout: 'noBorders',
+    margin: [0, 0, 0, 12]
+  };
 }
 
 async function buildStatementPdf(stmt, meta = {}) {
@@ -274,7 +344,6 @@ async function buildInvoicePdf(data) {
   const inv = data.invoice || {};
   const lines = data.lines || [];
   const lineTotalSum = lines.reduce((s, line) => s + Number(line.lineTotal || 0), 0);
-  const logo = getLogoDataUrl();
   const tableBody = [
     [
       headerCell('#', '#115e59'),
@@ -297,34 +366,7 @@ async function buildInvoicePdf(data) {
   ];
 
   const doc = baseDoc([
-    {
-      table: {
-        widths: logo ? [68, '*', 120] : ['*', 120],
-        body: [[
-          logo
-            ? { image: logo, width: 58, margin: [0, 4, 8, 0] }
-            : { text: '' },
-          {
-            stack: [
-              { text: COMPANY_NAME, style: 'companyTitle' },
-              { text: inv.kindLabel || 'فاتورة مبيعات', style: 'companySub' }
-            ],
-            alignment: 'right'
-          },
-          {
-            stack: [
-              { text: 'رقم الفاتورة', style: 'metaLabel', alignment: 'center' },
-              { text: String(inv.num || '—'), fontSize: 16, bold: true, color: '#ffffff', alignment: 'center', margin: [0, 2, 0, 2] },
-              { text: fmtDate(inv.date), fontSize: 9, color: '#ecfdf5', alignment: 'center' }
-            ],
-            fillColor: '#0f766e',
-            margin: [6, 8, 6, 8]
-          }
-        ]]
-      },
-      layout: 'noBorders',
-      margin: [0, 0, 0, 12]
-    },
+    buildInvoiceHeaderBlock(inv),
     metaBox([[
       metaStack('اسم الزبون', inv.accountName),
       metaStack('رقم الحساب', inv.accountNum),

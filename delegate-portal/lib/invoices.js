@@ -188,40 +188,53 @@ function canAgentAccessInvoice(agentId, ref, options = {}) {
   const raw = String(ref ?? '').trim();
   if (!raw) return false;
   const accHint = normalizeAccSeq(options.accSeq);
-  const by = String(options.by || 'auto').trim();
 
   const seq = normalizeBillSeq(raw);
-  if (seq && (by === 'auto' || by === 'seq')) {
-    const journalBySeq = accHint
-      ? db.prepare(
+  if (seq) {
+    if (accHint) {
+      const journalScoped = db.prepare(
         'SELECT acc_seq FROM journal WHERE bill_seq = ? AND acc_seq = ? LIMIT 1'
-      ).get(seq, accHint)
-      : db.prepare(
-        'SELECT acc_seq FROM journal WHERE bill_seq = ? LIMIT 1'
-      ).get(seq);
-    if (journalBySeq && canAgentAccess(agentId, journalBySeq.acc_seq)) return true;
+      ).get(seq, accHint);
+      if (journalScoped && canAgentAccess(agentId, journalScoped.acc_seq)) return true;
+    }
+    const journalRows = db.prepare(
+      'SELECT DISTINCT acc_seq FROM journal WHERE bill_seq = ?'
+    ).all(seq);
+    for (const row of journalRows) {
+      if (row?.acc_seq && canAgentAccess(agentId, row.acc_seq)) return true;
+    }
 
     const invoice = db.prepare('SELECT acc_seq FROM invoices WHERE seq = ?').get(seq);
     if (invoice?.acc_seq && canAgentAccess(agentId, invoice.acc_seq)) return true;
   }
 
   const num = normalizeBillNum(raw);
-  if (num && (by === 'auto' || by === 'num')) {
-    const journalByNum = accHint
-      ? db.prepare(
+  if (num) {
+    if (accHint) {
+      const journalScoped = db.prepare(
         'SELECT acc_seq FROM journal WHERE bill_num = ? AND acc_seq = ? LIMIT 1'
-      ).get(num, accHint)
-      : db.prepare(
-        'SELECT acc_seq FROM journal WHERE bill_num = ? LIMIT 1'
-      ).get(num);
-    if (journalByNum && canAgentAccess(agentId, journalByNum.acc_seq)) return true;
+      ).get(num, accHint);
+      if (journalScoped && canAgentAccess(agentId, journalScoped.acc_seq)) return true;
 
-    const invoice = accHint
-      ? db.prepare(
+      const invoiceScoped = db.prepare(
         'SELECT acc_seq FROM invoices WHERE num = ? AND acc_seq = ? LIMIT 1'
-      ).get(num, accHint)
-      : db.prepare('SELECT acc_seq FROM invoices WHERE num = ? LIMIT 1').get(num);
-    if (invoice?.acc_seq && canAgentAccess(agentId, invoice.acc_seq)) return true;
+      ).get(num, accHint);
+      if (invoiceScoped?.acc_seq && canAgentAccess(agentId, invoiceScoped.acc_seq)) return true;
+    }
+
+    const journalRows = db.prepare(
+      'SELECT DISTINCT acc_seq FROM journal WHERE bill_num = ?'
+    ).all(num);
+    for (const row of journalRows) {
+      if (row?.acc_seq && canAgentAccess(agentId, row.acc_seq)) return true;
+    }
+
+    const invoiceRows = db.prepare(
+      'SELECT DISTINCT acc_seq FROM invoices WHERE num = ?'
+    ).all(num);
+    for (const row of invoiceRows) {
+      if (row?.acc_seq && canAgentAccess(agentId, row.acc_seq)) return true;
+    }
   }
 
   return false;
