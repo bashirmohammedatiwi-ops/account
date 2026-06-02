@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const pdfmake = require('@digicole/pdfmake-rtl');
+const { resolveInvoiceTotals } = require('./invoices');
 
 pdfmake.addFonts(require('@digicole/pdfmake-rtl/fonts/Cairo'));
 pdfmake.addFonts(require('@digicole/pdfmake-rtl/fonts/Roboto'));
@@ -568,8 +569,13 @@ async function buildStatementPdf(stmt, meta = {}) {
 }
 
 async function buildInvoicePdf(data) {
-  const inv = data.invoice || {};
   const lines = data.lines || [];
+  const invRaw = data.invoice || {};
+  const totals = resolveInvoiceTotals(
+    { total: invRaw.total, discount: invRaw.discount, payment: invRaw.payment },
+    lines
+  );
+  const inv = { ...invRaw, ...totals };
   const qtySum = lines.reduce((s, line) => s + Number(line.quant || 0), 0);
 
   const tableBody = [

@@ -77,28 +77,68 @@ function resolveBillSeq(row) {
   return lookupBillSeqByNum(resolveBillNum(row), accSeq);
 }
 
-function lineTotal(quant, price, stored) {
-  const total = Number(stored);
-  if (!Number.isNaN(total) && total > 0) return total;
-  return Number(quant || 0) * Number(price || 0);
+function roundAmount(n) {
+  const x = Number(n);
+  if (Number.isNaN(x)) return 0;
+  return Math.round(x * 100) / 100;
 }
 
-function mapInvoiceRow(row, account) {
+/** مبلغ السطر: الكمية × السعر، مع تصحيح إن كان المخزّن في Edari مختلفاً */
+function lineTotal(quant, price, stored) {
+  const q = Number(quant || 0);
+  const p = Number(price || 0);
+  const computed = roundAmount(q * p);
+  const storedN = roundAmount(stored);
+  if (storedN > 0 && computed > 0) {
+    if (Math.abs(storedN - computed) <= 1) return storedN;
+    return computed;
+  }
+  if (storedN > 0) return storedN;
+  return computed;
+}
+
+/**
+ * إجمالي الفاتورة من مجموع البنود؛ الصافي = الإجمالي − الحسومات.
+ * لا نستخدم Payment كصافي إلا إن طابق (إجمالي − خصم) لتجنب أخطاء Edari.
+ */
+function resolveInvoiceTotals(header, lines = []) {
+  const discount = roundAmount(Math.max(0, Number(header?.discount ?? 0)));
+  const headerTotal = roundAmount(Math.max(0, Number(header?.total ?? 0)));
+  const headerPayment = roundAmount(Math.max(0, Number(header?.payment ?? 0)));
+
+  const linesSum = roundAmount(
+    lines.reduce((s, l) => s + roundAmount(l.lineTotal ?? 0), 0)
+  );
+
+  let total = headerTotal;
+  if (lines.length > 0 && linesSum > 0) {
+    total = linesSum;
+  } else if (!total && linesSum > 0) {
+    total = linesSum;
+  }
+
+  const netFromFormula = roundAmount(Math.max(0, total - discount));
+  let netPay = netFromFormula;
+  if (headerPayment > 0 && Math.abs(headerPayment - netFromFormula) <= 1) {
+    netPay = headerPayment;
+  }
+
+  return { total, discount, netPay, payment: headerPayment, linesSum };
+}
+
+function mapInvoiceRow(row, account, totals) {
   if (!row) return null;
-  const total = Number(row.total || 0);
-  const discount = Number(row.discount || 0);
-  const payment = Number(row.payment || 0);
-  const netPay = payment > 0 ? payment : Math.max(total - discount, 0);
+  const t = totals || resolveInvoiceTotals(row, []);
   return {
     seq: row.seq,
     num: row.num,
     kind: row.kind,
     kindLabel: invoiceKindLabel(row.kind),
     date: row.inv_date,
-    total,
-    payment,
-    discount,
-    netPay,
+    total: t.total,
+    payment: t.payment,
+    discount: t.discount,
+    netPay: t.netPay,
     lineCount: row.line_count,
     remarks: row.remarks,
     accSeq: row.acc_seq,
@@ -137,12 +177,8 @@ function getInvoiceByBillSeq(billSeq) {
     SELECT * FROM invoice_lines WHERE bill_seq = ? ORDER BY bill_no
   `).all(seq);
   const mappedLines = lines.map(mapInvoiceLineRow);
-  const computedTotal = mappedLines.reduce((s, l) => s + l.lineTotal, 0);
-  const mappedInvoice = mapInvoiceRow(invoice, account);
-  if (!mappedInvoice.total && computedTotal) mappedInvoice.total = computedTotal;
-  if (!mappedInvoice.netPay && mappedInvoice.total) {
-    mappedInvoice.netPay = Math.max(mappedInvoice.total - mappedInvoice.discount, 0);
-  }
+  const totals = resolveInvoiceTotals(invoice, mappedLines);
+  const mappedInvoice = mapInvoiceRow(invoice, account, totals);
   return {
     invoice: mappedInvoice,
     lines: mappedLines
@@ -255,5 +291,8 @@ module.exports = {
   getInvoiceForExport,
   canAgentAccessInvoice,
   mapInvoiceRow,
-  mapInvoiceLineRow
+  mapInvoiceLineRow,
+  resolveInvoiceTotals,
+  lineTotal,
+  roundAmount
 };

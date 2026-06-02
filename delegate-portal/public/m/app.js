@@ -142,6 +142,26 @@ function invMoneyTd(val, cls) {
   return `<td class="num ${cls || ''}" dir="ltr">${fmtInvInt(n)}</td>`;
 }
 
+function invoiceLineTotal(line) {
+  const q = Number(line.quant) || 0;
+  const p = Number(line.price) || 0;
+  const stored = Math.round(Number(line.lineTotal) || 0);
+  const computed = Math.round(q * p);
+  if (stored > 0 && computed > 0 && Math.abs(stored - computed) > 1) return computed;
+  return stored || computed;
+}
+
+/** توحيد الإجمالي والصافي مع مجموع البنود (إجمالي − حسومات) */
+function reconcileInvoiceTotals(inv, lines) {
+  const discount = Math.max(0, Math.round(Number(inv.discount) || 0));
+  const linesSum = lines.reduce((s, l) => s + invoiceLineTotal(l), 0);
+  const total = lines.length && linesSum > 0
+    ? linesSum
+    : Math.round(Number(inv.total) || 0);
+  const netPay = Math.max(0, total - discount);
+  return { ...inv, total, discount, netPay };
+}
+
 function bindStatementRowActions(root) {
   root.querySelectorAll('.tbl-btn-inv').forEach((btn) => {
     btn.addEventListener('click', (e) => {
@@ -701,8 +721,8 @@ async function openInvoice(ref, by = 'auto', acc = '') {
 
   try {
     const data = await api(`/invoices/${encodeURIComponent(ref)}${invoiceQueryString({ ref, by, acc: accSeq })}`);
-    const inv = data.invoice || {};
     const lines = data.lines || [];
+    const inv = reconcileInvoiceTotals(data.invoice || {}, lines);
     state.selectedInvoice = inv;
     state.lastInvoiceLookup = {
       ref: String(inv.seq || ref),
@@ -770,7 +790,7 @@ async function openInvoice(ref, by = 'auto', acc = '') {
                 ${qtyTd(line.quant)}
                 ${qtyTd(line.bonus)}
                 ${invMoneyTd(line.price)}
-                ${invMoneyTd(line.lineTotal, 'net')}
+                ${invMoneyTd(invoiceLineTotal(line), 'net')}
               </tr>`).join('')}
             </tbody>
             <tfoot>
