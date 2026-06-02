@@ -331,9 +331,6 @@ async function downloadAuthenticatedPdf(path, filename) {
 async function exportStatementPdf() {
   if (!state.selectedBranch?.seq) return;
   const params = new URLSearchParams();
-  if (state.selectedTree?.num) {
-    params.set('tree', `شجرة ${state.selectedTree.num}`);
-  }
   if (state.stmtFilter === 'all') {
     params.set('since', 'all');
   } else {
@@ -614,7 +611,7 @@ function renderStatement(data) {
           <span class="doc-meta-line">${[treeLabel, acc.address ? esc(acc.address) : '', matchNote ? esc(matchNote) : ''].filter(Boolean).join(' · ')}</span>
         </div>
       </div>
-      <table class="doc-meta-table">
+      <table class="doc-meta-table stmt-meta-table">
         <tbody>
           <tr>
             <th>إجمالي مدين</th><td class="debit" dir="ltr">${fmtNumAlways(totalDebit)}</td>
@@ -649,10 +646,10 @@ function renderStatement(data) {
       return `<tr class="${rowClass}">
         <td class="col-n">${idxLabel}</td>
         <td class="col-date">${fmtDate(r.date)}</td>
-        <td class="col-desc"><span class="row-tag ${txTypeClass(r)}">${txTypeLabel(r)}</span>${esc(r.description) || '—'}</td>
+        <td class="col-desc"><div class="stmt-desc-cell"><span class="row-tag ${txTypeClass(r)}">${txTypeLabel(r)}</span><span class="stmt-desc-text">${esc(r.description) || '—'}</span></div></td>
         ${amtTd(r.debit, 'debit')}
         ${amtTd(r.credit, 'credit')}
-        <td class="num ${balanceClassFor(r.balance)}" dir="ltr">${fmtBalanceDisplay(r.balance)}</td>
+        <td class="num col-balance ${balanceClassFor(r.balance)}" dir="ltr">${fmtBalanceDisplay(r.balance)}</td>
         <td class="col-act">${actions}</td>
       </tr>`;
     }).join('');
@@ -663,7 +660,7 @@ function renderStatement(data) {
 
     const stmtRoot = document.getElementById('stmtLines');
     stmtRoot.innerHTML = `
-      <div class="table-scroll">
+      <div class="table-scroll stmt-table-wrap">
         <table class="data-table stmt-table" dir="rtl">
           <thead>
             <tr>
@@ -682,7 +679,7 @@ function renderStatement(data) {
               <td colspan="3" class="total-label">${esc(summary.label)}</td>
               <td class="num debit" dir="ltr">${fmtNumAlways(totalDebit)}</td>
               <td class="num credit" dir="ltr">${fmtNumAlways(totalCredit)}</td>
-              <td class="num ${summary.side === 'debit' ? 'debit' : summary.side === 'credit' ? 'credit' : ''}" dir="ltr">${fmtNumAlways(summary.amount)}</td>
+              <td class="num col-balance ${summary.side === 'debit' ? 'debit' : summary.side === 'credit' ? 'credit' : ''}" dir="ltr">${fmtNumAlways(summary.amount)}</td>
               <td></td>
             </tr>
             ${extraRow}

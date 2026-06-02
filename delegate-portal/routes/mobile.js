@@ -97,8 +97,7 @@ router.get('/accounts/:seq/statement.pdf', authAgent, async (req, res) => {
   const stmt = getStatementForAccount(req.params.seq, { sinceLastMatch });
   if (!stmt) return res.status(404).json({ ok: false, error: 'الحساب غير موجود' });
   try {
-    const treeLabel = String(req.query.tree || '').trim();
-    const buffer = await buildStatementPdf(stmt, { treeLabel, sinceLastMatch: stmt.sinceLastMatch });
+    const buffer = await buildStatementPdf(stmt, { sinceLastMatch: stmt.sinceLastMatch });
     const num = stmt.account?.num || req.params.seq;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="statement-${num}.pdf"`);

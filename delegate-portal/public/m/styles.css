@@ -1076,6 +1076,192 @@ body {
 
 .stmt-lines { display: block; }
 
+/* ── Statement summary (hero meta) ── */
+.stmt-meta-table {
+  font-size: 0.72rem;
+}
+
+.stmt-meta-table th,
+.stmt-meta-table td {
+  padding: 8px 6px;
+  overflow: visible;
+  text-overflow: unset;
+  white-space: nowrap;
+}
+
+.stmt-meta-table th {
+  background: #eef2ff;
+  color: #334155;
+}
+
+.stmt-meta-table td {
+  font-size: 0.78rem;
+  background: #fff;
+}
+
+/* ── Statement movements table ── */
+.stmt-table-wrap {
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 1px 6px rgba(15, 23, 42, 0.08);
+}
+
+.data-table.stmt-table {
+  min-width: 680px;
+  font-size: 0.74rem;
+  table-layout: fixed;
+  border-spacing: 0;
+}
+
+.data-table.stmt-table th,
+.data-table.stmt-table td {
+  padding: 8px 6px;
+  border-color: #cbd5e1;
+  line-height: 1.35;
+}
+
+.data-table.stmt-table thead th {
+  font-size: 0.68rem;
+  padding: 9px 6px;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.12);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.data-table.stmt-table .col-n {
+  width: 30px;
+  min-width: 30px;
+  font-size: 0.72rem;
+  color: #64748b;
+  background: #f8fafc;
+}
+
+.data-table.stmt-table thead .col-n {
+  background: #334155;
+  color: #fff;
+}
+
+.data-table.stmt-table .col-date {
+  width: 78px;
+  min-width: 78px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.data-table.stmt-table .col-desc {
+  width: auto;
+  min-width: 140px;
+  max-width: none;
+  padding-inline: 8px;
+}
+
+.data-table.stmt-table .col-amt {
+  width: 76px;
+  min-width: 76px;
+}
+
+.data-table.stmt-table .col-balance {
+  width: 92px;
+  min-width: 92px;
+  font-weight: 800;
+  background: rgba(239, 246, 255, 0.45);
+}
+
+.data-table.stmt-table thead .col-balance {
+  background: #1d4ed8;
+}
+
+.data-table.stmt-table .col-act {
+  width: 82px;
+  min-width: 82px;
+}
+
+.stmt-desc-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  text-align: right;
+}
+
+.stmt-desc-text {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.4;
+  word-break: break-word;
+  color: var(--text);
+}
+
+.data-table.stmt-table tbody tr {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.data-table.stmt-table tbody tr:nth-child(odd) { background: #ffffff; }
+.data-table.stmt-table tbody tr:nth-child(even) { background: #f8fafc; }
+
+.data-table.stmt-table tbody tr.row-opening {
+  background: #eff6ff;
+  box-shadow: inset 3px 0 0 #1d4ed8;
+}
+
+.data-table.stmt-table tbody tr.row-recon {
+  background: #ecfdf5;
+  box-shadow: inset 3px 0 0 #047857;
+}
+
+.data-table.stmt-table tbody tr:active {
+  background: #e0f2fe;
+}
+
+.data-table.stmt-table td.num {
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.data-table.stmt-table td.num.debit {
+  color: #b91c1c;
+  background: rgba(254, 242, 242, 0.55);
+}
+
+.data-table.stmt-table td.num.credit {
+  color: #047857;
+  background: rgba(236, 253, 245, 0.55);
+}
+
+.data-table.stmt-table td.col-balance.debit { color: #b91c1c; }
+.data-table.stmt-table td.col-balance.credit { color: #047857; }
+
+.data-table.stmt-table tfoot td {
+  padding: 10px 6px;
+  border-top: 2px solid #94a3b8;
+  font-size: 0.74rem;
+}
+
+.data-table.stmt-table tfoot .total-label {
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: #1e293b;
+  background: #e2e8f0;
+}
+
+.data-table.stmt-table tfoot td.num.debit { background: #fee2e2; }
+.data-table.stmt-table tfoot td.num.credit { background: #d1fae5; }
+.data-table.stmt-table tfoot td.col-balance { background: #dbeafe; }
+
+.data-table.stmt-table .row-tag {
+  font-size: 0.62rem;
+  padding: 2px 8px;
+  flex-shrink: 0;
+}
+
+.data-table.stmt-table .tbl-btn {
+  font-size: 0.62rem;
+  padding: 4px 7px;
+  min-width: 52px;
+}
+
 .doc-extra {
   display: flex;
   flex-wrap: wrap;
@@ -1145,17 +1331,35 @@ body {
 }
 
 @media (max-width: 420px) {
-  .doc-meta-table {
+  .stmt-meta-table {
+    font-size: 0.64rem;
+  }
+
+  .stmt-meta-table td {
+    font-size: 0.7rem;
+  }
+
+  .doc-meta-table:not(.stmt-meta-table) {
     font-size: 0.58rem;
   }
 
-  .data-table {
+  .data-table.stmt-table {
+    min-width: 640px;
+    font-size: 0.7rem;
+  }
+
+  .data-table.stmt-table th,
+  .data-table.stmt-table td {
+    padding: 7px 5px;
+  }
+
+  .data-table:not(.stmt-table) {
     min-width: 480px;
     font-size: 0.64rem;
   }
 
-  .data-table th,
-  .data-table td {
+  .data-table:not(.stmt-table) th,
+  .data-table:not(.stmt-table) td {
     padding: 3px 2px;
   }
 
@@ -1194,7 +1398,7 @@ body {
   height: 1px;
 }
 
-.data-table tbody td {
+.data-table:not(.stmt-table) tbody td {
   padding-top: 3px;
   padding-bottom: 3px;
 }

@@ -75,29 +75,6 @@ function fmtDate(v) {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
-function compactGrid() {
-  return {
-    hLineWidth: (i, node) => (i === 0 || i === 1 || i === node.table.body.length ? 0.55 : 0.2),
-    vLineWidth: () => 0.2,
-    hLineColor: (i) => (i <= 1 ? COLORS.header : COLORS.border),
-    vLineColor: () => COLORS.border,
-    paddingLeft: () => 2,
-    paddingRight: () => 2,
-    paddingTop: () => 0.8,
-    paddingBottom: () => 0.8
-  };
-}
-
-function th(text, color = COLORS.header) {
-  return {
-    text,
-    style: 'th',
-    fillColor: color,
-    alignment: 'center',
-    margin: [1, 2, 1, 2]
-  };
-}
-
 function td(value, align = 'center', fill) {
   return {
     text: String(value ?? '—'),
@@ -119,15 +96,214 @@ function tdMoney(value, fill) {
   };
 }
 
-/** صف جدول من اليمين إلى اليسار: أول عمود = يمين (م) */
+const STMT_WIDTHS = [16, 44, '*', 44, 44, 50];
+
+/** صف جدول الكشف: أول عمود = يمين (م) في pdfmake-rtl */
 function stmtHeaderRow() {
   return [
-    th('م'),
-    th('التاريخ'),
-    th('البيان', COLORS.headerAlt),
-    th('مدين', COLORS.debit),
-    th('دائن', COLORS.credit),
-    th('رصيد الحساب', COLORS.balance)
+    thStmt('م', '#475569'),
+    thStmt('التاريخ', COLORS.header),
+    thStmt('البيان', COLORS.headerAlt),
+    thStmt('مدين', COLORS.debit),
+    thStmt('دائن', COLORS.credit),
+    thStmt('رصيد الحساب', COLORS.balance)
+  ];
+}
+
+function thStmt(text, color = COLORS.header) {
+  return {
+    text,
+    style: 'th',
+    fontSize: 7.5,
+    bold: true,
+    color: '#ffffff',
+    fillColor: color,
+    alignment: 'center',
+    margin: [2, 4, 2, 4]
+  };
+}
+
+function stmtTableLayout() {
+  return {
+    hLineWidth: (i, node) => {
+      if (i === 0 || i === 1) return 0.65;
+      if (node && i === node.table.body.length) return 0.45;
+      return 0.15;
+    },
+    vLineWidth: () => 0.15,
+    hLineColor: (i) => (i <= 1 ? COLORS.header : COLORS.border),
+    vLineColor: () => COLORS.border,
+    paddingLeft: () => 3,
+    paddingRight: () => 3,
+    paddingTop: () => 1.2,
+    paddingBottom: () => 1.2
+  };
+}
+
+function stmtLineRow(row, rowIndex) {
+  let fill = rowIndex % 2 === 0 ? COLORS.zebra : '#ffffff';
+  if (row.isOpening) fill = '#eff6ff';
+  else if (row.isReconciliation) fill = '#ecfdf5';
+  const idx = row.isOpening ? '∗' : String(rowIndex + 1);
+  return [
+    td(idx, 'center', fill),
+    td(fmtDate(row.date), 'center', fill),
+    td(row.description || '—', 'right', fill),
+    tdMoney(row.debit ? fmtNum(row.debit) : '—', fill),
+    tdMoney(row.credit ? fmtNum(row.credit) : '—', fill),
+    tdMoney(fmtNum(row.balance), fill)
+  ];
+}
+
+function statementPdfHeader(acc, periodNote) {
+  const logo = getLogoDataUrl();
+
+  const accent = {
+    canvas: [{ type: 'rect', x: 0, y: 0, w: 562, h: 4, color: COLORS.header }],
+    margin: [0, 0, 0, 0]
+  };
+
+  const headerInner = {
+    table: {
+      widths: [118, '*', 48],
+      body: [[
+        {
+          stack: [
+            { text: 'كشف حساب', fontSize: 8.5, bold: true, color: COLORS.header, alignment: 'right' },
+            { text: acc.name1 || '—', fontSize: 11, bold: true, color: '#0f172a', alignment: 'right', margin: [0, 4, 0, 0] },
+            periodNote
+              ? { text: periodNote, fontSize: 7, color: '#64748b', alignment: 'right', margin: [0, 2, 0, 0] }
+              : null
+          ].filter(Boolean),
+          margin: [10, 11, 10, 11]
+        },
+        {
+          stack: [
+            { text: COMPANY_NAME, fontSize: 13, bold: true, color: COLORS.header, alignment: 'center' },
+            { text: 'كشف حساب عميل', fontSize: 7, color: '#94a3b8', alignment: 'center', margin: [0, 3, 0, 0] }
+          ],
+          margin: [8, 12, 8, 12]
+        },
+        logo
+          ? { image: logo, width: 40, alignment: 'center', margin: [4, 10, 4, 10] }
+          : { text: '' }
+      ]]
+    },
+    layout: 'noBorders'
+  };
+
+  const headerFrame = {
+    table: { widths: ['*'], body: [[headerInner]] },
+    layout: {
+      hLineWidth: () => 0.8,
+      vLineWidth: () => 0.8,
+      hLineColor: () => COLORS.border,
+      vLineColor: () => COLORS.border,
+      fillColor: () => '#ffffff'
+    }
+  };
+
+  const clientLines = [
+    acc.address ? { text: acc.address, fontSize: 7.5, color: '#475569', alignment: 'right' } : null
+  ].filter(Boolean);
+
+  const client = clientLines.length
+    ? {
+      table: {
+        widths: [5, '*'],
+        body: [[
+          { text: '', fillColor: COLORS.headerAlt },
+          {
+            fillColor: '#f8fafc',
+            stack: [
+              { text: 'بيانات العميل', fontSize: 7, color: '#64748b', alignment: 'right' },
+              ...clientLines
+            ],
+            margin: [10, 8, 10, 8]
+          }
+        ]]
+      },
+      layout: {
+        hLineWidth: () => 0.5,
+        vLineWidth: () => 0.5,
+        hLineColor: () => COLORS.border,
+        vLineColor: () => COLORS.border
+      },
+      margin: [0, 0, 0, 0]
+    }
+    : null;
+
+  return {
+    stack: [accent, headerFrame, ...(client ? [client] : [])],
+    margin: [0, 0, 0, 6]
+  };
+}
+
+function statementMetaGrid(stmt, debtAmount, lineCount) {
+  const bal = Number(stmt.finalBalance ?? stmt.account?.bal ?? 0);
+  const rows = [
+    ['إجمالي مدين', fmtNum(stmt.totalDebit)],
+    ['إجمالي دائن', fmtNum(stmt.totalCredit)],
+    ['الديون', debtAmount],
+    ['عدد الحركات', String(lineCount)],
+    ['رصيد الحساب', fmtNum(Math.abs(bal))]
+  ];
+  const accents = ['#fee2e2', '#d1fae5', '#dbeafe', '#e2e8f0', '#fef3c7'];
+
+  return {
+    table: {
+      widths: rows.map(() => '*'),
+      body: [
+        rows.map(([label], i) => ({
+          text: label,
+          style: 'invMetaLbl',
+          fillColor: accents[i],
+          margin: [3, 5, 3, 2]
+        })),
+        rows.map(([, val], i) => ({
+          text: val,
+          style: 'invMetaVal',
+          fillColor: '#ffffff',
+          color: i === 2 ? '#b91c1c' : i === 4 ? '#1d4ed8' : '#0f172a',
+          margin: [3, 2, 3, 6]
+        }))
+      ]
+    },
+    layout: {
+      hLineWidth: () => 0.45,
+      vLineWidth: () => 0.45,
+      hLineColor: () => COLORS.border,
+      vLineColor: () => COLORS.border
+    },
+    margin: [0, 0, 0, 5]
+  };
+}
+
+function statementSectionTitle(text) {
+  return {
+    text,
+    style: 'invSection',
+    alignment: 'right',
+    margin: [0, 2, 0, 3]
+  };
+}
+
+function stmtTotalsTableRow(stmt) {
+  const bal = Number(stmt.finalBalance ?? stmt.account?.bal ?? 0);
+  return [
+    {
+      text: 'إجمالي الحركات',
+      style: 'foot',
+      alignment: 'right',
+      fillColor: '#e2e8f0',
+      colSpan: 3,
+      margin: [4, 5, 4, 5]
+    },
+    {},
+    {},
+    tdMoney(fmtNum(stmt.totalDebit), '#fef2f2'),
+    tdMoney(fmtNum(stmt.totalCredit), '#ecfdf5'),
+    tdMoney(fmtNum(Math.abs(bal)), '#eff6ff')
   ];
 }
 
@@ -397,77 +573,6 @@ function fmtInvPrice(v) {
   return fmtNum(Math.round(n), 0);
 }
 
-function dataRow(values, rowIndex, alignments = []) {
-  const fill = rowIndex % 2 === 0 ? COLORS.zebra : '#ffffff';
-  return values.map((value, i) => td(value, alignments[i] || 'center', fill));
-}
-
-function footLabel(text, colSpan, fill = '#e2e8f0') {
-  return { text, style: 'foot', alignment: 'right', fillColor: fill, colSpan, margin: [2, 2, 2, 2] };
-}
-
-function docBanner(title, accent = COLORS.accent) {
-  return {
-    table: {
-      widths: ['*'],
-      body: [[{ text: title, style: 'banner', fillColor: accent, alignment: 'center', margin: [0, 3, 0, 3] }]]
-    },
-    layout: 'noBorders',
-    margin: [0, 0, 0, 3]
-  };
-}
-
-function compactHeader(title, subtitle, rightStack) {
-  const logo = getLogoDataUrl();
-  const left = logo ? { image: logo, width: 32, margin: [0, 0, 4, 0] } : { text: '' };
-  const center = {
-    stack: [
-      { text: COMPANY_NAME, style: 'title' },
-      { text: title, style: 'sub', margin: [0, 1, 0, 0] },
-      subtitle ? { text: subtitle, style: 'sub' } : null
-    ].filter(Boolean),
-    alignment: 'right'
-  };
-  const right = { stack: rightStack, alignment: 'left' };
-
-  if (logo) {
-    return {
-      table: { widths: [36, '*', 108], body: [[left, center, right]] },
-      layout: 'noBorders',
-      margin: [0, 0, 0, 3]
-    };
-  }
-  return {
-    table: { widths: ['*', 108], body: [[center, right]] },
-    layout: 'noBorders',
-    margin: [0, 0, 0, 3]
-  };
-}
-
-function metaStrip(cells) {
-  const pairs = cells.map(([label, value]) => ({
-    stack: [
-      { text: label, style: 'meta' },
-      { text: value || '—', style: 'metaVal' }
-    ]
-  }));
-  return {
-    table: { widths: pairs.map(() => '*'), body: [pairs] },
-    layout: {
-      hLineWidth: () => 0.35,
-      vLineWidth: () => 0.35,
-      hLineColor: () => COLORS.border,
-      vLineColor: () => COLORS.border,
-      fillColor: () => '#f1f5f9',
-      paddingLeft: () => 3,
-      paddingRight: () => 3,
-      paddingTop: () => 2,
-      paddingBottom: () => 2
-    },
-    margin: [0, 0, 0, 3]
-  };
-}
-
 function pdfFooter() {
   return (currentPage, pageCount) => ({
     columns: [
@@ -504,7 +609,6 @@ async function createPdfBuffer(docDefinition) {
 async function buildStatementPdf(stmt, meta = {}) {
   const acc = stmt.account || {};
   const lines = stmt.lines || [];
-  const summary = stmt.summary || {};
   const debtAmount = fmtNum(
     Number(stmt.debtAmount) || resolveDebtDisplayAmount({
       finalBalance: stmt.finalBalance,
@@ -516,60 +620,33 @@ async function buildStatementPdf(stmt, meta = {}) {
     })
   );
   const openingBal = Number(stmt.openingBalance ?? 0);
-  const subtitle = meta.sinceLastMatch && (stmt.lastMatch?.date || acc.fixDate)
-    ? `منذ ${fmtDate(stmt.lastMatch?.date || acc.fixDate)}${openingBal ? ` · مرحّل ${fmtNum(Math.abs(openingBal))}` : ''}`
-    : '';
+  const sinceMatch = meta.sinceLastMatch ?? stmt.sinceLastMatch;
+  const periodParts = [];
+  if (sinceMatch && (stmt.lastMatch?.date || acc.fixDate)) {
+    periodParts.push(`منذ ${fmtDate(stmt.lastMatch?.date || acc.fixDate)}`);
+  }
+  if (sinceMatch && openingBal) {
+    periodParts.push(`مرحّل ${fmtNum(Math.abs(openingBal))}`);
+  }
+  const periodNote = periodParts.join(' · ');
 
-  const tableBody = [
-    stmtHeaderRow(),
-    ...lines.map((row, i) => dataRow([
-      row.isOpening ? '∗' : i + 1,
-      fmtDate(row.date),
-      row.description || '—',
-      row.debit ? fmtNum(row.debit) : '—',
-      row.credit ? fmtNum(row.credit) : '—',
-      fmtNum(row.balance)
-    ], i, ['center', 'center', 'right', 'center', 'center', 'center']))
-  ];
-
+  const tableBody = [stmtHeaderRow(), ...lines.map((row, i) => stmtLineRow(row, i))];
   if (lines.length) {
-    tableBody.push([
-      footLabel('إجمالي الحركات', 3),
-      {},
-      {},
-      td(fmtNum(stmt.totalDebit), 'center', '#fef2f2'),
-      td(fmtNum(stmt.totalCredit), 'center', '#ecfdf5'),
-      td(debtAmount, 'center', '#eff6ff')
-    ]);
+    tableBody.push(stmtTotalsTableRow(stmt));
   }
 
   const doc = baseDoc([
-    compactHeader('كشف حساب', subtitle, [
-      { text: acc.name1 || '—', style: 'metaVal', alignment: 'left' }
-    ]),
-    docBanner('كشف حساب — تفاصيل الحركات', COLORS.header),
-    metaStrip([
-      ['الشجرة', meta.treeLabel || '—'],
-      ['إجمالي مدين', fmtNum(stmt.totalDebit)],
-      ['إجمالي دائن', fmtNum(stmt.totalCredit)],
-      ['الديون', debtAmount]
-    ]),
+    statementPdfHeader(acc, periodNote),
+    statementMetaGrid(stmt, debtAmount, lines.length),
+    statementSectionTitle('تفاصيل الحركات'),
     {
       table: {
         headerRows: 1,
-        widths: [14, 42, '*', 38, 38, 48],
+        widths: STMT_WIDTHS,
         body: tableBody,
         dontBreakRows: false
       },
-      layout: compactGrid()
-    },
-    {
-      text: `${summary.label || 'الرصيد النهائي'}: ${fmtNum(summary.amount)}`,
-      alignment: 'right',
-      fontSize: 8,
-      bold: true,
-      color: COLORS.accent,
-      margin: [0, 3, 0, 0]
+      layout: stmtTableLayout()
     }
   ]);
 
