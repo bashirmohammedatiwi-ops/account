@@ -889,7 +889,10 @@ body {
 .data-table.inv-table thead th:nth-child(6),
 .data-table.inv-table thead th:nth-child(7) { background: #1d4ed8; }
 
-.inv-table { min-width: 540px; }
+.inv-table {
+  table-layout: auto;
+  min-width: 580px;
+}
 
 .data-table tbody tr:nth-child(even) { background: #fafafa; }
 .data-table tbody tr.row-opening { background: #eff6ff; }
@@ -918,20 +921,32 @@ body {
   word-break: break-word;
 }
 
-.data-table .col-mat,
-.data-table .col-barcode {
-  width: 72px;
-  min-width: 72px;
-  max-width: 88px;
+.data-table .col-mat {
+  width: 48px;
   text-align: center;
   font-weight: 700;
-  font-size: 0.6rem;
+  font-size: 0.64rem;
+}
+
+.data-table.inv-table .col-barcode {
+  width: auto;
+  min-width: 4.5rem;
+  max-width: none;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.58rem;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
   direction: ltr;
   font-family: Consolas, "Courier New", monospace;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
+  padding-inline: 6px;
+  line-height: 1.2;
+}
+
+.data-table.inv-table thead th.col-barcode {
+  white-space: nowrap;
 }
 
 .data-table .col-amt {
@@ -946,7 +961,11 @@ body {
 }
 
 .data-table.stmt-table .col-desc { width: auto; }
-.data-table.inv-table .col-name { width: auto; }
+.data-table.inv-table .col-name {
+  width: auto;
+  min-width: 72px;
+  max-width: 42vw;
+}
 
 .data-table td.num {
   font-weight: 800;
