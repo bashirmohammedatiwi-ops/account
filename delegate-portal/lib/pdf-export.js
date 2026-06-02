@@ -36,7 +36,8 @@ const STYLES = {
   tdName: { fontSize: 6.5, color: '#0f172a' }
 };
 
-const INV_WIDTHS = [11, 64, '*', 26, 22, 34, 38];
+/** عروض الأعمدة من اليسار إلى اليمين في PDF (مطابق لعرض الويب dir=rtl) */
+const INV_WIDTHS = [38, 34, 22, 26, '*', 64, 11];
 
 function getLogoDataUrl() {
   if (!fs.existsSync(LOGO_PATH)) return null;
@@ -116,16 +117,19 @@ function invBarcode(line) {
   return code.replace(/\s+/g, '') || '—';
 }
 
-/** فاتورة PDF: من اليمين — م | الباركود | اسم المادة | … | المبلغ */
+/**
+ * ترتيب الويب (dir=rtl): م → الباركود → … → المبلغ (من اليمين).
+ * pdfmake يرسم الجدول يسار→يمين، لذا نعكس ترتيب الخلايا ليطابق الويب.
+ */
 function invHeaderRow() {
   return [
-    th('م'),
-    th('الباركود', COLORS.header),
-    th('اسم المادة', COLORS.headerAlt),
-    th('الكمية', COLORS.qty),
-    th('هدية', COLORS.qty),
+    th('المبلغ', COLORS.price),
     th('سعر الوحدة', COLORS.price),
-    th('المبلغ', COLORS.price)
+    th('هدية', COLORS.qty),
+    th('الكمية', COLORS.qty),
+    th('اسم المادة', COLORS.headerAlt),
+    th('الباركود', COLORS.header),
+    th('م')
   ];
 }
 
@@ -153,25 +157,20 @@ function tdName(value, fill) {
 function invLineRow(line, rowIndex) {
   const fill = rowIndex % 2 === 0 ? COLORS.zebra : '#ffffff';
   return [
-    td(String(rowIndex + 1), 'center', fill),
-    tdBarcode(invBarcode(line), fill),
-    tdName(line.matName || '—', fill),
-    td(fmtQtyInt(line.quant), 'center', fill),
-    td(fmtQtyInt(line.bonus), 'center', fill),
+    td(fmtInvPrice(line.lineTotal), 'center', fill),
     td(fmtInvPrice(line.price), 'center', fill),
-    td(fmtInvPrice(line.lineTotal), 'center', fill)
+    td(fmtQtyInt(line.bonus), 'center', fill),
+    td(fmtQtyInt(line.quant), 'center', fill),
+    tdName(line.matName || '—', fill),
+    tdBarcode(invBarcode(line), fill),
+    td(String(rowIndex + 1), 'center', fill)
   ];
 }
 
 function invSumRow(label, value, fill) {
   return [
-    footLabel(label, 6, fill),
-    {},
-    {},
-    {},
-    {},
-    {},
-    td(value, 'center', fill)
+    td(value, 'center', fill),
+    { text: label, style: 'foot', alignment: 'right', fillColor: fill, colSpan: 6, margin: [2, 2, 2, 2] }
   ];
 }
 
