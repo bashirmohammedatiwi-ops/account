@@ -27,16 +27,17 @@ const C = {
 };
 
 const STYLES = {
-  title: { fontSize: 11, bold: true, color: C.text },
-  sub: { fontSize: 7.5, bold: true, color: C.primaryDark },
+  title: { fontSize: 12, bold: true, color: C.text },
+  sub: { fontSize: 8.5, bold: true, color: C.primaryDark },
   th: { fontSize: 7, bold: true, color: C.headerText },
   td: { fontSize: 7, bold: true, color: C.text },
   tdDate: { fontSize: 7, font: 'Roboto', bold: true, color: C.text },
   tdBarcode: { fontSize: 6.5, font: 'Roboto', bold: true, color: C.text },
   tdName: { fontSize: 7, bold: true, color: C.text },
   tdMoney: { fontSize: 7.5, font: 'Roboto', bold: true, color: C.text },
-  metaLbl: { fontSize: 6.5, bold: true, color: C.muted, alignment: 'center' },
-  metaVal: { fontSize: 8, font: 'Roboto', bold: true, color: C.text, alignment: 'center' }
+  boxLbl: { fontSize: 8, bold: true, color: '#ffffff' },
+  boxVal: { fontSize: 10, font: 'Roboto', bold: true, color: C.text },
+  boxSub: { fontSize: 7.5, bold: true, color: C.muted }
 };
 
 /** pdfmake-rtl: أول عمود = يمين. م دائماً أول عنصر */
@@ -84,11 +85,11 @@ function compactTableLayout() {
   };
 }
 
-function th(text) {
+function th(text, fill = C.headerBg) {
   return {
     text,
     style: 'th',
-    fillColor: C.headerBg,
+    fillColor: fill,
     alignment: 'center',
     margin: [1, 3, 1, 3]
   };
@@ -108,10 +109,12 @@ function tdDate(value, fill) {
   return td(fmtDate(value), 'center', fill, 'tdDate');
 }
 
-function tdMoney(value, fill) {
+function tdMoney(value, fill, color) {
+  const hasVal = value && value !== '—';
   return {
     text: String(value ?? '—'),
     style: 'tdMoney',
+    color: color || (hasVal ? C.text : C.muted),
     alignment: 'center',
     fillColor: fill || null,
     noWrap: true,
@@ -124,105 +127,155 @@ function rowFill(rowIndex, highlight) {
   return rowIndex % 2 === 0 ? '#ffffff' : C.zebra;
 }
 
-function pdfTopHeader({ docLabel, badgeText, sideLines, infoLabel, infoValue, stats }) {
-  const logo = getLogoDataUrl();
-  const logoCell = logo
-    ? { image: logo, width: 34, alignment: 'center', margin: [4, 6, 4, 6] }
-    : { text: '', width: 34 };
+function boxLayout() {
+  return {
+    hLineWidth: () => 0.45,
+    vLineWidth: () => 0.45,
+    hLineColor: () => C.border,
+    vLineColor: () => C.border
+  };
+}
 
-  const badgeCell = {
+function statBox(label, value, valueColor = C.text, labelBg = C.headerBg) {
+  return {
     table: {
       widths: ['*'],
-      body: [[{
-        text: badgeText,
-        fontSize: 7.5,
-        bold: true,
-        color: '#ffffff',
-        alignment: 'center',
-        fillColor: C.primary,
-        margin: [6, 5, 6, 5]
-      }]]
+      body: [
+        [{
+          text: label,
+          style: 'boxLbl',
+          alignment: 'center',
+          fillColor: labelBg,
+          margin: [4, 5, 4, 5]
+        }],
+        [{
+          text: value,
+          style: 'boxVal',
+          color: valueColor,
+          alignment: 'center',
+          fillColor: '#ffffff',
+          margin: [4, 7, 4, 9]
+        }]
+      ]
     },
-    layout: 'noBorders'
+    layout: boxLayout()
   };
+}
 
-  const mainHeader = {
+function infoBox(label, value, extra) {
+  const body = [
+    [{
+      text: label,
+      style: 'boxLbl',
+      alignment: 'right',
+      fillColor: C.primary,
+      margin: [8, 5, 8, 5]
+    }],
+    [{
+      stack: [
+        { text: value, fontSize: 10, bold: true, color: C.text, alignment: 'right' },
+        extra
+          ? { text: extra, style: 'boxSub', alignment: 'right', margin: [0, 4, 0, 0] }
+          : null
+      ].filter(Boolean),
+      fillColor: C.panel,
+      margin: [8, 8, 8, 8]
+    }]
+  ];
+  return {
+    table: { widths: ['*'], body },
+    layout: boxLayout()
+  };
+}
+
+function pdfTopHeader({ docLabel, badgeText, sideNote, infoLabel, infoValue, infoExtra, stats }) {
+  const logo = getLogoDataUrl();
+  const logoCell = logo
+    ? { image: logo, width: 38, alignment: 'center', margin: [6, 8, 6, 8] }
+    : { text: '', width: 38 };
+
+  const brandRow = {
     table: {
-      widths: [40, '*', 96],
+      widths: [44, '*', 102],
       body: [[
         logoCell,
         {
           stack: [
             { text: COMPANY_NAME, style: 'title', alignment: 'center' },
-            { text: docLabel, style: 'sub', alignment: 'center', margin: [0, 2, 0, 0] }
+            {
+              text: docLabel,
+              fontSize: 9,
+              bold: true,
+              color: '#ffffff',
+              alignment: 'center',
+              fillColor: C.primaryDark,
+              margin: [16, 4, 16, 4]
+            }
           ],
-          margin: [0, 7, 0, 7]
+          margin: [0, 8, 0, 8]
         },
         {
           stack: [
-            badgeCell,
-            ...(sideLines || []).map((line) => ({
-              ...line,
-              margin: [0, 3, 0, 0]
-            }))
-          ],
-          margin: [4, 6, 6, 6]
+            {
+              table: {
+                widths: ['*'],
+                body: [[{
+                  text: badgeText,
+                  fontSize: 9,
+                  bold: true,
+                  color: '#ffffff',
+                  alignment: 'center',
+                  fillColor: C.primary,
+                  margin: [8, 7, 8, 7]
+                }]]
+              },
+              layout: 'noBorders'
+            },
+            sideNote
+              ? { text: sideNote, fontSize: 8, bold: true, color: C.text, alignment: 'right', margin: [0, 5, 2, 0] }
+              : null
+          ].filter(Boolean),
+          margin: [4, 8, 8, 8]
         }
       ]]
     },
     layout: 'noBorders'
   };
 
-  const infoRow = {
+  const statCells = (stats || []).map(([label, value, accent, labelBg]) =>
+    statBox(label, value, accent || C.text, labelBg || C.headerBg)
+  );
+  const summaryRow = {
     table: {
-      widths: ['*', ...(stats || []).map(() => '*')],
+      widths: [118, ...statCells.map(() => '*')],
       body: [[
-        {
-          fillColor: C.panel,
-          stack: [
-            { text: infoLabel, fontSize: 6.5, bold: true, color: C.muted, alignment: 'right' },
-            { text: infoValue, fontSize: 9, bold: true, color: C.text, alignment: 'right', margin: [0, 2, 0, 0] }
-          ],
-          margin: [8, 6, 8, 6]
-        },
-        ...(stats || []).map(([label, value, accent]) => ({
-          fillColor: '#ffffff',
-          stack: [
-            { text: label, style: 'metaLbl', margin: [0, 0, 0, 2] },
-            { text: value, style: 'metaVal', color: accent || C.text }
-          ],
-          margin: [4, 5, 4, 5]
-        }))
+        infoBox(infoLabel, infoValue, infoExtra),
+        ...statCells
       ]]
     },
-    layout: {
-      hLineWidth: () => 0.4,
-      vLineWidth: () => 0.4,
-      hLineColor: () => C.border,
-      vLineColor: () => C.border
-    }
+    layout: boxLayout()
   };
 
   return {
     stack: [
       {
-        canvas: [{ type: 'rect', x: 0, y: 0, w: 575, h: 3, color: C.primary }],
+        canvas: [{ type: 'rect', x: 0, y: 0, w: 575, h: 4, color: C.primary }],
         margin: [0, 0, 0, 0]
       },
       {
-        table: { widths: ['*'], body: [[mainHeader]] },
+        table: { widths: ['*'], body: [[brandRow]] },
         layout: {
-          hLineWidth: () => 0.5,
-          vLineWidth: () => 0.5,
+          hLineWidth: () => 0.55,
+          vLineWidth: () => 0.55,
           hLineColor: () => C.border,
           vLineColor: () => C.border,
           fillColor: () => '#ffffff'
         },
-        margin: [0, 0, 0, 4]
+        margin: [0, 0, 0, 5]
       },
-      infoRow
+      summaryRow
     ],
-    margin: [0, 0, 0, 5]
+    margin: [0, 0, 0, 6]
   };
 }
 
@@ -231,8 +284,8 @@ function stmtHeaderRow() {
     th('م'),
     th('التاريخ'),
     th('البيان'),
-    th('مدين'),
-    th('دائن'),
+    th('مدين', C.debit),
+    th('دائن', C.credit),
     th('رصيد')
   ];
 }
@@ -244,8 +297,8 @@ function stmtLineRow(row, rowIndex) {
     td(idx, 'center', fill),
     tdDate(row.date, fill),
     td(row.description || '—', 'right', fill),
-    tdMoney(row.debit ? fmtNum(row.debit) : '—', fill),
-    tdMoney(row.credit ? fmtNum(row.credit) : '—', fill),
+    tdMoney(row.debit ? fmtNum(row.debit) : '—', fill, row.debit ? C.debit : null),
+    tdMoney(row.credit ? fmtNum(row.credit) : '—', fill, row.credit ? C.credit : null),
     tdMoney(fmtNum(row.balance), fill)
   ];
 }
@@ -265,24 +318,20 @@ function stmtTotalsTableRow(stmt) {
     },
     {},
     {},
-    tdMoney(fmtNum(stmt.totalDebit), C.panel),
-    tdMoney(fmtNum(stmt.totalCredit), C.panel),
+    tdMoney(fmtNum(stmt.totalDebit), C.panel, C.debit),
+    tdMoney(fmtNum(stmt.totalCredit), C.panel, C.credit),
     tdMoney(fmtNum(Math.abs(bal)), C.panel)
   ];
 }
 
 function statementPdfHeader(acc, periodNote, stats) {
-  const metaLine = [periodNote, acc.address || ''].filter(Boolean).join(' · ');
-  const sideLines = metaLine
-    ? [{ text: metaLine, fontSize: 6.5, bold: true, color: C.muted, alignment: 'right' }]
-    : [];
-
   return pdfTopHeader({
     docLabel: 'كشف حساب',
     badgeText: acc.num ? `حساب ${acc.num}` : 'كشف حساب',
-    sideLines,
+    sideNote: periodNote || null,
     infoLabel: 'اسم الحساب',
     infoValue: acc.name1 || '—',
+    infoExtra: acc.address || null,
     stats
   });
 }
@@ -365,16 +414,15 @@ function invoicePdfHeader(inv, lines, qtySum) {
   return pdfTopHeader({
     docLabel: title,
     badgeText: `رقم ${inv.num || '—'}`,
-    sideLines: [
-      { text: fmtDate(inv.date), fontSize: 7, font: 'Roboto', bold: true, color: C.text, alignment: 'right' }
-    ],
+    sideNote: fmtDate(inv.date),
     infoLabel: 'العميل',
     infoValue: inv.accountName || '—',
+    infoExtra: inv.accountNum ? `حساب ${inv.accountNum}` : null,
     stats: [
-      ['بنود', String(lines.length), C.text],
-      ['كمية', fmtNum(Math.round(qtySum), 0), C.text],
-      ['إجمالي', fmtInvPrice(inv.total), C.primaryDark],
-      ['صافي', fmtInvPrice(inv.netPay), C.net]
+      ['البنود', String(lines.length), C.text],
+      ['الكمية', fmtNum(Math.round(qtySum), 0), C.text],
+      ['الإجمالي', fmtInvPrice(inv.total), C.primaryDark],
+      ['الصافي', fmtInvPrice(inv.netPay), C.net]
     ]
   });
 }
@@ -456,10 +504,10 @@ async function buildStatementPdf(stmt, meta = {}) {
 
   const doc = baseDoc([
     statementPdfHeader(acc, periodNote, [
-      ['مدين', fmtNum(stmt.totalDebit), C.debit],
-      ['دائن', fmtNum(stmt.totalCredit), C.credit],
-      ['ديون', debtAmount, C.debit],
-      ['رصيد', fmtNum(Math.abs(bal)), C.primaryDark]
+      ['مدين', fmtNum(stmt.totalDebit), C.debit, C.debit],
+      ['دائن', fmtNum(stmt.totalCredit), C.credit, C.credit],
+      ['ديون', debtAmount, C.debit, C.debit],
+      ['رصيد', fmtNum(Math.abs(bal)), C.primaryDark, C.headerBg]
     ]),
     {
       table: {
