@@ -105,16 +105,42 @@ function stmtHeaderRow() {
   ];
 }
 
+/** فاتورة PDF: ترتيب الأعمدة معكوس (المبلغ يميناً ← م يساراً) */
+function invRow(cells) {
+  return [...cells].reverse();
+}
+
+const INV_COLS_RTL = [
+  th('م'),
+  th('رقم الصنف'),
+  th('اسم المادة', COLORS.headerAlt),
+  th('الكمية', COLORS.qty),
+  th('هدية', COLORS.qty),
+  th('سعر الوحدة', COLORS.price),
+  th('المبلغ', COLORS.price)
+];
+
 function invHeaderRow() {
-  return [
-    th('م'),
-    th('رقم الصنف'),
-    th('اسم المادة', COLORS.headerAlt),
-    th('الكمية', COLORS.qty),
-    th('هدية', COLORS.qty),
-    th('سعر الوحدة', COLORS.price),
-    th('المبلغ', COLORS.price)
-  ];
+  return invRow(INV_COLS_RTL);
+}
+
+function invDataRow(values, rowIndex, alignments = []) {
+  const fill = rowIndex % 2 === 0 ? COLORS.zebra : '#ffffff';
+  const cells = values.map((value, i) => td(value, alignments[i] || 'center', fill));
+  return invRow(cells);
+}
+
+function fmtQtyInt(v) {
+  const n = Number(v);
+  if (Number.isNaN(n) || n === 0) return '—';
+  return fmtNum(Math.round(n), 0);
+}
+
+/** أسعار الفاتورة PDF بدون كسور عشرية */
+function fmtInvPrice(v) {
+  const n = Number(v);
+  if (Number.isNaN(n)) return '—';
+  return fmtNum(Math.round(n), 0);
 }
 
 function dataRow(values, rowIndex, alignments = []) {
@@ -295,21 +321,23 @@ async function buildInvoicePdf(data) {
   const lines = data.lines || [];
   const qtySum = lines.reduce((s, line) => s + Number(line.quant || 0), 0);
 
+  const invAlign = ['center', 'center', 'right', 'center', 'center', 'center', 'center'];
+
   const tableBody = [
     invHeaderRow(),
-    ...lines.map((line, i) => dataRow([
+    ...lines.map((line, i) => invDataRow([
       i + 1,
       line.matNum || line.mat || '—',
       line.matName || '—',
-      fmtNum(line.quant, 2),
-      fmtNum(line.bonus, 2),
-      fmtMoney(line.price),
-      fmtMoney(line.lineTotal)
-    ], i, ['center', 'center', 'right', 'center', 'center', 'center', 'center']))
+      fmtQtyInt(line.quant),
+      fmtQtyInt(line.bonus),
+      fmtInvPrice(line.price),
+      fmtInvPrice(line.lineTotal)
+    ], i, invAlign))
   ];
 
   if (lines.length) {
-    const sumRow = (label, value, fill) => [
+    const sumRow = (label, value, fill) => invRow([
       footLabel(label, 6, fill),
       {},
       {},
@@ -317,11 +345,11 @@ async function buildInvoicePdf(data) {
       {},
       {},
       td(value, 'center', fill)
-    ];
+    ]);
 
-    tableBody.push(sumRow('إجمالي الفاتورة', fmtMoney(inv.total), '#f8fafc'));
-    tableBody.push(sumRow('الحسومات', fmtMoney(inv.discount), '#fff7ed'));
-    tableBody.push(sumRow('الصافي للدفع', fmtMoney(inv.netPay), '#ecfdf5'));
+    tableBody.push(sumRow('إجمالي الفاتورة', fmtInvPrice(inv.total), '#f8fafc'));
+    tableBody.push(sumRow('الحسومات', fmtInvPrice(inv.discount), '#fff7ed'));
+    tableBody.push(sumRow('الصافي للدفع', fmtInvPrice(inv.netPay), '#ecfdf5'));
   }
 
   const doc = baseDoc([
@@ -332,14 +360,14 @@ async function buildInvoicePdf(data) {
     docBanner(inv.kindLabel || 'فاتورة مبيعات', COLORS.headerAlt),
     metaStrip([
       ['عدد البنود', String(lines.length)],
-      ['إجمالي الكمية', fmtNum(qtySum, 2)],
-      ['إجمالي الفاتورة', fmtMoney(inv.total)],
-      ['الصافي للدفع', fmtMoney(inv.netPay)]
+      ['إجمالي الكمية', fmtNum(Math.round(qtySum), 0)],
+      ['إجمالي الفاتورة', fmtInvPrice(inv.total)],
+      ['الصافي للدفع', fmtInvPrice(inv.netPay)]
     ]),
     {
       table: {
         headerRows: 1,
-        widths: [12, 28, '*', 30, 34, 36, 42],
+        widths: invRow([12, 28, '*', 30, 34, 36, 42]),
         body: tableBody,
         dontBreakRows: false
       },
