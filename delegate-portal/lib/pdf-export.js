@@ -8,14 +8,28 @@ pdfmake.addFonts(require('@digicole/pdfmake-rtl/fonts/Roboto'));
 const COMPANY_NAME = 'شركة ديما الحياة';
 const LOGO_PATH = path.join(__dirname, '..', 'public', 'm', 'assets', 'logo.png');
 
+const COLORS = {
+  header: '#1e3a5f',
+  headerAlt: '#0f766e',
+  debit: '#991b1b',
+  credit: '#047857',
+  balance: '#1d4ed8',
+  qty: '#0f766e',
+  price: '#1d4ed8',
+  zebra: '#f8fafc',
+  border: '#cbd5e1',
+  accent: '#0f766e'
+};
+
 const STYLES = {
-  title: { fontSize: 11, bold: true, color: '#0f172a' },
+  title: { fontSize: 12, bold: true, color: '#0f172a' },
   sub: { fontSize: 8, color: '#64748b' },
-  th: { fontSize: 7.5, bold: true, color: '#ffffff' },
-  td: { fontSize: 7.5, color: '#0f172a' },
-  meta: { fontSize: 7.5, color: '#475569' },
-  metaVal: { fontSize: 8, bold: true, color: '#0f172a' },
-  foot: { fontSize: 7.5, bold: true }
+  th: { fontSize: 7, bold: true, color: '#ffffff' },
+  td: { fontSize: 6.5, color: '#0f172a' },
+  meta: { fontSize: 7, color: '#64748b' },
+  metaVal: { fontSize: 7.5, bold: true, color: '#0f172a' },
+  foot: { fontSize: 7, bold: true, color: '#0f172a' },
+  banner: { fontSize: 9, bold: true, color: '#ffffff' }
 };
 
 function getLogoDataUrl() {
@@ -46,26 +60,31 @@ function fmtDate(v) {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
+/** ترتيب خلايا الصف من اليسار إلى اليمين داخل جدول RTL */
+function ltrRow(cells) {
+  return [...cells].reverse();
+}
+
 function compactGrid() {
   return {
-    hLineWidth: () => 0.4,
-    vLineWidth: () => 0.4,
-    hLineColor: () => '#cbd5e1',
-    vLineColor: () => '#cbd5e1',
-    paddingLeft: () => 3,
-    paddingRight: () => 3,
-    paddingTop: () => 1.5,
-    paddingBottom: () => 1.5
+    hLineWidth: (i, node) => (i === 0 || i === 1 || i === node.table.body.length ? 0.55 : 0.2),
+    vLineWidth: () => 0.2,
+    hLineColor: (i) => (i <= 1 ? COLORS.header : COLORS.border),
+    vLineColor: () => COLORS.border,
+    paddingLeft: () => 2,
+    paddingRight: () => 2,
+    paddingTop: () => 0.8,
+    paddingBottom: () => 0.8
   };
 }
 
-function th(text, color = '#334155') {
+function th(text, color = COLORS.header) {
   return {
     text,
     style: 'th',
     fillColor: color,
     alignment: 'center',
-    margin: [1, 3, 1, 3]
+    margin: [1, 2, 1, 2]
   };
 }
 
@@ -75,23 +94,56 @@ function td(value, align = 'center', fill) {
     style: 'td',
     alignment: align,
     fillColor: fill || null,
-    margin: [1, 2, 1, 2]
+    margin: [1, 1, 1, 1]
   };
 }
 
-function rowCells(values, rowIndex, alignments = []) {
-  return values.map((value, i) => td(
-    value,
-    alignments[i] || 'center',
-    rowIndex % 2 === 0 ? '#fafafa' : '#ffffff'
-  ));
+function stmtHeaderRow() {
+  return ltrRow([
+    th('م'),
+    th('التاريخ'),
+    th('البيان', COLORS.headerAlt),
+    th('مدين', COLORS.debit),
+    th('دائن', COLORS.credit),
+    th('رصيد الحساب', COLORS.balance)
+  ]);
+}
+
+function invHeaderRow() {
+  return ltrRow([
+    th('م'),
+    th('رقم الصنف'),
+    th('اسم المادة', COLORS.headerAlt),
+    th('الكمية', COLORS.qty),
+    th('هدية', COLORS.qty),
+    th('سعر الوحدة', COLORS.price),
+    th('المبلغ', COLORS.price)
+  ]);
+}
+
+function dataRow(values, rowIndex, alignments = []) {
+  const fill = rowIndex % 2 === 0 ? COLORS.zebra : '#ffffff';
+  return ltrRow(values.map((value, i) => td(value, alignments[i] || 'center', fill)));
+}
+
+function footLabel(text, colSpan, fill = '#e2e8f0') {
+  return { text, style: 'foot', alignment: 'right', fillColor: fill, colSpan, margin: [2, 2, 2, 2] };
+}
+
+function docBanner(title, accent = COLORS.accent) {
+  return {
+    table: {
+      widths: ['*'],
+      body: [[{ text: title, style: 'banner', fillColor: accent, alignment: 'center', margin: [0, 3, 0, 3] }]]
+    },
+    layout: 'noBorders',
+    margin: [0, 0, 0, 3]
+  };
 }
 
 function compactHeader(title, subtitle, rightStack) {
   const logo = getLogoDataUrl();
-  const left = logo
-    ? { image: logo, width: 36, margin: [0, 0, 6, 0] }
-    : { text: '' };
+  const left = logo ? { image: logo, width: 32, margin: [0, 0, 4, 0] } : { text: '' };
   const center = {
     stack: [
       { text: COMPANY_NAME, style: 'title' },
@@ -100,22 +152,19 @@ function compactHeader(title, subtitle, rightStack) {
     ].filter(Boolean),
     alignment: 'right'
   };
-  const right = {
-    stack: rightStack,
-    alignment: 'left'
-  };
+  const right = { stack: rightStack, alignment: 'left' };
 
   if (logo) {
     return {
-      table: { widths: [42, '*', 110], body: [[left, center, right]] },
+      table: { widths: [36, '*', 108], body: [[left, center, right]] },
       layout: 'noBorders',
-      margin: [0, 0, 0, 4]
+      margin: [0, 0, 0, 3]
     };
   }
   return {
-    table: { widths: ['*', 110], body: [[center, right]] },
+    table: { widths: ['*', 108], body: [[center, right]] },
     layout: 'noBorders',
-    margin: [0, 0, 0, 4]
+    margin: [0, 0, 0, 3]
   };
 }
 
@@ -127,41 +176,38 @@ function metaStrip(cells) {
     ]
   }));
   return {
-    table: {
-      widths: pairs.map(() => '*'),
-      body: [pairs]
-    },
+    table: { widths: pairs.map(() => '*'), body: [pairs] },
     layout: {
-      hLineWidth: () => 0.4,
-      vLineWidth: () => 0.4,
-      hLineColor: () => '#cbd5e1',
-      vLineColor: () => '#cbd5e1',
-      fillColor: () => '#f8fafc',
-      paddingLeft: () => 4,
-      paddingRight: () => 4,
-      paddingTop: () => 3,
-      paddingBottom: () => 3
+      hLineWidth: () => 0.35,
+      vLineWidth: () => 0.35,
+      hLineColor: () => COLORS.border,
+      vLineColor: () => COLORS.border,
+      fillColor: () => '#f1f5f9',
+      paddingLeft: () => 3,
+      paddingRight: () => 3,
+      paddingTop: () => 2,
+      paddingBottom: () => 2
     },
-    margin: [0, 0, 0, 4]
+    margin: [0, 0, 0, 3]
   };
 }
 
 function pdfFooter() {
   return (currentPage, pageCount) => ({
     columns: [
-      { text: fmtDate(new Date()), alignment: 'right', fontSize: 7, color: '#94a3b8' },
-      { text: `${currentPage}/${pageCount}`, alignment: 'left', fontSize: 7, color: '#94a3b8' }
+      { text: fmtDate(new Date()), alignment: 'right', fontSize: 6.5, color: '#94a3b8' },
+      { text: `${currentPage} / ${pageCount}`, alignment: 'left', fontSize: 6.5, color: '#94a3b8' }
     ],
-    margin: [18, 0, 18, 0]
+    margin: [14, 0, 14, 0]
   });
 }
 
 function baseDoc(content) {
   return {
     rtl: true,
-    defaultStyle: { font: 'Cairo', fontSize: 8 },
+    defaultStyle: { font: 'Cairo', fontSize: 7 },
     pageSize: 'A4',
-    pageMargins: [18, 16, 18, 24],
+    pageMargins: [14, 12, 14, 22],
     styles: STYLES,
     footer: pdfFooter(),
     content
@@ -192,8 +238,8 @@ async function buildStatementPdf(stmt, meta = {}) {
     : '';
 
   const tableBody = [
-    [th('#'), th('التاريخ'), th('البيان', '#334155'), th('مدين', '#991b1b'), th('دائن', '#047857'), th('الرصيد', '#1d4ed8')],
-    ...lines.map((row, i) => rowCells([
+    stmtHeaderRow(),
+    ...lines.map((row, i) => dataRow([
       row.isOpening ? '∗' : i + 1,
       fmtDate(row.date),
       row.description || '—',
@@ -204,13 +250,14 @@ async function buildStatementPdf(stmt, meta = {}) {
   ];
 
   if (lines.length) {
-    tableBody.push([
-      { text: 'الإجمالي', colSpan: 3, style: 'foot', alignment: 'right', fillColor: '#f1f5f9', margin: [2, 3, 2, 3] },
-      {}, {},
+    tableBody.push(ltrRow([
+      footLabel('إجمالي الحركات', 3),
+      {},
+      {},
       td(fmtNum(stmt.totalDebit), 'center', '#fef2f2'),
       td(fmtNum(stmt.totalCredit), 'center', '#ecfdf5'),
       td(debtAmount, 'center', '#eff6ff')
-    ]);
+    ]));
   }
 
   const doc = baseDoc([
@@ -218,28 +265,29 @@ async function buildStatementPdf(stmt, meta = {}) {
       { text: `حساب ${acc.num || '—'}`, style: 'metaVal', alignment: 'left' },
       { text: acc.name1 || '—', style: 'meta', alignment: 'left' }
     ]),
+    docBanner('كشف حساب — تفاصيل الحركات', COLORS.header),
     metaStrip([
       ['الشجرة', meta.treeLabel || '—'],
-      ['مدين', fmtNum(stmt.totalDebit)],
-      ['دائن', fmtNum(stmt.totalCredit)],
+      ['إجمالي مدين', fmtNum(stmt.totalDebit)],
+      ['إجمالي دائن', fmtNum(stmt.totalCredit)],
       ['الديون', debtAmount]
     ]),
     {
       table: {
         headerRows: 1,
-        widths: [16, 42, '*', 42, 42, 46],
+        widths: ltrRow([48, 44, 44, '*', 38, 14]),
         body: tableBody,
-        dontBreakRows: true
+        dontBreakRows: false
       },
       layout: compactGrid()
     },
     {
-      text: `${summary.label || 'الرصيد'}: ${fmtNum(summary.amount)}`,
+      text: `${summary.label || 'الرصيد النهائي'}: ${fmtNum(summary.amount)}`,
       alignment: 'left',
       fontSize: 8,
       bold: true,
-      color: '#0f766e',
-      margin: [0, 4, 0, 0]
+      color: COLORS.accent,
+      margin: [0, 3, 0, 0]
     }
   ]);
 
@@ -252,8 +300,8 @@ async function buildInvoicePdf(data) {
   const qtySum = lines.reduce((s, line) => s + Number(line.quant || 0), 0);
 
   const tableBody = [
-    [th('#'), th('مادة'), th('الاسم', '#334155'), th('كم', '#0f766e'), th('هد', '#0f766e'), th('سعر', '#1d4ed8'), th('إجمالي', '#1d4ed8')],
-    ...lines.map((line, i) => rowCells([
+    invHeaderRow(),
+    ...lines.map((line, i) => dataRow([
       i + 1,
       line.matNum || line.mat || '—',
       line.matName || '—',
@@ -265,21 +313,19 @@ async function buildInvoicePdf(data) {
   ];
 
   if (lines.length) {
-    tableBody.push([
-      { text: 'إجمالي الفاتورة', colSpan: 6, style: 'foot', alignment: 'right', fillColor: '#f8fafc', margin: [2, 3, 2, 3] },
-      {}, {}, {}, {}, {},
-      td(fmtMoney(inv.total), 'center', '#f8fafc')
+    const sumRow = (label, value, fill) => ltrRow([
+      footLabel(label, 6, fill),
+      {},
+      {},
+      {},
+      {},
+      {},
+      td(value, 'center', fill)
     ]);
-    tableBody.push([
-      { text: 'الحسومات', colSpan: 6, style: 'foot', alignment: 'right', fillColor: '#fff7ed', margin: [2, 3, 2, 3] },
-      {}, {}, {}, {}, {},
-      td(fmtMoney(inv.discount), 'center', '#fff7ed')
-    ]);
-    tableBody.push([
-      { text: 'الصافي للدفع', colSpan: 6, style: 'foot', alignment: 'right', fillColor: '#ecfdf5', margin: [2, 3, 2, 3] },
-      {}, {}, {}, {}, {},
-      td(fmtMoney(inv.netPay), 'center', '#ecfdf5')
-    ]);
+
+    tableBody.push(sumRow('إجمالي الفاتورة', fmtMoney(inv.total), '#f8fafc'));
+    tableBody.push(sumRow('الحسومات', fmtMoney(inv.discount), '#fff7ed'));
+    tableBody.push(sumRow('الصافي للدفع', fmtMoney(inv.netPay), '#ecfdf5'));
   }
 
   const doc = baseDoc([
@@ -287,16 +333,19 @@ async function buildInvoicePdf(data) {
       { text: inv.accountName || '—', style: 'metaVal', alignment: 'left' },
       { text: inv.accountNum ? `حساب ${inv.accountNum}` : '—', style: 'meta', alignment: 'left' }
     ]),
+    docBanner(inv.kindLabel || 'فاتورة مبيعات', COLORS.headerAlt),
     metaStrip([
-      ['البنود', String(lines.length)],
-      ['الكمية', fmtNum(qtySum, 2)]
+      ['عدد البنود', String(lines.length)],
+      ['إجمالي الكمية', fmtNum(qtySum, 2)],
+      ['إجمالي الفاتورة', fmtMoney(inv.total)],
+      ['الصافي للدفع', fmtMoney(inv.netPay)]
     ]),
     {
       table: {
         headerRows: 1,
-        widths: [14, 34, '*', 24, 24, 38, 42],
+        widths: ltrRow([42, 36, 34, 30, '*', 28, 12]),
         body: tableBody,
-        dontBreakRows: true
+        dontBreakRows: false
       },
       layout: compactGrid()
     }

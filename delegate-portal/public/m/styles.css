@@ -728,10 +728,12 @@ body {
 /* ── Document panels & data tables ── */
 .doc-panel {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  padding: 10px;
+  padding: 10px 10px 8px;
   margin-bottom: 8px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+  border-top: 3px solid var(--accent-dark);
 }
 
 .doc-head-row {
@@ -816,22 +818,25 @@ body {
 .table-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--surface);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
 }
 
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.7rem;
-  min-width: 560px;
+  font-size: 0.68rem;
+  min-width: 520px;
+  direction: ltr;
+  table-layout: fixed;
 }
 
 .data-table th,
 .data-table td {
-  padding: 5px 4px;
-  border-bottom: 1px solid var(--border);
+  padding: 4px 3px;
+  border: 1px solid var(--border);
   vertical-align: middle;
 }
 
@@ -839,28 +844,39 @@ body {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: #334155;
+  background: #1e3a5f;
   color: #fff;
-  font-size: 0.62rem;
-  font-weight: 700;
+  font-size: 0.6rem;
+  font-weight: 800;
   text-align: center;
   white-space: nowrap;
-  padding: 6px 4px;
+  padding: 5px 3px;
+  letter-spacing: 0.01em;
 }
+
+.data-table.stmt-table thead th.col-debit { background: #991b1b; }
+.data-table.stmt-table thead th.col-credit { background: #047857; }
+.data-table.stmt-table thead th.col-balance { background: #1d4ed8; }
+
+.data-table.inv-table thead th:nth-child(4),
+.data-table.inv-table thead th:nth-child(5) { background: #0f766e; }
+
+.data-table.inv-table thead th:nth-child(6),
+.data-table.inv-table thead th:nth-child(7) { background: #1d4ed8; }
 
 .data-table tbody tr:nth-child(even) { background: #fafafa; }
 .data-table tbody tr.row-opening { background: #eff6ff; }
 .data-table tbody tr.row-recon { background: #ecfdf5; }
 
 .data-table .col-n {
-  width: 26px;
+  width: 24px;
   text-align: center;
   color: var(--muted);
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .data-table .col-date {
-  width: 66px;
+  width: 62px;
   text-align: center;
   white-space: nowrap;
   font-weight: 600;
@@ -869,26 +885,32 @@ body {
 .data-table .col-desc,
 .data-table .col-name {
   text-align: right;
-  min-width: 120px;
-  line-height: 1.35;
+  direction: rtl;
+  min-width: 100px;
+  line-height: 1.3;
+  word-break: break-word;
 }
 
 .data-table .col-mat {
-  width: 52px;
+  width: 48px;
   text-align: center;
   font-weight: 700;
+  font-size: 0.64rem;
 }
 
 .data-table .col-amt {
-  width: 52px;
+  width: 48px;
   text-align: center;
 }
 
 .data-table .col-act {
-  width: 78px;
+  width: 72px;
   text-align: center;
   white-space: nowrap;
 }
+
+.data-table.stmt-table .col-desc { width: auto; }
+.data-table.inv-table .col-name { width: auto; }
 
 .data-table td.num {
   font-weight: 800;
@@ -1069,12 +1091,17 @@ body {
 
 @media (max-width: 420px) {
   .doc-meta-table {
-    font-size: 0.6rem;
+    font-size: 0.58rem;
   }
 
   .data-table {
-    min-width: 520px;
-    font-size: 0.66rem;
+    min-width: 480px;
+    font-size: 0.64rem;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 3px 2px;
   }
 
   .tbl-actions {
@@ -1107,7 +1134,16 @@ body {
 
 .invoice-lines-section { margin-top: 0; }
 
-.inv-table { min-width: 480px; }
+.inv-table { min-width: 460px; }
+
+.data-table tbody tr {
+  height: 1px;
+}
+
+.data-table tbody td {
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
 
 .invoice-meta,
 .invoice-totals { display: none; }

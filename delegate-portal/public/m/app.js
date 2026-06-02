@@ -585,10 +585,10 @@ function renderStatement(data) {
       <table class="doc-meta-table">
         <tbody>
           <tr>
-            <th>مدين</th><td class="debit" dir="ltr">${fmtNumAlways(totalDebit)}</td>
-            <th>دائن</th><td class="credit" dir="ltr">${fmtNumAlways(totalCredit)}</td>
-            <th>حركات</th><td dir="ltr">${lines.length}</td>
-            <th>الرصيد</th><td class="${balanceClassFor(currentBal)}" dir="ltr">${fmtBalanceDisplay(currentBal)}</td>
+            <th>إجمالي مدين</th><td class="debit" dir="ltr">${fmtNumAlways(totalDebit)}</td>
+            <th>إجمالي دائن</th><td class="credit" dir="ltr">${fmtNumAlways(totalCredit)}</td>
+            <th>عدد الحركات</th><td dir="ltr">${lines.length}</td>
+            <th>رصيد الحساب</th><td class="${balanceClassFor(currentBal)}" dir="ltr">${fmtBalanceDisplay(currentBal)}</td>
           </tr>
         </tbody>
       </table>
@@ -632,16 +632,16 @@ function renderStatement(data) {
     const stmtRoot = document.getElementById('stmtLines');
     stmtRoot.innerHTML = `
       <div class="table-scroll">
-        <table class="data-table stmt-table">
+        <table class="data-table stmt-table" dir="ltr">
           <thead>
             <tr>
-              <th class="col-n">#</th>
+              <th class="col-n">م</th>
               <th class="col-date">التاريخ</th>
               <th class="col-desc">البيان</th>
-              <th class="col-amt">مدين</th>
-              <th class="col-amt">دائن</th>
-              <th class="col-amt">الرصيد</th>
-              <th class="col-act">إجراء</th>
+              <th class="col-amt col-debit">مدين</th>
+              <th class="col-amt col-credit">دائن</th>
+              <th class="col-amt col-balance">رصيد الحساب</th>
+              <th class="col-act">إجراءات</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
@@ -716,8 +716,10 @@ async function openInvoice(ref, by = 'auto', acc = '') {
         <table class="doc-meta-table">
           <tbody>
             <tr>
-              <th>بنود</th><td dir="ltr">${lines.length}</td>
-              <th>كمية</th><td dir="ltr">${fmtQty(qtySum)}</td>
+              <th>عدد البنود</th><td dir="ltr">${lines.length}</td>
+              <th>إجمالي الكمية</th><td dir="ltr">${fmtQty(qtySum)}</td>
+              <th>إجمالي الفاتورة</th><td dir="ltr">${fmtMoney(inv.total)}</td>
+              <th>الصافي للدفع</th><td class="net" dir="ltr">${fmtMoney(inv.netPay)}</td>
             </tr>
           </tbody>
         </table>
@@ -727,16 +729,16 @@ async function openInvoice(ref, by = 'auto', acc = '') {
     document.getElementById('invoiceLineCount').textContent = `${lines.length} بند`;
     document.getElementById('invoiceLines').innerHTML = lines.length
       ? `<div class="table-scroll">
-          <table class="data-table inv-table">
+          <table class="data-table inv-table" dir="ltr">
             <thead>
               <tr>
-                <th class="col-n">#</th>
-                <th class="col-mat">مادة</th>
-                <th class="col-name">الاسم</th>
-                <th class="col-amt">كم</th>
-                <th class="col-amt">هد</th>
-                <th class="col-amt">سعر</th>
-                <th class="col-amt">إجمالي</th>
+                <th class="col-n">م</th>
+                <th class="col-mat">رقم الصنف</th>
+                <th class="col-name">اسم المادة</th>
+                <th class="col-amt">الكمية</th>
+                <th class="col-amt">هدية</th>
+                <th class="col-amt">سعر الوحدة</th>
+                <th class="col-amt">المبلغ</th>
               </tr>
             </thead>
             <tbody>
