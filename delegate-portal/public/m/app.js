@@ -632,7 +632,7 @@ function renderStatement(data) {
     const stmtRoot = document.getElementById('stmtLines');
     stmtRoot.innerHTML = `
       <div class="table-scroll">
-        <table class="data-table stmt-table" dir="ltr">
+        <table class="data-table stmt-table" dir="rtl">
           <thead>
             <tr>
               <th class="col-n">م</th>
@@ -729,7 +729,7 @@ async function openInvoice(ref, by = 'auto', acc = '') {
     document.getElementById('invoiceLineCount').textContent = `${lines.length} بند`;
     document.getElementById('invoiceLines').innerHTML = lines.length
       ? `<div class="table-scroll">
-          <table class="data-table inv-table" dir="ltr">
+          <table class="data-table inv-table" dir="rtl">
             <thead>
               <tr>
                 <th class="col-n">م</th>

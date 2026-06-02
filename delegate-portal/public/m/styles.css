@@ -789,6 +789,10 @@ body {
   table-layout: fixed;
 }
 
+.doc-meta-table {
+  direction: rtl;
+}
+
 .doc-meta-table th,
 .doc-meta-table td {
   padding: 5px 4px;
@@ -829,7 +833,7 @@ body {
   border-collapse: collapse;
   font-size: 0.68rem;
   min-width: 520px;
-  direction: ltr;
+  direction: rtl;
   table-layout: fixed;
 }
 

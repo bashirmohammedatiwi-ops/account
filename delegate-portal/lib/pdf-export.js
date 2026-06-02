@@ -60,11 +60,6 @@ function fmtDate(v) {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
-/** ترتيب خلايا الصف من اليسار إلى اليمين داخل جدول RTL */
-function ltrRow(cells) {
-  return [...cells].reverse();
-}
-
 function compactGrid() {
   return {
     hLineWidth: (i, node) => (i === 0 || i === 1 || i === node.table.body.length ? 0.55 : 0.2),
@@ -98,19 +93,20 @@ function td(value, align = 'center', fill) {
   };
 }
 
+/** صف جدول من اليمين إلى اليسار: أول عمود = يمين (م) */
 function stmtHeaderRow() {
-  return ltrRow([
+  return [
     th('م'),
     th('التاريخ'),
     th('البيان', COLORS.headerAlt),
     th('مدين', COLORS.debit),
     th('دائن', COLORS.credit),
     th('رصيد الحساب', COLORS.balance)
-  ]);
+  ];
 }
 
 function invHeaderRow() {
-  return ltrRow([
+  return [
     th('م'),
     th('رقم الصنف'),
     th('اسم المادة', COLORS.headerAlt),
@@ -118,12 +114,12 @@ function invHeaderRow() {
     th('هدية', COLORS.qty),
     th('سعر الوحدة', COLORS.price),
     th('المبلغ', COLORS.price)
-  ]);
+  ];
 }
 
 function dataRow(values, rowIndex, alignments = []) {
   const fill = rowIndex % 2 === 0 ? COLORS.zebra : '#ffffff';
-  return ltrRow(values.map((value, i) => td(value, alignments[i] || 'center', fill)));
+  return values.map((value, i) => td(value, alignments[i] || 'center', fill));
 }
 
 function footLabel(text, colSpan, fill = '#e2e8f0') {
@@ -250,14 +246,14 @@ async function buildStatementPdf(stmt, meta = {}) {
   ];
 
   if (lines.length) {
-    tableBody.push(ltrRow([
+    tableBody.push([
       footLabel('إجمالي الحركات', 3),
       {},
       {},
       td(fmtNum(stmt.totalDebit), 'center', '#fef2f2'),
       td(fmtNum(stmt.totalCredit), 'center', '#ecfdf5'),
       td(debtAmount, 'center', '#eff6ff')
-    ]));
+    ]);
   }
 
   const doc = baseDoc([
@@ -275,7 +271,7 @@ async function buildStatementPdf(stmt, meta = {}) {
     {
       table: {
         headerRows: 1,
-        widths: ltrRow([48, 44, 44, '*', 38, 14]),
+        widths: [14, 42, '*', 38, 38, 48],
         body: tableBody,
         dontBreakRows: false
       },
@@ -283,7 +279,7 @@ async function buildStatementPdf(stmt, meta = {}) {
     },
     {
       text: `${summary.label || 'الرصيد النهائي'}: ${fmtNum(summary.amount)}`,
-      alignment: 'left',
+      alignment: 'right',
       fontSize: 8,
       bold: true,
       color: COLORS.accent,
@@ -313,7 +309,7 @@ async function buildInvoicePdf(data) {
   ];
 
   if (lines.length) {
-    const sumRow = (label, value, fill) => ltrRow([
+    const sumRow = (label, value, fill) => [
       footLabel(label, 6, fill),
       {},
       {},
@@ -321,7 +317,7 @@ async function buildInvoicePdf(data) {
       {},
       {},
       td(value, 'center', fill)
-    ]);
+    ];
 
     tableBody.push(sumRow('إجمالي الفاتورة', fmtMoney(inv.total), '#f8fafc'));
     tableBody.push(sumRow('الحسومات', fmtMoney(inv.discount), '#fff7ed'));
@@ -343,7 +339,7 @@ async function buildInvoicePdf(data) {
     {
       table: {
         headerRows: 1,
-        widths: ltrRow([42, 36, 34, 30, '*', 28, 12]),
+        widths: [12, 28, '*', 30, 34, 36, 42],
         body: tableBody,
         dontBreakRows: false
       },
