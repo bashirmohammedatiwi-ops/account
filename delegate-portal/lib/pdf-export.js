@@ -39,8 +39,8 @@ const STYLES = {
   invMetaVal: { fontSize: 8, font: 'Roboto', bold: true, color: '#0f172a', alignment: 'center' }
 };
 
-/** يسار→يمين في pdfmake: المبلغ | … | م — مطابق للويب */
-const INV_WIDTHS = [52, 40, 24, 28, '*', 72, 14];
+/** pdfmake RTL: أول عمود يمين — م | الباركود | … | المبلغ */
+const INV_WIDTHS = [14, 72, '*', 28, 24, 40, 52];
 
 function getLogoDataUrl() {
   if (!fs.existsSync(LOGO_PATH)) return null;
@@ -131,19 +131,16 @@ function invBarcode(line) {
   return code.replace(/\s+/g, '') || '—';
 }
 
-/**
- * ترتيب الويب (dir=rtl): م → الباركود → … → المبلغ (من اليمين).
- * pdfmake يرسم الجدول يسار→يمين، لذا نعكس ترتيب الخلايا ليطابق الويب.
- */
+/** من اليمين: م → الباركود → اسم المادة → … → المبلغ (مطابق للويب) */
 function invHeaderRow() {
   return [
-    th('المبلغ', COLORS.price),
-    th('سعر الوحدة', COLORS.price),
-    th('هدية', COLORS.qty),
-    th('الكمية', COLORS.qty),
-    th('اسم المادة', COLORS.headerAlt),
+    th('م'),
     th('الباركود', COLORS.header),
-    th('م')
+    th('اسم المادة', COLORS.headerAlt),
+    th('الكمية', COLORS.qty),
+    th('هدية', COLORS.qty),
+    th('سعر الوحدة', COLORS.price),
+    th('المبلغ', COLORS.price)
   ];
 }
 
@@ -171,13 +168,13 @@ function tdName(value, fill) {
 function invLineRow(line, rowIndex) {
   const fill = rowIndex % 2 === 0 ? COLORS.zebra : '#ffffff';
   return [
-    tdMoney(fmtInvPrice(line.lineTotal), fill),
-    tdMoney(fmtInvPrice(line.price), fill),
-    td(fmtQtyInt(line.bonus), 'center', fill),
-    td(fmtQtyInt(line.quant), 'center', fill),
-    tdName(line.matName || '—', fill),
+    td(String(rowIndex + 1), 'center', fill),
     tdBarcode(invBarcode(line), fill),
-    td(String(rowIndex + 1), 'center', fill)
+    tdName(line.matName || '—', fill),
+    td(fmtQtyInt(line.quant), 'center', fill),
+    td(fmtQtyInt(line.bonus), 'center', fill),
+    tdMoney(fmtInvPrice(line.price), fill),
+    tdMoney(fmtInvPrice(line.lineTotal), fill)
   ];
 }
 
@@ -185,16 +182,16 @@ function invEmpty(fill) {
   return { text: '', fillColor: fill || null };
 }
 
-/** 7 خلايا: المبلغ يساراً + التسمية تمتد على باقي الأعمدة (pdfmake يتطلب صفاً كاملاً) */
+/** التسمية يميناً (colSpan 6) والقيمة في عمود المبلغ يساراً */
 function invSumRow(label, value, fill) {
   return [
-    tdMoney(value, fill),
     footLabel(label, 6, fill),
     invEmpty(fill),
     invEmpty(fill),
     invEmpty(fill),
     invEmpty(fill),
-    invEmpty(fill)
+    invEmpty(fill),
+    tdMoney(value, fill)
   ];
 }
 
