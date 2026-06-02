@@ -131,16 +131,16 @@ function invBarcode(line) {
   return code.replace(/\s+/g, '') || '—';
 }
 
-/** من اليمين: م → الباركود → اسم المادة → … → المبلغ (مطابق للويب) */
+/** يسار: المبلغ … يمين: م (م | الباركود | … من اليمين للقارئ) */
 function invHeaderRow() {
   return [
-    th('م'),
-    th('الباركود', COLORS.header),
-    th('اسم المادة', COLORS.headerAlt),
-    th('الكمية', COLORS.qty),
-    th('هدية', COLORS.qty),
+    th('المبلغ', COLORS.price),
     th('سعر الوحدة', COLORS.price),
-    th('المبلغ', COLORS.price)
+    th('هدية', COLORS.qty),
+    th('الكمية', COLORS.qty),
+    th('اسم المادة', COLORS.headerAlt),
+    th('الباركود', COLORS.header),
+    th('م')
   ];
 }
 
@@ -168,13 +168,13 @@ function tdName(value, fill) {
 function invLineRow(line, rowIndex) {
   const fill = rowIndex % 2 === 0 ? COLORS.zebra : '#ffffff';
   return [
-    td(String(rowIndex + 1), 'center', fill),
-    tdBarcode(invBarcode(line), fill),
-    tdName(line.matName || '—', fill),
-    td(fmtQtyInt(line.quant), 'center', fill),
-    td(fmtQtyInt(line.bonus), 'center', fill),
+    tdMoney(fmtInvPrice(line.lineTotal), fill),
     tdMoney(fmtInvPrice(line.price), fill),
-    tdMoney(fmtInvPrice(line.lineTotal), fill)
+    td(fmtQtyInt(line.bonus), 'center', fill),
+    td(fmtQtyInt(line.quant), 'center', fill),
+    tdName(line.matName || '—', fill),
+    tdBarcode(invBarcode(line), fill),
+    td(String(rowIndex + 1), 'center', fill)
   ];
 }
 
@@ -182,16 +182,16 @@ function invEmpty(fill) {
   return { text: '', fillColor: fill || null };
 }
 
-/** التسمية يميناً (colSpan 6) والقيمة في عمود المبلغ يساراً */
+/** القيمة في عمود المبلغ (يسار) والتسمية تمتد يميناً */
 function invSumRow(label, value, fill) {
   return [
+    tdMoney(value, fill),
     footLabel(label, 6, fill),
     invEmpty(fill),
     invEmpty(fill),
     invEmpty(fill),
     invEmpty(fill),
-    invEmpty(fill),
-    tdMoney(value, fill)
+    invEmpty(fill)
   ];
 }
 
