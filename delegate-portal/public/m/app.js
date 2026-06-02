@@ -199,19 +199,14 @@ function txTypeClass(line) {
   return 'type-neutral';
 }
 
-function debtDisplayAmount(bal) {
-  const n = Number(bal);
-  if (Number.isNaN(n) || n >= 0) return 0;
-  return Math.abs(n);
-}
-
-function renderDebtField(bal) {
+function renderDebtField(amount) {
   const el = document.getElementById('stmtDebtField');
-  const amount = debtDisplayAmount(bal);
+  const n = Number(amount);
+  const value = Number.isNaN(n) ? 0 : Math.max(0, n);
   el.classList.remove('hidden');
   el.innerHTML = `
     <span class="debt-field-label">الديون</span>
-    <span class="debt-field-value">${fmtNumAlways(amount)}</span>`;
+    <span class="debt-field-value">${fmtNumAlways(value)}</span>`;
 }
 
 function agentInitial(name) {
@@ -608,7 +603,7 @@ function renderStatement(data) {
       ? 'لا مطابقة — نفّذ مزامنة'
       : '');
 
-  renderDebtField(currentBal);
+  renderDebtField(data.debtAmount ?? 0);
 
   document.getElementById('stmtHero').innerHTML = `
     <div class="doc-panel">

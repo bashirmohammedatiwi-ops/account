@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const pdfmake = require('@digicole/pdfmake-rtl');
 const { resolveInvoiceTotals } = require('./invoices');
+const { resolveDebtDisplayAmount } = require('./statement-utils');
 
 pdfmake.addFonts(require('@digicole/pdfmake-rtl/fonts/Cairo'));
 pdfmake.addFonts(require('@digicole/pdfmake-rtl/fonts/Roboto'));
@@ -41,8 +42,8 @@ const STYLES = {
   invSection: { fontSize: 8.5, bold: true, color: '#1e3a5f' }
 };
 
-/** عرض الجدول: المبلغ يسار ← … ← م يمين */
-const INV_WIDTHS = [54, 42, 26, 30, '*', 74, 16];
+/** عرض الجدول (pdfmake-rtl: أول عمود يمين): م يمين ← … ← المبلغ يسار */
+const INV_WIDTHS = [16, 74, '*', 30, 26, 42, 54];
 
 const INV_META_ACCENTS = ['#e2e8f0', '#dbeafe', '#fef3c7', '#d1fae5'];
 
@@ -135,16 +136,16 @@ function invBarcode(line) {
   return code.replace(/\s+/g, '') || '—';
 }
 
-/** يسار: المبلغ … يمين: م (م | الباركود | … من اليمين للقارئ) */
+/** يمين: م … يسار: المبلغ (ترتيب المصفوفة لـ pdfmake-rtl) */
 function invHeaderRow() {
   return [
-    thInv('المبلغ', COLORS.price),
-    thInv('سعر الوحدة', COLORS.price),
-    thInv('هدية', COLORS.qty),
-    thInv('الكمية', COLORS.qty),
-    thInv('اسم المادة', COLORS.headerAlt),
+    thInv('م', '#475569'),
     thInv('الباركود', COLORS.header),
-    thInv('م', '#475569')
+    thInv('اسم المادة', COLORS.headerAlt),
+    thInv('الكمية', COLORS.qty),
+    thInv('هدية', COLORS.qty),
+    thInv('سعر الوحدة', COLORS.price),
+    thInv('المبلغ', COLORS.price)
   ];
 }
 
@@ -172,13 +173,13 @@ function tdName(value, fill) {
 function invLineRow(line, rowIndex) {
   const fill = rowIndex % 2 === 0 ? COLORS.zebra : '#ffffff';
   return [
-    tdMoney(fmtInvPrice(line.lineTotal), fill),
-    tdMoney(fmtInvPrice(line.price), fill),
-    td(fmtQtyInt(line.bonus), 'center', fill),
-    td(fmtQtyInt(line.quant), 'center', fill),
-    tdName(line.matName || '—', fill),
+    td(String(rowIndex + 1), 'center', fill),
     tdBarcode(invBarcode(line), fill),
-    td(String(rowIndex + 1), 'center', fill)
+    tdName(line.matName || '—', fill),
+    td(fmtQtyInt(line.quant), 'center', fill),
+    td(fmtQtyInt(line.bonus), 'center', fill),
+    tdMoney(fmtInvPrice(line.price), fill),
+    tdMoney(fmtInvPrice(line.lineTotal), fill)
   ];
 }
 
@@ -504,9 +505,16 @@ async function buildStatementPdf(stmt, meta = {}) {
   const acc = stmt.account || {};
   const lines = stmt.lines || [];
   const summary = stmt.summary || {};
-  const debtAmount = Number(stmt.finalBalance ?? acc.bal ?? 0) < 0
-    ? fmtNum(Math.abs(Number(stmt.finalBalance ?? acc.bal ?? 0)))
-    : '0';
+  const debtAmount = fmtNum(
+    Number(stmt.debtAmount) || resolveDebtDisplayAmount({
+      finalBalance: stmt.finalBalance,
+      lines: stmt.lines,
+      totalDebit: stmt.totalDebit,
+      totalCredit: stmt.totalCredit,
+      sinceLastMatch: meta.sinceLastMatch ?? stmt.sinceLastMatch,
+      account: acc
+    })
+  );
   const openingBal = Number(stmt.openingBalance ?? 0);
   const subtitle = meta.sinceLastMatch && (stmt.lastMatch?.date || acc.fixDate)
     ? `منذ ${fmtDate(stmt.lastMatch?.date || acc.fixDate)}${openingBal ? ` · مرحّل ${fmtNum(Math.abs(openingBal))}` : ''}`

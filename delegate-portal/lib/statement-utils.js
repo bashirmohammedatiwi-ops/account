@@ -175,10 +175,30 @@ function debtStatusFromBalance(bal) {
   return 'الديون';
 }
 
+/** مبلغ «الديون» للعرض — يتوافق مع رصيد الكشف وإجماليات Edari منذ المطابقة */
+function resolveDebtDisplayAmount(data = {}) {
+  const lines = data.lines || [];
+  const lastLineBal = lines.length ? parseAmount(lines[lines.length - 1].balance) : null;
+  const accountBal = parseAmount(data.finalBalance ?? data.account?.bal ?? data.bal);
+  const stmtBal = parseAmount(data.stmtFinalBalance);
+
+  if (lastLineBal < 0) return Math.abs(lastLineBal);
+  if (accountBal < 0) return Math.abs(accountBal);
+  if (stmtBal < 0) return Math.abs(stmtBal);
+
+  if (data.sinceLastMatch) {
+    const net = parseAmount(data.totalDebit) - parseAmount(data.totalCredit);
+    if (net > 0) return net;
+  }
+
+  return 0;
+}
+
 module.exports = {
   buildStatementLines,
   balanceSummaryLabel,
   debtStatusFromBalance,
+  resolveDebtDisplayAmount,
   journalSortKey,
   isJournalAfter,
   filterRowsSinceLastMatch,
