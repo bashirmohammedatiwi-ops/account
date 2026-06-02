@@ -39,8 +39,8 @@ const STYLES = {
   invMetaVal: { fontSize: 8, font: 'Roboto', bold: true, color: '#0f172a', alignment: 'center' }
 };
 
-/** pdfmake RTL: أول عمود يمين — م | الباركود | … | المبلغ */
-const INV_WIDTHS = [14, 72, '*', 28, 24, 40, 52];
+/** عرض الجدول: المبلغ يسار ← … ← م يمين */
+const INV_WIDTHS = [52, 40, 24, 28, '*', 72, 14];
 
 function getLogoDataUrl() {
   if (!fs.existsSync(LOGO_PATH)) return null;
