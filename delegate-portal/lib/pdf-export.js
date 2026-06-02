@@ -27,21 +27,21 @@ const C = {
 };
 
 const STYLES = {
-  title: { fontSize: 13, bold: true, color: C.text },
-  sub: { fontSize: 8.5, bold: true, color: C.primaryDark },
-  th: { fontSize: 8, bold: true, color: C.headerText },
-  td: { fontSize: 8, bold: true, color: C.text },
-  tdDate: { fontSize: 8, font: 'Roboto', bold: true, color: C.text },
-  tdBarcode: { fontSize: 7.5, font: 'Roboto', bold: true, color: C.text },
-  tdName: { fontSize: 8, bold: true, color: C.text },
-  tdMoney: { fontSize: 8.5, font: 'Roboto', bold: true, color: C.text },
-  invMetaLbl: { fontSize: 7.5, bold: true, color: C.muted, alignment: 'center' },
-  invMetaVal: { fontSize: 9, font: 'Roboto', bold: true, color: C.text, alignment: 'center' },
-  invSection: { fontSize: 9, bold: true, color: C.primaryDark }
+  title: { fontSize: 11, bold: true, color: C.text },
+  sub: { fontSize: 7.5, bold: true, color: C.primaryDark },
+  th: { fontSize: 7, bold: true, color: C.headerText },
+  td: { fontSize: 7, bold: true, color: C.text },
+  tdDate: { fontSize: 7, font: 'Roboto', bold: true, color: C.text },
+  tdBarcode: { fontSize: 6.5, font: 'Roboto', bold: true, color: C.text },
+  tdName: { fontSize: 7, bold: true, color: C.text },
+  tdMoney: { fontSize: 7.5, font: 'Roboto', bold: true, color: C.text },
+  metaLbl: { fontSize: 6.5, bold: true, color: C.muted, alignment: 'center' },
+  metaVal: { fontSize: 8, font: 'Roboto', bold: true, color: C.text, alignment: 'center' }
 };
 
-const INV_WIDTHS = [16, 74, '*', 30, 26, 42, 54];
-const STMT_WIDTHS = [52, 42, 42, '*', 40, 14];
+/** pdfmake-rtl: أول عمود = يمين. م دائماً أول عنصر */
+const STMT_WIDTHS = [11, 36, '*', 36, 36, 44];
+const INV_WIDTHS = [11, 58, '*', 22, 20, 34, 42];
 
 function getLogoDataUrl() {
   if (!fs.existsSync(LOGO_PATH)) return null;
@@ -67,27 +67,20 @@ function fmtDate(v) {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
-function accentBar() {
-  return {
-    canvas: [{ type: 'rect', x: 0, y: 0, w: 562, h: 5, color: C.primary }],
-    margin: [0, 0, 0, 0]
-  };
-}
-
-function tableLayout() {
+function compactTableLayout() {
   return {
     hLineWidth: (i, node) => {
-      if (i === 0 || i === 1) return 0.55;
-      if (node && i === node.table.body.length) return 0.55;
-      return 0.2;
+      if (i === 0 || i === 1) return 0.45;
+      if (node && i === node.table.body.length) return 0.45;
+      return 0.12;
     },
-    vLineWidth: () => 0.2,
+    vLineWidth: () => 0.12,
     hLineColor: () => C.border,
     vLineColor: () => C.border,
-    paddingLeft: () => 4,
-    paddingRight: () => 4,
-    paddingTop: () => 3,
-    paddingBottom: () => 3
+    paddingLeft: () => 2,
+    paddingRight: () => 2,
+    paddingTop: () => 1,
+    paddingBottom: () => 1
   };
 }
 
@@ -97,7 +90,7 @@ function th(text) {
     style: 'th',
     fillColor: C.headerBg,
     alignment: 'center',
-    margin: [2, 5, 2, 5]
+    margin: [1, 3, 1, 3]
   };
 }
 
@@ -107,7 +100,7 @@ function td(value, align = 'center', fill, style = 'td') {
     style,
     alignment: align,
     fillColor: fill || null,
-    margin: [2, 3, 2, 3]
+    margin: [1, 1.5, 1, 1.5]
   };
 }
 
@@ -122,7 +115,7 @@ function tdMoney(value, fill) {
     alignment: 'center',
     fillColor: fill || null,
     noWrap: true,
-    margin: [3, 3, 3, 3]
+    margin: [1, 2, 1, 2]
   };
 }
 
@@ -131,134 +124,116 @@ function rowFill(rowIndex, highlight) {
   return rowIndex % 2 === 0 ? '#ffffff' : C.zebra;
 }
 
-function badge(text, fill = C.primary) {
-  return {
+function pdfTopHeader({ docLabel, badgeText, sideLines, infoLabel, infoValue, stats }) {
+  const logo = getLogoDataUrl();
+  const logoCell = logo
+    ? { image: logo, width: 34, alignment: 'center', margin: [4, 6, 4, 6] }
+    : { text: '', width: 34 };
+
+  const badgeCell = {
     table: {
       widths: ['*'],
       body: [[{
-        text,
-        fontSize: 8,
+        text: badgeText,
+        fontSize: 7.5,
         bold: true,
         color: '#ffffff',
         alignment: 'center',
-        fillColor: fill,
-        margin: [8, 6, 8, 6]
+        fillColor: C.primary,
+        margin: [6, 5, 6, 5]
       }]]
     },
     layout: 'noBorders'
   };
-}
 
-function infoStrip(label, value) {
-  return {
+  const mainHeader = {
     table: {
-      widths: [4, '*'],
-      body: [[
-        { text: '', fillColor: C.primary },
-        {
-          fillColor: C.panel,
-          stack: [
-            { text: label, fontSize: 7.5, bold: true, color: C.muted, alignment: 'right' },
-            { text: value, fontSize: 10, bold: true, color: C.text, alignment: 'right', margin: [0, 3, 0, 0] }
-          ],
-          margin: [10, 8, 10, 8]
-        }
-      ]]
-    },
-    layout: {
-      hLineWidth: () => 0.45,
-      vLineWidth: () => 0.45,
-      hLineColor: () => C.border,
-      vLineColor: () => C.border
-    }
-  };
-}
-
-function pdfTopHeader(docLabel, badgeText, leftStack, infoLabel, infoValue) {
-  const logo = getLogoDataUrl();
-  const logoCell = logo
-    ? { image: logo, width: 42, alignment: 'center', margin: [6, 10, 6, 10] }
-    : { text: '', width: 42 };
-
-  const headerRow = {
-    table: {
-      widths: [52, '*', 108],
+      widths: [40, '*', 96],
       body: [[
         logoCell,
         {
           stack: [
             { text: COMPANY_NAME, style: 'title', alignment: 'center' },
-            { text: docLabel, style: 'sub', alignment: 'center', margin: [0, 3, 0, 0] }
+            { text: docLabel, style: 'sub', alignment: 'center', margin: [0, 2, 0, 0] }
           ],
-          margin: [0, 12, 0, 12]
+          margin: [0, 7, 0, 7]
         },
         {
           stack: [
-            badge(badgeText),
-            { stack: leftStack, margin: [0, 6, 0, 0] }
+            badgeCell,
+            ...(sideLines || []).map((line) => ({
+              ...line,
+              margin: [0, 3, 0, 0]
+            }))
           ],
-          margin: [6, 8, 8, 8]
+          margin: [4, 6, 6, 6]
         }
       ]]
     },
     layout: 'noBorders'
   };
 
+  const infoRow = {
+    table: {
+      widths: ['*', ...(stats || []).map(() => '*')],
+      body: [[
+        {
+          fillColor: C.panel,
+          stack: [
+            { text: infoLabel, fontSize: 6.5, bold: true, color: C.muted, alignment: 'right' },
+            { text: infoValue, fontSize: 9, bold: true, color: C.text, alignment: 'right', margin: [0, 2, 0, 0] }
+          ],
+          margin: [8, 6, 8, 6]
+        },
+        ...(stats || []).map(([label, value, accent]) => ({
+          fillColor: '#ffffff',
+          stack: [
+            { text: label, style: 'metaLbl', margin: [0, 0, 0, 2] },
+            { text: value, style: 'metaVal', color: accent || C.text }
+          ],
+          margin: [4, 5, 4, 5]
+        }))
+      ]]
+    },
+    layout: {
+      hLineWidth: () => 0.4,
+      vLineWidth: () => 0.4,
+      hLineColor: () => C.border,
+      vLineColor: () => C.border
+    }
+  };
+
   return {
     stack: [
-      accentBar(),
       {
-        table: { widths: ['*'], body: [[headerRow]] },
+        canvas: [{ type: 'rect', x: 0, y: 0, w: 575, h: 3, color: C.primary }],
+        margin: [0, 0, 0, 0]
+      },
+      {
+        table: { widths: ['*'], body: [[mainHeader]] },
         layout: {
-          hLineWidth: () => 0.6,
-          vLineWidth: () => 0.6,
+          hLineWidth: () => 0.5,
+          vLineWidth: () => 0.5,
           hLineColor: () => C.border,
           vLineColor: () => C.border,
           fillColor: () => '#ffffff'
         },
-        margin: [0, 0, 0, 6]
+        margin: [0, 0, 0, 4]
       },
-      infoStrip(infoLabel, infoValue),
-      { text: '', margin: [0, 0, 0, 4] }
-    ]
-  };
-}
-
-function kpiCell(label, value, accent = C.text) {
-  return {
-    stack: [
-      { text: label, fontSize: 7.5, bold: true, color: C.muted, alignment: 'center', margin: [0, 0, 0, 3] },
-      { text: value, font: 'Roboto', fontSize: 10, bold: true, color: accent, alignment: 'center' }
+      infoRow
     ],
-    margin: [6, 9, 6, 9]
-  };
-}
-
-function summaryBar(cells) {
-  return {
-    table: {
-      widths: cells.map(() => '*'),
-      body: [cells]
-    },
-    layout: {
-      hLineWidth: () => 0.45,
-      vLineWidth: () => 0.45,
-      hLineColor: () => C.border,
-      vLineColor: () => C.border,
-      fillColor: () => '#ffffff'
-    },
-    margin: [0, 0, 0, 8]
+    margin: [0, 0, 0, 5]
   };
 }
 
 function stmtHeaderRow() {
   return [
-    th('رصيد الحساب'),
-    th('دائن'),
-    th('مدين'),
-    th('البيان'),
+    th('م'),
     th('التاريخ'),
-    th('م')
+    th('البيان'),
+    th('مدين'),
+    th('دائن'),
+    th('رصيد')
   ];
 }
 
@@ -266,52 +241,50 @@ function stmtLineRow(row, rowIndex) {
   const fill = rowFill(rowIndex, row.isOpening || row.isReconciliation);
   const idx = row.isOpening ? '∗' : String(rowIndex + 1);
   return [
-    tdMoney(fmtNum(row.balance), fill),
-    tdMoney(row.credit ? fmtNum(row.credit) : '—', fill),
-    tdMoney(row.debit ? fmtNum(row.debit) : '—', fill),
-    td(row.description || '—', 'right', fill),
+    td(idx, 'center', fill),
     tdDate(row.date, fill),
-    td(idx, 'center', fill)
+    td(row.description || '—', 'right', fill),
+    tdMoney(row.debit ? fmtNum(row.debit) : '—', fill),
+    tdMoney(row.credit ? fmtNum(row.credit) : '—', fill),
+    tdMoney(fmtNum(row.balance), fill)
   ];
 }
 
 function stmtTotalsTableRow(stmt) {
   const bal = Number(stmt.finalBalance ?? stmt.account?.bal ?? 0);
   return [
-    tdMoney(fmtNum(Math.abs(bal)), C.panel),
-    tdMoney(fmtNum(stmt.totalCredit), C.panel),
-    tdMoney(fmtNum(stmt.totalDebit), C.panel),
     {
       text: 'الإجمالي',
       bold: true,
-      fontSize: 8.5,
+      fontSize: 7.5,
       color: C.text,
       alignment: 'right',
       fillColor: C.panel,
       colSpan: 3,
-      margin: [4, 6, 4, 6]
+      margin: [2, 4, 2, 4]
     },
     {},
-    {}
+    {},
+    tdMoney(fmtNum(stmt.totalDebit), C.panel),
+    tdMoney(fmtNum(stmt.totalCredit), C.panel),
+    tdMoney(fmtNum(Math.abs(bal)), C.panel)
   ];
 }
 
-function statementPdfHeader(acc, periodNote) {
+function statementPdfHeader(acc, periodNote, stats) {
   const metaLine = [periodNote, acc.address || ''].filter(Boolean).join(' · ');
-  const badgeText = acc.num ? `حساب ${acc.num}` : 'كشف حساب';
-  const leftStack = [
-    metaLine
-      ? { text: metaLine, fontSize: 7.5, bold: true, color: C.muted, alignment: 'right' }
-      : null
-  ].filter(Boolean);
+  const sideLines = metaLine
+    ? [{ text: metaLine, fontSize: 6.5, bold: true, color: C.muted, alignment: 'right' }]
+    : [];
 
-  return pdfTopHeader(
-    'كشف حساب',
-    badgeText,
-    leftStack,
-    'اسم الحساب',
-    acc.name1 || '—'
-  );
+  return pdfTopHeader({
+    docLabel: 'كشف حساب',
+    badgeText: acc.num ? `حساب ${acc.num}` : 'كشف حساب',
+    sideLines,
+    infoLabel: 'اسم الحساب',
+    infoValue: acc.name1 || '—',
+    stats
+  });
 }
 
 function invBarcode(line) {
@@ -322,12 +295,12 @@ function invBarcode(line) {
 function invHeaderRow() {
   return [
     th('م'),
-    th('الباركود'),
-    th('اسم المادة'),
-    th('الكمية'),
-    th('هدية'),
-    th('سعر الوحدة'),
-    th('المبلغ')
+    th('باركود'),
+    th('المادة'),
+    th('كم'),
+    th('هد'),
+    th('سعر'),
+    th('مبلغ')
   ];
 }
 
@@ -338,7 +311,7 @@ function tdBarcode(value, fill) {
     alignment: 'center',
     fillColor: fill || null,
     noWrap: true,
-    margin: [2, 3, 2, 3]
+    margin: [1, 1.5, 1, 1.5]
   };
 }
 
@@ -348,7 +321,7 @@ function tdName(value, fill) {
     style: 'tdName',
     alignment: 'right',
     fillColor: fill || null,
-    margin: [2, 3, 2, 3]
+    margin: [1, 1.5, 1, 1.5]
   };
 }
 
@@ -365,110 +338,45 @@ function invLineRow(line, rowIndex) {
   ];
 }
 
-function invoicePdfHeader(inv) {
-  const title = inv.kindLabel || 'فاتورة مبيعات';
-  const leftStack = [
-    { text: fmtDate(inv.date), fontSize: 8, font: 'Roboto', bold: true, color: C.text, alignment: 'right' }
-  ];
-
-  return pdfTopHeader(
-    title,
-    `رقم ${inv.num || '—'}`,
-    leftStack,
-    'العميل',
-    inv.accountName || '—'
-  );
-}
-
-function invoiceMetaGrid(inv, lines, qtySum) {
-  const rows = [
-    ['عدد البنود', String(lines.length), C.panel],
-    ['إجمالي الكمية', fmtNum(Math.round(qtySum), 0), C.panel],
-    ['إجمالي الفاتورة', fmtInvPrice(inv.total), C.primaryLight],
-    ['الصافي للدفع', fmtInvPrice(inv.netPay), '#d1fae5']
-  ];
-  return {
-    table: {
-      widths: rows.map(() => '*'),
-      body: [
-        rows.map(([label, , fill]) => ({
-          text: label,
-          style: 'invMetaLbl',
-          fillColor: fill,
-          margin: [3, 6, 3, 2]
-        })),
-        rows.map(([, val, fill]) => ({
-          text: val,
-          style: 'invMetaVal',
-          fillColor: fill,
-          margin: [3, 2, 3, 7]
-        }))
-      ]
-    },
-    layout: {
-      hLineWidth: () => 0.45,
-      vLineWidth: () => 0.45,
-      hLineColor: () => C.border,
-      vLineColor: () => C.border
-    },
-    margin: [0, 0, 0, 6]
-  };
-}
-
-function invoiceSectionTitle(text) {
-  return {
-    text,
-    style: 'invSection',
-    alignment: 'right',
-    margin: [0, 2, 0, 4]
-  };
-}
-
-function invoiceTotalsPanel(inv) {
-  const row = (label, value, fill, valueColor = C.text) => [
+function invTotalsRows(inv) {
+  const foot = (label, value, fill) => [
     {
       text: label,
-      fontSize: 8,
       bold: true,
+      fontSize: 7,
+      color: C.text,
       alignment: 'right',
       fillColor: fill,
-      color: C.text,
-      margin: [10, 7, 6, 7]
+      colSpan: 6,
+      margin: [2, 4, 2, 4]
     },
-    {
-      text: value,
-      font: 'Roboto',
-      fontSize: 9,
-      bold: true,
-      alignment: 'center',
-      fillColor: fill,
-      color: valueColor,
-      noWrap: true,
-      margin: [6, 7, 10, 7]
-    }
+    {}, {}, {}, {}, {},
+    tdMoney(value, fill)
   ];
+  return [
+    foot('إجمالي الفاتورة', fmtInvPrice(inv.total), '#ffffff'),
+    foot('الحسومات', fmtInvPrice(inv.discount), '#fff7ed'),
+    foot('الصافي للدفع', fmtInvPrice(inv.netPay), C.primaryLight)
+  ];
+}
 
-  const panel = {
-    table: {
-      widths: ['*', 68],
-      body: [
-        row('إجمالي الفاتورة', fmtInvPrice(inv.total), '#ffffff'),
-        row('الحسومات', fmtInvPrice(inv.discount), '#fff7ed', C.debit),
-        row('الصافي للدفع', fmtInvPrice(inv.netPay), C.primaryLight, C.net)
-      ]
-    },
-    layout: {
-      hLineWidth: () => 0.45,
-      vLineWidth: () => 0.45,
-      hLineColor: () => C.border,
-      vLineColor: () => C.border
-    }
-  };
-
-  return {
-    columns: [panel, { width: '*', text: '' }],
-    margin: [0, 8, 0, 0]
-  };
+function invoicePdfHeader(inv, lines, qtySum) {
+  const title = inv.kindLabel || 'فاتورة مبيعات';
+  return pdfTopHeader({
+    docLabel: title,
+    badgeText: `رقم ${inv.num || '—'}`,
+    sideLines: [
+      { text: fmtDate(inv.date), fontSize: 7, font: 'Roboto', bold: true, color: C.text, alignment: 'right' }
+    ],
+    infoLabel: 'العميل',
+    infoValue: inv.accountName || '—',
+    stats: [
+      ['بنود', String(lines.length), C.text],
+      ['كمية', fmtNum(Math.round(qtySum), 0), C.text],
+      ['إجمالي', fmtInvPrice(inv.total), C.primaryDark],
+      ['صافي', fmtInvPrice(inv.netPay), C.net]
+    ]
+  });
 }
 
 function fmtQtyInt(v) {
@@ -486,19 +394,19 @@ function fmtInvPrice(v) {
 function pdfFooter() {
   return (currentPage, pageCount) => ({
     columns: [
-      { text: fmtDate(new Date()), font: 'Roboto', alignment: 'right', fontSize: 7.5, bold: true, color: C.muted },
-      { text: `${currentPage} / ${pageCount}`, font: 'Roboto', alignment: 'left', fontSize: 7.5, bold: true, color: C.muted }
+      { text: fmtDate(new Date()), font: 'Roboto', alignment: 'right', fontSize: 7, bold: true, color: C.muted },
+      { text: `${currentPage}/${pageCount}`, font: 'Roboto', alignment: 'left', fontSize: 7, bold: true, color: C.muted }
     ],
-    margin: [14, 0, 14, 0]
+    margin: [10, 0, 10, 0]
   });
 }
 
 function baseDoc(content) {
   return {
     rtl: true,
-    defaultStyle: { font: 'Cairo', fontSize: 8, bold: true, color: C.text },
+    defaultStyle: { font: 'Cairo', fontSize: 7, bold: true, color: C.text },
     pageSize: 'A4',
-    pageMargins: [14, 14, 14, 24],
+    pageMargins: [10, 8, 10, 18],
     styles: STYLES,
     footer: pdfFooter(),
     content
@@ -547,12 +455,11 @@ async function buildStatementPdf(stmt, meta = {}) {
   }
 
   const doc = baseDoc([
-    statementPdfHeader(acc, periodNote),
-    summaryBar([
-      kpiCell('إجمالي مدين', fmtNum(stmt.totalDebit), C.debit),
-      kpiCell('إجمالي دائن', fmtNum(stmt.totalCredit), C.credit),
-      kpiCell('الديون', debtAmount, C.debit),
-      kpiCell('رصيد الحساب', fmtNum(Math.abs(bal)), C.primaryDark)
+    statementPdfHeader(acc, periodNote, [
+      ['مدين', fmtNum(stmt.totalDebit), C.debit],
+      ['دائن', fmtNum(stmt.totalCredit), C.credit],
+      ['ديون', debtAmount, C.debit],
+      ['رصيد', fmtNum(Math.abs(bal)), C.primaryDark]
     ]),
     {
       table: {
@@ -561,7 +468,7 @@ async function buildStatementPdf(stmt, meta = {}) {
         body: tableBody,
         dontBreakRows: false
       },
-      layout: tableLayout()
+      layout: compactTableLayout()
     }
   ]);
 
@@ -582,11 +489,12 @@ async function buildInvoicePdf(data) {
     invHeaderRow(),
     ...lines.map((line, i) => invLineRow(line, i))
   ];
+  if (lines.length) {
+    tableBody.push(...invTotalsRows(inv));
+  }
 
   const doc = baseDoc([
-    invoicePdfHeader(inv),
-    invoiceMetaGrid(inv, lines, qtySum),
-    invoiceSectionTitle('تفاصيل البنود'),
+    invoicePdfHeader(inv, lines, qtySum),
     {
       table: {
         headerRows: 1,
@@ -594,9 +502,8 @@ async function buildInvoicePdf(data) {
         body: tableBody,
         dontBreakRows: false
       },
-      layout: tableLayout()
-    },
-    ...(lines.length ? [invoiceTotalsPanel(inv)] : [])
+      layout: compactTableLayout()
+    }
   ]);
 
   return createPdfBuffer(doc);
