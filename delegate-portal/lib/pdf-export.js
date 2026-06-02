@@ -169,8 +169,13 @@ function invLineRow(line, rowIndex) {
 
 function invSumRow(label, value, fill) {
   return [
-    td(value, 'center', fill),
-    { text: label, style: 'foot', alignment: 'right', fillColor: fill, colSpan: 6, margin: [2, 2, 2, 2] }
+    footLabel(label, 6, fill),
+    {},
+    {},
+    {},
+    {},
+    {},
+    td(value, 'center', fill)
   ];
 }
 
