@@ -10,42 +10,35 @@ pdfmake.addFonts(require('@digicole/pdfmake-rtl/fonts/Roboto'));
 const COMPANY_NAME = 'شركة ديما الحياة';
 const LOGO_PATH = path.join(__dirname, '..', 'public', 'm', 'assets', 'logo.png');
 
-const COLORS = {
-  header: '#1e3a5f',
-  headerAlt: '#0f766e',
-  debit: '#991b1b',
-  credit: '#047857',
-  balance: '#1d4ed8',
-  qty: '#0f766e',
-  price: '#1d4ed8',
-  zebra: '#f8fafc',
-  border: '#cbd5e1',
-  accent: '#0f766e'
+/** لوحة ألوان موحّدة — بسيطة وواضحة */
+const C = {
+  text: '#111111',
+  muted: '#444444',
+  headerBg: '#333333',
+  headerText: '#ffffff',
+  border: '#cccccc',
+  zebra: '#f5f5f5',
+  panel: '#f5f5f5'
 };
 
 const STYLES = {
-  title: { fontSize: 12, bold: true, color: '#0f172a' },
-  sub: { fontSize: 8, color: '#64748b' },
-  th: { fontSize: 7, bold: true, color: '#ffffff' },
-  td: { fontSize: 6.5, color: '#0f172a' },
-  meta: { fontSize: 7, color: '#64748b' },
-  metaVal: { fontSize: 7.5, bold: true, color: '#0f172a' },
-  foot: { fontSize: 7, bold: true, color: '#0f172a' },
-  banner: { fontSize: 9, bold: true, color: '#ffffff' },
-  invType: { fontSize: 10, bold: true, color: COLORS.headerAlt },
-  invClient: { fontSize: 8.5, bold: true, color: '#0f172a' },
-  tdBarcode: { fontSize: 6, font: 'Roboto', color: '#0f172a' },
-  tdName: { fontSize: 6.5, color: '#0f172a' },
-  tdMoney: { fontSize: 7, font: 'Roboto', bold: true, color: '#0f172a' },
-  invMetaLbl: { fontSize: 6.5, color: '#475569', alignment: 'center' },
-  invMetaVal: { fontSize: 8.5, font: 'Roboto', bold: true, color: '#0f172a', alignment: 'center' },
-  invSection: { fontSize: 8.5, bold: true, color: '#1e3a5f' }
+  title: { fontSize: 12, bold: true, color: C.text },
+  sub: { fontSize: 8, color: C.muted },
+  th: { fontSize: 7.5, bold: true, color: C.headerText },
+  td: { fontSize: 7.5, color: C.text },
+  meta: { fontSize: 7.5, color: C.muted },
+  metaVal: { fontSize: 8, bold: true, color: C.text },
+  foot: { fontSize: 7.5, bold: true, color: C.text },
+  tdBarcode: { fontSize: 7, font: 'Roboto', color: C.text },
+  tdName: { fontSize: 7.5, color: C.text },
+  tdMoney: { fontSize: 8, font: 'Roboto', bold: true, color: C.text },
+  invMetaLbl: { fontSize: 7, color: C.muted, alignment: 'center' },
+  invMetaVal: { fontSize: 8.5, font: 'Roboto', bold: true, color: C.text, alignment: 'center' },
+  invSection: { fontSize: 8.5, bold: true, color: C.text }
 };
 
-/** عرض الجدول (pdfmake-rtl: أول عمود يمين): م يمين ← … ← المبلغ يسار */
 const INV_WIDTHS = [16, 74, '*', 30, 26, 42, 54];
-
-const INV_META_ACCENTS = ['#e2e8f0', '#dbeafe', '#fef3c7', '#d1fae5'];
+const STMT_WIDTHS = [52, 42, 42, '*', 40, 14];
 
 function getLogoDataUrl() {
   if (!fs.existsSync(LOGO_PATH)) return null;
@@ -64,15 +57,38 @@ function fmtNum(v, digits = 0) {
   });
 }
 
-function fmtMoney(v) {
-  return fmtNum(v, 2);
-}
-
 function fmtDate(v) {
   if (!v) return '—';
   const d = new Date(String(v).replace(' 00:00:00', ''));
   if (Number.isNaN(d.getTime())) return String(v).slice(0, 10);
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+}
+
+function tableLayout() {
+  return {
+    hLineWidth: (i, node) => {
+      if (i === 0 || i === 1) return 0.5;
+      if (node && i === node.table.body.length) return 0.5;
+      return 0.2;
+    },
+    vLineWidth: () => 0.2,
+    hLineColor: () => C.border,
+    vLineColor: () => C.border,
+    paddingLeft: () => 4,
+    paddingRight: () => 4,
+    paddingTop: () => 3,
+    paddingBottom: () => 3
+  };
+}
+
+function th(text) {
+  return {
+    text,
+    style: 'th',
+    fillColor: C.headerBg,
+    alignment: 'center',
+    margin: [2, 4, 2, 4]
+  };
 }
 
 function td(value, align = 'center', fill) {
@@ -81,7 +97,7 @@ function td(value, align = 'center', fill) {
     style: 'td',
     alignment: align,
     fillColor: fill || null,
-    margin: [1, 1, 1, 1]
+    margin: [2, 2, 2, 2]
   };
 }
 
@@ -96,53 +112,78 @@ function tdMoney(value, fill) {
   };
 }
 
-/** عرض الجدول (pdfmake-rtl): يسار رصيد ← … ← يمين م */
-const STMT_WIDTHS = [52, 42, 42, '*', 40, 14];
+function rowFill(rowIndex, highlight) {
+  if (highlight) return C.zebra;
+  return rowIndex % 2 === 0 ? '#ffffff' : C.zebra;
+}
 
-function thStmt(text, fill = COLORS.header) {
+function kpiCell(label, value) {
   return {
-    text,
-    fontSize: 7,
-    bold: true,
-    color: '#ffffff',
-    fillColor: fill,
-    alignment: 'center',
-    margin: [2, 5, 2, 5]
+    stack: [
+      { text: label, fontSize: 7, color: C.muted, alignment: 'center', margin: [0, 0, 0, 2] },
+      { text: value, font: 'Roboto', fontSize: 9, bold: true, color: C.text, alignment: 'center' }
+    ],
+    margin: [6, 8, 6, 8]
+  };
+}
+
+function summaryBar(cells) {
+  return {
+    table: {
+      widths: cells.map(() => '*'),
+      body: [cells]
+    },
+    layout: {
+      hLineWidth: () => 0.4,
+      vLineWidth: () => 0.4,
+      hLineColor: () => C.border,
+      vLineColor: () => C.border,
+      fillColor: () => C.panel
+    },
+    margin: [0, 0, 0, 8]
+  };
+}
+
+function docHeader(title, rightStack, centerSub) {
+  const logo = getLogoDataUrl();
+  const left = logo
+    ? { image: logo, width: 36, alignment: 'left', margin: [8, 10, 0, 10] }
+    : { text: '', width: 36 };
+
+  const center = {
+    stack: [
+      { text: COMPANY_NAME, style: 'title', alignment: 'center' },
+      { text: title, style: 'sub', alignment: 'center', margin: [0, 2, 0, 0] },
+      centerSub ? { text: centerSub, fontSize: 7, color: C.muted, alignment: 'center', margin: [0, 2, 0, 0] } : null
+    ].filter(Boolean),
+    margin: [0, 10, 0, 10]
+  };
+
+  const right = {
+    stack: rightStack,
+    margin: [0, 10, 10, 10]
+  };
+
+  return {
+    table: { widths: [44, '*', '*'], body: [[left, center, right]] },
+    layout: 'noBorders',
+    margin: [0, 0, 0, 8]
   };
 }
 
 function stmtHeaderRow() {
   return [
-    thStmt('رصيد الحساب', COLORS.balance),
-    thStmt('دائن', COLORS.credit),
-    thStmt('مدين', COLORS.debit),
-    thStmt('البيان', COLORS.header),
-    thStmt('التاريخ', COLORS.header),
-    thStmt('م', '#64748b')
+    th('رصيد الحساب'),
+    th('دائن'),
+    th('مدين'),
+    th('البيان'),
+    th('التاريخ'),
+    th('م')
   ];
 }
 
-function stmtTableLayout() {
-  return {
-    hLineWidth: (i, node) => {
-      if (i === 0 || i === 1) return 0.5;
-      if (node && i === node.table.body.length) return 0.5;
-      return 0.12;
-    },
-    vLineWidth: () => 0.12,
-    hLineColor: () => '#e2e8f0',
-    vLineColor: () => '#e2e8f0',
-    paddingLeft: () => 4,
-    paddingRight: () => 4,
-    paddingTop: () => 2,
-    paddingBottom: () => 2
-  };
-}
-
 function stmtLineRow(row, rowIndex) {
-  let fill = rowIndex % 2 === 0 ? '#ffffff' : '#f8fafc';
-  if (row.isOpening) fill = '#f0f9ff';
-  else if (row.isReconciliation) fill = '#f0fdf4';
+  const fill = rowFill(rowIndex, row.isOpening || row.isReconciliation);
   const idx = row.isOpening ? '∗' : String(rowIndex + 1);
   return [
     tdMoney(fmtNum(row.balance), fill),
@@ -157,15 +198,16 @@ function stmtLineRow(row, rowIndex) {
 function stmtTotalsTableRow(stmt) {
   const bal = Number(stmt.finalBalance ?? stmt.account?.bal ?? 0);
   return [
-    tdMoney(fmtNum(Math.abs(bal)), '#eff6ff'),
-    tdMoney(fmtNum(stmt.totalCredit), '#ecfdf5'),
-    tdMoney(fmtNum(stmt.totalDebit), '#fef2f2'),
+    tdMoney(fmtNum(Math.abs(bal)), C.panel),
+    tdMoney(fmtNum(stmt.totalCredit), C.panel),
+    tdMoney(fmtNum(stmt.totalDebit), C.panel),
     {
       text: 'الإجمالي',
       bold: true,
-      fontSize: 7,
+      fontSize: 7.5,
+      color: C.text,
       alignment: 'right',
-      fillColor: '#f1f5f9',
+      fillColor: C.panel,
       colSpan: 3,
       margin: [4, 5, 4, 5]
     },
@@ -174,81 +216,14 @@ function stmtTotalsTableRow(stmt) {
   ];
 }
 
-function stmtKpiCell(label, value, accent) {
-  return {
-    stack: [
-      { text: label, fontSize: 6.5, color: '#64748b', alignment: 'center', margin: [0, 0, 0, 2] },
-      { text: value, font: 'Roboto', fontSize: 9, bold: true, color: accent || '#0f172a', alignment: 'center' }
-    ],
-    margin: [6, 8, 6, 8]
-  };
-}
-
 function statementPdfHeader(acc, periodNote) {
-  const logo = getLogoDataUrl();
   const metaLine = [periodNote, acc.address || ''].filter(Boolean).join(' · ');
-
-  const left = logo
-    ? { image: logo, width: 36, alignment: 'left', margin: [8, 10, 0, 10] }
-    : { text: '', width: 36 };
-
-  const center = {
-    stack: [
-      { text: COMPANY_NAME, fontSize: 12, bold: true, color: COLORS.header, alignment: 'center' },
-      { text: 'كشف حساب', fontSize: 8, color: '#64748b', alignment: 'center', margin: [0, 2, 0, 0] }
-    ],
-    margin: [0, 12, 0, 12]
-  };
-
-  const right = {
-    stack: [
-      { text: acc.name1 || '—', fontSize: 10, bold: true, color: '#0f172a', alignment: 'right' },
-      metaLine
-        ? { text: metaLine, fontSize: 6.5, color: '#64748b', alignment: 'right', margin: [0, 3, 0, 0] }
-        : null
-    ].filter(Boolean),
-    margin: [0, 10, 10, 10]
-  };
-
-  return {
-    table: {
-      widths: [44, '*', '*'],
-      body: [[
-        left,
-        center,
-        right
-      ]]
-    },
-    layout: {
-      hLineWidth: () => 0,
-      vLineWidth: () => 0,
-      fillColor: () => '#ffffff'
-    },
-    margin: [0, 0, 0, 8]
-  };
-}
-
-function statementSummaryBar(stmt, debtAmount) {
-  const bal = Number(stmt.finalBalance ?? stmt.account?.bal ?? 0);
-  return {
-    table: {
-      widths: ['*', '*', '*', '*'],
-      body: [[
-        stmtKpiCell('إجمالي مدين', fmtNum(stmt.totalDebit), '#b91c1c'),
-        stmtKpiCell('إجمالي دائن', fmtNum(stmt.totalCredit), '#047857'),
-        stmtKpiCell('الديون', debtAmount, '#b91c1c'),
-        stmtKpiCell('رصيد الحساب', fmtNum(Math.abs(bal)), '#1d4ed8')
-      ]]
-    },
-    layout: {
-      hLineWidth: () => 0.4,
-      vLineWidth: () => 0.4,
-      hLineColor: () => '#e2e8f0',
-      vLineColor: () => '#e2e8f0',
-      fillColor: () => '#fafafa'
-    },
-    margin: [0, 0, 0, 10]
-  };
+  return docHeader('كشف حساب', [
+    { text: acc.name1 || '—', fontSize: 10, bold: true, color: C.text, alignment: 'right' },
+    metaLine
+      ? { text: metaLine, fontSize: 7, color: C.muted, alignment: 'right', margin: [0, 3, 0, 0] }
+      : null
+  ].filter(Boolean));
 }
 
 function invBarcode(line) {
@@ -256,16 +231,15 @@ function invBarcode(line) {
   return code.replace(/\s+/g, '') || '—';
 }
 
-/** يمين: م … يسار: المبلغ (ترتيب المصفوفة لـ pdfmake-rtl) */
 function invHeaderRow() {
   return [
-    thInv('م', '#475569'),
-    thInv('الباركود', COLORS.header),
-    thInv('اسم المادة', COLORS.headerAlt),
-    thInv('الكمية', COLORS.qty),
-    thInv('هدية', COLORS.qty),
-    thInv('سعر الوحدة', COLORS.price),
-    thInv('المبلغ', COLORS.price)
+    th('م'),
+    th('الباركود'),
+    th('اسم المادة'),
+    th('الكمية'),
+    th('هدية'),
+    th('سعر الوحدة'),
+    th('المبلغ')
   ];
 }
 
@@ -291,7 +265,7 @@ function tdName(value, fill) {
 }
 
 function invLineRow(line, rowIndex) {
-  const fill = rowIndex % 2 === 0 ? COLORS.zebra : '#ffffff';
+  const fill = rowFill(rowIndex);
   return [
     td(String(rowIndex + 1), 'center', fill),
     tdBarcode(invBarcode(line), fill),
@@ -303,61 +277,25 @@ function invLineRow(line, rowIndex) {
   ];
 }
 
-function invTableLayout() {
-  return {
-    hLineWidth: (i, node) => {
-      if (i === 0 || i === 1) return 0.65;
-      if (node && i === node.table.body.length) return 0.45;
-      return 0.15;
-    },
-    vLineWidth: () => 0.15,
-    hLineColor: (i) => (i <= 1 ? COLORS.header : COLORS.border),
-    vLineColor: () => COLORS.border,
-    paddingLeft: () => 3,
-    paddingRight: () => 3,
-    paddingTop: () => 1.2,
-    paddingBottom: () => 1.2
-  };
-}
-
-function thInv(text, color = COLORS.header) {
-  return {
-    text,
-    style: 'th',
-    fontSize: 7.5,
-    bold: true,
-    color: '#ffffff',
-    fillColor: color,
-    alignment: 'center',
-    margin: [2, 4, 2, 4]
-  };
-}
-
 function invoicePdfHeader(inv) {
-  const logo = getLogoDataUrl();
   const title = inv.kindLabel || 'فاتورة مبيعات';
-
-  const accent = {
-    canvas: [{ type: 'rect', x: 0, y: 0, w: 562, h: 4, color: COLORS.headerAlt }],
-    margin: [0, 0, 0, 0]
-  };
-
+  const logo = getLogoDataUrl();
   const headerInner = {
     table: {
       widths: [118, '*', 48],
       body: [[
         {
           stack: [
-            { text: title, fontSize: 8.5, bold: true, color: COLORS.headerAlt, alignment: 'right' },
-            { text: `رقم ${inv.num || '—'}`, fontSize: 12, bold: true, color: COLORS.header, alignment: 'right', margin: [0, 4, 0, 0] },
-            { text: fmtDate(inv.date), fontSize: 7.5, color: '#64748b', alignment: 'right' }
+            { text: title, fontSize: 9, bold: true, color: C.text, alignment: 'right' },
+            { text: `رقم ${inv.num || '—'}`, fontSize: 12, bold: true, color: C.text, alignment: 'right', margin: [0, 4, 0, 0] },
+            { text: fmtDate(inv.date), fontSize: 7.5, color: C.muted, alignment: 'right' }
           ],
           margin: [10, 11, 10, 11]
         },
         {
           stack: [
-            { text: COMPANY_NAME, fontSize: 13, bold: true, color: COLORS.header, alignment: 'center' },
-            { text: 'وثيقة مبيعات', fontSize: 7, color: '#94a3b8', alignment: 'center', margin: [0, 3, 0, 0] }
+            { text: COMPANY_NAME, style: 'title', alignment: 'center' },
+            { text: 'وثيقة مبيعات', style: 'sub', alignment: 'center', margin: [0, 3, 0, 0] }
           ],
           margin: [8, 12, 8, 12]
         },
@@ -369,42 +307,40 @@ function invoicePdfHeader(inv) {
     layout: 'noBorders'
   };
 
-  const headerFrame = {
-    table: { widths: ['*'], body: [[headerInner]] },
-    layout: {
-      hLineWidth: () => 0.8,
-      vLineWidth: () => 0.8,
-      hLineColor: () => COLORS.border,
-      vLineColor: () => COLORS.border,
-      fillColor: () => '#ffffff'
-    }
-  };
-
   const client = {
     table: {
-      widths: [5, '*'],
-      body: [[
-        { text: '', fillColor: COLORS.headerAlt },
-        {
-          fillColor: '#f8fafc',
-          stack: [
-            { text: 'العميل', fontSize: 7, color: '#64748b', alignment: 'right' },
-            { text: inv.accountName || '—', fontSize: 9.5, bold: true, color: '#0f172a', alignment: 'right', margin: [0, 3, 0, 0] }
-          ],
-          margin: [10, 9, 10, 9]
-        }
-      ]]
+      widths: ['*'],
+      body: [[{
+        fillColor: C.panel,
+        stack: [
+          { text: 'العميل', fontSize: 7, color: C.muted, alignment: 'right' },
+          { text: inv.accountName || '—', fontSize: 9.5, bold: true, color: C.text, alignment: 'right', margin: [0, 3, 0, 0] }
+        ],
+        margin: [10, 9, 10, 9]
+      }]]
     },
     layout: {
-      hLineWidth: () => 0.5,
-      vLineWidth: () => 0.5,
-      hLineColor: () => COLORS.border,
-      vLineColor: () => COLORS.border
+      hLineWidth: () => 0.4,
+      vLineWidth: () => 0.4,
+      hLineColor: () => C.border,
+      vLineColor: () => C.border
     }
   };
 
   return {
-    stack: [accent, headerFrame, client],
+    stack: [
+      {
+        table: { widths: ['*'], body: [[headerInner]] },
+        layout: {
+          hLineWidth: () => 0.5,
+          vLineWidth: () => 0.5,
+          hLineColor: () => C.border,
+          vLineColor: () => C.border,
+          fillColor: () => '#ffffff'
+        }
+      },
+      client
+    ],
     margin: [0, 0, 0, 6]
   };
 }
@@ -420,26 +356,25 @@ function invoiceMetaGrid(inv, lines, qtySum) {
     table: {
       widths: rows.map(() => '*'),
       body: [
-        rows.map(([label], i) => ({
+        rows.map(([label]) => ({
           text: label,
           style: 'invMetaLbl',
-          fillColor: INV_META_ACCENTS[i],
+          fillColor: C.panel,
           margin: [3, 5, 3, 2]
         })),
-        rows.map(([, val], i) => ({
+        rows.map(([, val]) => ({
           text: val,
           style: 'invMetaVal',
           fillColor: '#ffffff',
-          color: i === 3 ? '#047857' : '#0f172a',
           margin: [3, 2, 3, 6]
         }))
       ]
     },
     layout: {
-      hLineWidth: () => 0.45,
-      vLineWidth: () => 0.45,
-      hLineColor: () => COLORS.border,
-      vLineColor: () => COLORS.border
+      hLineWidth: () => 0.4,
+      vLineWidth: () => 0.4,
+      hLineColor: () => C.border,
+      vLineColor: () => C.border
     },
     margin: [0, 0, 0, 5]
   };
@@ -455,24 +390,24 @@ function invoiceSectionTitle(text) {
 }
 
 function invoiceTotalsPanel(inv) {
-  const row = (label, value, fill, highlight = false) => [
+  const row = (label, value, bold = false) => [
     {
       text: label,
       fontSize: 7.5,
       bold: true,
       alignment: 'right',
-      fillColor: fill,
-      color: '#334155',
+      fillColor: C.panel,
+      color: C.text,
       margin: [10, 6, 6, 6]
     },
     {
       text: value,
       font: 'Roboto',
-      fontSize: highlight ? 9 : 7.5,
+      fontSize: bold ? 9 : 8,
       bold: true,
       alignment: 'center',
-      fillColor: fill,
-      color: highlight ? '#047857' : '#0f172a',
+      fillColor: C.panel,
+      color: C.text,
       noWrap: true,
       margin: [6, 6, 10, 6]
     }
@@ -482,24 +417,21 @@ function invoiceTotalsPanel(inv) {
     table: {
       widths: ['*', 64],
       body: [
-        row('إجمالي الفاتورة', fmtInvPrice(inv.total), '#ffffff'),
-        row('الحسومات', fmtInvPrice(inv.discount), '#fff7ed'),
-        row('الصافي للدفع', fmtInvPrice(inv.netPay), '#d1fae5', true)
+        row('إجمالي الفاتورة', fmtInvPrice(inv.total)),
+        row('الحسومات', fmtInvPrice(inv.discount)),
+        row('الصافي للدفع', fmtInvPrice(inv.netPay), true)
       ]
     },
     layout: {
-      hLineWidth: (i) => (i === 0 ? 0.55 : 0.35),
-      vLineWidth: () => 0.35,
-      hLineColor: () => COLORS.border,
-      vLineColor: () => COLORS.border
+      hLineWidth: () => 0.4,
+      vLineWidth: () => 0.4,
+      hLineColor: () => C.border,
+      vLineColor: () => C.border
     }
   };
 
   return {
-    columns: [
-      panel,
-      { width: '*', text: '' }
-    ],
+    columns: [panel, { width: '*', text: '' }],
     margin: [0, 6, 0, 0]
   };
 }
@@ -510,7 +442,6 @@ function fmtQtyInt(v) {
   return fmtNum(Math.round(n), 0);
 }
 
-/** أسعار الفاتورة PDF بدون كسور عشرية */
 function fmtInvPrice(v) {
   const n = Number(v);
   if (Number.isNaN(n)) return '—';
@@ -520,8 +451,8 @@ function fmtInvPrice(v) {
 function pdfFooter() {
   return (currentPage, pageCount) => ({
     columns: [
-      { text: fmtDate(new Date()), alignment: 'right', fontSize: 6.5, color: '#94a3b8' },
-      { text: `${currentPage} / ${pageCount}`, alignment: 'left', fontSize: 6.5, color: '#94a3b8' }
+      { text: fmtDate(new Date()), alignment: 'right', fontSize: 7, color: C.muted },
+      { text: `${currentPage} / ${pageCount}`, alignment: 'left', fontSize: 7, color: C.muted }
     ],
     margin: [14, 0, 14, 0]
   });
@@ -530,7 +461,7 @@ function pdfFooter() {
 function baseDoc(content) {
   return {
     rtl: true,
-    defaultStyle: { font: 'Cairo', fontSize: 7 },
+    defaultStyle: { font: 'Cairo', fontSize: 7.5, color: C.text },
     pageSize: 'A4',
     pageMargins: [14, 12, 14, 22],
     styles: STYLES,
@@ -573,6 +504,7 @@ async function buildStatementPdf(stmt, meta = {}) {
     periodParts.push(`مرحّل ${fmtNum(Math.abs(openingBal))}`);
   }
   const periodNote = periodParts.join(' · ');
+  const bal = Number(stmt.finalBalance ?? acc.bal ?? 0);
 
   const tableBody = [stmtHeaderRow(), ...lines.map((row, i) => stmtLineRow(row, i))];
   if (lines.length) {
@@ -580,12 +512,13 @@ async function buildStatementPdf(stmt, meta = {}) {
   }
 
   const doc = baseDoc([
-    {
-      canvas: [{ type: 'rect', x: 0, y: 0, w: 562, h: 3, color: COLORS.headerAlt }],
-      margin: [0, 0, 0, 6]
-    },
     statementPdfHeader(acc, periodNote),
-    statementSummaryBar(stmt, debtAmount),
+    summaryBar([
+      kpiCell('إجمالي مدين', fmtNum(stmt.totalDebit)),
+      kpiCell('إجمالي دائن', fmtNum(stmt.totalCredit)),
+      kpiCell('الديون', debtAmount),
+      kpiCell('رصيد الحساب', fmtNum(Math.abs(bal)))
+    ]),
     {
       table: {
         headerRows: 1,
@@ -593,7 +526,7 @@ async function buildStatementPdf(stmt, meta = {}) {
         body: tableBody,
         dontBreakRows: false
       },
-      layout: stmtTableLayout()
+      layout: tableLayout()
     }
   ]);
 
@@ -626,7 +559,7 @@ async function buildInvoicePdf(data) {
         body: tableBody,
         dontBreakRows: false
       },
-      layout: invTableLayout()
+      layout: tableLayout()
     },
     ...(lines.length ? [invoiceTotalsPanel(inv)] : [])
   ]);
