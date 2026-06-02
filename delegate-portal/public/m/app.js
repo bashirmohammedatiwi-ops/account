@@ -509,7 +509,6 @@ function renderBranches() {
       <div class="nav-card-body">
         <div class="nav-card-top">
           <div class="nav-card-name">${esc(b.name1 || '—')}</div>
-          <span class="nav-card-num">${esc(b.num)}</span>
         </div>
       </div>
       <span class="nav-card-arrow">${ICONS.chevron}</span>
