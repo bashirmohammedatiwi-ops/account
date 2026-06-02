@@ -136,46 +136,23 @@ function boxLayout() {
   };
 }
 
-function compactStatCell(label, value, valueColor = C.text, labelBg = C.headerBg) {
-  return {
-    table: {
-      widths: ['*'],
-      body: [[
-        {
-          text: label,
-          style: 'boxLbl',
-          alignment: 'center',
-          fillColor: labelBg,
-          margin: [2, 2, 2, 2]
-        },
-        {
-          text: value,
-          style: 'boxVal',
-          color: valueColor,
-          alignment: 'center',
-          fillColor: '#ffffff',
-          margin: [2, 3, 2, 4]
-        }
-      ]]
-    },
-    layout: boxLayout()
-  };
-}
-
 function pdfTopHeader({ docLabel, badgeText, sideNote, infoLabel, infoValue, infoExtra, stats }) {
   const logo = getLogoDataUrl();
   const logoCell = logo
     ? { image: logo, width: 32, alignment: 'center', margin: [4, 5, 4, 5] }
-    : { text: '', width: 32 };
+    : { text: '' };
 
-  const brandRow = {
+  const nameLine = [infoValue, infoExtra].filter(Boolean).join(' · ');
+  const statRows = stats || [];
+
+  const headerBlock = {
     table: {
       widths: [38, '*', 98],
       body: [[
         logoCell,
         {
           stack: [
-            { text: COMPANY_NAME, fontSize: 11, bold: true, color: C.text, alignment: 'center' },
+            { text: COMPANY_NAME, style: 'title', alignment: 'center' },
             {
               text: docLabel,
               fontSize: 8,
@@ -199,19 +176,18 @@ function pdfTopHeader({ docLabel, badgeText, sideNote, infoLabel, infoValue, inf
               fillColor: C.primary,
               margin: [6, 4, 6, 4]
             },
-            sideNote
-              ? { text: sideNote, fontSize: 7, bold: true, color: C.muted, alignment: 'right', margin: [0, 3, 0, 0] }
-              : null
-          ].filter(Boolean),
+            ...(sideNote
+              ? [{ text: sideNote, fontSize: 7, bold: true, color: C.muted, alignment: 'right', margin: [0, 3, 0, 0] }]
+              : [])
+          ],
           margin: [4, 5, 6, 5]
         }
       ]]
     },
-    layout: 'noBorders'
+    layout: boxLayout()
   };
 
-  const nameParts = [infoValue, infoExtra].filter(Boolean);
-  const accountStrip = {
+  const accountBlock = {
     table: {
       widths: [72, '*'],
       body: [[
@@ -225,7 +201,7 @@ function pdfTopHeader({ docLabel, badgeText, sideNote, infoLabel, infoValue, inf
           margin: [6, 4, 6, 4]
         },
         {
-          text: nameParts.join(' · '),
+          text: nameLine || '—',
           fontSize: 8.5,
           bold: true,
           color: C.text,
@@ -238,15 +214,27 @@ function pdfTopHeader({ docLabel, badgeText, sideNote, infoLabel, infoValue, inf
     layout: boxLayout()
   };
 
-  const statCells = (stats || []).map(([label, value, accent, labelBg]) =>
-    compactStatCell(label, value, accent || C.text, labelBg || C.headerBg)
-  );
-
-  const summaryRow = statCells.length
+  const statsBlock = statRows.length
     ? {
       table: {
-        widths: statCells.map(() => '*'),
-        body: [statCells]
+        widths: statRows.map(() => '*'),
+        body: [
+          statRows.map(([label, , , labelBg]) => ({
+            text: label,
+            style: 'boxLbl',
+            alignment: 'center',
+            fillColor: labelBg || C.headerBg,
+            margin: [2, 3, 2, 3]
+          })),
+          statRows.map(([, value, accent]) => ({
+            text: value,
+            style: 'boxVal',
+            color: accent || C.text,
+            alignment: 'center',
+            fillColor: '#ffffff',
+            margin: [2, 4, 2, 5]
+          }))
+        ]
       },
       layout: boxLayout(),
       margin: [0, 4, 0, 0]
@@ -259,24 +247,9 @@ function pdfTopHeader({ docLabel, badgeText, sideNote, infoLabel, infoValue, inf
         canvas: [{ type: 'rect', x: 0, y: 0, w: 575, h: 3, color: C.primary }],
         margin: [0, 0, 0, 0]
       },
-      {
-        table: {
-          widths: ['*'],
-          body: [
-            [brandRow],
-            [accountStrip]
-          ]
-        },
-        layout: {
-          hLineWidth: () => 0.45,
-          vLineWidth: () => 0.45,
-          hLineColor: () => C.border,
-          vLineColor: () => C.border,
-          fillColor: () => '#ffffff'
-        },
-        margin: [0, 0, 0, 0]
-      },
-      summaryRow
+      headerBlock,
+      accountBlock,
+      statsBlock
     ].filter(Boolean),
     margin: [0, 0, 0, 5]
   };
@@ -306,6 +279,10 @@ function stmtLineRow(row, rowIndex) {
   ];
 }
 
+function emptyCell() {
+  return { text: '' };
+}
+
 function stmtTotalsTableRow(stmt) {
   const bal = Number(stmt.finalBalance ?? stmt.account?.bal ?? 0);
   return [
@@ -319,8 +296,8 @@ function stmtTotalsTableRow(stmt) {
       colSpan: 3,
       margin: [2, 4, 2, 4]
     },
-    {},
-    {},
+    emptyCell(),
+    emptyCell(),
     tdMoney(fmtNum(stmt.totalDebit), C.panel, C.debit),
     tdMoney(fmtNum(stmt.totalCredit), C.panel, C.credit),
     tdMoney(fmtNum(Math.abs(bal)), C.panel)
@@ -402,7 +379,11 @@ function invTotalsRows(inv) {
       colSpan: 6,
       margin: [2, 4, 2, 4]
     },
-    {}, {}, {}, {}, {},
+    emptyCell(),
+    emptyCell(),
+    emptyCell(),
+    emptyCell(),
+    emptyCell(),
     tdMoney(value, fill)
   ];
   return [
