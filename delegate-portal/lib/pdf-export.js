@@ -181,11 +181,20 @@ function invLineRow(line, rowIndex) {
   ];
 }
 
-/** القيمة في عمود المبلغ (أول عمود يساراً) وليس عمود م */
+function invEmpty(fill) {
+  return { text: '', fillColor: fill || null };
+}
+
+/** 7 خلايا: المبلغ يساراً + التسمية تمتد على باقي الأعمدة (pdfmake يتطلب صفاً كاملاً) */
 function invSumRow(label, value, fill) {
   return [
     tdMoney(value, fill),
-    footLabel(label, 6, fill)
+    footLabel(label, 6, fill),
+    invEmpty(fill),
+    invEmpty(fill),
+    invEmpty(fill),
+    invEmpty(fill),
+    invEmpty(fill)
   ];
 }
 
