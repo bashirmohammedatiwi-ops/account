@@ -10,31 +10,34 @@ pdfmake.addFonts(require('@digicole/pdfmake-rtl/fonts/Roboto'));
 const COMPANY_NAME = 'شركة ديما الحياة';
 const LOGO_PATH = path.join(__dirname, '..', 'public', 'm', 'assets', 'logo.png');
 
-/** لوحة ألوان موحّدة — بسيطة وواضحة */
 const C = {
   text: '#111111',
-  muted: '#444444',
-  headerBg: '#333333',
+  muted: '#333333',
+  primary: '#0f766e',
+  primaryDark: '#115e59',
+  primaryLight: '#ecfdf5',
+  headerBg: '#1e3a5f',
   headerText: '#ffffff',
-  border: '#cccccc',
-  zebra: '#f5f5f5',
-  panel: '#f5f5f5'
+  border: '#cbd5e1',
+  zebra: '#f8fafc',
+  panel: '#f1f5f9',
+  debit: '#991b1b',
+  credit: '#047857',
+  net: '#0f766e'
 };
 
 const STYLES = {
-  title: { fontSize: 12, bold: true, color: C.text },
-  sub: { fontSize: 8, color: C.muted },
-  th: { fontSize: 7.5, bold: true, color: C.headerText },
-  td: { fontSize: 7.5, color: C.text },
-  meta: { fontSize: 7.5, color: C.muted },
-  metaVal: { fontSize: 8, bold: true, color: C.text },
-  foot: { fontSize: 7.5, bold: true, color: C.text },
-  tdBarcode: { fontSize: 7, font: 'Roboto', color: C.text },
-  tdName: { fontSize: 7.5, color: C.text },
-  tdMoney: { fontSize: 8, font: 'Roboto', bold: true, color: C.text },
-  invMetaLbl: { fontSize: 7, color: C.muted, alignment: 'center' },
-  invMetaVal: { fontSize: 8.5, font: 'Roboto', bold: true, color: C.text, alignment: 'center' },
-  invSection: { fontSize: 8.5, bold: true, color: C.text }
+  title: { fontSize: 13, bold: true, color: C.text },
+  sub: { fontSize: 8.5, bold: true, color: C.primaryDark },
+  th: { fontSize: 8, bold: true, color: C.headerText },
+  td: { fontSize: 8, bold: true, color: C.text },
+  tdDate: { fontSize: 8, font: 'Roboto', bold: true, color: C.text },
+  tdBarcode: { fontSize: 7.5, font: 'Roboto', bold: true, color: C.text },
+  tdName: { fontSize: 8, bold: true, color: C.text },
+  tdMoney: { fontSize: 8.5, font: 'Roboto', bold: true, color: C.text },
+  invMetaLbl: { fontSize: 7.5, bold: true, color: C.muted, alignment: 'center' },
+  invMetaVal: { fontSize: 9, font: 'Roboto', bold: true, color: C.text, alignment: 'center' },
+  invSection: { fontSize: 9, bold: true, color: C.primaryDark }
 };
 
 const INV_WIDTHS = [16, 74, '*', 30, 26, 42, 54];
@@ -64,11 +67,18 @@ function fmtDate(v) {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
+function accentBar() {
+  return {
+    canvas: [{ type: 'rect', x: 0, y: 0, w: 562, h: 5, color: C.primary }],
+    margin: [0, 0, 0, 0]
+  };
+}
+
 function tableLayout() {
   return {
     hLineWidth: (i, node) => {
-      if (i === 0 || i === 1) return 0.5;
-      if (node && i === node.table.body.length) return 0.5;
+      if (i === 0 || i === 1) return 0.55;
+      if (node && i === node.table.body.length) return 0.55;
       return 0.2;
     },
     vLineWidth: () => 0.2,
@@ -87,18 +97,22 @@ function th(text) {
     style: 'th',
     fillColor: C.headerBg,
     alignment: 'center',
-    margin: [2, 4, 2, 4]
+    margin: [2, 5, 2, 5]
   };
 }
 
-function td(value, align = 'center', fill) {
+function td(value, align = 'center', fill, style = 'td') {
   return {
     text: String(value ?? '—'),
-    style: 'td',
+    style,
     alignment: align,
     fillColor: fill || null,
-    margin: [2, 2, 2, 2]
+    margin: [2, 3, 2, 3]
   };
+}
+
+function tdDate(value, fill) {
+  return td(fmtDate(value), 'center', fill, 'tdDate');
 }
 
 function tdMoney(value, fill) {
@@ -113,17 +127,110 @@ function tdMoney(value, fill) {
 }
 
 function rowFill(rowIndex, highlight) {
-  if (highlight) return C.zebra;
+  if (highlight) return C.primaryLight;
   return rowIndex % 2 === 0 ? '#ffffff' : C.zebra;
 }
 
-function kpiCell(label, value) {
+function badge(text, fill = C.primary) {
+  return {
+    table: {
+      widths: ['*'],
+      body: [[{
+        text,
+        fontSize: 8,
+        bold: true,
+        color: '#ffffff',
+        alignment: 'center',
+        fillColor: fill,
+        margin: [8, 6, 8, 6]
+      }]]
+    },
+    layout: 'noBorders'
+  };
+}
+
+function infoStrip(label, value) {
+  return {
+    table: {
+      widths: [4, '*'],
+      body: [[
+        { text: '', fillColor: C.primary },
+        {
+          fillColor: C.panel,
+          stack: [
+            { text: label, fontSize: 7.5, bold: true, color: C.muted, alignment: 'right' },
+            { text: value, fontSize: 10, bold: true, color: C.text, alignment: 'right', margin: [0, 3, 0, 0] }
+          ],
+          margin: [10, 8, 10, 8]
+        }
+      ]]
+    },
+    layout: {
+      hLineWidth: () => 0.45,
+      vLineWidth: () => 0.45,
+      hLineColor: () => C.border,
+      vLineColor: () => C.border
+    }
+  };
+}
+
+function pdfTopHeader(docLabel, badgeText, leftStack, infoLabel, infoValue) {
+  const logo = getLogoDataUrl();
+  const logoCell = logo
+    ? { image: logo, width: 42, alignment: 'center', margin: [6, 10, 6, 10] }
+    : { text: '', width: 42 };
+
+  const headerRow = {
+    table: {
+      widths: [52, '*', 108],
+      body: [[
+        logoCell,
+        {
+          stack: [
+            { text: COMPANY_NAME, style: 'title', alignment: 'center' },
+            { text: docLabel, style: 'sub', alignment: 'center', margin: [0, 3, 0, 0] }
+          ],
+          margin: [0, 12, 0, 12]
+        },
+        {
+          stack: [
+            badge(badgeText),
+            { stack: leftStack, margin: [0, 6, 0, 0] }
+          ],
+          margin: [6, 8, 8, 8]
+        }
+      ]]
+    },
+    layout: 'noBorders'
+  };
+
   return {
     stack: [
-      { text: label, fontSize: 7, color: C.muted, alignment: 'center', margin: [0, 0, 0, 2] },
-      { text: value, font: 'Roboto', fontSize: 9, bold: true, color: C.text, alignment: 'center' }
+      accentBar(),
+      {
+        table: { widths: ['*'], body: [[headerRow]] },
+        layout: {
+          hLineWidth: () => 0.6,
+          vLineWidth: () => 0.6,
+          hLineColor: () => C.border,
+          vLineColor: () => C.border,
+          fillColor: () => '#ffffff'
+        },
+        margin: [0, 0, 0, 6]
+      },
+      infoStrip(infoLabel, infoValue),
+      { text: '', margin: [0, 0, 0, 4] }
+    ]
+  };
+}
+
+function kpiCell(label, value, accent = C.text) {
+  return {
+    stack: [
+      { text: label, fontSize: 7.5, bold: true, color: C.muted, alignment: 'center', margin: [0, 0, 0, 3] },
+      { text: value, font: 'Roboto', fontSize: 10, bold: true, color: accent, alignment: 'center' }
     ],
-    margin: [6, 8, 6, 8]
+    margin: [6, 9, 6, 9]
   };
 }
 
@@ -134,39 +241,12 @@ function summaryBar(cells) {
       body: [cells]
     },
     layout: {
-      hLineWidth: () => 0.4,
-      vLineWidth: () => 0.4,
+      hLineWidth: () => 0.45,
+      vLineWidth: () => 0.45,
       hLineColor: () => C.border,
       vLineColor: () => C.border,
-      fillColor: () => C.panel
+      fillColor: () => '#ffffff'
     },
-    margin: [0, 0, 0, 8]
-  };
-}
-
-function docHeader(title, rightStack, centerSub) {
-  const logo = getLogoDataUrl();
-  const left = logo
-    ? { image: logo, width: 36, alignment: 'left', margin: [8, 10, 0, 10] }
-    : { text: '', width: 36 };
-
-  const center = {
-    stack: [
-      { text: COMPANY_NAME, style: 'title', alignment: 'center' },
-      { text: title, style: 'sub', alignment: 'center', margin: [0, 2, 0, 0] },
-      centerSub ? { text: centerSub, fontSize: 7, color: C.muted, alignment: 'center', margin: [0, 2, 0, 0] } : null
-    ].filter(Boolean),
-    margin: [0, 10, 0, 10]
-  };
-
-  const right = {
-    stack: rightStack,
-    margin: [0, 10, 10, 10]
-  };
-
-  return {
-    table: { widths: [44, '*', '*'], body: [[left, center, right]] },
-    layout: 'noBorders',
     margin: [0, 0, 0, 8]
   };
 }
@@ -190,7 +270,7 @@ function stmtLineRow(row, rowIndex) {
     tdMoney(row.credit ? fmtNum(row.credit) : '—', fill),
     tdMoney(row.debit ? fmtNum(row.debit) : '—', fill),
     td(row.description || '—', 'right', fill),
-    td(fmtDate(row.date), 'center', fill),
+    tdDate(row.date, fill),
     td(idx, 'center', fill)
   ];
 }
@@ -204,12 +284,12 @@ function stmtTotalsTableRow(stmt) {
     {
       text: 'الإجمالي',
       bold: true,
-      fontSize: 7.5,
+      fontSize: 8.5,
       color: C.text,
       alignment: 'right',
       fillColor: C.panel,
       colSpan: 3,
-      margin: [4, 5, 4, 5]
+      margin: [4, 6, 4, 6]
     },
     {},
     {}
@@ -218,12 +298,20 @@ function stmtTotalsTableRow(stmt) {
 
 function statementPdfHeader(acc, periodNote) {
   const metaLine = [periodNote, acc.address || ''].filter(Boolean).join(' · ');
-  return docHeader('كشف حساب', [
-    { text: acc.name1 || '—', fontSize: 10, bold: true, color: C.text, alignment: 'right' },
+  const badgeText = acc.num ? `حساب ${acc.num}` : 'كشف حساب';
+  const leftStack = [
     metaLine
-      ? { text: metaLine, fontSize: 7, color: C.muted, alignment: 'right', margin: [0, 3, 0, 0] }
+      ? { text: metaLine, fontSize: 7.5, bold: true, color: C.muted, alignment: 'right' }
       : null
-  ].filter(Boolean));
+  ].filter(Boolean);
+
+  return pdfTopHeader(
+    'كشف حساب',
+    badgeText,
+    leftStack,
+    'اسم الحساب',
+    acc.name1 || '—'
+  );
 }
 
 function invBarcode(line) {
@@ -250,7 +338,7 @@ function tdBarcode(value, fill) {
     alignment: 'center',
     fillColor: fill || null,
     noWrap: true,
-    margin: [2, 2, 2, 2]
+    margin: [2, 3, 2, 3]
   };
 }
 
@@ -260,7 +348,7 @@ function tdName(value, fill) {
     style: 'tdName',
     alignment: 'right',
     fillColor: fill || null,
-    margin: [2, 2, 2, 2]
+    margin: [2, 3, 2, 3]
   };
 }
 
@@ -279,104 +367,51 @@ function invLineRow(line, rowIndex) {
 
 function invoicePdfHeader(inv) {
   const title = inv.kindLabel || 'فاتورة مبيعات';
-  const logo = getLogoDataUrl();
-  const headerInner = {
-    table: {
-      widths: [118, '*', 48],
-      body: [[
-        {
-          stack: [
-            { text: title, fontSize: 9, bold: true, color: C.text, alignment: 'right' },
-            { text: `رقم ${inv.num || '—'}`, fontSize: 12, bold: true, color: C.text, alignment: 'right', margin: [0, 4, 0, 0] },
-            { text: fmtDate(inv.date), fontSize: 7.5, color: C.muted, alignment: 'right' }
-          ],
-          margin: [10, 11, 10, 11]
-        },
-        {
-          stack: [
-            { text: COMPANY_NAME, style: 'title', alignment: 'center' },
-            { text: 'وثيقة مبيعات', style: 'sub', alignment: 'center', margin: [0, 3, 0, 0] }
-          ],
-          margin: [8, 12, 8, 12]
-        },
-        logo
-          ? { image: logo, width: 40, alignment: 'center', margin: [4, 10, 4, 10] }
-          : { text: '' }
-      ]]
-    },
-    layout: 'noBorders'
-  };
+  const leftStack = [
+    { text: fmtDate(inv.date), fontSize: 8, font: 'Roboto', bold: true, color: C.text, alignment: 'right' }
+  ];
 
-  const client = {
-    table: {
-      widths: ['*'],
-      body: [[{
-        fillColor: C.panel,
-        stack: [
-          { text: 'العميل', fontSize: 7, color: C.muted, alignment: 'right' },
-          { text: inv.accountName || '—', fontSize: 9.5, bold: true, color: C.text, alignment: 'right', margin: [0, 3, 0, 0] }
-        ],
-        margin: [10, 9, 10, 9]
-      }]]
-    },
-    layout: {
-      hLineWidth: () => 0.4,
-      vLineWidth: () => 0.4,
-      hLineColor: () => C.border,
-      vLineColor: () => C.border
-    }
-  };
-
-  return {
-    stack: [
-      {
-        table: { widths: ['*'], body: [[headerInner]] },
-        layout: {
-          hLineWidth: () => 0.5,
-          vLineWidth: () => 0.5,
-          hLineColor: () => C.border,
-          vLineColor: () => C.border,
-          fillColor: () => '#ffffff'
-        }
-      },
-      client
-    ],
-    margin: [0, 0, 0, 6]
-  };
+  return pdfTopHeader(
+    title,
+    `رقم ${inv.num || '—'}`,
+    leftStack,
+    'العميل',
+    inv.accountName || '—'
+  );
 }
 
 function invoiceMetaGrid(inv, lines, qtySum) {
   const rows = [
-    ['عدد البنود', String(lines.length)],
-    ['إجمالي الكمية', fmtNum(Math.round(qtySum), 0)],
-    ['إجمالي الفاتورة', fmtInvPrice(inv.total)],
-    ['الصافي للدفع', fmtInvPrice(inv.netPay)]
+    ['عدد البنود', String(lines.length), C.panel],
+    ['إجمالي الكمية', fmtNum(Math.round(qtySum), 0), C.panel],
+    ['إجمالي الفاتورة', fmtInvPrice(inv.total), C.primaryLight],
+    ['الصافي للدفع', fmtInvPrice(inv.netPay), '#d1fae5']
   ];
   return {
     table: {
       widths: rows.map(() => '*'),
       body: [
-        rows.map(([label]) => ({
+        rows.map(([label, , fill]) => ({
           text: label,
           style: 'invMetaLbl',
-          fillColor: C.panel,
-          margin: [3, 5, 3, 2]
+          fillColor: fill,
+          margin: [3, 6, 3, 2]
         })),
-        rows.map(([, val]) => ({
+        rows.map(([, val, fill]) => ({
           text: val,
           style: 'invMetaVal',
-          fillColor: '#ffffff',
-          margin: [3, 2, 3, 6]
+          fillColor: fill,
+          margin: [3, 2, 3, 7]
         }))
       ]
     },
     layout: {
-      hLineWidth: () => 0.4,
-      vLineWidth: () => 0.4,
+      hLineWidth: () => 0.45,
+      vLineWidth: () => 0.45,
       hLineColor: () => C.border,
       vLineColor: () => C.border
     },
-    margin: [0, 0, 0, 5]
+    margin: [0, 0, 0, 6]
   };
 }
 
@@ -385,46 +420,46 @@ function invoiceSectionTitle(text) {
     text,
     style: 'invSection',
     alignment: 'right',
-    margin: [0, 2, 0, 3]
+    margin: [0, 2, 0, 4]
   };
 }
 
 function invoiceTotalsPanel(inv) {
-  const row = (label, value, bold = false) => [
+  const row = (label, value, fill, valueColor = C.text) => [
     {
       text: label,
-      fontSize: 7.5,
+      fontSize: 8,
       bold: true,
       alignment: 'right',
-      fillColor: C.panel,
+      fillColor: fill,
       color: C.text,
-      margin: [10, 6, 6, 6]
+      margin: [10, 7, 6, 7]
     },
     {
       text: value,
       font: 'Roboto',
-      fontSize: bold ? 9 : 8,
+      fontSize: 9,
       bold: true,
       alignment: 'center',
-      fillColor: C.panel,
-      color: C.text,
+      fillColor: fill,
+      color: valueColor,
       noWrap: true,
-      margin: [6, 6, 10, 6]
+      margin: [6, 7, 10, 7]
     }
   ];
 
   const panel = {
     table: {
-      widths: ['*', 64],
+      widths: ['*', 68],
       body: [
-        row('إجمالي الفاتورة', fmtInvPrice(inv.total)),
-        row('الحسومات', fmtInvPrice(inv.discount)),
-        row('الصافي للدفع', fmtInvPrice(inv.netPay), true)
+        row('إجمالي الفاتورة', fmtInvPrice(inv.total), '#ffffff'),
+        row('الحسومات', fmtInvPrice(inv.discount), '#fff7ed', C.debit),
+        row('الصافي للدفع', fmtInvPrice(inv.netPay), C.primaryLight, C.net)
       ]
     },
     layout: {
-      hLineWidth: () => 0.4,
-      vLineWidth: () => 0.4,
+      hLineWidth: () => 0.45,
+      vLineWidth: () => 0.45,
       hLineColor: () => C.border,
       vLineColor: () => C.border
     }
@@ -432,7 +467,7 @@ function invoiceTotalsPanel(inv) {
 
   return {
     columns: [panel, { width: '*', text: '' }],
-    margin: [0, 6, 0, 0]
+    margin: [0, 8, 0, 0]
   };
 }
 
@@ -451,8 +486,8 @@ function fmtInvPrice(v) {
 function pdfFooter() {
   return (currentPage, pageCount) => ({
     columns: [
-      { text: fmtDate(new Date()), alignment: 'right', fontSize: 7, color: C.muted },
-      { text: `${currentPage} / ${pageCount}`, alignment: 'left', fontSize: 7, color: C.muted }
+      { text: fmtDate(new Date()), font: 'Roboto', alignment: 'right', fontSize: 7.5, bold: true, color: C.muted },
+      { text: `${currentPage} / ${pageCount}`, font: 'Roboto', alignment: 'left', fontSize: 7.5, bold: true, color: C.muted }
     ],
     margin: [14, 0, 14, 0]
   });
@@ -461,9 +496,9 @@ function pdfFooter() {
 function baseDoc(content) {
   return {
     rtl: true,
-    defaultStyle: { font: 'Cairo', fontSize: 7.5, color: C.text },
+    defaultStyle: { font: 'Cairo', fontSize: 8, bold: true, color: C.text },
     pageSize: 'A4',
-    pageMargins: [14, 12, 14, 22],
+    pageMargins: [14, 14, 14, 24],
     styles: STYLES,
     footer: pdfFooter(),
     content
@@ -514,10 +549,10 @@ async function buildStatementPdf(stmt, meta = {}) {
   const doc = baseDoc([
     statementPdfHeader(acc, periodNote),
     summaryBar([
-      kpiCell('إجمالي مدين', fmtNum(stmt.totalDebit)),
-      kpiCell('إجمالي دائن', fmtNum(stmt.totalCredit)),
-      kpiCell('الديون', debtAmount),
-      kpiCell('رصيد الحساب', fmtNum(Math.abs(bal)))
+      kpiCell('إجمالي مدين', fmtNum(stmt.totalDebit), C.debit),
+      kpiCell('إجمالي دائن', fmtNum(stmt.totalCredit), C.credit),
+      kpiCell('الديون', debtAmount, C.debit),
+      kpiCell('رصيد الحساب', fmtNum(Math.abs(bal)), C.primaryDark)
     ]),
     {
       table: {
