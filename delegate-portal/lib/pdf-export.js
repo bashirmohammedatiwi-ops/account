@@ -33,11 +33,14 @@ const STYLES = {
   invType: { fontSize: 10, bold: true, color: COLORS.headerAlt },
   invClient: { fontSize: 8.5, bold: true, color: '#0f172a' },
   tdBarcode: { fontSize: 6, font: 'Roboto', color: '#0f172a' },
-  tdName: { fontSize: 6.5, color: '#0f172a' }
+  tdName: { fontSize: 6.5, color: '#0f172a' },
+  tdMoney: { fontSize: 7, font: 'Roboto', bold: true, color: '#0f172a' },
+  invMetaLbl: { fontSize: 6.5, color: '#64748b', alignment: 'center' },
+  invMetaVal: { fontSize: 8, font: 'Roboto', bold: true, color: '#0f172a', alignment: 'center' }
 };
 
-/** عروض الأعمدة من اليسار إلى اليمين في PDF (مطابق لعرض الويب dir=rtl) */
-const INV_WIDTHS = [38, 34, 22, 26, '*', 64, 11];
+/** يسار→يمين في pdfmake: المبلغ | … | م — مطابق للويب */
+const INV_WIDTHS = [52, 40, 24, 28, '*', 72, 14];
 
 function getLogoDataUrl() {
   if (!fs.existsSync(LOGO_PATH)) return null;
@@ -100,6 +103,17 @@ function td(value, align = 'center', fill) {
   };
 }
 
+function tdMoney(value, fill) {
+  return {
+    text: String(value ?? '—'),
+    style: 'tdMoney',
+    alignment: 'center',
+    fillColor: fill || null,
+    noWrap: true,
+    margin: [3, 3, 3, 3]
+  };
+}
+
 /** صف جدول من اليمين إلى اليسار: أول عمود = يمين (م) */
 function stmtHeaderRow() {
   return [
@@ -157,8 +171,8 @@ function tdName(value, fill) {
 function invLineRow(line, rowIndex) {
   const fill = rowIndex % 2 === 0 ? COLORS.zebra : '#ffffff';
   return [
-    td(fmtInvPrice(line.lineTotal), 'center', fill),
-    td(fmtInvPrice(line.price), 'center', fill),
+    tdMoney(fmtInvPrice(line.lineTotal), fill),
+    tdMoney(fmtInvPrice(line.price), fill),
     td(fmtQtyInt(line.bonus), 'center', fill),
     td(fmtQtyInt(line.quant), 'center', fill),
     tdName(line.matName || '—', fill),
@@ -167,57 +181,122 @@ function invLineRow(line, rowIndex) {
   ];
 }
 
+/** القيمة في عمود المبلغ (أول عمود يساراً) وليس عمود م */
 function invSumRow(label, value, fill) {
   return [
-    footLabel(label, 6, fill),
-    {},
-    {},
-    {},
-    {},
-    {},
-    td(value, 'center', fill)
+    tdMoney(value, fill),
+    footLabel(label, 6, fill)
   ];
 }
 
 function invoicePdfHeader(inv) {
   const logo = getLogoDataUrl();
   const title = inv.kindLabel || 'فاتورة مبيعات';
-  const center = {
-    stack: [
-      { text: COMPANY_NAME, style: 'title', alignment: 'right' },
-      { text: title, style: 'invType', alignment: 'right', margin: [0, 2, 0, 0] },
-      { text: `رقم ${inv.num || '—'}  ·  ${fmtDate(inv.date)}`, style: 'sub', alignment: 'right' }
-    ]
+  const logoCell = logo
+    ? { image: logo, width: 40, alignment: 'center', margin: [4, 4, 4, 4] }
+    : { text: '' };
+
+  const titleBand = {
+    table: {
+      widths: [44, '*', 100],
+      body: [[
+        logoCell,
+        {
+          stack: [
+            { text: COMPANY_NAME, fontSize: 12, bold: true, color: '#ffffff', alignment: 'center' },
+            { text: title, fontSize: 9.5, bold: true, color: '#ccfbf1', alignment: 'center', margin: [0, 3, 0, 0] }
+          ],
+          fillColor: COLORS.headerAlt,
+          margin: [6, 7, 6, 7]
+        },
+        {
+          stack: [
+            { text: `رقم ${inv.num || '—'}`, fontSize: 10, bold: true, color: '#ffffff', alignment: 'center' },
+            { text: fmtDate(inv.date), fontSize: 7.5, color: '#e2e8f0', alignment: 'center', margin: [0, 3, 0, 0] }
+          ],
+          fillColor: '#0d5c56',
+          margin: [4, 7, 4, 7]
+        }
+      ]]
+    },
+    layout: {
+      hLineWidth: () => 0,
+      vLineWidth: () => 0,
+      paddingLeft: () => 0,
+      paddingRight: () => 0,
+      paddingTop: () => 0,
+      paddingBottom: () => 0
+    }
   };
-  const client = {
-    stack: [
-      { text: inv.accountName || '—', style: 'invClient', alignment: 'left' },
-      inv.accountNum
-        ? { text: `حساب ${inv.accountNum}`, style: 'meta', alignment: 'left', margin: [0, 2, 0, 0] }
-        : null
-    ].filter(Boolean)
+
+  const clientBand = {
+    table: {
+      widths: ['*'],
+      body: [[{
+        columns: [
+          {
+            width: '*',
+            stack: [
+              { text: 'العميل', fontSize: 7, color: '#64748b', alignment: 'right', margin: [0, 0, 0, 2] },
+              { text: inv.accountName || '—', style: 'invClient', alignment: 'right' },
+              inv.accountNum
+                ? { text: `حساب ${inv.accountNum}`, fontSize: 7, color: '#64748b', alignment: 'right', margin: [0, 2, 0, 0] }
+                : null
+            ].filter(Boolean)
+          }
+        ],
+        fillColor: '#f1f5f9',
+        margin: [8, 7, 8, 7]
+      }]]
+    },
+    layout: {
+      hLineWidth: () => 0.5,
+      vLineWidth: () => 0.5,
+      hLineColor: () => COLORS.border,
+      vLineColor: () => COLORS.border
+    },
+    margin: [0, 0, 0, 0]
   };
-  if (logo) {
-    return {
-      table: { widths: [40, '*', 115], body: [[{ image: logo, width: 36, margin: [0, 2, 0, 0] }, center, client]] },
-      layout: 'noBorders',
-      margin: [0, 0, 0, 4]
-    };
-  }
+
   return {
-    table: { widths: ['*', 115], body: [[center, client]] },
-    layout: 'noBorders',
-    margin: [0, 0, 0, 4]
+    stack: [titleBand, clientBand],
+    margin: [0, 0, 0, 5]
   };
 }
 
-function invoiceMetaStrip(inv, lines, qtySum) {
-  return metaStrip([
+function invoiceMetaGrid(inv, lines, qtySum) {
+  const rows = [
     ['عدد البنود', String(lines.length)],
     ['إجمالي الكمية', fmtNum(Math.round(qtySum), 0)],
     ['إجمالي الفاتورة', fmtInvPrice(inv.total)],
     ['الصافي للدفع', fmtInvPrice(inv.netPay)]
-  ]);
+  ];
+  return {
+    table: {
+      widths: rows.map(() => '*'),
+      body: [
+        rows.map(([label]) => ({
+          text: label,
+          style: 'invMetaLbl',
+          fillColor: '#e2e8f0',
+          margin: [2, 4, 2, 2]
+        })),
+        rows.map(([, val]) => ({
+          text: val,
+          style: 'invMetaVal',
+          fillColor: '#ffffff',
+          margin: [2, 2, 2, 5]
+        }))
+      ]
+    },
+    layout: {
+      hLineWidth: () => 0.4,
+      vLineWidth: () => 0.4,
+      hLineColor: () => COLORS.border,
+      vLineColor: () => COLORS.border
+    },
+    margin: [0, 0, 0, 4]
+  };
 }
 
 function fmtQtyInt(v) {
@@ -424,8 +503,7 @@ async function buildInvoicePdf(data) {
 
   const doc = baseDoc([
     invoicePdfHeader(inv),
-    docBanner(inv.kindLabel || 'فاتورة مبيعات', COLORS.headerAlt),
-    invoiceMetaStrip(inv, lines, qtySum),
+    invoiceMetaGrid(inv, lines, qtySum),
     {
       table: {
         headerRows: 1,
