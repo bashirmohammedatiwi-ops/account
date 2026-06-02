@@ -105,29 +105,37 @@ function stmtHeaderRow() {
   ];
 }
 
-/** فاتورة PDF: ترتيب الأعمدة معكوس (المبلغ يميناً ← م يساراً) */
-function invRow(cells) {
-  return [...cells].reverse();
-}
-
-const INV_COLS_RTL = [
-  th('م'),
-  th('رقم الصنف'),
-  th('اسم المادة', COLORS.headerAlt),
-  th('الكمية', COLORS.qty),
-  th('هدية', COLORS.qty),
-  th('سعر الوحدة', COLORS.price),
-  th('المبلغ', COLORS.price)
-];
-
+/** فاتورة PDF: ترتيب معكوس — المبلغ يميناً (أول عمود في RTL) ثم … م يساراً */
 function invHeaderRow() {
-  return invRow(INV_COLS_RTL);
+  return [
+    th('المبلغ', COLORS.price),
+    th('سعر الوحدة', COLORS.price),
+    th('هدية', COLORS.qty),
+    th('الكمية', COLORS.qty),
+    th('اسم المادة', COLORS.headerAlt),
+    th('رقم الصنف'),
+    th('م')
+  ];
 }
 
-function invDataRow(values, rowIndex, alignments = []) {
+function invLineRow(line, rowIndex) {
   const fill = rowIndex % 2 === 0 ? COLORS.zebra : '#ffffff';
-  const cells = values.map((value, i) => td(value, alignments[i] || 'center', fill));
-  return invRow(cells);
+  return [
+    td(fmtInvPrice(line.lineTotal), 'center', fill),
+    td(fmtInvPrice(line.price), 'center', fill),
+    td(fmtQtyInt(line.bonus), 'center', fill),
+    td(fmtQtyInt(line.quant), 'center', fill),
+    td(line.matName || '—', 'right', fill),
+    td(line.matNum || line.mat || '—', 'center', fill),
+    td(String(rowIndex + 1), 'center', fill)
+  ];
+}
+
+function invSumRow(label, value, fill) {
+  return [
+    td(value, 'center', fill),
+    { text: label, style: 'foot', alignment: 'right', fillColor: fill, colSpan: 6, margin: [2, 2, 2, 2] }
+  ];
 }
 
 function fmtQtyInt(v) {
@@ -321,35 +329,15 @@ async function buildInvoicePdf(data) {
   const lines = data.lines || [];
   const qtySum = lines.reduce((s, line) => s + Number(line.quant || 0), 0);
 
-  const invAlign = ['center', 'center', 'right', 'center', 'center', 'center', 'center'];
-
   const tableBody = [
     invHeaderRow(),
-    ...lines.map((line, i) => invDataRow([
-      i + 1,
-      line.matNum || line.mat || '—',
-      line.matName || '—',
-      fmtQtyInt(line.quant),
-      fmtQtyInt(line.bonus),
-      fmtInvPrice(line.price),
-      fmtInvPrice(line.lineTotal)
-    ], i, invAlign))
+    ...lines.map((line, i) => invLineRow(line, i))
   ];
 
   if (lines.length) {
-    const sumRow = (label, value, fill) => invRow([
-      footLabel(label, 6, fill),
-      {},
-      {},
-      {},
-      {},
-      {},
-      td(value, 'center', fill)
-    ]);
-
-    tableBody.push(sumRow('إجمالي الفاتورة', fmtInvPrice(inv.total), '#f8fafc'));
-    tableBody.push(sumRow('الحسومات', fmtInvPrice(inv.discount), '#fff7ed'));
-    tableBody.push(sumRow('الصافي للدفع', fmtInvPrice(inv.netPay), '#ecfdf5'));
+    tableBody.push(invSumRow('إجمالي الفاتورة', fmtInvPrice(inv.total), '#f8fafc'));
+    tableBody.push(invSumRow('الحسومات', fmtInvPrice(inv.discount), '#fff7ed'));
+    tableBody.push(invSumRow('الصافي للدفع', fmtInvPrice(inv.netPay), '#ecfdf5'));
   }
 
   const doc = baseDoc([
@@ -367,7 +355,7 @@ async function buildInvoicePdf(data) {
     {
       table: {
         headerRows: 1,
-        widths: invRow([12, 28, '*', 30, 34, 36, 42]),
+        widths: [42, 36, 34, 30, '*', 28, 12],
         body: tableBody,
         dontBreakRows: false
       },
