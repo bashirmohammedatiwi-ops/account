@@ -29,8 +29,14 @@ const STYLES = {
   meta: { fontSize: 7, color: '#64748b' },
   metaVal: { fontSize: 7.5, bold: true, color: '#0f172a' },
   foot: { fontSize: 7, bold: true, color: '#0f172a' },
-  banner: { fontSize: 9, bold: true, color: '#ffffff' }
+  banner: { fontSize: 9, bold: true, color: '#ffffff' },
+  invType: { fontSize: 10, bold: true, color: COLORS.headerAlt },
+  invClient: { fontSize: 8.5, bold: true, color: '#0f172a' },
+  tdBarcode: { fontSize: 6, font: 'Roboto', color: '#0f172a' },
+  tdName: { fontSize: 6.5, color: '#0f172a' }
 };
+
+const INV_WIDTHS = [11, 64, '*', 26, 22, 34, 38];
 
 function getLogoDataUrl() {
   if (!fs.existsSync(LOGO_PATH)) return null;
@@ -105,37 +111,109 @@ function stmtHeaderRow() {
   ];
 }
 
-/** فاتورة PDF: ترتيب معكوس — المبلغ يميناً (أول عمود في RTL) ثم … م يساراً */
+function invBarcode(line) {
+  const code = String(line.matNum || line.mat || '').trim();
+  return code.replace(/\s+/g, '') || '—';
+}
+
+/** فاتورة PDF: من اليمين — م | الباركود | اسم المادة | … | المبلغ */
 function invHeaderRow() {
   return [
-    th('المبلغ', COLORS.price),
-    th('سعر الوحدة', COLORS.price),
-    th('هدية', COLORS.qty),
-    th('الكمية', COLORS.qty),
+    th('م'),
+    th('الباركود', COLORS.header),
     th('اسم المادة', COLORS.headerAlt),
-    th('رقم الصنف'),
-    th('م')
+    th('الكمية', COLORS.qty),
+    th('هدية', COLORS.qty),
+    th('سعر الوحدة', COLORS.price),
+    th('المبلغ', COLORS.price)
   ];
+}
+
+function tdBarcode(value, fill) {
+  return {
+    text: String(value ?? '—'),
+    style: 'tdBarcode',
+    alignment: 'center',
+    fillColor: fill || null,
+    noWrap: true,
+    margin: [2, 2, 2, 2]
+  };
+}
+
+function tdName(value, fill) {
+  return {
+    text: String(value ?? '—'),
+    style: 'tdName',
+    alignment: 'right',
+    fillColor: fill || null,
+    margin: [2, 2, 2, 2]
+  };
 }
 
 function invLineRow(line, rowIndex) {
   const fill = rowIndex % 2 === 0 ? COLORS.zebra : '#ffffff';
   return [
-    td(fmtInvPrice(line.lineTotal), 'center', fill),
-    td(fmtInvPrice(line.price), 'center', fill),
-    td(fmtQtyInt(line.bonus), 'center', fill),
+    td(String(rowIndex + 1), 'center', fill),
+    tdBarcode(invBarcode(line), fill),
+    tdName(line.matName || '—', fill),
     td(fmtQtyInt(line.quant), 'center', fill),
-    td(line.matName || '—', 'right', fill),
-    td(line.matNum || line.mat || '—', 'center', fill),
-    td(String(rowIndex + 1), 'center', fill)
+    td(fmtQtyInt(line.bonus), 'center', fill),
+    td(fmtInvPrice(line.price), 'center', fill),
+    td(fmtInvPrice(line.lineTotal), 'center', fill)
   ];
 }
 
 function invSumRow(label, value, fill) {
   return [
-    td(value, 'center', fill),
-    { text: label, style: 'foot', alignment: 'right', fillColor: fill, colSpan: 6, margin: [2, 2, 2, 2] }
+    footLabel(label, 6, fill),
+    {},
+    {},
+    {},
+    {},
+    {},
+    td(value, 'center', fill)
   ];
+}
+
+function invoicePdfHeader(inv) {
+  const logo = getLogoDataUrl();
+  const title = inv.kindLabel || 'فاتورة مبيعات';
+  const center = {
+    stack: [
+      { text: COMPANY_NAME, style: 'title', alignment: 'right' },
+      { text: title, style: 'invType', alignment: 'right', margin: [0, 2, 0, 0] },
+      { text: `رقم ${inv.num || '—'}  ·  ${fmtDate(inv.date)}`, style: 'sub', alignment: 'right' }
+    ]
+  };
+  const client = {
+    stack: [
+      { text: inv.accountName || '—', style: 'invClient', alignment: 'left' },
+      inv.accountNum
+        ? { text: `حساب ${inv.accountNum}`, style: 'meta', alignment: 'left', margin: [0, 2, 0, 0] }
+        : null
+    ].filter(Boolean)
+  };
+  if (logo) {
+    return {
+      table: { widths: [40, '*', 115], body: [[{ image: logo, width: 36, margin: [0, 2, 0, 0] }, center, client]] },
+      layout: 'noBorders',
+      margin: [0, 0, 0, 4]
+    };
+  }
+  return {
+    table: { widths: ['*', 115], body: [[center, client]] },
+    layout: 'noBorders',
+    margin: [0, 0, 0, 4]
+  };
+}
+
+function invoiceMetaStrip(inv, lines, qtySum) {
+  return metaStrip([
+    ['عدد البنود', String(lines.length)],
+    ['إجمالي الكمية', fmtNum(Math.round(qtySum), 0)],
+    ['إجمالي الفاتورة', fmtInvPrice(inv.total)],
+    ['الصافي للدفع', fmtInvPrice(inv.netPay)]
+  ]);
 }
 
 function fmtQtyInt(v) {
@@ -341,21 +419,13 @@ async function buildInvoicePdf(data) {
   }
 
   const doc = baseDoc([
-    compactHeader(inv.kindLabel || 'فاتورة مبيعات', `رقم ${inv.num || '—'} · ${fmtDate(inv.date)}`, [
-      { text: inv.accountName || '—', style: 'metaVal', alignment: 'left' },
-      { text: inv.accountNum ? `حساب ${inv.accountNum}` : '—', style: 'meta', alignment: 'left' }
-    ]),
+    invoicePdfHeader(inv),
     docBanner(inv.kindLabel || 'فاتورة مبيعات', COLORS.headerAlt),
-    metaStrip([
-      ['عدد البنود', String(lines.length)],
-      ['إجمالي الكمية', fmtNum(Math.round(qtySum), 0)],
-      ['إجمالي الفاتورة', fmtInvPrice(inv.total)],
-      ['الصافي للدفع', fmtInvPrice(inv.netPay)]
-    ]),
+    invoiceMetaStrip(inv, lines, qtySum),
     {
       table: {
         headerRows: 1,
-        widths: [42, 36, 34, 30, '*', 28, 12],
+        widths: INV_WIDTHS,
         body: tableBody,
         dontBreakRows: false
       },

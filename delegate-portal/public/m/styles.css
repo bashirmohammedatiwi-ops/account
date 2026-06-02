@@ -736,6 +736,25 @@ body {
   border-top: 3px solid var(--accent-dark);
 }
 
+.doc-panel.invoice-doc {
+  border-top-color: #1e3a5f;
+}
+
+.doc-head-side {
+  text-align: left;
+  min-width: 0;
+  flex-shrink: 0;
+  max-width: 42%;
+}
+
+.doc-client {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.35;
+  color: var(--text);
+}
+
 .doc-head-row {
   display: flex;
   align-items: flex-start;
@@ -862,11 +881,15 @@ body {
 .data-table.stmt-table thead th.col-credit { background: #047857; }
 .data-table.stmt-table thead th.col-balance { background: #1d4ed8; }
 
+.data-table.inv-table thead th.col-barcode { background: #334155; }
+
 .data-table.inv-table thead th:nth-child(4),
 .data-table.inv-table thead th:nth-child(5) { background: #0f766e; }
 
 .data-table.inv-table thead th:nth-child(6),
 .data-table.inv-table thead th:nth-child(7) { background: #1d4ed8; }
+
+.inv-table { min-width: 540px; }
 
 .data-table tbody tr:nth-child(even) { background: #fafafa; }
 .data-table tbody tr.row-opening { background: #eff6ff; }
@@ -895,11 +918,20 @@ body {
   word-break: break-word;
 }
 
-.data-table .col-mat {
-  width: 48px;
+.data-table .col-mat,
+.data-table .col-barcode {
+  width: 72px;
+  min-width: 72px;
+  max-width: 88px;
   text-align: center;
   font-weight: 700;
-  font-size: 0.64rem;
+  font-size: 0.6rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: ltr;
+  font-family: Consolas, "Courier New", monospace;
+  letter-spacing: 0.02em;
 }
 
 .data-table .col-amt {
@@ -1138,7 +1170,6 @@ body {
 
 .invoice-lines-section { margin-top: 0; }
 
-.inv-table { min-width: 460px; }
 
 .data-table tbody tr {
   height: 1px;

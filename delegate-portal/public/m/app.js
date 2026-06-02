@@ -125,6 +125,23 @@ function qtyTd(val) {
   return `<td class="num" dir="ltr">${fmtQty(n)}</td>`;
 }
 
+function fmtInvInt(v) {
+  const n = Number(v);
+  if (Number.isNaN(n)) return '—';
+  return Math.round(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
+function invBarcodeCell(line) {
+  const code = String(line.matNum || line.mat || '').trim().replace(/\s+/g, '');
+  return code || '—';
+}
+
+function invMoneyTd(val, cls) {
+  const n = Number(val);
+  if (Number.isNaN(n) || n === 0) return '<td class="num empty">—</td>';
+  return `<td class="num ${cls || ''}" dir="ltr">${fmtInvInt(n)}</td>`;
+}
+
 function bindStatementRowActions(root) {
   root.querySelectorAll('.tbl-btn-inv').forEach((btn) => {
     btn.addEventListener('click', (e) => {
@@ -704,22 +721,26 @@ async function openInvoice(ref, by = 'auto', acc = '') {
     const qtySum = lines.reduce((s, line) => s + Number(line.quant || 0), 0);
 
     document.getElementById('invoiceHero').innerHTML = `
-      <div class="doc-panel">
+      <div class="doc-panel invoice-doc">
         <div class="doc-head-row">
           <img class="doc-logo" src="assets/logo.png" alt="" width="36" height="36">
           <div class="doc-head-main">
-            <span class="doc-label">${esc(inv.kindLabel || 'فاتورة مبيعات')}</span>
-            <strong class="doc-title">${esc(inv.accountName || state.selectedBranch?.name1 || '—')}</strong>
-            <span class="doc-meta-line">شركة ديما الحياة · رقم ${esc(inv.num || ref)} · ${fmtDate(inv.date)}${inv.accountNum ? ` · حساب ${esc(inv.accountNum)}` : ''}</span>
+            <span class="doc-label">شركة ديما الحياة</span>
+            <strong class="doc-title">${esc(inv.kindLabel || 'فاتورة مبيعات')}</strong>
+            <span class="doc-meta-line">رقم ${esc(inv.num || ref)} · ${fmtDate(inv.date)}</span>
+          </div>
+          <div class="doc-head-side">
+            <strong class="doc-client">${esc(inv.accountName || state.selectedBranch?.name1 || '—')}</strong>
+            ${inv.accountNum ? `<span class="doc-meta-line">حساب ${esc(inv.accountNum)}</span>` : ''}
           </div>
         </div>
-        <table class="doc-meta-table">
+        <table class="doc-meta-table invoice-meta">
           <tbody>
             <tr>
               <th>عدد البنود</th><td dir="ltr">${lines.length}</td>
-              <th>إجمالي الكمية</th><td dir="ltr">${fmtQty(qtySum)}</td>
-              <th>إجمالي الفاتورة</th><td dir="ltr">${fmtMoney(inv.total)}</td>
-              <th>الصافي للدفع</th><td class="net" dir="ltr">${fmtMoney(inv.netPay)}</td>
+              <th>إجمالي الكمية</th><td dir="ltr">${fmtInvInt(qtySum)}</td>
+              <th>إجمالي الفاتورة</th><td dir="ltr">${fmtInvInt(inv.total)}</td>
+              <th>الصافي للدفع</th><td class="net" dir="ltr">${fmtInvInt(inv.netPay)}</td>
             </tr>
           </tbody>
         </table>
@@ -733,7 +754,7 @@ async function openInvoice(ref, by = 'auto', acc = '') {
             <thead>
               <tr>
                 <th class="col-n">م</th>
-                <th class="col-mat">رقم الصنف</th>
+                <th class="col-barcode">الباركود</th>
                 <th class="col-name">اسم المادة</th>
                 <th class="col-amt">الكمية</th>
                 <th class="col-amt">هدية</th>
@@ -745,26 +766,26 @@ async function openInvoice(ref, by = 'auto', acc = '') {
               ${lines.map((line, i) => `
               <tr>
                 <td class="col-n">${i + 1}</td>
-                <td class="col-mat" dir="ltr">${esc(line.matNum || line.mat || '—')}</td>
+                <td class="col-barcode" dir="ltr">${esc(invBarcodeCell(line))}</td>
                 <td class="col-name">${esc(line.matName || '—')}${line.remarks ? `<span class="row-note">${esc(line.remarks)}</span>` : ''}</td>
                 ${qtyTd(line.quant)}
                 ${qtyTd(line.bonus)}
-                ${moneyTd(line.price)}
-                ${moneyTd(line.lineTotal, 'net')}
+                ${invMoneyTd(line.price)}
+                ${invMoneyTd(line.lineTotal, 'net')}
               </tr>`).join('')}
             </tbody>
             <tfoot>
               <tr class="row-sum">
                 <td colspan="6" class="total-label">إجمالي الفاتورة</td>
-                <td class="num" dir="ltr">${fmtMoney(inv.total)}</td>
+                <td class="num" dir="ltr">${fmtInvInt(inv.total)}</td>
               </tr>
               <tr class="row-sum">
                 <td colspan="6" class="total-label">الحسومات</td>
-                <td class="num discount" dir="ltr">${fmtMoney(inv.discount)}</td>
+                <td class="num discount" dir="ltr">${fmtInvInt(inv.discount)}</td>
               </tr>
               <tr class="row-total">
                 <td colspan="6" class="total-label">الصافي للدفع</td>
-                <td class="num net" dir="ltr">${fmtMoney(inv.netPay)}</td>
+                <td class="num net" dir="ltr">${fmtInvInt(inv.netPay)}</td>
               </tr>
             </tfoot>
           </table>
