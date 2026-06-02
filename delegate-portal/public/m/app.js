@@ -383,9 +383,9 @@ function goToScreen(name) {
     toolbarWrap.classList.add('hidden');
     document.getElementById('headerUser').classList.add('hidden');
     title.textContent = state.selectedBranch?.name1 || 'كشف الحساب';
-    crumb.textContent = state.selectedBranch
-      ? `كشف حساب · ${state.selectedBranch.num}`
-      : '';
+    crumb.textContent = state.selectedBranch?.name1
+      ? `كشف حساب · ${state.selectedBranch.name1}`
+      : 'كشف حساب';
   } else if (name === 'invoice') {
     backBtn.classList.remove('hidden');
     toolbarWrap.classList.add('hidden');
@@ -596,7 +596,7 @@ function renderStatement(data) {
         <div class="doc-head-main">
           <span class="doc-label">كشف حساب</span>
           <strong class="doc-title">${esc(acc.name1)}</strong>
-          <span class="doc-meta-line">${treeLabel ? `${esc(treeLabel)} · ` : ''}حساب ${esc(acc.num)}${acc.address ? ` · ${esc(acc.address)}` : ''}${matchNote ? ` · ${esc(matchNote)}` : ''}</span>
+          <span class="doc-meta-line">${[treeLabel, acc.address ? esc(acc.address) : '', matchNote ? esc(matchNote) : ''].filter(Boolean).join(' · ')}</span>
         </div>
       </div>
       <table class="doc-meta-table">
@@ -731,7 +731,6 @@ async function openInvoice(ref, by = 'auto', acc = '') {
           </div>
           <div class="doc-head-side">
             <strong class="doc-client">${esc(inv.accountName || state.selectedBranch?.name1 || '—')}</strong>
-            ${inv.accountNum ? `<span class="doc-meta-line">حساب ${esc(inv.accountNum)}</span>` : ''}
           </div>
         </div>
         <table class="doc-meta-table invoice-meta">

@@ -244,11 +244,8 @@ function invoicePdfHeader(inv) {
             width: '*',
             stack: [
               { text: 'العميل', fontSize: 7, color: '#64748b', alignment: 'right', margin: [0, 0, 0, 2] },
-              { text: inv.accountName || '—', style: 'invClient', alignment: 'right' },
-              inv.accountNum
-                ? { text: `حساب ${inv.accountNum}`, fontSize: 7, color: '#64748b', alignment: 'right', margin: [0, 2, 0, 0] }
-                : null
-            ].filter(Boolean)
+              { text: inv.accountName || '—', style: 'invClient', alignment: 'right' }
+            ]
           }
         ],
         fillColor: '#f1f5f9',
@@ -459,8 +456,7 @@ async function buildStatementPdf(stmt, meta = {}) {
 
   const doc = baseDoc([
     compactHeader('كشف حساب', subtitle, [
-      { text: `حساب ${acc.num || '—'}`, style: 'metaVal', alignment: 'left' },
-      { text: acc.name1 || '—', style: 'meta', alignment: 'left' }
+      { text: acc.name1 || '—', style: 'metaVal', alignment: 'left' }
     ]),
     docBanner('كشف حساب — تفاصيل الحركات', COLORS.header),
     metaStrip([
