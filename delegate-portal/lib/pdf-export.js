@@ -35,9 +35,9 @@ const STYLES = {
   tdBarcode: { fontSize: 6.5, font: 'Roboto', bold: true, color: C.text },
   tdName: { fontSize: 7, bold: true, color: C.text },
   tdMoney: { fontSize: 7.5, font: 'Roboto', bold: true, color: C.text },
-  boxLbl: { fontSize: 8, bold: true, color: '#ffffff' },
-  boxVal: { fontSize: 10, font: 'Roboto', bold: true, color: C.text },
-  boxSub: { fontSize: 7.5, bold: true, color: C.muted }
+  boxLbl: { fontSize: 7, bold: true, color: '#ffffff' },
+  boxVal: { fontSize: 8.5, font: 'Roboto', bold: true, color: C.text },
+  boxSub: { fontSize: 7, bold: true, color: C.muted }
 };
 
 /** pdfmake-rtl: أول عمود = يمين. م دائماً أول عنصر */
@@ -136,54 +136,28 @@ function boxLayout() {
   };
 }
 
-function statBox(label, value, valueColor = C.text, labelBg = C.headerBg) {
+function compactStatCell(label, value, valueColor = C.text, labelBg = C.headerBg) {
   return {
     table: {
       widths: ['*'],
-      body: [
-        [{
+      body: [[
+        {
           text: label,
           style: 'boxLbl',
           alignment: 'center',
           fillColor: labelBg,
-          margin: [4, 5, 4, 5]
-        }],
-        [{
+          margin: [2, 2, 2, 2]
+        },
+        {
           text: value,
           style: 'boxVal',
           color: valueColor,
           alignment: 'center',
           fillColor: '#ffffff',
-          margin: [4, 7, 4, 9]
-        }]
-      ]
+          margin: [2, 3, 2, 4]
+        }
+      ]]
     },
-    layout: boxLayout()
-  };
-}
-
-function infoBox(label, value, extra) {
-  const body = [
-    [{
-      text: label,
-      style: 'boxLbl',
-      alignment: 'right',
-      fillColor: C.primary,
-      margin: [8, 5, 8, 5]
-    }],
-    [{
-      stack: [
-        { text: value, fontSize: 10, bold: true, color: C.text, alignment: 'right' },
-        extra
-          ? { text: extra, style: 'boxSub', alignment: 'right', margin: [0, 4, 0, 0] }
-          : null
-      ].filter(Boolean),
-      fillColor: C.panel,
-      margin: [8, 8, 8, 8]
-    }]
-  ];
-  return {
-    table: { widths: ['*'], body },
     layout: boxLayout()
   };
 }
@@ -191,91 +165,120 @@ function infoBox(label, value, extra) {
 function pdfTopHeader({ docLabel, badgeText, sideNote, infoLabel, infoValue, infoExtra, stats }) {
   const logo = getLogoDataUrl();
   const logoCell = logo
-    ? { image: logo, width: 38, alignment: 'center', margin: [6, 8, 6, 8] }
-    : { text: '', width: 38 };
+    ? { image: logo, width: 32, alignment: 'center', margin: [4, 5, 4, 5] }
+    : { text: '', width: 32 };
 
   const brandRow = {
     table: {
-      widths: [44, '*', 102],
+      widths: [38, '*', 98],
       body: [[
         logoCell,
         {
           stack: [
-            { text: COMPANY_NAME, style: 'title', alignment: 'center' },
+            { text: COMPANY_NAME, fontSize: 11, bold: true, color: C.text, alignment: 'center' },
             {
               text: docLabel,
-              fontSize: 9,
+              fontSize: 8,
               bold: true,
               color: '#ffffff',
               alignment: 'center',
               fillColor: C.primaryDark,
-              margin: [16, 4, 16, 4]
+              margin: [10, 2, 10, 2]
             }
           ],
-          margin: [0, 8, 0, 8]
+          margin: [0, 5, 0, 4]
         },
         {
           stack: [
             {
-              table: {
-                widths: ['*'],
-                body: [[{
-                  text: badgeText,
-                  fontSize: 9,
-                  bold: true,
-                  color: '#ffffff',
-                  alignment: 'center',
-                  fillColor: C.primary,
-                  margin: [8, 7, 8, 7]
-                }]]
-              },
-              layout: 'noBorders'
+              text: badgeText,
+              fontSize: 8,
+              bold: true,
+              color: '#ffffff',
+              alignment: 'center',
+              fillColor: C.primary,
+              margin: [6, 4, 6, 4]
             },
             sideNote
-              ? { text: sideNote, fontSize: 8, bold: true, color: C.text, alignment: 'right', margin: [0, 5, 2, 0] }
+              ? { text: sideNote, fontSize: 7, bold: true, color: C.muted, alignment: 'right', margin: [0, 3, 0, 0] }
               : null
           ].filter(Boolean),
-          margin: [4, 8, 8, 8]
+          margin: [4, 5, 6, 5]
         }
       ]]
     },
     layout: 'noBorders'
   };
 
-  const statCells = (stats || []).map(([label, value, accent, labelBg]) =>
-    statBox(label, value, accent || C.text, labelBg || C.headerBg)
-  );
-  const summaryRow = {
+  const nameParts = [infoValue, infoExtra].filter(Boolean);
+  const accountStrip = {
     table: {
-      widths: [118, ...statCells.map(() => '*')],
+      widths: [72, '*'],
       body: [[
-        infoBox(infoLabel, infoValue, infoExtra),
-        ...statCells
+        {
+          text: infoLabel,
+          fontSize: 7,
+          bold: true,
+          color: '#ffffff',
+          alignment: 'right',
+          fillColor: C.primary,
+          margin: [6, 4, 6, 4]
+        },
+        {
+          text: nameParts.join(' · '),
+          fontSize: 8.5,
+          bold: true,
+          color: C.text,
+          alignment: 'right',
+          fillColor: C.panel,
+          margin: [6, 4, 6, 4]
+        }
       ]]
     },
     layout: boxLayout()
   };
 
+  const statCells = (stats || []).map(([label, value, accent, labelBg]) =>
+    compactStatCell(label, value, accent || C.text, labelBg || C.headerBg)
+  );
+
+  const summaryRow = statCells.length
+    ? {
+      table: {
+        widths: statCells.map(() => '*'),
+        body: [statCells]
+      },
+      layout: boxLayout(),
+      margin: [0, 4, 0, 0]
+    }
+    : null;
+
   return {
     stack: [
       {
-        canvas: [{ type: 'rect', x: 0, y: 0, w: 575, h: 4, color: C.primary }],
+        canvas: [{ type: 'rect', x: 0, y: 0, w: 575, h: 3, color: C.primary }],
         margin: [0, 0, 0, 0]
       },
       {
-        table: { widths: ['*'], body: [[brandRow]] },
+        table: {
+          widths: ['*'],
+          body: [
+            [brandRow],
+            [accountStrip]
+          ]
+        },
         layout: {
-          hLineWidth: () => 0.55,
-          vLineWidth: () => 0.55,
+          hLineWidth: () => 0.45,
+          vLineWidth: () => 0.45,
           hLineColor: () => C.border,
           vLineColor: () => C.border,
           fillColor: () => '#ffffff'
         },
-        margin: [0, 0, 0, 5]
+        margin: [0, 0, 0, 0]
       },
       summaryRow
-    ],
-    margin: [0, 0, 0, 6]
+    ].filter(Boolean),
+    margin: [0, 0, 0, 5]
   };
 }
 
