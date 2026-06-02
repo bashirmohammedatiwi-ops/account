@@ -40,9 +40,9 @@ const STYLES = {
   boxSub: { fontSize: 7, bold: true, color: C.muted }
 };
 
-/** pdfmake-rtl: أول عمود = يمين. م دائماً أول عنصر */
-const STMT_WIDTHS = [11, 36, '*', 36, 36, 44];
-const INV_WIDTHS = [11, 58, '*', 22, 20, 34, 42];
+/** pdfmake-rtl يعكس الأعمدة: أول عنصر = يسار، آخر عنصر = يمين */
+const STMT_WIDTHS = [44, 34, 34, '*', 48, 11];
+const INV_WIDTHS = [42, 34, 20, 22, '*', 58, 11];
 
 function getLogoDataUrl() {
   if (!fs.existsSync(LOGO_PATH)) return null;
@@ -106,7 +106,14 @@ function td(value, align = 'center', fill, style = 'td') {
 }
 
 function tdDate(value, fill) {
-  return td(fmtDate(value), 'center', fill, 'tdDate');
+  return {
+    text: fmtDate(value),
+    style: 'tdDate',
+    alignment: 'center',
+    fillColor: fill || null,
+    noWrap: true,
+    margin: [1, 1.5, 1, 1.5]
+  };
 }
 
 function tdMoney(value, fill, color) {
@@ -257,12 +264,12 @@ function pdfTopHeader({ docLabel, badgeText, sideNote, infoLabel, infoValue, inf
 
 function stmtHeaderRow() {
   return [
-    th('م'),
-    th('التاريخ'),
-    th('البيان'),
-    th('مدين', C.debit),
+    th('رصيد'),
     th('دائن', C.credit),
-    th('رصيد')
+    th('مدين', C.debit),
+    th('البيان'),
+    th('التاريخ'),
+    th('م')
   ];
 }
 
@@ -270,12 +277,12 @@ function stmtLineRow(row, rowIndex) {
   const fill = rowFill(rowIndex, row.isOpening || row.isReconciliation);
   const idx = row.isOpening ? '∗' : String(rowIndex + 1);
   return [
-    td(idx, 'center', fill),
-    tdDate(row.date, fill),
-    td(row.description || '—', 'right', fill),
-    tdMoney(row.debit ? fmtNum(row.debit) : '—', fill, row.debit ? C.debit : null),
+    tdMoney(fmtNum(row.balance), fill),
     tdMoney(row.credit ? fmtNum(row.credit) : '—', fill, row.credit ? C.credit : null),
-    tdMoney(fmtNum(row.balance), fill)
+    tdMoney(row.debit ? fmtNum(row.debit) : '—', fill, row.debit ? C.debit : null),
+    td(row.description || '—', 'right', fill),
+    tdDate(row.date, fill),
+    td(idx, 'center', fill)
   ];
 }
 
@@ -286,6 +293,9 @@ function emptyCell() {
 function stmtTotalsTableRow(stmt) {
   const bal = Number(stmt.finalBalance ?? stmt.account?.bal ?? 0);
   return [
+    tdMoney(fmtNum(Math.abs(bal)), C.panel),
+    tdMoney(fmtNum(stmt.totalCredit), C.panel, C.credit),
+    tdMoney(fmtNum(stmt.totalDebit), C.panel, C.debit),
     {
       text: 'الإجمالي',
       bold: true,
@@ -297,10 +307,7 @@ function stmtTotalsTableRow(stmt) {
       margin: [2, 4, 2, 4]
     },
     emptyCell(),
-    emptyCell(),
-    tdMoney(fmtNum(stmt.totalDebit), C.panel, C.debit),
-    tdMoney(fmtNum(stmt.totalCredit), C.panel, C.credit),
-    tdMoney(fmtNum(Math.abs(bal)), C.panel)
+    emptyCell()
   ];
 }
 
@@ -323,13 +330,13 @@ function invBarcode(line) {
 
 function invHeaderRow() {
   return [
-    th('م'),
-    th('باركود'),
-    th('المادة'),
-    th('كم'),
-    th('هد'),
+    th('المبلغ'),
     th('سعر'),
-    th('مبلغ')
+    th('هد'),
+    th('كم'),
+    th('المادة'),
+    th('باركود'),
+    th('م')
   ];
 }
 
@@ -357,18 +364,19 @@ function tdName(value, fill) {
 function invLineRow(line, rowIndex) {
   const fill = rowFill(rowIndex);
   return [
-    td(String(rowIndex + 1), 'center', fill),
-    tdBarcode(invBarcode(line), fill),
-    tdName(line.matName || '—', fill),
-    td(fmtQtyInt(line.quant), 'center', fill),
-    td(fmtQtyInt(line.bonus), 'center', fill),
+    tdMoney(fmtInvPrice(line.lineTotal), fill),
     tdMoney(fmtInvPrice(line.price), fill),
-    tdMoney(fmtInvPrice(line.lineTotal), fill)
+    td(fmtQtyInt(line.bonus), 'center', fill),
+    td(fmtQtyInt(line.quant), 'center', fill),
+    tdName(line.matName || '—', fill),
+    tdBarcode(invBarcode(line), fill),
+    td(String(rowIndex + 1), 'center', fill)
   ];
 }
 
 function invTotalsRows(inv) {
   const foot = (label, value, fill) => [
+    tdMoney(value, fill),
     {
       text: label,
       bold: true,
@@ -383,8 +391,7 @@ function invTotalsRows(inv) {
     emptyCell(),
     emptyCell(),
     emptyCell(),
-    emptyCell(),
-    tdMoney(value, fill)
+    emptyCell()
   ];
   return [
     foot('إجمالي الفاتورة', fmtInvPrice(inv.total), '#ffffff'),
