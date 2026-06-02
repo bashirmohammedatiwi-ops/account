@@ -388,7 +388,7 @@ function goToScreen(name) {
     toolbarWrap.classList.remove('hidden');
     document.getElementById('headerUser').classList.add('hidden');
     title.textContent = state.selectedTree?.name1 || 'الفروع';
-    crumb.textContent = state.selectedTree ? `شجرة ${state.selectedTree.num}` : '';
+    crumb.textContent = state.selectedTree?.name1 || '';
     renderTreeContext();
   } else if (name === 'statement') {
     backBtn.classList.remove('hidden');
@@ -411,18 +411,8 @@ function goToScreen(name) {
 
 function renderTreeContext() {
   const el = document.getElementById('treeContext');
-  if (!state.selectedTree) {
-    el.classList.add('hidden');
-    el.innerHTML = '';
-    return;
-  }
-  el.classList.remove('hidden');
-  el.innerHTML = `
-    <div class="tree-context-icon">${ICONS.tree}</div>
-    <div>
-      <div class="tree-context-num">${esc(state.selectedTree.num)}</div>
-      <div class="tree-context-name">${esc(state.selectedTree.name1 || '—')}</div>
-    </div>`;
+  el.classList.add('hidden');
+  el.innerHTML = '';
 }
 
 function filterBranches(list) {
