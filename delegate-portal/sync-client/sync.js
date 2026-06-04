@@ -233,9 +233,10 @@ async function fetchLastMatchByAccount(accSeqs) {
   const parts = chunk(accSeqs, 60);
   for (const part of parts) {
     const ids = part.join(',');
+    // لا تقارن Dept بـ 'False' في SQL — NexusDB يخزّنها Boolean وتسبب Type mismatch
     const rows = await query(
-      `SELECT Acc, Seq, "Date", Exp1, Remarks FROM File12n
-       WHERE Acc IN (${ids}) AND Dept = 'False' AND ${MATCH_SQL}
+      `SELECT Acc, Seq, "Date", Exp1, Remarks, Dept, BillSeq, BillNum FROM File12n
+       WHERE Acc IN (${ids}) AND ${MATCH_SQL}
        ORDER BY Acc, "Date", Seq`
     );
     for (const row of rows) {
