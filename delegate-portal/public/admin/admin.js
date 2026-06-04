@@ -22,6 +22,41 @@ function getBackendDisplayUrl() {
   return resolveApiBase() || window.location.origin || window.ADMIN_CONFIG?.BACKEND_URL || '—';
 }
 
+function isLocalhostUrl(url) {
+  try {
+    const host = new URL(url).hostname;
+    return host === '127.0.0.1' || host === 'localhost';
+  } catch {
+    return false;
+  }
+}
+
+/** عنوان رفع المزامنة — يجب أن يطابق سيرفر المندوب */
+function resolveSyncServerUrl() {
+  const backend = (
+    getBackendDisplayUrl()
+    || window.edariDesktop?.backendUrl
+    || window.ADMIN_CONFIG?.BACKEND_URL
+    || ''
+  ).replace(/\/$/, '');
+  const saved = (localStorage.getItem('syncServerUrl') || '').trim().replace(/\/$/, '');
+  const input = (document.getElementById('syncServerUrl')?.value || '').trim().replace(/\/$/, '');
+  const candidate = input || saved || backend;
+
+  if (candidate && backend && isLocalhostUrl(candidate) && !isLocalhostUrl(backend)) {
+    return backend;
+  }
+  return candidate || backend;
+}
+
+function applySyncServerUrl(url) {
+  const norm = String(url || '').trim().replace(/\/$/, '');
+  if (!norm) return;
+  localStorage.setItem('syncServerUrl', norm);
+  const el = document.getElementById('syncServerUrl');
+  if (el) el.value = norm;
+}
+
 function setServerStatus(state, text) {
   const dot = document.getElementById('statusDot');
   const label = document.getElementById('statusText');
@@ -463,16 +498,44 @@ function applySyncProgressLine(line) {
   msg.textContent = line;
 }
 
+async function verifySyncTarget(serverUrl, syncKey) {
+  const res = await fetch(`${serverUrl}/api/sync/status`, {
+    headers: { 'X-Sync-Key': syncKey },
+    cache: 'no-store'
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error || 'تعذّر التحقق من السيرفر — تأكد من العنوان ومفتاح المزامنة');
+  }
+  return data;
+}
+
 async function runSync() {
-  const serverUrl = document.getElementById('syncServerUrl').value.trim();
+  const serverUrl = resolveSyncServerUrl();
   const syncKey = document.getElementById('syncApiKey').value.trim();
+  const backendUrl = (getBackendDisplayUrl() || '').replace(/\/$/, '');
   const treeSeqs = getSelectedSyncTreeSeqs();
   if (!treeSeqs.length) {
     alert('حدد شجرة واحدة على الأقل للرفع');
     return;
   }
+  if (!serverUrl) {
+    alert('أدخل عنوان سيرفر الرفع (نفس عنوان تطبيق المندوب)');
+    return;
+  }
+  if (!syncKey) {
+    alert('أدخل مفتاح المزامنة (SYNC_API_KEY على السيرفر)');
+    return;
+  }
+  if (backendUrl && serverUrl.replace(/\/$/, '') !== backendUrl) {
+    const proceed = confirm(
+      `عنوان الرفع (${serverUrl}) يختلف عن سيرفر لوحة التحكم (${backendUrl}).\n\n` +
+      'لن تصل التحديثات للمندوب إلا إذا كان الرفع لنفس السيرفر.\n\nمتابعة على أي حال؟'
+    );
+    if (!proceed) return;
+  }
 
-  localStorage.setItem('syncServerUrl', serverUrl);
+  applySyncServerUrl(serverUrl);
   localStorage.setItem('syncApiKey', syncKey);
   saveSyncTreeSelection();
 
@@ -482,7 +545,7 @@ async function runSync() {
   prog.classList.remove('hidden');
   if (bar) bar.style.width = '0%';
   if (step) step.textContent = 'الخطوة 1 من 6';
-  applySyncProgressLine('جاري قراءة الحسابات من EdariNX...');
+  applySyncProgressLine('التحقق من اتصال سيرفر الرفع...');
 
   let stopProgress = null;
   if (window.edariDesktop?.onSyncProgress) {
@@ -492,6 +555,9 @@ async function runSync() {
   }
 
   try {
+    await verifySyncTarget(serverUrl, syncKey);
+    applySyncProgressLine('جاري قراءة الحسابات من EdariNX...');
+
     let data;
     if (window.edariDesktop?.runLocalSync) {
       data = await window.edariDesktop.runLocalSync(serverUrl, syncKey, treeSeqs);
@@ -575,10 +641,8 @@ async function loadConfig() {
   if (!localStorage.getItem('syncApiKey') && data.syncApiKey) {
     syncKeyEl.value = data.syncApiKey;
   }
-  const defaultServer = window.ADMIN_CONFIG?.DEFAULT_SYNC_SERVER || data.serverUrl || base;
-  if (!localStorage.getItem('syncServerUrl') && defaultServer) {
-    document.getElementById('syncServerUrl').value = defaultServer;
-  }
+  const defaultServer = (base || window.ADMIN_CONFIG?.DEFAULT_SYNC_SERVER || data.serverUrl || '').replace(/\/$/, '');
+  applySyncServerUrl(resolveSyncServerUrl() || defaultServer);
   if (!localStorage.getItem('backendUrl')) {
     const backendEl = document.getElementById('backendUrl');
     if (backendEl && window.ADMIN_CONFIG?.BACKEND_URL) {
@@ -606,11 +670,10 @@ async function refreshAll() {
   await loadSyncLogs();
 }
 
-const savedUrl = localStorage.getItem('syncServerUrl');
 const savedKey = localStorage.getItem('syncApiKey');
 const savedBackend = localStorage.getItem('backendUrl');
-if (savedUrl) document.getElementById('syncServerUrl').value = savedUrl;
 if (savedKey) document.getElementById('syncApiKey').value = savedKey;
+applySyncServerUrl(resolveSyncServerUrl());
 if (savedBackend) document.getElementById('backendUrl').value = savedBackend;
 
 document.getElementById('backendUrl')?.addEventListener('change', saveBackendUrl);

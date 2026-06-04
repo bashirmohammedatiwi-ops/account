@@ -123,19 +123,23 @@ function runLocalSyncScript(serverUrl, syncKey, treeSeqs = []) {
     const nodeBin = getNodeBin();
     let stdout = '';
 
+    const syncTarget = (serverUrl || BACKEND_URL).replace(/\/$/, '');
+
     const child = spawn(nodeBin, [
       script,
-      '--server', serverUrl,
+      '--server', syncTarget,
       '--key', syncKey,
       '--trees', treeSeqs.join(',')
     ], {
       cwd: portalDir,
       env: {
         ...process.env,
-        SYNC_SERVER: serverUrl,
+        SYNC_SERVER: syncTarget,
         SYNC_API_KEY: syncKey,
         EDARI_READER_ROOT: getEdariReaderRoot(),
-        NODE_BIN: nodeBin
+        NODE_BIN: nodeBin,
+        EDARI_BACKEND_URL: BACKEND_URL,
+        EDARI_USE_REMOTE: USE_REMOTE ? '1' : '0'
       },
       windowsHide: true
     });
@@ -190,7 +194,11 @@ function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      preload: path.join(__dirname, 'preload.js')
+      preload: path.join(__dirname, 'preload.js'),
+      additionalArguments: [
+        `--edari-backend=${BACKEND_URL}`,
+        `--edari-remote=${USE_REMOTE ? '1' : '0'}`
+      ]
     }
   });
 

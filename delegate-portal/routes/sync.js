@@ -62,12 +62,13 @@ router.post('/push', authSync, (req, res) => {
       accounts = [],
       journal = [],
       invoices = [],
-      invoiceLines = []
+      invoiceLines = [],
+      accountSeqs = []
     } = req.body || {};
     if (!accounts.length) {
       return res.status(400).json({ ok: false, error: 'لا توجد حسابات للرفع' });
     }
-    const result = importSyncData({ accounts, journal, invoices, invoiceLines });
+    const result = importSyncData({ accounts, journal, invoices, invoiceLines, accountSeqs });
     res.json({ ok: true, ...result, status: getSyncStatus() });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });

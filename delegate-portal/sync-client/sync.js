@@ -338,9 +338,9 @@ async function fetchInvoiceLines(billSeqs) {
   });
 }
 
-async function uploadLegacy(payload) {
+async function uploadLegacy(payload, accountSeqs = []) {
   reportProgress(5, 6, 50, 'رفع دفعة واحدة (وضع قديم)...');
-  const data = await postJson('/api/sync/push', payload, 900000);
+  const data = await postJson('/api/sync/push', { ...payload, accountSeqs }, 900000);
   reportProgress(6, 6, 100, 'اكتمل الرفع');
   return data;
 }
@@ -359,7 +359,7 @@ async function uploadChunked(payload, accountSeqs = []) {
     start = await postJson('/api/sync/start', { accountSeqs }, 120000);
   } catch (err) {
     if (/404|Cannot POST|Not Found/i.test(err.message)) {
-      return uploadLegacy(payload);
+      return uploadLegacy(payload, accountSeqs);
     }
     throw err;
   }
@@ -446,7 +446,11 @@ async function main() {
   const invoiceLines = await fetchInvoiceLines(billSeqs);
   reportProgress(4, 6, 100, `تم: ${invoiceLines.length} بند`);
 
-  const result = await uploadChunked({ accounts: accountsForUpload, journal, invoices, invoiceLines }, leafSeqs);
+  const allAccountSeqs = accounts.map((a) => accountSeq(a)).filter(Boolean);
+  const result = await uploadChunked(
+    { accounts: accountsForUpload, journal, invoices, invoiceLines },
+    allAccountSeqs
+  );
   console.log('✓ تمت المزامنة:', result.accounts, 'حساب،', result.journal, 'حركة،', result.invoices, 'فاتورة،', result.invoiceLines, 'بند');
 }
 

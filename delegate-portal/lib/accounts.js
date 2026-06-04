@@ -187,8 +187,8 @@ function mapJournalRow(j) {
     ? String(billSeqRaw).replace(/[^0-9]/g, '')
     : '';
   return {
-    seq: String(j.Seq ?? j.seq),
-    acc_seq: String(j.Acc ?? j.acc_seq),
+    seq: String(j.Seq ?? j.seq).replace(/[^0-9]/g, ''),
+    acc_seq: String(j.Acc ?? j.acc_seq ?? '').replace(/[^0-9]/g, ''),
     tx_date: j.Date ?? j.tx_date ?? j.DtCreated ?? '',
     am: Number(j.Am ?? j.am ?? 0),
     is_debit: dept === 'True' || dept === true || dept === 1 ? 1 : 0,
@@ -356,8 +356,19 @@ function failSyncSession(logId, message) {
   `).run(new Date().toISOString(), 'error', message, logId);
 }
 
-function importSyncData({ accounts = [], journal = [], invoices = [], invoiceLines = [] }) {
-  const logId = startSyncSession();
+function collectAccountSeqs(accounts = [], accountSeqs = []) {
+  const fromArg = [...new Set(accountSeqs.map((s) => String(s).replace(/[^0-9]/g, '')).filter(Boolean))];
+  if (fromArg.length) return fromArg;
+  return [...new Set(
+    accounts
+      .map((a) => String(a.Seq ?? a.seq ?? '').replace(/[^0-9]/g, ''))
+      .filter(Boolean)
+  )];
+}
+
+function importSyncData({ accounts = [], journal = [], invoices = [], invoiceLines = [], accountSeqs = [] }) {
+  const purgeSeqs = collectAccountSeqs(accounts, accountSeqs);
+  const logId = startSyncSession(purgeSeqs);
   try {
     importSyncChunk('accounts', accounts);
     importSyncChunk('journal', journal);
