@@ -131,9 +131,21 @@ async function api(path, opts = {}) {
   return data;
 }
 
+const PAGE_META = {
+  dashboard: { title: 'الرئيسية', sub: 'نظرة عامة واختصارات سريعة' },
+  sync: { title: 'رفع البيانات', sub: 'مزامنة EdariNX مع سيرفر المندوبين' },
+  agents: { title: 'المندوبون', sub: 'حسابات الدخول وصلاحيات الشجرات' },
+  trees: { title: 'كشوف الحساب', sub: 'اختر شجرة ثم زبوناً لعرض الكشف' }
+};
+
 function showPage(name) {
   document.querySelectorAll('.nav-item').forEach((n) => n.classList.toggle('active', n.dataset.page === name));
   document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p.id === `page-${name}`));
+  const meta = PAGE_META[name] || { title: '', sub: '' };
+  const titleEl = document.getElementById('pageTitle');
+  const subEl = document.getElementById('pageSubtitle');
+  if (titleEl) titleEl.textContent = meta.title;
+  if (subEl) subEl.textContent = meta.sub;
   if (name === 'trees') initExplorer();
 }
 
@@ -141,18 +153,24 @@ async function loadDashboard() {
   const data = await api('/api/admin/dashboard');
   const { counts, last } = data;
   document.getElementById('dashStats').innerHTML = [
-    ['حسابات', counts.accounts],
-    ['حركات', counts.journal],
-    ['مندوبون نشطون', counts.agents],
-    ['شجرات', treesCache.length]
-  ].map(([k, v]) => `<div class="stat-card"><div class="k">${k}</div><div class="v">${fmtNumAlways(v)}</div></div>`).join('');
+    ['حسابات', counts.accounts, ''],
+    ['حركات', counts.journal, ''],
+    ['مندوبون', counts.agents, 'نشطون'],
+    ['شجرات', treesCache.length, 'متاحة']
+  ].map(([k, v, note]) => `
+    <div class="stat-card">
+      <div class="k">${esc(k)}${note ? ` · ${esc(note)}` : ''}</div>
+      <div class="v">${fmtNumAlways(v)}</div>
+    </div>`).join('');
 
   if (last) {
     const cls = last.status === 'success' ? 'ok' : last.status === 'error' ? 'off' : 'pending';
     document.getElementById('lastSyncInfo').innerHTML = `
-      <span class="badge ${cls}">${last.status}</span>
-      ${fmtDate(last.started_at)} — ${last.accounts_count || 0} حساب، ${last.journal_count || 0} حركة
-      <br><span class="muted">${last.message || ''}</span>`;
+      <p><span class="badge ${cls}">${esc(last.status)}</span></p>
+      <p style="margin:8px 0 0">${fmtDate(last.started_at)}</p>
+      <p class="muted">${last.accounts_count || 0} حساب · ${last.journal_count || 0} حركة</p>`;
+  } else {
+    document.getElementById('lastSyncInfo').textContent = 'لم تُنفَّذ مزامنة بعد';
   }
 }
 
@@ -182,16 +200,16 @@ function renderExplorerTrees() {
     : 'لا توجد بيانات — ارفع البيانات أولاً';
 
   document.getElementById('explorerTrees').innerHTML = explorer.trees.map((t) => `
-    <button class="explorer-item${explorer.selectedTreeSeq === t.seq ? ' active' : ''}" data-seq="${esc(t.seq)}">
-      <div class="item-top">
-        <span class="acc-num">${esc(t.num)}</span>
-        <span class="bal ${balClass(Number(t.bal))}">${fmtNumAlways(t.bal)}</span>
+    <button type="button" class="pick-item${explorer.selectedTreeSeq === t.seq ? ' active' : ''}" data-seq="${esc(t.seq)}">
+      <div class="row-top">
+        <span class="code">${esc(t.num)}</span>
+        <span class="num ${balClass(Number(t.bal))}">${fmtNumAlways(t.bal)}</span>
       </div>
-      <div class="item-name">${esc(t.name1 || '—')}</div>
-      <div class="item-sub">${t.sub_count || 0} فرع</div>
+      <div class="name">${esc(t.name1 || '—')}</div>
+      <div class="sub">${t.sub_count || 0} فرع</div>
     </button>`).join('') || '<p class="empty-msg">—</p>';
 
-  document.querySelectorAll('#explorerTrees .explorer-item').forEach((btn) => {
+  document.querySelectorAll('#explorerTrees .pick-item').forEach((btn) => {
     btn.addEventListener('click', () => selectExplorerTree(btn.dataset.seq));
   });
 }
@@ -203,16 +221,16 @@ function renderExplorerBranches() {
     : 'اختر شجرة';
 
   document.getElementById('explorerBranches').innerHTML = filtered.map((b) => `
-    <button class="explorer-item${explorer.selectedBranchSeq === b.seq ? ' active' : ''}" data-seq="${esc(b.seq)}">
-      <div class="item-top">
-        <span class="acc-num">${esc(b.num)}</span>
-        <span class="bal ${balClass(Number(b.bal))}">${fmtNumAlways(b.bal)}</span>
+    <button type="button" class="pick-item${explorer.selectedBranchSeq === b.seq ? ' active' : ''}" data-seq="${esc(b.seq)}">
+      <div class="row-top">
+        <span class="code">${esc(b.num)}</span>
+        <span class="num ${balClass(Number(b.bal))}">${fmtNumAlways(b.bal)}</span>
       </div>
-      <div class="item-name">${esc(b.name1 || '—')}</div>
-      <div class="item-sub">${esc(b.summary?.label || b.debtStatus || '')}</div>
+      <div class="name">${esc(b.name1 || '—')}</div>
+      <div class="sub">${esc(b.summary?.label || b.debtStatus || '')}</div>
     </button>`).join('') || '<p class="empty-msg">لا توجد فروع</p>';
 
-  document.querySelectorAll('#explorerBranches .explorer-item').forEach((btn) => {
+  document.querySelectorAll('#explorerBranches .pick-item').forEach((btn) => {
     btn.addEventListener('click', () => selectExplorerBranch(btn.dataset.seq));
   });
 }
@@ -268,7 +286,7 @@ async function selectExplorerBranch(seq) {
       ['إجمالي مدين', fmtNumAlways(data.totalDebit)],
       ['إجمالي دائن', fmtNumAlways(data.totalCredit)],
       ['الحالة', data.summary?.label || acc.debtStatus]
-    ].map(([k, v]) => `<div class="stmt-card"><div class="k">${k}</div><div class="v">${esc(v)}</div></div>`).join('');
+    ].map(([k, v]) => `<div class="mini-stat"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join('');
 
     const { lines, totalDebit, totalCredit, summary } = data;
     document.getElementById('explorerStmtMeta').textContent = `${lines.length} حركة • ${summary.label}`;
@@ -310,10 +328,10 @@ async function initExplorer() {
       explorer.branchSearch = e.target.value;
       renderExplorerBranches();
     });
-    document.querySelectorAll('#page-trees .chip').forEach((chip) => {
+    document.querySelectorAll('#page-trees .seg-btn').forEach((chip) => {
       chip.addEventListener('click', () => {
         explorer.branchFilter = chip.dataset.filter;
-        document.querySelectorAll('#page-trees .chip').forEach((c) => c.classList.toggle('active', c === chip));
+        document.querySelectorAll('#page-trees .seg-btn').forEach((c) => c.classList.toggle('active', c === chip));
         renderExplorerBranches();
       });
     });
@@ -352,29 +370,35 @@ async function initExplorer() {
 
 async function loadAgents() {
   const data = await api('/api/admin/agents');
-  document.getElementById('agentsBody').innerHTML = data.agents.map((a) => {
-    const treeLabels = a.treeSeqs.map((seq) => {
-      const t = treesCache.find((x) => x.seq === seq);
-      return t ? `${t.num}` : seq;
-    }).join(', ') || '—';
+  const grid = document.getElementById('agentsGrid');
+  if (!data.agents?.length) {
+    grid.innerHTML = '<p class="muted">لا يوجد مندوبون — اضغط «مندوب جديد»</p>';
+    return;
+  }
+  grid.innerHTML = data.agents.map((a) => {
+    const treeCount = a.treeSeqs?.length || 0;
     return `
-      <tr>
-        <td>${a.name}</td>
-        <td>${a.phone || '—'}</td>
-        <td>${a.username}</td>
-        <td>${treeLabels}</td>
-        <td><span class="badge ${a.active ? 'ok' : 'off'}">${a.active ? 'نشط' : 'موقوف'}</span></td>
-        <td>
-          <button class="btn sm" data-edit="${a.id}">تعديل</button>
-          <button class="btn sm danger" data-del="${a.id}">حذف</button>
-        </td>
-      </tr>`;
-  }).join('') || '<tr><td colspan="6">لا يوجد مندوبون</td></tr>';
+    <article class="agent-card">
+      <div class="agent-card-head">
+        <strong>${esc(a.name)}</strong>
+        <span class="badge ${a.active ? 'ok' : 'off'}">${a.active ? 'نشط' : 'موقوف'}</span>
+      </div>
+      <div class="agent-card-meta">
+        <div>@${esc(a.username)}</div>
+        ${a.phone ? `<div>${esc(a.phone)}</div>` : ''}
+        <div>${treeCount} شجرة مصرّحة</div>
+      </div>
+      <div class="agent-card-actions">
+        <button type="button" class="btn btn-soft btn-sm" data-edit="${a.id}">تعديل</button>
+        <button type="button" class="btn btn-danger btn-sm" data-del="${a.id}">حذف</button>
+      </div>
+    </article>`;
+  }).join('');
 
-  document.querySelectorAll('[data-edit]').forEach((btn) => {
+  grid.querySelectorAll('[data-edit]').forEach((btn) => {
     btn.addEventListener('click', () => openAgentModal(Number(btn.dataset.edit)));
   });
-  document.querySelectorAll('[data-del]').forEach((btn) => {
+  grid.querySelectorAll('[data-del]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       if (!confirm('حذف هذا المندوب؟')) return;
       await api(`/api/admin/agents/${btn.dataset.del}`, { method: 'DELETE' });
@@ -404,6 +428,17 @@ function getSelectedSyncTreeSeqs() {
 
 function saveSyncTreeSelection() {
   localStorage.setItem('syncTreeSeqs', JSON.stringify(getSelectedSyncTreeSeqs()));
+  void persistBackgroundSyncSettings();
+}
+
+async function persistBackgroundSyncSettings() {
+  if (!window.edariDesktop?.saveBackgroundSyncSettings) return null;
+  return window.edariDesktop.saveBackgroundSyncSettings({
+    serverUrl: resolveSyncServerUrl(),
+    syncKey: document.getElementById('syncApiKey')?.value?.trim() || '',
+    treeSeqs: getSelectedSyncTreeSeqs(),
+    autoSyncEnabled: document.getElementById('autoSyncEnabled')?.checked !== false
+  });
 }
 
 function renderSyncTreeChecks(trees, selected = []) {
@@ -414,9 +449,12 @@ function renderSyncTreeChecks(trees, selected = []) {
     return;
   }
   el.innerHTML = trees.map((t) => `
-    <label>
+    <label class="tree-pick">
       <input type="checkbox" name="syncTreeSeq" value="${esc(t.seq)}" ${selected.includes(String(t.seq)) ? 'checked' : ''}>
-      ${esc(t.num)} — ${esc(t.name1 || '')} (${t.sub_count || 0} فرع)
+      <div class="tree-pick-body">
+        <div class="tree-pick-name">${esc(t.name1 || '—')}</div>
+        <div class="tree-pick-meta">${esc(t.num)} · ${t.sub_count || 0} فرع</div>
+      </div>
     </label>`).join('');
 
   el.querySelectorAll('input[name=syncTreeSeq]').forEach((input) => {
@@ -451,9 +489,12 @@ function renderTreeChecks(selected = []) {
     return;
   }
   el.innerHTML = treesCache.map((t) => `
-    <label>
+    <label class="tree-pick">
       <input type="checkbox" name="treeSeq" value="${t.seq}" ${selected.includes(t.seq) ? 'checked' : ''}>
-      ${t.num} — ${t.name1 || ''} (${t.sub_count} فرع)
+      <div class="tree-pick-body">
+        <div class="tree-pick-name">${esc(t.name1 || '—')}</div>
+        <div class="tree-pick-meta">${esc(t.num)} · ${t.sub_count || 0} فرع</div>
+      </div>
     </label>`).join('');
 }
 
@@ -510,30 +551,157 @@ async function verifySyncTarget(serverUrl, syncKey) {
   return data;
 }
 
-async function runSync() {
+let syncInProgress = false;
+
+const AUTO_SYNC_INTERVAL_SEC = 30 * 60;
+const autoSync = {
+  enabled: true,
+  secondsLeft: AUTO_SYNC_INTERVAL_SEC
+};
+
+function canAutoSync() {
+  return Boolean(window.edariDesktop?.runLocalSync);
+}
+
+function formatAutoSyncCountdown(totalSec) {
+  const sec = Math.max(0, Math.floor(totalSec));
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function setAutoSyncHint(text) {
+  const hint = document.getElementById('autoSyncHint');
+  if (hint) hint.textContent = text;
+}
+
+function updateAutoSyncDisplay() {
+  const text = syncInProgress
+    ? 'جاري المزامنة...'
+    : formatAutoSyncCountdown(autoSync.secondsLeft);
+  const els = [
+    document.getElementById('autoSyncCountdown'),
+    document.getElementById('autoSyncPillTime')
+  ];
+  for (const el of els) {
+    if (!el) continue;
+    el.textContent = text;
+    el.classList.toggle('running', syncInProgress);
+  }
+  if (!syncInProgress && autoSync.enabled) {
+    setAutoSyncHint(autoSync.secondsLeft > 0 ? 'حتى الرفع التلقائي التالي' : 'بدء الرفع الآن...');
+  }
+}
+
+function applyMainAutoSyncState(state = {}) {
+  autoSync.enabled = Boolean(state.enabled);
+  autoSync.secondsLeft = Number(state.secondsLeft) || AUTO_SYNC_INTERVAL_SEC;
+  syncInProgress = Boolean(state.syncing);
+  const checkbox = document.getElementById('autoSyncEnabled');
+  if (checkbox) checkbox.checked = autoSync.enabled;
+  const loginChk = document.getElementById('startAtLoginEnabled');
+  if (loginChk) loginChk.checked = state.startAtLogin !== false;
+  updateAutoSyncDisplay();
+  if (autoSync.enabled) {
+    setAutoSyncHint(
+      state.syncing
+        ? 'رفع تلقائي جارٍ في الخلفية...'
+        : 'يعمل في الخلفية — العداد حتى الرفع التالي'
+    );
+  } else {
+    setAutoSyncHint('المزامنة التلقائية متوقفة');
+  }
+}
+
+async function setAutoSyncEnabled(on) {
+  localStorage.setItem('autoSyncEnabled', on ? '1' : '0');
+  if (window.edariDesktop?.setAutoSyncEnabled) {
+    const state = await window.edariDesktop.setAutoSyncEnabled(on);
+    applyMainAutoSyncState(state);
+    return;
+  }
+  autoSync.enabled = Boolean(on);
+  updateAutoSyncDisplay();
+}
+
+async function initAutoSync() {
+  const sidebar = document.getElementById('autoSyncSidebar');
+  const pill = document.getElementById('autoSyncPill');
+  const desc = document.getElementById('syncAutoDesc');
+  const bgCard = document.getElementById('backgroundSyncCard');
+  if (!canAutoSync()) {
+    sidebar?.classList.add('hidden');
+    pill?.classList.add('hidden');
+    desc?.classList.add('hidden');
+    bgCard?.classList.add('hidden');
+    return;
+  }
+  sidebar?.classList.remove('hidden');
+  pill?.classList.remove('hidden');
+  desc?.classList.remove('hidden');
+  bgCard?.classList.remove('hidden');
+
+  if (window.edariDesktop?.onAutoSyncState) {
+    window.edariDesktop.onAutoSyncState(applyMainAutoSyncState);
+  }
+  if (window.edariDesktop?.getAutoSyncState) {
+    const state = await window.edariDesktop.getAutoSyncState();
+    applyMainAutoSyncState(state);
+  }
+
+  await persistBackgroundSyncSettings();
+}
+
+async function runSync(opts = {}) {
+  const { auto = false } = opts;
+  if (auto && window.edariDesktop?.runBackgroundSyncNow) {
+    await persistBackgroundSyncSettings();
+    await window.edariDesktop.runBackgroundSyncNow();
+    return true;
+  }
+  if (syncInProgress) {
+    if (!auto) alert('المزامنة قيد التنفيذ بالفعل');
+    return false;
+  }
+
   const serverUrl = resolveSyncServerUrl();
   const syncKey = document.getElementById('syncApiKey').value.trim();
   const backendUrl = (getBackendDisplayUrl() || '').replace(/\/$/, '');
   const treeSeqs = getSelectedSyncTreeSeqs();
   if (!treeSeqs.length) {
+    if (auto) {
+      setAutoSyncHint('تخطّي: حدد شجرة واحدة على الأقل');
+      return false;
+    }
     alert('حدد شجرة واحدة على الأقل للرفع');
-    return;
+    return false;
   }
   if (!serverUrl) {
+    if (auto) {
+      setAutoSyncHint('تخطّي: عنوان السيرفر غير مضبوط');
+      return false;
+    }
     alert('أدخل عنوان سيرفر الرفع (نفس عنوان تطبيق المندوب)');
-    return;
+    return false;
   }
   if (!syncKey) {
+    if (auto) {
+      setAutoSyncHint('تخطّي: مفتاح المزامنة فارغ');
+      return false;
+    }
     alert('أدخل مفتاح المزامنة (SYNC_API_KEY على السيرفر)');
-    return;
+    return false;
   }
-  if (backendUrl && serverUrl.replace(/\/$/, '') !== backendUrl) {
+  if (!auto && backendUrl && serverUrl.replace(/\/$/, '') !== backendUrl) {
     const proceed = confirm(
       `عنوان الرفع (${serverUrl}) يختلف عن سيرفر لوحة التحكم (${backendUrl}).\n\n` +
       'لن تصل التحديثات للمندوب إلا إذا كان الرفع لنفس السيرفر.\n\nمتابعة على أي حال؟'
     );
-    if (!proceed) return;
+    if (!proceed) return false;
   }
+
+  syncInProgress = true;
+  updateAutoSyncDisplay();
 
   applySyncServerUrl(serverUrl);
   localStorage.setItem('syncApiKey', syncKey);
@@ -579,19 +747,47 @@ async function runSync() {
     if (explorer.selectedTreeSeq) await selectExplorerTree(explorer.selectedTreeSeq);
     await loadSyncLogs();
     await loadAgents();
+    await persistBackgroundSyncSettings();
   } catch (e) {
     applySyncProgressLine(`خطأ: ${e.message}`);
     if (bar) bar.style.width = '0%';
-    alert(`فشل الرفع:\n${e.message}\n\nيمكنك تشغيل المزامنة يدوياً:\nnode sync-client/sync.js`);
+    if (auto) {
+      setAutoSyncHint(`خطأ: ${e.message}`);
+    } else {
+      alert(`فشل الرفع:\n${e.message}\n\nيمكنك تشغيل المزامنة يدوياً:\nnode sync-client/sync.js`);
+    }
+    syncInProgress = false;
+    updateAutoSyncDisplay();
+    return false;
   } finally {
     stopProgress?.();
-    setTimeout(() => prog.classList.add('hidden'), 5000);
+    syncInProgress = false;
+    updateAutoSyncDisplay();
+    setTimeout(() => prog.classList.add('hidden'), auto ? 8000 : 5000);
   }
+  return true;
 }
 
 document.getElementById('btnAddAgent').addEventListener('click', () => openAgentModal());
-document.getElementById('agentCancel').addEventListener('click', () => document.getElementById('agentModal').classList.add('hidden'));
-document.getElementById('btnSyncNow').addEventListener('click', runSync);
+const agentModal = document.getElementById('agentModal');
+document.getElementById('agentCancel').addEventListener('click', () => agentModal.classList.add('hidden'));
+agentModal?.addEventListener('click', (e) => {
+  if (e.target === agentModal) agentModal.classList.add('hidden');
+});
+document.getElementById('btnSyncNow').addEventListener('click', () => {
+  void runSync({ auto: false });
+});
+document.getElementById('autoSyncEnabled')?.addEventListener('change', (e) => {
+  void setAutoSyncEnabled(e.target.checked);
+});
+document.getElementById('startAtLoginEnabled')?.addEventListener('change', async (e) => {
+  if (window.edariDesktop?.setStartAtLogin) {
+    const state = await window.edariDesktop.setStartAtLogin(e.target.checked);
+    applyMainAutoSyncState(state);
+  }
+});
+document.getElementById('syncServerUrl')?.addEventListener('change', () => { void persistBackgroundSyncSettings(); });
+document.getElementById('syncApiKey')?.addEventListener('change', () => { void persistBackgroundSyncSettings(); });
 document.getElementById('btnSyncTreesAll')?.addEventListener('click', () => {
   document.querySelectorAll('#syncTreeChecks input[name=syncTreeSeq]').forEach((c) => { c.checked = true; });
   saveSyncTreeSelection();
@@ -630,6 +826,10 @@ document.querySelectorAll('.nav-item').forEach((btn) => {
   btn.addEventListener('click', () => showPage(btn.dataset.page));
 });
 
+document.querySelectorAll('.quick-card[data-goto]').forEach((btn) => {
+  btn.addEventListener('click', () => showPage(btn.dataset.goto));
+});
+
 async function loadConfig() {
   const data = await api('/api/admin/config');
   const base = resolveApiBase() || data.serverUrl || window.ADMIN_CONFIG?.BACKEND_URL || '';
@@ -649,8 +849,6 @@ async function loadConfig() {
       backendEl.value = window.ADMIN_CONFIG.BACKEND_URL;
     }
   }
-  const urlLabel = document.getElementById('backendUrlLabel');
-  if (urlLabel) urlLabel.textContent = getBackendDisplayUrl();
 }
 
 function saveBackendUrl() {
@@ -668,6 +866,7 @@ async function refreshAll() {
   await loadDashboard();
   await loadAgents();
   await loadSyncLogs();
+  initAutoSync();
 }
 
 const savedKey = localStorage.getItem('syncApiKey');

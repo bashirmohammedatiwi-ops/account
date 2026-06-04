@@ -1,17 +1,31 @@
-const { app, BrowserWindow, Menu, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, Tray, nativeImage } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
+const { createBackgroundSync } = require('./background-sync');
 
 const PORT = Number(process.env.PORT || 4100);
 const BACKEND_URL = (process.env.BACKEND_URL || 'http://187.124.23.65:5005').replace(/\/$/, '');
 const USE_REMOTE = process.env.USE_LOCAL_SERVER !== '1';
 const ADMIN_URL = USE_REMOTE ? `${BACKEND_URL}/admin` : `http://127.0.0.1:${PORT}/admin`;
+const START_HIDDEN = process.argv.includes('--background') || process.argv.includes('--hidden');
 
 let mainWindow;
+let tray;
 let serverProcess;
 let startedServer = false;
+let appIsQuitting = false;
+let backgroundSync;
+
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    showMainWindow();
+  });
+}
 
 function getPortalDir() {
   if (app.isPackaged) {
@@ -33,6 +47,10 @@ function getNodeBin() {
     if (fs.existsSync(bundled)) return bundled;
   }
   return process.platform === 'win32' ? 'node.exe' : 'node';
+}
+
+function getSettingsPath() {
+  return path.join(app.getPath('userData'), 'background-sync.json');
 }
 
 function serverEnv() {
@@ -101,6 +119,11 @@ function pushSyncProgress(text) {
   mainWindow.webContents.send('sync-progress', line);
 }
 
+function pushAutoSyncState(state) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('auto-sync-state', state);
+}
+
 function parseSyncResult(stdout) {
   const match = stdout.match(/(\d+) حساب، (\d+) حركة(?:، (\d+) فاتورة(?:، (\d+) بند)?)?/);
   return {
@@ -112,9 +135,14 @@ function parseSyncResult(stdout) {
   };
 }
 
+let activeSyncPromise = null;
+
 function runLocalSyncScript(serverUrl, syncKey, treeSeqs = []) {
-  return new Promise((resolve, reject) => {
+  if (activeSyncPromise) return activeSyncPromise;
+
+  activeSyncPromise = new Promise((resolve, reject) => {
     if (!Array.isArray(treeSeqs) || !treeSeqs.length) {
+      activeSyncPromise = null;
       return reject(new Error('حدد شجرة واحدة على الأقل للرفع'));
     }
 
@@ -165,7 +193,11 @@ function runLocalSyncScript(serverUrl, syncKey, treeSeqs = []) {
       if (code !== 0) return reject(new Error(stdout.trim() || `Sync exit ${code}`));
       resolve(parseSyncResult(stdout));
     });
+  }).finally(() => {
+    activeSyncPromise = null;
   });
+
+  return activeSyncPromise;
 }
 
 function getAppIcon() {
@@ -182,12 +214,79 @@ function getAppIcon() {
   return undefined;
 }
 
-function createWindow() {
+function formatTrayCountdown(secondsLeft, syncing) {
+  if (syncing) return 'جاري المزامنة...';
+  const sec = Math.max(0, Math.floor(secondsLeft));
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function updateTrayMenu() {
+  if (!tray || !backgroundSync) return;
+  const st = backgroundSync.getState();
+  const countdown = formatTrayCountdown(st.secondsLeft, st.syncing);
+
+  tray.setToolTip(`Edari Admin — مزامنة تلقائية ${countdown}`);
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'فتح لوحة التحكم', click: () => showMainWindow() },
+    {
+      label: st.syncing ? 'جاري المزامنة...' : 'رفع الآن',
+      enabled: !st.syncing,
+      click: () => { void backgroundSync.runNow(); }
+    },
+    { type: 'separator' },
+    {
+      label: 'مزامنة تلقائية كل 30 دقيقة',
+      type: 'checkbox',
+      checked: st.enabled,
+      click: (item) => backgroundSync.setAutoSyncEnabled(item.checked)
+    },
+    {
+      label: 'تشغيل مع Windows',
+      type: 'checkbox',
+      checked: st.startAtLogin,
+      click: (item) => backgroundSync.setStartAtLogin(item.checked)
+    },
+    { type: 'separator' },
+    {
+      label: 'إنهاء التطبيق',
+      click: () => {
+        appIsQuitting = true;
+        app.quit();
+      }
+    }
+  ]));
+}
+
+function createTray() {
+  const iconPath = getAppIcon();
+  if (!iconPath) return;
+
+  const image = nativeImage.createFromPath(iconPath);
+  tray = new Tray(image.isEmpty() ? nativeImage.createEmpty() : image);
+  tray.setToolTip('Edari Admin — يعمل في الخلفية');
+  tray.on('double-click', () => showMainWindow());
+  updateTrayMenu();
+}
+
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow({ show: true });
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function createWindow({ show = !START_HIDDEN } = {}) {
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 920,
     minWidth: 1100,
     minHeight: 700,
+    show: false,
     title: 'Edari Admin — لوحة التحكم',
     icon: getAppIcon(),
     backgroundColor: '#f0f4f8',
@@ -202,26 +301,49 @@ function createWindow() {
     }
   });
 
+  mainWindow.once('ready-to-show', () => {
+    if (show) mainWindow.show();
+    pushAutoSyncState(backgroundSync?.getState() || {});
+  });
+
   mainWindow.loadURL(ADMIN_URL);
+
+  mainWindow.on('close', (e) => {
+    if (!appIsQuitting) {
+      e.preventDefault();
+      mainWindow.hide();
+    }
+  });
 
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     {
       label: 'ملف',
       submenu: [
+        { label: 'إظهار النافذة', click: () => showMainWindow() },
         { label: 'تحديث', accelerator: 'F5', click: () => mainWindow?.reload() },
         { type: 'separator' },
-        { role: 'quit', label: 'خروج' }
+        {
+          label: 'إنهاء',
+          click: () => {
+            appIsQuitting = true;
+            app.quit();
+          }
+        }
       ]
     },
     {
       label: 'مزامنة',
       submenu: [
         {
-          label: 'رفع من EdariNX إلى السيرفر',
+          label: 'رفع الآن',
+          click: () => { void backgroundSync?.runNow(); }
+        },
+        {
+          label: 'صفحة رفع البيانات',
           click: () => {
+            showMainWindow();
             mainWindow?.webContents.executeJavaScript(`
               document.querySelector('.nav-item[data-page="sync"]')?.click();
-              alert('حدّد الشجرات من صفحة رفع البيانات ثم اضغط «تحديث ورفع البيانات»');
             `);
           }
         }
@@ -264,6 +386,29 @@ function runListEdariTreesScript() {
   });
 }
 
+function initBackgroundSync() {
+  backgroundSync = createBackgroundSync({
+    app,
+    getSettingsPath,
+    defaultServerUrl: BACKEND_URL,
+    runSync: runLocalSyncScript,
+    onStateChange: (state) => {
+      pushAutoSyncState(state);
+      updateTrayMenu();
+    },
+    onNotify: (msg) => {
+      if (tray && !mainWindow?.isVisible()) {
+        tray.displayBalloon?.({
+          title: 'Edari Admin',
+          content: String(msg || ''),
+          iconType: 'info'
+        });
+      }
+    }
+  });
+  backgroundSync.init();
+}
+
 ipcMain.handle('run-local-sync', (_e, { serverUrl, syncKey, treeSeqs }) => {
   return runLocalSyncScript(serverUrl, syncKey, treeSeqs);
 });
@@ -272,6 +417,25 @@ ipcMain.handle('list-edari-trees', () => {
   return runListEdariTreesScript();
 });
 
+ipcMain.handle('get-auto-sync-state', () => backgroundSync?.getState() || {});
+
+ipcMain.handle('save-background-sync-settings', (_e, patch) => {
+  backgroundSync?.saveSettings(patch || {});
+  return backgroundSync?.getState() || {};
+});
+
+ipcMain.handle('set-auto-sync-enabled', (_e, enabled) => {
+  backgroundSync?.setAutoSyncEnabled(Boolean(enabled));
+  return backgroundSync?.getState() || {};
+});
+
+ipcMain.handle('set-start-at-login', (_e, enabled) => {
+  backgroundSync?.setStartAtLogin(Boolean(enabled));
+  return backgroundSync?.getState() || {};
+});
+
+ipcMain.handle('run-background-sync-now', () => backgroundSync?.runNow());
+
 app.whenReady().then(async () => {
   try {
     if (USE_REMOTE) {
@@ -279,18 +443,32 @@ app.whenReady().then(async () => {
     } else {
       await startBackend();
     }
-    createWindow();
+    initBackgroundSync();
+    createTray();
+    createWindow({ show: !START_HIDDEN });
+
+    if (START_HIDDEN) {
+      setTimeout(() => {
+        void backgroundSync?.runNow();
+      }, 15000);
+    }
   } catch (err) {
     console.error(err);
-    app.quit();
+    if (!START_HIDDEN) app.quit();
   }
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  /* يبقى التطبيق يعمل في الخلفية (أيقونة بجانب الساعة) */
+});
+
+app.on('activate', () => {
+  showMainWindow();
 });
 
 app.on('before-quit', () => {
+  appIsQuitting = true;
+  backgroundSync?.shutdown();
   if (startedServer && serverProcess) {
     serverProcess.kill();
   }
