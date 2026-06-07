@@ -348,101 +348,33 @@ function buildPdfFile(blob, filename) {
   return new File([pdfBlob], pdfName, { type: 'application/pdf', lastModified: Date.now() });
 }
 
-async function createPdfShareUrl(payload) {
-  const data = await api('/share/create', {
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
-  return data.url;
-}
-
-async function trySharePdfFile(file, message) {
+async function trySharePdfFile(file) {
   if (!navigator.share) return false;
-
-  const attempts = [
-    { files: [file] },
-    { files: [file], text: message }
-  ];
-
-  for (const shareData of attempts) {
-    try {
-      if (navigator.canShare && !navigator.canShare(shareData)) continue;
-      await navigator.share(shareData);
-      return true;
-    } catch (err) {
-      if (err?.name === 'AbortError') return true;
-    }
-  }
-
+  const shareData = { files: [file] };
   try {
-    await navigator.share({ files: [file] });
+    if (navigator.canShare && !navigator.canShare(shareData)) return false;
+    await navigator.share(shareData);
     return true;
   } catch (err) {
     if (err?.name === 'AbortError') return true;
+    return false;
   }
-  return false;
 }
 
-function openWhatsApp(text) {
-  const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-  window.open(url, '_blank', 'noopener,noreferrer');
+function openWhatsAppApp() {
+  window.open('https://wa.me/', '_blank', 'noopener,noreferrer');
 }
 
-function buildStatementShareMessage(data = {}) {
-  const acc = data.account || state.selectedBranch || {};
-  const parts = [
-    'شركة ديما الحياة',
-    'كشف حساب',
-    acc.name1 ? `العميل: ${acc.name1}` : '',
-    acc.num ? `رقم الحساب: ${acc.num}` : '',
-    `إجمالي مدين: ${fmtNumAlways(data.totalDebit ?? 0)}`,
-    `إجمالي دائن: ${fmtNumAlways(data.totalCredit ?? 0)}`,
-    `الديون: ${fmtNumAlways(data.debtAmount ?? 0)}`,
-    data.summary?.label ? `الحالة: ${data.summary.label}` : ''
-  ].filter(Boolean);
-  return parts.join('\n');
-}
-
-function buildInvoiceShareMessage(inv = {}) {
-  const parts = [
-    'شركة ديما الحياة',
-    inv.kindLabel || 'فاتورة',
-    inv.num ? `رقم: ${inv.num}` : '',
-    inv.date ? `التاريخ: ${fmtDate(inv.date)}` : '',
-    `العميل: ${inv.accountName || state.selectedBranch?.name1 || '—'}`,
-    `الإجمالي: ${fmtNumAlways(inv.total ?? 0)}`,
-    Number(inv.discount) > 0 ? `الحسومات: ${fmtNumAlways(inv.discount)}` : '',
-    `الصافي: ${fmtNumAlways(inv.netPay ?? inv.total ?? 0)}`
-  ].filter(Boolean);
-  return parts.join('\n');
-}
-
-async function sharePdfViaWhatsApp(path, filename, message, sharePayload) {
+async function sharePdfViaWhatsApp(path, filename) {
   setOverlay(true);
   try {
     const blob = await fetchAuthenticatedPdf(path);
     const file = buildPdfFile(blob, filename);
 
-    // على الهاتف: اختر واتساب من قائمة المشاركة لإرفاق ملف PDF
-    if (await trySharePdfFile(file, message)) return;
-
-    const shareUrl = await createPdfShareUrl({
-      ...sharePayload,
-      filename: file.name
-    });
-    const linkMessage = `${message}\n\n📄 PDF:\n${shareUrl}`;
-
-    if (navigator.share) {
-      try {
-        await navigator.share({ url: shareUrl, text: message, title: file.name });
-        return;
-      } catch (err) {
-        if (err?.name === 'AbortError') return;
-      }
-    }
+    if (await trySharePdfFile(file)) return;
 
     triggerBlobDownload(blob, file.name);
-    openWhatsApp(`${linkMessage}\n\nتم تنزيل PDF — أرفقه من التنزيلات أو أرسل الرابط أعلاه.`);
+    openWhatsAppApp();
   } finally {
     setOverlay(false);
   }
@@ -470,12 +402,9 @@ async function exportStatementPdf() {
 async function shareStatementWhatsApp() {
   if (!state.selectedBranch?.seq) return;
   const num = state.selectedBranch.num || state.selectedBranch.seq;
-  const message = buildStatementShareMessage(state.lastStatement || {});
   await sharePdfViaWhatsApp(
     `/accounts/${encodeURIComponent(state.selectedBranch.seq)}/statement.pdf`,
-    `statement-${num}.pdf`,
-    message,
-    { kind: 'statement', accSeq: String(state.selectedBranch.seq) }
+    `statement-${num}.pdf`
   );
 }
 
@@ -509,12 +438,9 @@ async function shareInvoiceWhatsApp(refOverride, byOverride, accOverride) {
   }
   const label = inv.num || ref;
   const qs = invoiceQueryString({ ref, by, acc });
-  const message = buildInvoiceShareMessage(inv);
   await sharePdfViaWhatsApp(
     invoicePdfPath(ref, qs),
-    `invoice-${label}.pdf`,
-    message,
-    { kind: 'invoice', ref: String(ref), by, acc: String(acc) }
+    `invoice-${label}.pdf`
   );
 }
 
