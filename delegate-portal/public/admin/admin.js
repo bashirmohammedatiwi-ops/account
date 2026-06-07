@@ -279,16 +279,19 @@ async function selectExplorerBranch(seq) {
       </div>
       <div class="hdr-bal ${balClass(Number(acc.bal ?? data.finalBalance))}">
         <span>${esc(acc.debtStatus || data.summary?.label || '')}</span>
-        <strong>${fmtNumAlways(data.finalBalance ?? acc.bal)}</strong>
+        <strong>${fmtNumAlways(Math.abs(Number(data.finalBalance ?? acc.bal ?? 0)))}</strong>
       </div>`;
 
+    const { lines, totalDebit, totalCredit, summary } = data;
+    const debtAmount = data.debtAmount ?? Math.max(0, Number(totalDebit) - Number(totalCredit));
+
     document.getElementById('explorerStmtCards').innerHTML = [
-      ['إجمالي مدين', fmtNumAlways(data.totalDebit)],
-      ['إجمالي دائن', fmtNumAlways(data.totalCredit)],
-      ['الحالة', data.summary?.label || acc.debtStatus]
+      ['إجمالي مدين', fmtNumAlways(totalDebit)],
+      ['إجمالي دائن', fmtNumAlways(totalCredit)],
+      ['الديون', fmtNumAlways(debtAmount)],
+      ['الحالة', summary?.label || acc.debtStatus]
     ].map(([k, v]) => `<div class="mini-stat"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join('');
 
-    const { lines, totalDebit, totalCredit, summary } = data;
     document.getElementById('explorerStmtMeta').textContent = `${lines.length} حركة • ${summary.label}`;
 
     document.getElementById('explorerStmtBody').innerHTML = lines.length

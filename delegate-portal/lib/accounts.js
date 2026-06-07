@@ -82,7 +82,8 @@ function getStatementForAccount(accSeq, options = {}) {
     lines: stmt.lines,
     stmt,
     account,
-    useSinceMatch
+    useSinceMatch,
+    openingBalance
   });
   const debtAmount = resolveDebtDisplayAmount({
     finalBalance,

@@ -86,28 +86,48 @@ function computeBalanceThroughCutoff(rows, cutoff) {
   return balance;
 }
 
+function normalizeCarriedBalance(balance, account = {}) {
+  const b = parseAmount(balance);
+  if (b === 0) return 0;
+  const accountBal = parseAmount(account?.bal ?? account?.Bal);
+  // بعض حسابات Edari تخزّن FixBal موجباً رغم أن الرصيد مدين
+  if (b > 0 && accountBal <= 0) return -Math.abs(b);
+  if (b < 0 && accountBal > 0) return Math.abs(b);
+  return b;
+}
+
 function computeOpeningBalance(rows, cutoff, account) {
   if (!cutoff) return 0;
   const fixBal = parseAmount(account?.fix_bal ?? account?.fixBal);
   if (cutoff.source === 'fix_date' && isValidFixDate(cutoff.date) && fixBal !== 0) {
-    return fixBal;
+    return normalizeCarriedBalance(fixBal, account);
   }
   if (cutoff.seq || isValidFixDate(cutoff.date)) {
-    return computeBalanceThroughCutoff(rows, cutoff);
+    return normalizeCarriedBalance(computeBalanceThroughCutoff(rows, cutoff), account);
   }
-  return fixBal;
+  return normalizeCarriedBalance(fixBal, account);
 }
 
 function sumLineAmounts(lines, field) {
   return (lines || []).reduce((s, l) => s + parseAmount(l[field]), 0);
 }
 
-/** إجماليات الكشف — عند وجود رصيد مدور يُجمع مع مدين الحركات كما في Edari */
-function resolveStatementTotals({ lines = [], stmt = {}, account = {}, useSinceMatch = false } = {}) {
+/** إجماليات الكشف — الرصيد المدور + الحركات، وإذا كان رصيد الحساب مديناً يُضمّ إلى الديون */
+function resolveStatementTotals({
+  lines = [],
+  stmt = {},
+  account = {},
+  useSinceMatch = false,
+  openingBalance = 0
+} = {}) {
   const lineDebit = sumLineAmounts(lines, 'debit');
   const lineCredit = sumLineAmounts(lines, 'credit');
   const edariDebit = parseAmount(account.tot1);
   const edariCredit = parseAmount(account.tot2);
+  const hasOpening = lines.some((l) => l.isOpening);
+  const openBal = parseAmount(openingBalance);
+  const openDebit = openBal < 0 ? Math.abs(openBal) : 0;
+  const accountBal = parseAmount(account.bal);
 
   if (!useSinceMatch) {
     return {
@@ -116,15 +136,30 @@ function resolveStatementTotals({ lines = [], stmt = {}, account = {}, useSinceM
     };
   }
 
-  const hasOpening = lines.some((l) => l.isOpening);
+  let totalDebit;
+  let totalCredit;
+
   if (hasOpening && lines.length) {
-    return { totalDebit: lineDebit, totalCredit: lineCredit };
+    totalDebit = lineDebit;
+    totalCredit = lineCredit;
+  } else {
+    totalDebit = edariDebit > 0 ? edariDebit : lineDebit;
+    totalCredit = edariCredit > 0 ? edariCredit : lineCredit;
+    if (openDebit > 0 && Math.abs(totalDebit - lineDebit) <= 1) {
+      totalDebit = lineDebit + openDebit;
+    }
   }
 
-  return {
-    totalDebit: edariDebit > 0 ? edariDebit : lineDebit,
-    totalCredit: edariCredit > 0 ? edariCredit : lineCredit
-  };
+  // رصيد الحساب مدين — اجمع مع الديون حتى يطابق «لكم» في Edari
+  if (accountBal < 0) {
+    const debtFromBal = Math.abs(accountBal);
+    const net = totalDebit - totalCredit;
+    if (debtFromBal > net + 0.5) {
+      totalDebit = totalCredit + debtFromBal;
+    }
+  }
+
+  return { totalDebit, totalCredit };
 }
 
 function buildOpeningLine(openingBalance, cutoff) {
@@ -204,21 +239,22 @@ function debtStatusFromBalance(bal) {
   return 'الديون';
 }
 
-/** مبلغ «الديون» للعرض — يتوافق مع رصيد الكشف وإجماليات Edari منذ المطابقة */
+/** مبلغ «الديون» — إجمالي مدين − دائن، أو رصيد الحساب إذا كان مديناً */
 function resolveDebtDisplayAmount(data = {}) {
+  const totalDebit = parseAmount(data.totalDebit);
+  const totalCredit = parseAmount(data.totalCredit);
+  const netFromTotals = totalDebit - totalCredit;
+  if (netFromTotals > 0) return netFromTotals;
+
+  const accountBal = parseAmount(data.finalBalance ?? data.account?.bal ?? data.bal);
+  if (accountBal < 0) return Math.abs(accountBal);
+
   const lines = data.lines || [];
   const lastLineBal = lines.length ? parseAmount(lines[lines.length - 1].balance) : null;
-  const accountBal = parseAmount(data.finalBalance ?? data.account?.bal ?? data.bal);
-  const stmtBal = parseAmount(data.stmtFinalBalance);
-
   if (lastLineBal < 0) return Math.abs(lastLineBal);
-  if (accountBal < 0) return Math.abs(accountBal);
-  if (stmtBal < 0) return Math.abs(stmtBal);
 
-  if (data.sinceLastMatch) {
-    const net = parseAmount(data.totalDebit) - parseAmount(data.totalCredit);
-    if (net > 0) return net;
-  }
+  const stmtBal = parseAmount(data.stmtFinalBalance);
+  if (stmtBal < 0) return Math.abs(stmtBal);
 
   return 0;
 }
@@ -236,6 +272,7 @@ module.exports = {
   computeBalanceThroughCutoff,
   computeOpeningBalance,
   buildOpeningLine,
+  normalizeCarriedBalance,
   isValidFixDate,
   sortJournalRowsAsc,
   sortJournalRowsDesc,
