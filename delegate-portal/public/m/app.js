@@ -101,6 +101,15 @@ function fmtBalanceDisplay(bal) {
   return '0';
 }
 
+/** حركة الرصيد كما في Edari: 4,701,950- */
+function fmtEdariRunningBalance(bal, isOpening = false) {
+  if (isOpening) return '';
+  const n = Number(bal);
+  if (Number.isNaN(n) || n === 0) return '0';
+  const abs = fmtNumAlways(Math.abs(n));
+  return n < 0 ? `${abs}-` : abs;
+}
+
 function balanceClassFor(bal) {
   const n = Number(bal);
   if (Number.isNaN(n) || n === 0) return '';
@@ -182,7 +191,7 @@ function bindStatementRowActions(root) {
 }
 
 function txTypeLabel(line) {
-  if (line?.isOpening) return 'رصيد مرحّل';
+  if (line?.isOpening) return 'رصيد مدور';
   if (line?.isReconciliation) return 'ترصيد';
   if (line?.debit && line?.hasInvoice) return 'فاتورة';
   if (line?.debit) return 'مدين';
@@ -634,18 +643,14 @@ function renderStatement(data) {
         : '<span class="num empty">—</span>';
       return `<tr class="${rowClass}">
         <td class="col-n">${idxLabel}</td>
-        <td class="col-date">${fmtDate(r.date)}</td>
+        <td class="col-date">${r.isOpening ? '' : fmtDate(r.date)}</td>
         <td class="col-desc"><div class="stmt-desc-cell"><span class="row-tag ${txTypeClass(r)}">${txTypeLabel(r)}</span><span class="stmt-desc-text">${esc(r.description) || '—'}</span></div></td>
         ${amtTd(r.debit, 'debit')}
         ${amtTd(r.credit, 'credit')}
-        <td class="num col-balance ${balanceClassFor(r.balance)}" dir="ltr">${fmtBalanceDisplay(r.balance)}</td>
+        <td class="num col-balance ${balanceClassFor(r.balance)}" dir="ltr">${fmtEdariRunningBalance(r.balance, r.isOpening)}</td>
         <td class="col-act">${actions}</td>
       </tr>`;
     }).join('');
-
-    const extraRow = branch.tot1 != null || branch.tot2 != null
-      ? `<tr class="row-extra"><td colspan="7">${branch.tot1 != null ? `إجمالي 1: <b dir="ltr">${fmtNumAlways(branch.tot1)}</b>` : ''}${branch.tot2 != null ? `${branch.tot1 != null ? ' · ' : ''}إجمالي 2: <b dir="ltr">${fmtNumAlways(branch.tot2)}</b>` : ''}</td></tr>`
-      : '';
 
     const stmtRoot = document.getElementById('stmtLines');
     stmtRoot.innerHTML = `
@@ -658,20 +663,26 @@ function renderStatement(data) {
               <th class="col-desc">البيان</th>
               <th class="col-amt col-debit">مدين</th>
               <th class="col-amt col-credit">دائن</th>
-              <th class="col-amt col-balance">رصيد الحساب</th>
+              <th class="col-amt col-balance">حركة الرصيد</th>
               <th class="col-act">إجراءات</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
           <tfoot>
             <tr class="row-total">
-              <td colspan="3" class="total-label">${esc(summary.label)}</td>
+              <td colspan="3" class="total-label"><strong>المجموع</strong></td>
               <td class="num debit" dir="ltr">${fmtNumAlways(totalDebit)}</td>
               <td class="num credit" dir="ltr">${fmtNumAlways(totalCredit)}</td>
-              <td class="num col-balance ${summary.side === 'debit' ? 'debit' : summary.side === 'credit' ? 'credit' : ''}" dir="ltr">${fmtNumAlways(summary.amount)}</td>
+              <td></td>
               <td></td>
             </tr>
-            ${extraRow}
+            <tr class="row-final">
+              <td colspan="3" class="total-label"><strong>${esc(summary.label)}</strong></td>
+              <td class="num debit" dir="ltr">${summary.side === 'debit' ? fmtNumAlways(summary.amount) : ''}</td>
+              <td class="num credit" dir="ltr">${summary.side === 'credit' ? fmtNumAlways(summary.amount) : ''}</td>
+              <td></td>
+              <td></td>
+            </tr>
           </tfoot>
         </table>
       </div>`;

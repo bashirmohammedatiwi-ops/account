@@ -59,6 +59,7 @@ function getStatementForAccount(accSeq, options = {}) {
     debtStatusFromBalance,
     resolveDebtDisplayAmount,
     resolveStatementTotals,
+    resolveFinalBalance,
     filterRowsSinceLastMatch,
     computeOpeningBalance,
     buildOpeningLine
@@ -77,21 +78,22 @@ function getStatementForAccount(accSeq, options = {}) {
     if (openingLine) stmt.lines.unshift(openingLine);
   }
 
-  const finalBalance = Number(account.bal ?? stmt.finalBalance ?? 0);
   const { totalDebit, totalCredit } = resolveStatementTotals({
     lines: stmt.lines,
     stmt,
     account,
-    useSinceMatch,
-    openingBalance
+    useSinceMatch
+  });
+  const finalBalance = resolveFinalBalance({
+    accountBal: account.bal,
+    totalDebit,
+    totalCredit,
+    stmtFinalBalance: stmt.finalBalance
   });
   const debtAmount = resolveDebtDisplayAmount({
     finalBalance,
-    lines: stmt.lines,
     totalDebit,
     totalCredit,
-    sinceLastMatch: useSinceMatch,
-    stmtFinalBalance: stmt.finalBalance,
     account: { bal: account.bal }
   });
 
@@ -115,7 +117,7 @@ function getStatementForAccount(accSeq, options = {}) {
     totalCredit,
     finalBalance,
     debtAmount,
-    summary: balanceSummaryLabel(finalBalance),
+    summary: balanceSummaryLabel(finalBalance, account.name1),
     openingBalance: useSinceMatch ? openingBalance : 0,
     sinceLastMatch: useSinceMatch,
     lastMatch: cutoff

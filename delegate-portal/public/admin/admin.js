@@ -105,6 +105,14 @@ function fmtNumAlways(v) {
   return Number.isNaN(n) ? '—' : n.toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
+function fmtStmtBalance(bal, isOpening = false) {
+  if (isOpening) return '';
+  const n = Number(bal);
+  if (Number.isNaN(n) || n === 0) return '0';
+  const abs = fmtNumAlways(Math.abs(n));
+  return n < 0 ? `${abs}-` : abs;
+}
+
 function fmtStmtDate(v) {
   if (!v) return '';
   const d = new Date(String(v).replace(' 00:00:00', ''));
@@ -296,12 +304,12 @@ async function selectExplorerBranch(seq) {
 
     document.getElementById('explorerStmtBody').innerHTML = lines.length
       ? lines.map((r) => `
-        <tr>
+        <tr class="${r.isOpening ? 'row-opening' : ''}">
           <td class="num">${fmtNum(r.debit)}</td>
           <td class="num">${fmtNum(r.credit)}</td>
           <td class="desc">${esc(r.description)}</td>
-          <td>${fmtStmtDate(r.date)}</td>
-          <td class="num ${balClass(r.balance)}">${fmtNumAlways(r.balance)}</td>
+          <td>${r.isOpening ? '' : fmtStmtDate(r.date)}</td>
+          <td class="num ${balClass(r.balance)}">${fmtStmtBalance(r.balance, r.isOpening)}</td>
         </tr>`).join('')
       : '<tr><td colspan="5">لا توجد حركات</td></tr>';
 
@@ -313,7 +321,7 @@ async function selectExplorerBranch(seq) {
           <td></td>
         </tr>
         <tr class="final">
-          <td class="num">${summary.side === 'debit' ? fmtNumAlways(summary.amount) : summary.amount === 0 ? '0' : ''}</td>
+          <td class="num">${summary.side === 'debit' ? fmtNumAlways(summary.amount) : ''}</td>
           <td class="num">${summary.side === 'credit' ? fmtNumAlways(summary.amount) : ''}</td>
           <td colspan="2"><strong>${esc(summary.label)}</strong></td>
           <td></td>

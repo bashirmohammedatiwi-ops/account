@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const pdfmake = require('@digicole/pdfmake-rtl');
 const { resolveInvoiceTotals } = require('./invoices');
-const { resolveDebtDisplayAmount } = require('./statement-utils');
+const { resolveDebtDisplayAmount, formatRunningBalance } = require('./statement-utils');
 
 pdfmake.addFonts(require('@digicole/pdfmake-rtl/fonts/Cairo'));
 pdfmake.addFonts(require('@digicole/pdfmake-rtl/fonts/Roboto'));
@@ -276,12 +276,14 @@ function stmtHeaderRow() {
 function stmtLineRow(row, rowIndex) {
   const fill = rowFill(rowIndex, row.isOpening || row.isReconciliation);
   const idx = row.isOpening ? '∗' : String(rowIndex + 1);
+  const balText = row.isOpening ? '' : formatRunningBalance(row.balance);
+  const dateText = row.isOpening ? '' : fmtDate(row.date);
   return [
-    tdMoney(fmtNum(row.balance), fill),
+    tdMoney(balText || '—', fill),
     tdMoney(row.credit ? fmtNum(row.credit) : '—', fill, row.credit ? C.credit : null),
     tdMoney(row.debit ? fmtNum(row.debit) : '—', fill, row.debit ? C.debit : null),
     td(row.description || '—', 'right', fill),
-    tdDate(row.date, fill),
+    tdDate(dateText, fill),
     td(idx, 'center', fill)
   ];
 }
@@ -291,18 +293,41 @@ function emptyCell() {
 }
 
 function stmtTotalsTableRow(stmt) {
-  const bal = Number(stmt.finalBalance ?? stmt.account?.bal ?? 0);
+  const summary = stmt.summary || {};
   return [
-    tdMoney(fmtNum(Math.abs(bal)), C.panel),
+    tdMoney('', C.panel),
     tdMoney(fmtNum(stmt.totalCredit), C.panel, C.credit),
     tdMoney(fmtNum(stmt.totalDebit), C.panel, C.debit),
     {
-      text: 'الإجمالي',
+      text: 'المجموع',
       bold: true,
       fontSize: 7.5,
       color: C.text,
       alignment: 'right',
       fillColor: C.panel,
+      colSpan: 3,
+      margin: [2, 4, 2, 4]
+    },
+    emptyCell(),
+    emptyCell()
+  ];
+}
+
+function stmtFinalTableRow(stmt) {
+  const summary = stmt.summary || {};
+  const debitAmt = summary.side === 'debit' ? fmtNum(summary.amount) : '—';
+  const creditAmt = summary.side === 'credit' ? fmtNum(summary.amount) : '—';
+  return [
+    tdMoney('', C.panel),
+    tdMoney(creditAmt, C.panel, summary.side === 'credit' ? C.credit : null),
+    tdMoney(debitAmt, C.panel, summary.side === 'debit' ? C.debit : null),
+    {
+      text: summary.label || '—',
+      bold: true,
+      fontSize: 7.5,
+      color: C.text,
+      alignment: 'right',
+      fillColor: C.primaryLight,
       colSpan: 3,
       margin: [2, 4, 2, 4]
     },
@@ -491,6 +516,7 @@ async function buildStatementPdf(stmt, meta = {}) {
   const tableBody = [stmtHeaderRow(), ...lines.map((row, i) => stmtLineRow(row, i))];
   if (lines.length) {
     tableBody.push(stmtTotalsTableRow(stmt));
+    tableBody.push(stmtFinalTableRow(stmt));
   }
 
   const doc = baseDoc([
