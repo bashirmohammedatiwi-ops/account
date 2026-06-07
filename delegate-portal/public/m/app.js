@@ -350,19 +350,13 @@ function buildPdfFile(blob, filename) {
 
 async function trySharePdfFile(file) {
   if (!navigator.share) return false;
-  const shareData = { files: [file] };
   try {
-    if (navigator.canShare && !navigator.canShare(shareData)) return false;
-    await navigator.share(shareData);
+    await navigator.share({ files: [file] });
     return true;
   } catch (err) {
     if (err?.name === 'AbortError') return true;
     return false;
   }
-}
-
-function openWhatsAppApp() {
-  window.open('https://wa.me/', '_blank', 'noopener,noreferrer');
 }
 
 async function sharePdfViaWhatsApp(path, filename) {
@@ -374,7 +368,7 @@ async function sharePdfViaWhatsApp(path, filename) {
     if (await trySharePdfFile(file)) return;
 
     triggerBlobDownload(blob, file.name);
-    openWhatsAppApp();
+    alert('لم تتوفر مشاركة PDF مباشرة على هذا الجهاز.\nتم تنزيل الملف — افتح واتساب واختر «مستند» لإرفاق PDF من التنزيلات.');
   } finally {
     setOverlay(false);
   }
