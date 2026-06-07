@@ -11,8 +11,7 @@ const state = {
   selectedBranch: null,
   selectedInvoice: null,
   branchFilter: 'all',
-  branchSearch: '',
-  stmtFilter: 'since-match'
+  branchSearch: ''
 };
 
 function esc(v) {
@@ -339,22 +338,11 @@ async function downloadAuthenticatedPdf(path, filename) {
 
 async function exportStatementPdf() {
   if (!state.selectedBranch?.seq) return;
-  const params = new URLSearchParams();
-  if (state.stmtFilter === 'all') {
-    params.set('since', 'all');
-  } else {
-    params.set('since', 'match');
-  }
-  const qs = `?${params.toString()}`;
   const num = state.selectedBranch.num || state.selectedBranch.seq;
   await downloadAuthenticatedPdf(
-    `/accounts/${encodeURIComponent(state.selectedBranch.seq)}/statement.pdf${qs}`,
+    `/accounts/${encodeURIComponent(state.selectedBranch.seq)}/statement.pdf`,
     `statement-${num}.pdf`
   );
-}
-
-function statementSinceQuery() {
-  return state.stmtFilter === 'all' ? '?since=all' : '?since=match';
 }
 
 async function exportInvoicePdf(refOverride, byOverride, accOverride) {
@@ -548,8 +536,6 @@ async function openTree(seq) {
 
 async function openBranch(seq) {
   state.selectedBranch = state.branches.find((b) => String(b.seq) === String(seq)) || { seq };
-  state.stmtFilter = 'since-match';
-  syncStmtFilterChips();
   goToScreen('statement');
   await loadStatement(seq);
 }
@@ -566,19 +552,13 @@ async function loadStatement(seq) {
   document.getElementById('stmtTableSection').classList.add('hidden');
 
   try {
-    const data = await api(`/accounts/${encodeURIComponent(seq)}/statement${statementSinceQuery()}`);
+    const data = await api(`/accounts/${encodeURIComponent(seq)}/statement`);
     renderStatement(data);
   } catch (e) {
     document.getElementById('stmtLines').innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`;
   } finally {
     setOverlay(false);
   }
-}
-
-function syncStmtFilterChips() {
-  document.querySelectorAll('.stmt-filter-chip').forEach((chip) => {
-    chip.classList.toggle('active', chip.dataset.stmtFilter === state.stmtFilter);
-  });
 }
 
 function renderStatement(data) {
@@ -589,14 +569,12 @@ function renderStatement(data) {
   const currentBal = data.finalBalance ?? acc.bal ?? 0;
   const treeLabel = state.selectedTree?.num ? `شجرة ${state.selectedTree.num}` : '';
   const openingBal = Number(data.openingBalance ?? 0);
-  const openingNote = data.sinceLastMatch && openingBal !== 0
-    ? ` · مرحّل ${fmtNumAlways(openingBal < 0 ? Math.abs(openingBal) : openingBal)}`
+  const openingNote = openingBal !== 0
+    ? ` · رصيد مدور ${fmtNumAlways(openingBal < 0 ? Math.abs(openingBal) : openingBal)}`
     : '';
-  const matchNote = data.sinceLastMatch && data.lastMatch?.date
-    ? `من ${fmtDate(data.lastMatch.date)}${openingNote}`
-    : (state.stmtFilter === 'since-match' && !data.hasMatchCutoff
-      ? 'لا مطابقة — نفّذ مزامنة'
-      : '');
+  const periodNote = data.lastMatch?.date || acc.fixDate
+    ? `من ${fmtDate(data.lastMatch?.date || acc.fixDate)}${openingNote}`
+    : '';
 
   renderDebtField(data.debtAmount ?? 0);
 
@@ -606,7 +584,7 @@ function renderStatement(data) {
         <div class="doc-head-main">
           <span class="doc-label">كشف حساب</span>
           <strong class="doc-title">${esc(acc.name1)}</strong>
-          <span class="doc-meta-line">${[treeLabel, acc.address ? esc(acc.address) : '', matchNote ? esc(matchNote) : ''].filter(Boolean).join(' · ')}</span>
+          <span class="doc-meta-line">${[treeLabel, acc.address ? esc(acc.address) : '', periodNote ? esc(periodNote) : ''].filter(Boolean).join(' · ')}</span>
         </div>
       </div>
       <table class="doc-meta-table stmt-meta-table">
@@ -689,7 +667,7 @@ function renderStatement(data) {
     bindStatementRowActions(stmtRoot);
   } else {
     document.getElementById('stmtLines').innerHTML = `
-      <div class="empty-state"><div class="icon">📋</div><p>${state.stmtFilter === 'since-match' ? 'لا توجد حركات بعد آخر مطابقة' : 'لا توجد حركات لهذا الحساب'}</p></div>`;
+      <div class="empty-state"><div class="icon">📋</div><p>لا توجد حركات في كشف الحساب</p></div>`;
   }
 
   document.getElementById('stmtTotals').innerHTML = '';
@@ -937,17 +915,6 @@ function init() {
       state.branchFilter = chip.dataset.filter;
       document.querySelectorAll('.filter-chip').forEach((c) => c.classList.toggle('active', c === chip));
       renderBranches();
-    });
-  });
-
-  document.querySelectorAll('.stmt-filter-chip').forEach((chip) => {
-    chip.addEventListener('click', () => {
-      if (state.stmtFilter === chip.dataset.stmtFilter) return;
-      state.stmtFilter = chip.dataset.stmtFilter;
-      syncStmtFilterChips();
-      if (state.selectedBranch?.seq) {
-        loadStatement(state.selectedBranch.seq).catch((e) => alert(e.message));
-      }
     });
   });
 

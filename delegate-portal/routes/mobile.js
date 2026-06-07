@@ -93,8 +93,7 @@ router.get('/accounts/:seq/statement.pdf', authAgent, async (req, res) => {
   if (!canAgentAccess(req.agent.id, req.params.seq)) {
     return res.status(403).json({ ok: false, error: 'لا تملك صلاحية هذا الحساب' });
   }
-  const sinceLastMatch = String(req.query.since || 'match').trim().toLowerCase() !== 'all';
-  const stmt = getStatementForAccount(req.params.seq, { sinceLastMatch });
+  const stmt = getStatementForAccount(req.params.seq);
   if (!stmt) return res.status(404).json({ ok: false, error: 'الحساب غير موجود' });
   try {
     const buffer = await buildStatementPdf(stmt, { sinceLastMatch: stmt.sinceLastMatch });
@@ -111,8 +110,7 @@ router.get('/accounts/:seq/statement', authAgent, (req, res) => {
   if (!canAgentAccess(req.agent.id, req.params.seq)) {
     return res.status(403).json({ ok: false, error: 'لا تملك صلاحية هذا الحساب' });
   }
-  const sinceLastMatch = String(req.query.since || 'match').trim().toLowerCase() !== 'all';
-  const stmt = getStatementForAccount(req.params.seq, { sinceLastMatch });
+  const stmt = getStatementForAccount(req.params.seq);
   if (!stmt) return res.status(404).json({ ok: false, error: 'الحساب غير موجود' });
   res.json({ ok: true, ...stmt });
 });

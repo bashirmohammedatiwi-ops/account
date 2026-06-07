@@ -45,8 +45,7 @@ function getAssignableTrees() {
   `).all();
 }
 
-function getStatementForAccount(accSeq, options = {}) {
-  const sinceLastMatch = options.sinceLastMatch !== false;
+function getStatementForAccount(accSeq) {
   const account = db.prepare('SELECT * FROM accounts WHERE seq = ?').get(String(accSeq));
   if (!account) return null;
   const rows = db.prepare(
@@ -68,21 +67,21 @@ function getStatementForAccount(accSeq, options = {}) {
 
   const cutoff = resolveLastMatchCutoff(account, rows);
   const matchAvailable = hasMatchCutoff(account, rows);
-  const useSinceMatch = sinceLastMatch && matchAvailable;
-  const filteredRows = useSinceMatch ? filterRowsSinceLastMatch(rows, cutoff) : rows;
-  const openingBalance = useSinceMatch ? computeOpeningBalance(rows, cutoff, account) : 0;
+  const filteredRows = matchAvailable ? filterRowsSinceLastMatch(rows, cutoff) : rows;
+  const openingBalance = matchAvailable ? computeOpeningBalance(rows, cutoff, account) : 0;
   const stmt = buildStatementLines(filteredRows, { openingBalance });
 
-  if (useSinceMatch) {
+  if (matchAvailable) {
     const openingLine = buildOpeningLine(openingBalance, cutoff);
-    if (openingLine) stmt.lines.unshift(openingLine);
+    if (openingLine && (openingLine.debit || openingLine.credit)) {
+      stmt.lines.unshift(openingLine);
+    }
   }
 
   const { totalDebit, totalCredit } = resolveStatementTotals({
     lines: stmt.lines,
     stmt,
-    account,
-    useSinceMatch
+    account
   });
   const finalBalance = resolveFinalBalance({
     accountBal: account.bal,
@@ -118,8 +117,8 @@ function getStatementForAccount(accSeq, options = {}) {
     finalBalance,
     debtAmount,
     summary: balanceSummaryLabel(finalBalance, account.name1),
-    openingBalance: useSinceMatch ? openingBalance : 0,
-    sinceLastMatch: useSinceMatch,
+    openingBalance: matchAvailable ? openingBalance : 0,
+    sinceLastMatch: matchAvailable,
     lastMatch: cutoff
       ? { seq: cutoff.seq || null, date: cutoff.date || '', source: cutoff.source || null }
       : null,

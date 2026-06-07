@@ -122,18 +122,11 @@ function sumLineAmounts(lines, field) {
 }
 
 /** إجماليات الكشف — Tot1/Tot2 من Edari (تشمل رصيد مدور) أو مجموع الأسطر */
-function resolveStatementTotals({ lines = [], stmt = {}, account = {}, useSinceMatch = false } = {}) {
+function resolveStatementTotals({ lines = [], stmt = {}, account = {} } = {}) {
   const lineDebit = sumLineAmounts(lines, 'debit');
   const lineCredit = sumLineAmounts(lines, 'credit');
   const edariDebit = parseAmount(account.tot1);
   const edariCredit = parseAmount(account.tot2);
-
-  if (!useSinceMatch) {
-    return {
-      totalDebit: parseAmount(stmt.totalDebit),
-      totalCredit: parseAmount(stmt.totalCredit)
-    };
-  }
 
   if (edariDebit > 0) {
     return {
@@ -142,7 +135,10 @@ function resolveStatementTotals({ lines = [], stmt = {}, account = {}, useSinceM
     };
   }
 
-  return { totalDebit: lineDebit, totalCredit: lineCredit };
+  return {
+    totalDebit: lineDebit || parseAmount(stmt.totalDebit),
+    totalCredit: lineCredit || parseAmount(stmt.totalCredit)
+  };
 }
 
 function resolveFinalBalance({ accountBal, totalDebit, totalCredit, stmtFinalBalance }) {
