@@ -348,8 +348,20 @@ function buildPdfFile(blob, filename) {
   return new File([pdfBlob], pdfName, { type: 'application/pdf', lastModified: Date.now() });
 }
 
+async function createPdfShareUrl(payload) {
+  const data = await api('/share/create', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+  return data.url;
+}
+
+function isMobileDevice() {
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+}
+
 async function trySharePdfFile(file) {
-  if (!navigator.share) return false;
+  if (!navigator.share || !window.isSecureContext) return false;
   try {
     await navigator.share({ files: [file] });
     return true;
@@ -359,16 +371,44 @@ async function trySharePdfFile(file) {
   }
 }
 
-async function sharePdfViaWhatsApp(path, filename) {
+async function trySharePdfUrl(shareUrl) {
+  if (!navigator.share || !window.isSecureContext) return false;
+  try {
+    await navigator.share({ url: shareUrl });
+    return true;
+  } catch (err) {
+    if (err?.name === 'AbortError') return true;
+    return false;
+  }
+}
+
+function openWhatsAppPdfLink(shareUrl) {
+  const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareUrl)}`;
+  if (isMobileDevice()) {
+    window.location.assign(waUrl);
+    return;
+  }
+  window.open(waUrl, '_blank', 'noopener,noreferrer');
+}
+
+async function sharePdfViaWhatsApp(path, filename, sharePayload) {
   setOverlay(true);
   try {
     const blob = await fetchAuthenticatedPdf(path);
     const file = buildPdfFile(blob, filename);
 
+    // 1) إرفاق PDF مباشرة — اختر واتساب من قائمة المشاركة
     if (await trySharePdfFile(file)) return;
 
-    triggerBlobDownload(blob, file.name);
-    alert('لم تتوفر مشاركة PDF مباشرة على هذا الجهاز.\nتم تنزيل الملف — افتح واتساب واختر «مستند» لإرفاق PDF من التنزيلات.');
+    // 2) رابط PDF عام — يفتح واتساب مباشرة (الرابط فقط بدون نص إضافي)
+    const shareUrl = await createPdfShareUrl({
+      ...sharePayload,
+      filename: file.name
+    });
+
+    if (await trySharePdfUrl(shareUrl)) return;
+
+    openWhatsAppPdfLink(shareUrl);
   } finally {
     setOverlay(false);
   }
@@ -398,7 +438,8 @@ async function shareStatementWhatsApp() {
   const num = state.selectedBranch.num || state.selectedBranch.seq;
   await sharePdfViaWhatsApp(
     `/accounts/${encodeURIComponent(state.selectedBranch.seq)}/statement.pdf`,
-    `statement-${num}.pdf`
+    `statement-${num}.pdf`,
+    { kind: 'statement', accSeq: String(state.selectedBranch.seq) }
   );
 }
 
@@ -434,7 +475,8 @@ async function shareInvoiceWhatsApp(refOverride, byOverride, accOverride) {
   const qs = invoiceQueryString({ ref, by, acc });
   await sharePdfViaWhatsApp(
     invoicePdfPath(ref, qs),
-    `invoice-${label}.pdf`
+    `invoice-${label}.pdf`,
+    { kind: 'invoice', ref: String(ref), by, acc: String(acc) }
   );
 }
 

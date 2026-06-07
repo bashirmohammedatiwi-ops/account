@@ -245,7 +245,7 @@ router.get('/share/:token.pdf', async (req, res) => {
     }
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${filename.replace(/"/g, '')}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename.replace(/"/g, '')}"`);
     res.send(buffer);
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message || 'فشل إنشاء PDF' });
