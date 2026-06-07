@@ -10,6 +10,7 @@ const state = {
   branches: [],
   selectedBranch: null,
   selectedInvoice: null,
+  lastStatement: null,
   branchFilter: 'all',
   branchSearch: ''
 };
@@ -289,51 +290,119 @@ async function api(path, opts = {}) {
   return data;
 }
 
+async function fetchAuthenticatedPdf(path) {
+  const token = getToken();
+  const res = await fetch(`${API}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
+  });
+
+  if (res.status === 401) {
+    clearSession();
+    showLogin();
+    throw new Error('انتهت الجلسة');
+  }
+
+  const contentType = String(res.headers.get('content-type') || '').toLowerCase();
+  if (!res.ok) {
+    let message = `فشل تصدير PDF (${res.status})`;
+    if (contentType.includes('application/json')) {
+      const data = await res.json().catch(() => ({}));
+      message = data.error || message;
+    } else {
+      const text = await res.text().catch(() => '');
+      if (text && text.length < 200) message = text;
+    }
+    throw new Error(message);
+  }
+
+  const isPdf = contentType.includes('application/pdf')
+    || contentType.includes('application/octet-stream');
+  if (!isPdf) {
+    throw new Error('استجابة غير صالحة من السيرفر');
+  }
+
+  const blob = await res.blob();
+  if (!blob.size) {
+    throw new Error('ملف PDF فارغ');
+  }
+  return blob;
+}
+
+function triggerBlobDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function openWhatsApp(text) {
+  const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+function buildStatementShareMessage(data = {}) {
+  const acc = data.account || state.selectedBranch || {};
+  const parts = [
+    'شركة ديما الحياة',
+    'كشف حساب',
+    acc.name1 ? `العميل: ${acc.name1}` : '',
+    acc.num ? `رقم الحساب: ${acc.num}` : '',
+    `إجمالي مدين: ${fmtNumAlways(data.totalDebit ?? 0)}`,
+    `إجمالي دائن: ${fmtNumAlways(data.totalCredit ?? 0)}`,
+    `الديون: ${fmtNumAlways(data.debtAmount ?? 0)}`,
+    data.summary?.label ? `الحالة: ${data.summary.label}` : ''
+  ].filter(Boolean);
+  return parts.join('\n');
+}
+
+function buildInvoiceShareMessage(inv = {}) {
+  const parts = [
+    'شركة ديما الحياة',
+    inv.kindLabel || 'فاتورة',
+    inv.num ? `رقم: ${inv.num}` : '',
+    inv.date ? `التاريخ: ${fmtDate(inv.date)}` : '',
+    `العميل: ${inv.accountName || state.selectedBranch?.name1 || '—'}`,
+    `الإجمالي: ${fmtNumAlways(inv.total ?? 0)}`,
+    Number(inv.discount) > 0 ? `الحسومات: ${fmtNumAlways(inv.discount)}` : '',
+    `الصافي: ${fmtNumAlways(inv.netPay ?? inv.total ?? 0)}`
+  ].filter(Boolean);
+  return parts.join('\n');
+}
+
+async function sharePdfViaWhatsApp(path, filename, message) {
+  setOverlay(true);
+  try {
+    const blob = await fetchAuthenticatedPdf(path);
+    const file = new File([blob], filename, { type: 'application/pdf' });
+    const shareData = { files: [file], text: message, title: filename };
+
+    if (navigator.share) {
+      try {
+        if (!navigator.canShare || navigator.canShare(shareData)) {
+          await navigator.share(shareData);
+          return;
+        }
+      } catch (err) {
+        if (err?.name === 'AbortError') return;
+      }
+    }
+
+    triggerBlobDownload(blob, filename);
+    openWhatsApp(`${message}\n\n📎 تم تنزيل الملف: ${filename}\nأرفقه من مجلد التنزيلات في واتساب.`);
+  } finally {
+    setOverlay(false);
+  }
+}
+
 async function downloadAuthenticatedPdf(path, filename) {
   setOverlay(true);
   try {
-    const token = getToken();
-    const res = await fetch(`${API}${path}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {}
-    });
-
-    if (res.status === 401) {
-      clearSession();
-      showLogin();
-      throw new Error('انتهت الجلسة');
-    }
-
-    const contentType = String(res.headers.get('content-type') || '').toLowerCase();
-    if (!res.ok) {
-      let message = `فشل تصدير PDF (${res.status})`;
-      if (contentType.includes('application/json')) {
-        const data = await res.json().catch(() => ({}));
-        message = data.error || message;
-      } else {
-        const text = await res.text().catch(() => '');
-        if (text && text.length < 200) message = text;
-      }
-      throw new Error(message);
-    }
-
-    const isPdf = contentType.includes('application/pdf')
-      || contentType.includes('application/octet-stream');
-    if (!isPdf) {
-      throw new Error('استجابة غير صالحة من السيرفر');
-    }
-
-    const blob = await res.blob();
-    if (!blob.size) {
-      throw new Error('ملف PDF فارغ');
-    }
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    const blob = await fetchAuthenticatedPdf(path);
+    triggerBlobDownload(blob, filename);
   } finally {
     setOverlay(false);
   }
@@ -345,6 +414,17 @@ async function exportStatementPdf() {
   await downloadAuthenticatedPdf(
     `/accounts/${encodeURIComponent(state.selectedBranch.seq)}/statement.pdf`,
     `statement-${num}.pdf`
+  );
+}
+
+async function shareStatementWhatsApp() {
+  if (!state.selectedBranch?.seq) return;
+  const num = state.selectedBranch.num || state.selectedBranch.seq;
+  const message = buildStatementShareMessage(state.lastStatement || {});
+  await sharePdfViaWhatsApp(
+    `/accounts/${encodeURIComponent(state.selectedBranch.seq)}/statement.pdf`,
+    `statement-${num}.pdf`,
+    message
   );
 }
 
@@ -363,6 +443,26 @@ async function exportInvoicePdf(refOverride, byOverride, accOverride) {
   await downloadAuthenticatedPdf(
     invoicePdfPath(ref, qs),
     `invoice-${label}.pdf`
+  );
+}
+
+async function shareInvoiceWhatsApp(refOverride, byOverride, accOverride) {
+  const lookup = state.lastInvoiceLookup || {};
+  const inv = state.selectedInvoice || {};
+  const ref = refOverride || lookup.ref || inv.seq || inv.num;
+  const by = byOverride || lookup.by || (inv.seq ? 'seq' : 'num');
+  const acc = accOverride || lookup.acc || state.selectedBranch?.seq || inv.accSeq || '';
+  if (!ref) {
+    alert('افتح فاتورة محددة أولاً');
+    return;
+  }
+  const label = inv.num || ref;
+  const qs = invoiceQueryString({ ref, by, acc });
+  const message = buildInvoiceShareMessage(inv);
+  await sharePdfViaWhatsApp(
+    invoicePdfPath(ref, qs),
+    `invoice-${label}.pdf`,
+    message
   );
 }
 
@@ -556,6 +656,7 @@ async function loadStatement(seq) {
 
   try {
     const data = await api(`/accounts/${encodeURIComponent(seq)}/statement`);
+    state.lastStatement = data;
     renderStatement(data);
   } catch (e) {
     document.getElementById('stmtLines').innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`;
@@ -683,7 +784,9 @@ async function openInvoice(ref, by = 'auto', acc = '') {
   state.lastInvoiceLookup = { ref, by, acc: accSeq };
   state.selectedInvoice = null;
   const exportBtn = document.getElementById('btnExportInvoicePdf');
+  const shareBtn = document.getElementById('btnShareInvoiceWa');
   if (exportBtn) exportBtn.disabled = true;
+  if (shareBtn) shareBtn.disabled = true;
   goToScreen('invoice');
 
   const loading = document.getElementById('invoiceLoading');
@@ -711,6 +814,7 @@ async function openInvoice(ref, by = 'auto', acc = '') {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m0 0l4-4m-4 4L8 11M5 21h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         تصدير فاتورة ${esc(inv.num || ref)} PDF`;
     }
+    if (shareBtn) shareBtn.disabled = false;
 
     const qtySum = lines.reduce((s, line) => s + Number(line.quant || 0), 0);
 
@@ -796,6 +900,7 @@ async function openInvoice(ref, by = 'auto', acc = '') {
     loading.classList.add('hidden');
     empty.classList.remove('hidden');
     if (exportBtn) exportBtn.disabled = true;
+    if (shareBtn) shareBtn.disabled = true;
     empty.innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`;
   }
 }
@@ -905,8 +1010,14 @@ function init() {
   document.getElementById('btnExportStatementPdf')?.addEventListener('click', () => {
     exportStatementPdf().catch((e) => alert(e.message));
   });
+  document.getElementById('btnShareStatementWa')?.addEventListener('click', () => {
+    shareStatementWhatsApp().catch((e) => alert(e.message));
+  });
   document.getElementById('btnExportInvoicePdf')?.addEventListener('click', () => {
     exportInvoicePdf().catch((e) => alert(e.message));
+  });
+  document.getElementById('btnShareInvoiceWa')?.addEventListener('click', () => {
+    shareInvoiceWhatsApp().catch((e) => alert(e.message));
   });
 
   document.getElementById('branchSearch').addEventListener('input', (e) => {
