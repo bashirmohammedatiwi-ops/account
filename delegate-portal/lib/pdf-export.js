@@ -502,14 +502,10 @@ async function buildStatementPdf(stmt, meta = {}) {
     })
   );
   const openingBal = Number(stmt.openingBalance ?? 0);
-  const sinceMatch = meta.sinceLastMatch ?? stmt.sinceLastMatch;
   const periodParts = [];
-  if (sinceMatch && (stmt.lastMatch?.date || acc.fixDate)) {
-    periodParts.push(`منذ ${fmtDate(stmt.lastMatch?.date || acc.fixDate)}`);
-  }
-  if (sinceMatch && openingBal) {
-    periodParts.push(`مرحّل ${fmtNum(Math.abs(openingBal))}`);
-  }
+  const periodStart = stmt.periodStart || acc.fixDate;
+  if (periodStart) periodParts.push(`من ${fmtDate(periodStart)}`);
+  if (openingBal) periodParts.push(`رصيد مدور ${fmtNum(Math.abs(openingBal))}`);
   const periodNote = periodParts.join(' · ');
   const bal = Number(stmt.finalBalance ?? acc.bal ?? 0);
 

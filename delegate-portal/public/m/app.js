@@ -572,8 +572,8 @@ function renderStatement(data) {
   const openingNote = openingBal !== 0
     ? ` · رصيد مدور ${fmtNumAlways(openingBal < 0 ? Math.abs(openingBal) : openingBal)}`
     : '';
-  const periodNote = data.lastMatch?.date || acc.fixDate
-    ? `من ${fmtDate(data.lastMatch?.date || acc.fixDate)}${openingNote}`
+  const periodNote = data.periodStart || acc.fixDate
+    ? `من ${fmtDate(data.periodStart || acc.fixDate)}${openingNote}`
     : '';
 
   renderDebtField(data.debtAmount ?? 0);
@@ -621,7 +621,7 @@ function renderStatement(data) {
         : '<span class="num empty">—</span>';
       return `<tr class="${rowClass}">
         <td class="col-n">${idxLabel}</td>
-        <td class="col-date">${r.isOpening ? '' : fmtDate(r.date)}</td>
+        <td class="col-date">${r.date ? fmtDate(r.date) : ''}</td>
         <td class="col-desc"><div class="stmt-desc-cell"><span class="row-tag ${txTypeClass(r)}">${txTypeLabel(r)}</span><span class="stmt-desc-text">${esc(r.description) || '—'}</span></div></td>
         ${amtTd(r.debit, 'debit')}
         ${amtTd(r.credit, 'credit')}

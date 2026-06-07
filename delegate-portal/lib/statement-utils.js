@@ -162,7 +162,7 @@ function buildOpeningLine(openingBalance, cutoff) {
     debit,
     credit,
     description: 'رصيد مدور',
-    date: '',
+    date: cutoff.date || '',
     billNum: null,
     billSeq: null,
     billKind: null,
@@ -242,6 +242,7 @@ function resolveDebtDisplayAmount(data = {}) {
 }
 
 module.exports = {
+  parseAmount,
   buildStatementLines,
   balanceSummaryLabel,
   debtStatusFromBalance,
