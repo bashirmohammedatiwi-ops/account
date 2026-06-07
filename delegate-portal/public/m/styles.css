@@ -1303,32 +1303,6 @@ body {
   margin-bottom: 10px;
 }
 
-.btn-export-wa {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid #86efac;
-  background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
-  color: #15803d;
-  border-radius: 999px;
-  padding: 10px 16px;
-  font-family: inherit;
-  font-size: 0.82rem;
-  font-weight: 800;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(21, 128, 61, 0.12);
-}
-
-.btn-export-wa:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-.btn-export-wa:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
 .btn-export-pdf {
   display: inline-flex;
   align-items: center;

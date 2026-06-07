@@ -339,81 +339,6 @@ function triggerBlobDownload(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-function buildPdfFile(blob, filename) {
-  const safeName = String(filename || 'document.pdf').replace(/[^\w.\-]+/g, '-');
-  const pdfName = safeName.toLowerCase().endsWith('.pdf') ? safeName : `${safeName}.pdf`;
-  const pdfBlob = blob.type === 'application/pdf'
-    ? blob
-    : new Blob([blob], { type: 'application/pdf' });
-  return new File([pdfBlob], pdfName, { type: 'application/pdf', lastModified: Date.now() });
-}
-
-async function createPdfShareUrl(payload) {
-  const data = await api('/share/create', {
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
-  return data.url;
-}
-
-function isMobileDevice() {
-  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
-}
-
-async function trySharePdfFile(file) {
-  if (!navigator.share || !window.isSecureContext) return false;
-  try {
-    await navigator.share({ files: [file] });
-    return true;
-  } catch (err) {
-    if (err?.name === 'AbortError') return true;
-    return false;
-  }
-}
-
-async function trySharePdfUrl(shareUrl) {
-  if (!navigator.share || !window.isSecureContext) return false;
-  try {
-    await navigator.share({ url: shareUrl });
-    return true;
-  } catch (err) {
-    if (err?.name === 'AbortError') return true;
-    return false;
-  }
-}
-
-function openWhatsAppPdfLink(shareUrl) {
-  const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareUrl)}`;
-  if (isMobileDevice()) {
-    window.location.assign(waUrl);
-    return;
-  }
-  window.open(waUrl, '_blank', 'noopener,noreferrer');
-}
-
-async function sharePdfViaWhatsApp(path, filename, sharePayload) {
-  setOverlay(true);
-  try {
-    const blob = await fetchAuthenticatedPdf(path);
-    const file = buildPdfFile(blob, filename);
-
-    // 1) إرفاق PDF مباشرة — اختر واتساب من قائمة المشاركة
-    if (await trySharePdfFile(file)) return;
-
-    // 2) رابط PDF عام — يفتح واتساب مباشرة (الرابط فقط بدون نص إضافي)
-    const shareUrl = await createPdfShareUrl({
-      ...sharePayload,
-      filename: file.name
-    });
-
-    if (await trySharePdfUrl(shareUrl)) return;
-
-    openWhatsAppPdfLink(shareUrl);
-  } finally {
-    setOverlay(false);
-  }
-}
-
 async function downloadAuthenticatedPdf(path, filename) {
   setOverlay(true);
   try {
@@ -433,16 +358,6 @@ async function exportStatementPdf() {
   );
 }
 
-async function shareStatementWhatsApp() {
-  if (!state.selectedBranch?.seq) return;
-  const num = state.selectedBranch.num || state.selectedBranch.seq;
-  await sharePdfViaWhatsApp(
-    `/accounts/${encodeURIComponent(state.selectedBranch.seq)}/statement.pdf`,
-    `statement-${num}.pdf`,
-    { kind: 'statement', accSeq: String(state.selectedBranch.seq) }
-  );
-}
-
 async function exportInvoicePdf(refOverride, byOverride, accOverride) {
   const lookup = state.lastInvoiceLookup || {};
   const inv = state.selectedInvoice || {};
@@ -458,25 +373,6 @@ async function exportInvoicePdf(refOverride, byOverride, accOverride) {
   await downloadAuthenticatedPdf(
     invoicePdfPath(ref, qs),
     `invoice-${label}.pdf`
-  );
-}
-
-async function shareInvoiceWhatsApp(refOverride, byOverride, accOverride) {
-  const lookup = state.lastInvoiceLookup || {};
-  const inv = state.selectedInvoice || {};
-  const ref = refOverride || lookup.ref || inv.seq || inv.num;
-  const by = byOverride || lookup.by || (inv.seq ? 'seq' : 'num');
-  const acc = accOverride || lookup.acc || state.selectedBranch?.seq || inv.accSeq || '';
-  if (!ref) {
-    alert('افتح فاتورة محددة أولاً');
-    return;
-  }
-  const label = inv.num || ref;
-  const qs = invoiceQueryString({ ref, by, acc });
-  await sharePdfViaWhatsApp(
-    invoicePdfPath(ref, qs),
-    `invoice-${label}.pdf`,
-    { kind: 'invoice', ref: String(ref), by, acc: String(acc) }
   );
 }
 
@@ -798,9 +694,7 @@ async function openInvoice(ref, by = 'auto', acc = '') {
   state.lastInvoiceLookup = { ref, by, acc: accSeq };
   state.selectedInvoice = null;
   const exportBtn = document.getElementById('btnExportInvoicePdf');
-  const shareBtn = document.getElementById('btnShareInvoiceWa');
   if (exportBtn) exportBtn.disabled = true;
-  if (shareBtn) shareBtn.disabled = true;
   goToScreen('invoice');
 
   const loading = document.getElementById('invoiceLoading');
@@ -828,8 +722,6 @@ async function openInvoice(ref, by = 'auto', acc = '') {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m0 0l4-4m-4 4L8 11M5 21h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         تصدير فاتورة ${esc(inv.num || ref)} PDF`;
     }
-    if (shareBtn) shareBtn.disabled = false;
-
     const qtySum = lines.reduce((s, line) => s + Number(line.quant || 0), 0);
 
     document.getElementById('invoiceHero').innerHTML = `
@@ -914,7 +806,6 @@ async function openInvoice(ref, by = 'auto', acc = '') {
     loading.classList.add('hidden');
     empty.classList.remove('hidden');
     if (exportBtn) exportBtn.disabled = true;
-    if (shareBtn) shareBtn.disabled = true;
     empty.innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`;
   }
 }
@@ -1024,14 +915,8 @@ function init() {
   document.getElementById('btnExportStatementPdf')?.addEventListener('click', () => {
     exportStatementPdf().catch((e) => alert(e.message));
   });
-  document.getElementById('btnShareStatementWa')?.addEventListener('click', () => {
-    shareStatementWhatsApp().catch((e) => alert(e.message));
-  });
   document.getElementById('btnExportInvoicePdf')?.addEventListener('click', () => {
     exportInvoicePdf().catch((e) => alert(e.message));
-  });
-  document.getElementById('btnShareInvoiceWa')?.addEventListener('click', () => {
-    shareInvoiceWhatsApp().catch((e) => alert(e.message));
   });
 
   document.getElementById('branchSearch').addEventListener('input', (e) => {
