@@ -11,6 +11,7 @@ const {
 const { debtStatusFromBalance, balanceSummaryLabel } = require('../lib/statement-utils');
 const { getInvoiceForExport, canAgentAccessInvoice } = require('../lib/invoices');
 const { buildStatementPdf, buildInvoicePdf } = require('../lib/pdf-export');
+const { createShareToken, getShareToken, buildShareUrl } = require('../lib/share-tokens');
 
 const router = express.Router();
 
@@ -158,6 +159,97 @@ router.get('/invoices/:ref', authAgent, (req, res) => {
     return res.status(404).json({ ok: false, error: 'الفاتورة غير موجودة — قد تحتاج مزامنة جديدة' });
   }
   res.json({ ok: true, ...data });
+});
+
+router.post('/share/create', authAgent, (req, res) => {
+  const kind = String(req.body?.kind || '').trim();
+  if (kind === 'statement') {
+    const accSeq = String(req.body?.accSeq || '').trim();
+    if (!accSeq) {
+      return res.status(400).json({ ok: false, error: 'رقم الحساب غير صالح' });
+    }
+    if (!canAgentAccess(req.agent.id, accSeq)) {
+      return res.status(403).json({ ok: false, error: 'لا تملك صلاحية هذا الحساب' });
+    }
+    const acc = db.prepare('SELECT num FROM accounts WHERE seq = ?').get(accSeq);
+    const filename = String(req.body?.filename || `statement-${acc?.num || accSeq}.pdf`);
+    const created = createShareToken({
+      kind: 'statement',
+      payload: { accSeq, filename },
+      agentId: req.agent.id
+    });
+    return res.json({
+      ok: true,
+      url: buildShareUrl(req, created.token),
+      expiresAt: created.expiresAt
+    });
+  }
+
+  if (kind === 'invoice') {
+    const ref = String(req.body?.ref || '').trim();
+    const by = String(req.body?.by || 'auto').trim();
+    const accSeq = String(req.body?.acc || req.body?.accSeq || '').trim();
+    if (!ref) {
+      return res.status(400).json({ ok: false, error: 'رقم الفاتورة غير صالح' });
+    }
+    if (!canAgentAccessInvoice(req.agent.id, ref, { by, accSeq })) {
+      return res.status(403).json({ ok: false, error: 'لا تملك صلاحية هذه الفاتورة' });
+    }
+    const data = getInvoiceForExport(ref, by, accSeq);
+    if (!data) {
+      return res.status(404).json({ ok: false, error: 'الفاتورة غير موجودة' });
+    }
+    const filename = String(req.body?.filename || `invoice-${data.invoice?.num || ref}.pdf`);
+    const created = createShareToken({
+      kind: 'invoice',
+      payload: { ref, by, acc: accSeq, filename },
+      agentId: req.agent.id
+    });
+    return res.json({
+      ok: true,
+      url: buildShareUrl(req, created.token),
+      expiresAt: created.expiresAt
+    });
+  }
+
+  return res.status(400).json({ ok: false, error: 'نوع المشاركة غير مدعوم' });
+});
+
+router.get('/share/:token.pdf', async (req, res) => {
+  const token = String(req.params.token || '').replace(/\.pdf$/i, '').trim();
+  const row = getShareToken(token);
+  if (!row) {
+    return res.status(404).json({ ok: false, error: 'رابط المشاركة منتهٍ أو غير صالح' });
+  }
+
+  try {
+    let buffer;
+    let filename = row.payload?.filename || 'document.pdf';
+
+    if (row.kind === 'statement') {
+      const accSeq = String(row.payload?.accSeq || '');
+      const stmt = getStatementForAccount(accSeq);
+      if (!stmt) return res.status(404).json({ ok: false, error: 'الحساب غير موجود' });
+      buffer = await buildStatementPdf(stmt, { sinceLastMatch: stmt.sinceLastMatch });
+      filename = filename || `statement-${stmt.account?.num || accSeq}.pdf`;
+    } else if (row.kind === 'invoice') {
+      const ref = String(row.payload?.ref || '');
+      const by = String(row.payload?.by || 'auto');
+      const accSeq = String(row.payload?.acc || '');
+      const data = getInvoiceForExport(ref, by, accSeq);
+      if (!data) return res.status(404).json({ ok: false, error: 'الفاتورة غير موجودة' });
+      buffer = await buildInvoicePdf(data);
+      filename = filename || `invoice-${data.invoice?.num || ref}.pdf`;
+    } else {
+      return res.status(400).json({ ok: false, error: 'نوع المشاركة غير مدعوم' });
+    }
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename.replace(/"/g, '')}"`);
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'فشل إنشاء PDF' });
+  }
 });
 
 router.get('/search', authAgent, (req, res) => {

@@ -339,6 +339,50 @@ function triggerBlobDownload(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
+function buildPdfFile(blob, filename) {
+  const safeName = String(filename || 'document.pdf').replace(/[^\w.\-]+/g, '-');
+  const pdfName = safeName.toLowerCase().endsWith('.pdf') ? safeName : `${safeName}.pdf`;
+  const pdfBlob = blob.type === 'application/pdf'
+    ? blob
+    : new Blob([blob], { type: 'application/pdf' });
+  return new File([pdfBlob], pdfName, { type: 'application/pdf', lastModified: Date.now() });
+}
+
+async function createPdfShareUrl(payload) {
+  const data = await api('/share/create', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+  return data.url;
+}
+
+async function trySharePdfFile(file, message) {
+  if (!navigator.share) return false;
+
+  const attempts = [
+    { files: [file] },
+    { files: [file], text: message }
+  ];
+
+  for (const shareData of attempts) {
+    try {
+      if (navigator.canShare && !navigator.canShare(shareData)) continue;
+      await navigator.share(shareData);
+      return true;
+    } catch (err) {
+      if (err?.name === 'AbortError') return true;
+    }
+  }
+
+  try {
+    await navigator.share({ files: [file] });
+    return true;
+  } catch (err) {
+    if (err?.name === 'AbortError') return true;
+  }
+  return false;
+}
+
 function openWhatsApp(text) {
   const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
   window.open(url, '_blank', 'noopener,noreferrer');
@@ -373,26 +417,32 @@ function buildInvoiceShareMessage(inv = {}) {
   return parts.join('\n');
 }
 
-async function sharePdfViaWhatsApp(path, filename, message) {
+async function sharePdfViaWhatsApp(path, filename, message, sharePayload) {
   setOverlay(true);
   try {
     const blob = await fetchAuthenticatedPdf(path);
-    const file = new File([blob], filename, { type: 'application/pdf' });
-    const shareData = { files: [file], text: message, title: filename };
+    const file = buildPdfFile(blob, filename);
+
+    // على الهاتف: اختر واتساب من قائمة المشاركة لإرفاق ملف PDF
+    if (await trySharePdfFile(file, message)) return;
+
+    const shareUrl = await createPdfShareUrl({
+      ...sharePayload,
+      filename: file.name
+    });
+    const linkMessage = `${message}\n\n📄 PDF:\n${shareUrl}`;
 
     if (navigator.share) {
       try {
-        if (!navigator.canShare || navigator.canShare(shareData)) {
-          await navigator.share(shareData);
-          return;
-        }
+        await navigator.share({ url: shareUrl, text: message, title: file.name });
+        return;
       } catch (err) {
         if (err?.name === 'AbortError') return;
       }
     }
 
-    triggerBlobDownload(blob, filename);
-    openWhatsApp(`${message}\n\n📎 تم تنزيل الملف: ${filename}\nأرفقه من مجلد التنزيلات في واتساب.`);
+    triggerBlobDownload(blob, file.name);
+    openWhatsApp(`${linkMessage}\n\nتم تنزيل PDF — أرفقه من التنزيلات أو أرسل الرابط أعلاه.`);
   } finally {
     setOverlay(false);
   }
@@ -424,7 +474,8 @@ async function shareStatementWhatsApp() {
   await sharePdfViaWhatsApp(
     `/accounts/${encodeURIComponent(state.selectedBranch.seq)}/statement.pdf`,
     `statement-${num}.pdf`,
-    message
+    message,
+    { kind: 'statement', accSeq: String(state.selectedBranch.seq) }
   );
 }
 
@@ -462,7 +513,8 @@ async function shareInvoiceWhatsApp(refOverride, byOverride, accOverride) {
   await sharePdfViaWhatsApp(
     invoicePdfPath(ref, qs),
     `invoice-${label}.pdf`,
-    message
+    message,
+    { kind: 'invoice', ref: String(ref), by, acc: String(acc) }
   );
 }
 
