@@ -308,7 +308,7 @@ async function selectExplorerBranch(seq) {
           <td class="num">${fmtNum(r.debit)}</td>
           <td class="num">${fmtNum(r.credit)}</td>
           <td class="desc">${esc(r.description)}</td>
-          <td>${r.date ? fmtStmtDate(r.date) : ''}</td>
+          <td>${r.isOpening ? '' : (r.date ? fmtStmtDate(r.date) : '')}</td>
           <td class="num ${balClass(r.balance)}">${fmtStmtBalance(r.balance, r.isOpening)}</td>
         </tr>`).join('')
       : '<tr><td colspan="5">لا توجد حركات</td></tr>';

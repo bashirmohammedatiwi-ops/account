@@ -62,8 +62,7 @@ function getStatementForAccount(accSeq) {
     filterRowsSinceLastMatch,
     buildOpeningLine,
     isValidFixDate,
-    normalizeCarriedBalance,
-    parseAmount
+    deriveOpeningBalance
   } = require('./statement-utils');
   const { resolveLastMatchCutoff, hasMatchCutoff } = require('./reconciliation-utils');
 
@@ -72,21 +71,18 @@ function getStatementForAccount(accSeq) {
 
   // كشف كامل كما في Edari: كل الحركات من FixDate (إن وُجد) وليس من آخر مطابقة فقط
   let filteredRows = rows;
-  let openingBalance = 0;
   let periodCutoff = null;
   if (isValidFixDate(account.fix_date)) {
     periodCutoff = { date: account.fix_date, seq: '', source: 'fix_date' };
     filteredRows = filterRowsSinceLastMatch(rows, periodCutoff);
-    openingBalance = normalizeCarriedBalance(parseAmount(account.fix_bal), account);
   }
 
+  const openingBalance = deriveOpeningBalance(account, filteredRows);
   const stmt = buildStatementLines(filteredRows, { openingBalance });
 
-  if (periodCutoff) {
-    const openingLine = buildOpeningLine(openingBalance, periodCutoff);
-    if (openingLine && (openingLine.debit || openingLine.credit)) {
-      stmt.lines.unshift(openingLine);
-    }
+  const openingLine = buildOpeningLine(openingBalance, periodCutoff || { date: account.fix_date || '', source: 'fix_date' });
+  if (openingLine && (openingLine.debit || openingLine.credit)) {
+    stmt.lines.unshift(openingLine);
   }
 
   const { totalDebit, totalCredit } = resolveStatementTotals({

@@ -621,7 +621,7 @@ function renderStatement(data) {
         : '<span class="num empty">—</span>';
       return `<tr class="${rowClass}">
         <td class="col-n">${idxLabel}</td>
-        <td class="col-date">${r.date ? fmtDate(r.date) : ''}</td>
+        <td class="col-date">${r.isOpening ? '' : (r.date ? fmtDate(r.date) : '')}</td>
         <td class="col-desc"><div class="stmt-desc-cell"><span class="row-tag ${txTypeClass(r)}">${txTypeLabel(r)}</span><span class="stmt-desc-text">${esc(r.description) || '—'}</span></div></td>
         ${amtTd(r.debit, 'debit')}
         ${amtTd(r.credit, 'credit')}

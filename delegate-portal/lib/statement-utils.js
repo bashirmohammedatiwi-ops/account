@@ -7,10 +7,30 @@ function isDebitRow(row) {
   return row.is_debit === 1 || row.is_debit === true || row.Dept === 'True' || row.Dept === true;
 }
 
+function parseEdariDate(value) {
+  const raw = String(value || '').trim().replace(' 00:00:00', '');
+  if (!raw || raw.startsWith('12/30/1899')) return null;
+
+  let d = new Date(raw);
+  if (!Number.isNaN(d.getTime())) return d;
+
+  const parts = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (parts) {
+    const first = Number(parts[1]);
+    const second = Number(parts[2]);
+    const year = Number(parts[3]);
+    if (first > 12) d = new Date(year, second - 1, first);
+    else if (second > 12) d = new Date(year, first - 1, second);
+    else d = new Date(year, second - 1, first);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  return null;
+}
+
 function journalSortKey(row) {
   const raw = row.tx_date || row.Date || row.date || '';
-  const d = new Date(String(raw).replace(' 00:00:00', ''));
-  const t = Number.isNaN(d.getTime()) ? 0 : d.getTime();
+  const d = parseEdariDate(raw);
+  const t = d ? d.getTime() : 0;
   const seq = Number(row.seq ?? row.Seq ?? 0);
   return { t, seq };
 }
@@ -24,10 +44,7 @@ function isJournalAfter(row, cutoff) {
 }
 
 function isValidFixDate(value) {
-  const raw = String(value || '').trim();
-  if (!raw || raw.startsWith('12/30/1899')) return false;
-  const t = new Date(raw.replace(' 00:00:00', '')).getTime();
-  return !Number.isNaN(t);
+  return parseEdariDate(value) !== null;
 }
 
 function sortJournalRowsAsc(rows) {
@@ -44,8 +61,8 @@ function sortJournalRowsDesc(rows) {
 }
 
 function endOfCalendarDay(value) {
-  const d = new Date(String(value).replace(' 00:00:00', ''));
-  if (Number.isNaN(d.getTime())) return 0;
+  const d = parseEdariDate(value);
+  if (!d) return 0;
   d.setHours(23, 59, 59, 999);
   return d.getTime();
 }
@@ -93,6 +110,42 @@ function formatRunningBalance(balance, { isOpening = false } = {}) {
   if (n === 0) return '0';
   const abs = Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
   return n < 0 ? `${abs}-` : abs;
+}
+
+function sumMovementAmount(rows, field) {
+  let total = 0;
+  for (const row of rows) {
+    const am = parseAmount(row.am ?? row.Am);
+    if (field === 'debit' && isDebitRow(row)) total += am;
+    if (field === 'credit' && !isDebitRow(row)) total += am;
+  }
+  return total;
+}
+
+/** رصيد مدور — من FixBal أو من Tot1/Tot2 ناقص حركات الفترة */
+function deriveOpeningBalance(account, movementRows = []) {
+  const fixBal = parseAmount(account?.fix_bal ?? account?.fixBal);
+  if (fixBal !== 0) {
+    return normalizeCarriedBalance(fixBal, account);
+  }
+
+  const edariDebit = parseAmount(account?.tot1);
+  const edariCredit = parseAmount(account?.tot2);
+  if (edariDebit > 0) {
+    const moveDebit = sumMovementAmount(movementRows, 'debit');
+    const openingDebit = edariDebit - moveDebit;
+    if (openingDebit > 0) {
+      return normalizeCarriedBalance(openingDebit, account);
+    }
+  }
+  if (edariCredit > 0) {
+    const moveCredit = sumMovementAmount(movementRows, 'credit');
+    const openingCredit = edariCredit - moveCredit;
+    if (openingCredit > 0) {
+      return normalizeCarriedBalance(openingCredit, account);
+    }
+  }
+  return 0;
 }
 
 function normalizeCarriedBalance(balance, account = {}) {
@@ -162,7 +215,7 @@ function buildOpeningLine(openingBalance, cutoff) {
     debit,
     credit,
     description: 'رصيد مدور',
-    date: cutoff.date || '',
+    date: '',
     billNum: null,
     billSeq: null,
     billKind: null,
@@ -258,6 +311,8 @@ module.exports = {
   computeOpeningBalance,
   buildOpeningLine,
   normalizeCarriedBalance,
+  deriveOpeningBalance,
+  parseEdariDate,
   isValidFixDate,
   sortJournalRowsAsc,
   sortJournalRowsDesc,
