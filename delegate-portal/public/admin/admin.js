@@ -423,21 +423,42 @@ async function loadSyncLogs() {
 
 function getSelectedSyncTreeSeqs() {
   return [...document.querySelectorAll('#syncTreeChecks input[name=syncTreeSeq]:checked')]
-    .map((c) => c.value);
+    .map((c) => c.value)
+    .filter(Boolean);
+}
+
+function getSavedSyncTreeSeqs() {
+  try {
+    return JSON.parse(localStorage.getItem('syncTreeSeqs') || '[]')
+      .map(String)
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/** الشجرات من الواجهة، أو من localStorage إن لم تُحمَّل القائمة بعد */
+function getEffectiveSyncTreeSeqs() {
+  const fromDom = getSelectedSyncTreeSeqs();
+  if (fromDom.length) return fromDom;
+  return getSavedSyncTreeSeqs();
 }
 
 function saveSyncTreeSelection() {
-  localStorage.setItem('syncTreeSeqs', JSON.stringify(getSelectedSyncTreeSeqs()));
-  void persistBackgroundSyncSettings();
+  const seqs = getSelectedSyncTreeSeqs();
+  localStorage.setItem('syncTreeSeqs', JSON.stringify(seqs));
+  void persistBackgroundSyncSettings({ treeSeqs: seqs });
 }
 
-async function persistBackgroundSyncSettings() {
+async function persistBackgroundSyncSettings(override = {}) {
   if (!window.edariDesktop?.saveBackgroundSyncSettings) return null;
+  const treeSeqs = override.treeSeqs ?? getEffectiveSyncTreeSeqs();
   return window.edariDesktop.saveBackgroundSyncSettings({
     serverUrl: resolveSyncServerUrl(),
     syncKey: document.getElementById('syncApiKey')?.value?.trim() || '',
-    treeSeqs: getSelectedSyncTreeSeqs(),
-    autoSyncEnabled: document.getElementById('autoSyncEnabled')?.checked !== false
+    treeSeqs,
+    autoSyncEnabled: document.getElementById('autoSyncEnabled')?.checked !== false,
+    ...override
   });
 }
 
@@ -477,6 +498,7 @@ async function loadSyncTrees() {
       trees = data.trees || [];
     }
     renderSyncTreeChecks(trees, saved.map(String));
+    await persistBackgroundSyncSettings({ treeSeqs: getEffectiveSyncTreeSeqs() });
   } catch (e) {
     if (el) el.innerHTML = `<p class="muted">تعذّر تحميل الشجرات: ${esc(e.message)}</p>`;
   }
@@ -667,7 +689,8 @@ async function runSync(opts = {}) {
   const serverUrl = resolveSyncServerUrl();
   const syncKey = document.getElementById('syncApiKey').value.trim();
   const backendUrl = (getBackendDisplayUrl() || '').replace(/\/$/, '');
-  const treeSeqs = getSelectedSyncTreeSeqs();
+  await persistBackgroundSyncSettings();
+  const treeSeqs = getEffectiveSyncTreeSeqs();
   if (!treeSeqs.length) {
     if (auto) {
       setAutoSyncHint('تخطّي: حدد شجرة واحدة على الأقل');
@@ -774,7 +797,8 @@ document.getElementById('agentCancel').addEventListener('click', () => agentModa
 agentModal?.addEventListener('click', (e) => {
   if (e.target === agentModal) agentModal.classList.add('hidden');
 });
-document.getElementById('btnSyncNow').addEventListener('click', () => {
+document.getElementById('btnSyncNow').addEventListener('click', async () => {
+  await persistBackgroundSyncSettings();
   void runSync({ auto: false });
 });
 document.getElementById('autoSyncEnabled')?.addEventListener('change', (e) => {
@@ -866,7 +890,7 @@ async function refreshAll() {
   await loadDashboard();
   await loadAgents();
   await loadSyncLogs();
-  initAutoSync();
+  await initAutoSync();
 }
 
 const savedKey = localStorage.getItem('syncApiKey');

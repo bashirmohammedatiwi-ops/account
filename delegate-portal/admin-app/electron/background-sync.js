@@ -8,6 +8,7 @@ function createBackgroundSync({
   getSettingsPath,
   defaultServerUrl,
   runSync,
+  prepareSync,
   onStateChange,
   onNotify
 }) {
@@ -99,6 +100,14 @@ function createBackgroundSync({
 
   async function runBackgroundSync() {
     if (state.syncing) return { ok: false, error: 'المزامنة قيد التنفيذ' };
+    if (prepareSync) {
+      try {
+        await prepareSync();
+        settings = loadSettings();
+      } catch {
+        /* ignore */
+      }
+    }
     const treeSeqs = (settings.treeSeqs || []).map(String).filter(Boolean);
     const syncKey = String(settings.syncKey || '').trim();
     const serverUrl = String(settings.serverUrl || defaultServerUrl).replace(/\/$/, '');

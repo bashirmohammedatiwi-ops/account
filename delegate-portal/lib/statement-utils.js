@@ -98,6 +98,35 @@ function computeOpeningBalance(rows, cutoff, account) {
   return fixBal;
 }
 
+function sumLineAmounts(lines, field) {
+  return (lines || []).reduce((s, l) => s + parseAmount(l[field]), 0);
+}
+
+/** إجماليات الكشف — عند وجود رصيد مدور يُجمع مع مدين الحركات كما في Edari */
+function resolveStatementTotals({ lines = [], stmt = {}, account = {}, useSinceMatch = false } = {}) {
+  const lineDebit = sumLineAmounts(lines, 'debit');
+  const lineCredit = sumLineAmounts(lines, 'credit');
+  const edariDebit = parseAmount(account.tot1);
+  const edariCredit = parseAmount(account.tot2);
+
+  if (!useSinceMatch) {
+    return {
+      totalDebit: parseAmount(stmt.totalDebit),
+      totalCredit: parseAmount(stmt.totalCredit)
+    };
+  }
+
+  const hasOpening = lines.some((l) => l.isOpening);
+  if (hasOpening && lines.length) {
+    return { totalDebit: lineDebit, totalCredit: lineCredit };
+  }
+
+  return {
+    totalDebit: edariDebit > 0 ? edariDebit : lineDebit,
+    totalCredit: edariCredit > 0 ? edariCredit : lineCredit
+  };
+}
+
 function buildOpeningLine(openingBalance, cutoff) {
   if (!cutoff) return null;
   const balance = parseAmount(openingBalance);
@@ -107,7 +136,7 @@ function buildOpeningLine(openingBalance, cutoff) {
     seq: null,
     debit,
     credit,
-    description: 'رصيد من آخر مطابقة',
+    description: 'رصيد مدور',
     date: cutoff.date || '',
     billNum: null,
     billSeq: null,
@@ -164,9 +193,9 @@ function buildStatementLines(rows, options = {}) {
 
 function balanceSummaryLabel(balance) {
   const n = parseAmount(balance);
-  if (n < 0) return { label: 'رصيد مدين', amount: Math.abs(n), side: 'credit' };
-  if (n > 0) return { label: 'رصيد دائن', amount: n, side: 'debit' };
-  return { label: 'رصيد دائن', amount: 0, side: 'none' };
+  if (n < 0) return { label: 'لكم', amount: Math.abs(n), side: 'debit' };
+  if (n > 0) return { label: 'عليكم', amount: n, side: 'credit' };
+  return { label: 'متعادل', amount: 0, side: 'none' };
 }
 
 function debtStatusFromBalance(bal) {
@@ -199,6 +228,8 @@ module.exports = {
   balanceSummaryLabel,
   debtStatusFromBalance,
   resolveDebtDisplayAmount,
+  resolveStatementTotals,
+  sumLineAmounts,
   journalSortKey,
   isJournalAfter,
   filterRowsSinceLastMatch,

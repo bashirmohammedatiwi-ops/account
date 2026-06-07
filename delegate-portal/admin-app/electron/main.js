@@ -233,7 +233,7 @@ function updateTrayMenu() {
     {
       label: st.syncing ? 'جاري المزامنة...' : 'رفع الآن',
       enabled: !st.syncing,
-      click: () => { void backgroundSync.runNow(); }
+      click: () => { void refreshBackgroundSyncFromUi().then(() => backgroundSync.runNow()); }
     },
     { type: 'separator' },
     {
@@ -336,7 +336,7 @@ function createWindow({ show = !START_HIDDEN } = {}) {
       submenu: [
         {
           label: 'رفع الآن',
-          click: () => { void backgroundSync?.runNow(); }
+          click: () => { void refreshBackgroundSyncFromUi().then(() => backgroundSync?.runNow()); }
         },
         {
           label: 'صفحة رفع البيانات',
@@ -386,12 +386,40 @@ function runListEdariTreesScript() {
   });
 }
 
+async function pullSyncSettingsFromRenderer() {
+  if (!mainWindow || mainWindow.isDestroyed()) return null;
+  try {
+    return await mainWindow.webContents.executeJavaScript(`(function () {
+      const checked = [...document.querySelectorAll('#syncTreeChecks input[name=syncTreeSeq]:checked')].map((c) => c.value).filter(Boolean);
+      let saved = [];
+      try { saved = JSON.parse(localStorage.getItem('syncTreeSeqs') || '[]'); } catch (e) { /* ignore */ }
+      const treeSeqs = (checked.length ? checked : saved).map(String).filter(Boolean);
+      const serverUrl = (document.getElementById('syncServerUrl')?.value || localStorage.getItem('syncServerUrl') || '').trim().replace(/\\/$/, '');
+      const syncKey = (document.getElementById('syncApiKey')?.value || localStorage.getItem('syncApiKey') || '').trim();
+      return { serverUrl, syncKey, treeSeqs };
+    })()`);
+  } catch {
+    return null;
+  }
+}
+
+async function refreshBackgroundSyncFromUi() {
+  const fromUi = await pullSyncSettingsFromRenderer();
+  if (!fromUi) return;
+  const patch = {};
+  if (fromUi.treeSeqs?.length) patch.treeSeqs = fromUi.treeSeqs;
+  if (fromUi.syncKey) patch.syncKey = fromUi.syncKey;
+  if (fromUi.serverUrl) patch.serverUrl = fromUi.serverUrl;
+  if (Object.keys(patch).length) backgroundSync?.saveSettings(patch);
+}
+
 function initBackgroundSync() {
   backgroundSync = createBackgroundSync({
     app,
     getSettingsPath,
     defaultServerUrl: BACKEND_URL,
     runSync: runLocalSyncScript,
+    prepareSync: refreshBackgroundSyncFromUi,
     onStateChange: (state) => {
       pushAutoSyncState(state);
       updateTrayMenu();
@@ -434,7 +462,10 @@ ipcMain.handle('set-start-at-login', (_e, enabled) => {
   return backgroundSync?.getState() || {};
 });
 
-ipcMain.handle('run-background-sync-now', () => backgroundSync?.runNow());
+ipcMain.handle('run-background-sync-now', async () => {
+  await refreshBackgroundSyncFromUi();
+  return backgroundSync?.runNow();
+});
 
 app.whenReady().then(async () => {
   try {
@@ -448,7 +479,8 @@ app.whenReady().then(async () => {
     createWindow({ show: !START_HIDDEN });
 
     if (START_HIDDEN) {
-      setTimeout(() => {
+      setTimeout(async () => {
+        await refreshBackgroundSyncFromUi();
         void backgroundSync?.runNow();
       }, 15000);
     }
