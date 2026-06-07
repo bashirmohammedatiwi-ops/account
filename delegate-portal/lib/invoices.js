@@ -28,6 +28,7 @@ function extractBillNumFromText(text) {
   const s = String(text || '').trim();
   if (!s) return '';
   const patterns = [
+    /(?:مردود|مرتجع)\s*(?:مبيعات\s*)?(?:بال)?(?:فات?[او]?رة?\s*)?(\d+)/i,
     /(?:فات?[او]?رة?|فت?[او]?رة?)\s*(\d+)/i,
     /(?:invoice|bill)\s*#?\s*(\d+)/i,
     /(\d+)\s*[-–—]?\s*$/
@@ -68,6 +69,56 @@ function isInvoiceMovement(row) {
   if (normalizeBillSeq(row.bill_seq ?? row.billSeq)) return true;
   if (normalizeBillNum(row.bill_num ?? row.BillNum)) return true;
   return Boolean(extractBillNumFromText(row.exp1 ?? row.Exp1 ?? row.description));
+}
+
+function isDebitJournalRow(row) {
+  const dept = row?.is_debit ?? row?.Dept;
+  return dept === 1 || dept === true || dept === 'True' || dept === '1';
+}
+
+function movementText(row) {
+  return String(row?.exp1 ?? row?.Exp1 ?? row?.description ?? row?.remarks ?? row?.Remarks ?? '').trim();
+}
+
+function isReturnInvoiceKind(kind) {
+  const k = Number(kind);
+  return k === 2 || k === 5;
+}
+
+function isSalesReturnText(text) {
+  const s = String(text || '').trim();
+  if (!s) return false;
+  if (/مردود|مرتجع/i.test(s) && /(?:فات|مبيع)/i.test(s)) return true;
+  return /مردود\s*مبيعات/i.test(s);
+}
+
+function lookupInvoiceKind(billSeq) {
+  const seq = normalizeBillSeq(billSeq);
+  if (!seq) return null;
+  const row = db.prepare('SELECT kind FROM invoices WHERE seq = ?').get(seq);
+  return row?.kind ?? null;
+}
+
+/** مردود مبيعات — حركة دائن مرتبطة بفاتورة */
+function isSalesReturnMovement(row) {
+  if (isDebitJournalRow(row)) return false;
+  if (!isInvoiceMovement(row)) return false;
+
+  const text = movementText(row);
+  if (isSalesReturnText(text)) return true;
+
+  const billKind = row.bill_kind ?? row.BillKind;
+  if (isReturnInvoiceKind(billKind)) return true;
+
+  const billSeq = normalizeBillSeq(row.bill_seq ?? row.billSeq) || resolveBillSeq(row);
+  const invKind = lookupInvoiceKind(billSeq);
+  if (isReturnInvoiceKind(invKind)) return true;
+
+  return false;
+}
+
+function isSalesInvoiceMovement(row) {
+  return isDebitJournalRow(row) && isInvoiceMovement(row) && !isSalesReturnText(movementText(row));
 }
 
 function resolveBillSeq(row) {
@@ -284,6 +335,10 @@ module.exports = {
   extractBillNumFromText,
   resolveBillNum,
   isInvoiceMovement,
+  isSalesInvoiceMovement,
+  isSalesReturnMovement,
+  isSalesReturnText,
+  isReturnInvoiceKind,
   resolveBillSeq,
   getInvoiceByBillSeq,
   getInvoiceByNum,

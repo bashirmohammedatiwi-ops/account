@@ -133,6 +133,7 @@ function extractBillNumFromText(text) {
   const s = String(text || '').trim();
   if (!s) return '';
   const patterns = [
+    /(?:مردود|مرتجع)\s*(?:مبيعات\s*)?(?:بال)?(?:فات?[او]?رة?\s*)?(\d+)/i,
     /(?:فات?[او]?رة?|فت?[او]?رة?)\s*(\d+)/i,
     /(?:invoice|bill)\s*#?\s*(\d+)/i,
     /(\d+)\s*[-–—]?\s*$/

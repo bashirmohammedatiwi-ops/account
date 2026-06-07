@@ -49,9 +49,10 @@ function fmtNumAlways(v) {
   return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
-function isPurchaseLine(line) {
-  if (Number(line?.debit) <= 0) return false;
-  return Boolean(line?.invoiceRef || line?.billSeq || line?.billNum);
+function isInvoiceLine(line) {
+  if (line?.isOpening || !line?.hasInvoice) return false;
+  if (line?.isReturnInvoice) return Number(line?.credit) > 0;
+  return Number(line?.debit) > 0;
 }
 
 function invoiceLookupFor(line, accSeq) {
@@ -192,6 +193,7 @@ function bindStatementRowActions(root) {
 function txTypeLabel(line) {
   if (line?.isOpening) return 'رصيد مدور';
   if (line?.isReconciliation) return 'ترصيد';
+  if (line?.isReturnInvoice) return 'مردود';
   if (line?.debit && line?.hasInvoice) return 'فاتورة';
   if (line?.debit) return 'مدين';
   if (line?.credit) return 'دائن';
@@ -201,6 +203,7 @@ function txTypeLabel(line) {
 function txTypeClass(line) {
   if (line?.isOpening) return 'type-opening';
   if (line?.isReconciliation) return 'type-recon';
+  if (line?.isReturnInvoice) return 'type-return';
   if (line?.debit && line?.hasInvoice) return 'type-invoice';
   if (line?.debit) return 'type-debit';
   if (line?.credit) return 'type-credit';
@@ -606,16 +609,17 @@ function renderStatement(data) {
     document.getElementById('stmtLineCount').textContent = `${lines.length} حركة`;
     let moveNum = 0;
     const rows = lines.map((r) => {
-      const showInvoiceBtn = isPurchaseLine(r) && !r.isOpening;
+      const showInvoiceBtn = isInvoiceLine(r) && !r.isOpening;
       const invoiceLookup = showInvoiceBtn ? invoiceLookupFor(r, branch.seq) : null;
       const idxLabel = r.isOpening ? '∗' : String(++moveNum);
       const rowClass = [
         r.isReconciliation ? 'row-recon' : '',
         r.isOpening ? 'row-opening' : ''
       ].filter(Boolean).join(' ');
+      const invBtnLabel = r.isReturnInvoice ? 'مردود' : 'فاتورة';
       const actions = showInvoiceBtn && invoiceLookup
         ? `<div class="tbl-actions">
-            <button type="button" class="tbl-btn tbl-btn-inv" data-invoice-ref="${esc(invoiceLookup.ref)}" data-invoice-by="${esc(invoiceLookup.by)}" data-invoice-acc="${esc(invoiceLookup.acc || branch.seq || '')}">فاتورة</button>
+            <button type="button" class="tbl-btn tbl-btn-inv" data-invoice-ref="${esc(invoiceLookup.ref)}" data-invoice-by="${esc(invoiceLookup.by)}" data-invoice-acc="${esc(invoiceLookup.acc || branch.seq || '')}">${invBtnLabel}</button>
             <button type="button" class="tbl-btn tbl-btn-pdf" data-export-ref="${esc(invoiceLookup.ref)}" data-export-by="${esc(invoiceLookup.by || 'seq')}" data-export-acc="${esc(invoiceLookup.acc || branch.seq || '')}">PDF</button>
           </div>`
         : '<span class="num empty">—</span>';

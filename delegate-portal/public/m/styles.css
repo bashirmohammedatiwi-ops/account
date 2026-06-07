@@ -996,6 +996,7 @@ body {
 .row-tag.type-opening { background: rgba(29, 78, 216, 0.12); color: #1d4ed8; }
 .row-tag.type-recon { background: rgba(4, 120, 87, 0.12); color: #047857; }
 .row-tag.type-invoice { background: rgba(180, 83, 9, 0.12); color: #b45309; }
+.row-tag.type-return { background: rgba(109, 40, 217, 0.12); color: #6d28d9; }
 .row-tag.type-debit { background: rgba(185, 28, 28, 0.1); color: #b91c1c; }
 .row-tag.type-credit { background: rgba(4, 120, 87, 0.1); color: #047857; }
 .row-tag.type-neutral { background: var(--surface-muted); color: var(--text-secondary); }

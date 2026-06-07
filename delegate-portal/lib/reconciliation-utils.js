@@ -31,6 +31,7 @@ function normalizeBillSeq(value) {
 
 function isInvoiceLinkedCredit(row) {
   const text = movementText(row);
+  if (/مردود|مرتجع/i.test(text) && /(?:فات|مبيع)/i.test(text)) return true;
   if (/فات?[او]?رة?|invoice/i.test(text)) return true;
   if (normalizeBillSeq(row?.bill_seq ?? row?.BillSeq)) {
     return /حسم|خصم/i.test(text) && !MATCH_TEXT_RE.test(text);

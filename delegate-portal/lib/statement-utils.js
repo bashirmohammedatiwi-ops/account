@@ -230,7 +230,12 @@ function buildOpeningLine(openingBalance, cutoff) {
 }
 
 function buildStatementLines(rows, options = {}) {
-  const { isInvoiceMovement, resolveBillSeq, resolveBillNum } = require('./invoices');
+  const {
+    isInvoiceMovement,
+    isSalesReturnMovement,
+    resolveBillSeq,
+    resolveBillNum
+  } = require('./invoices');
   const { isReconciliationMovement } = require('./reconciliation-utils');
   let balance = parseAmount(options.openingBalance);
   const lines = sortJournalRowsAsc(rows).map((row) => {
@@ -240,7 +245,8 @@ function buildStatementLines(rows, options = {}) {
     balance = balance - debit + credit;
     const billNum = resolveBillNum(row);
     const billSeq = resolveBillSeq(row) || null;
-    const hasInvoice = isInvoiceMovement(row) && debit > 0;
+    const isReturnInvoice = isSalesReturnMovement(row);
+    const hasInvoice = (isInvoiceMovement(row) && debit > 0) || isReturnInvoice;
     const invoiceRef = billNum || billSeq || null;
     const description = row.exp1 || row.Exp1 || row.remarks || row.Remarks || '';
     return {
@@ -254,8 +260,9 @@ function buildStatementLines(rows, options = {}) {
       billKind: row.bill_kind ?? row.BillKind ?? null,
       invoiceRef: hasInvoice ? invoiceRef : null,
       hasInvoice,
+      isReturnInvoice,
       isReconciliation: isReconciliationMovement(row),
-      clickable: Boolean(hasInvoice && invoiceRef && debit > 0),
+      clickable: Boolean(hasInvoice && invoiceRef && (debit > 0 || credit > 0)),
       balance
     };
   });
