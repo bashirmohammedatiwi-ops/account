@@ -1,13 +1,36 @@
 /* Admin: invoices, catalog, orders */
+const PRODUCT_PAGE_SIZE = 50;
+
 const commerce = {
   branches: [],
   sections: [],
+  allSections: [],
   products: [],
+  productTotal: 0,
+  productOffset: 0,
   selectedBranchId: null,
   selectedSectionId: null,
+  selectedProductIds: new Set(),
   selectedInvoice: null,
-  selectedOrder: null
+  selectedOrder: null,
+  productFilters: {
+    q: '',
+    active: '',
+    noImage: '',
+    sortBy: 'sort_order',
+    showAllSections: false
+  }
 };
+
+function showToast(msg, type = 'ok') {
+  const el = document.getElementById('adminToast');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = `toast toast-${type}`;
+  el.classList.remove('hidden');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => el.classList.add('hidden'), 3200);
+}
 
 function commerceApi(path, opts = {}) {
   return api(`/api/admin${path}`, opts);
@@ -89,6 +112,7 @@ async function loadCatalogPage() {
     commerce.selectedBranchId = commerce.branches[0].id;
   }
   renderCatalogBranches();
+  await loadAllSectionsForBranch();
   await loadCatalogSections();
 }
 
@@ -96,18 +120,28 @@ function renderCatalogBranches() {
   const el = document.getElementById('catalogBranchesList');
   if (!el) return;
   el.innerHTML = commerce.branches.map((b) => `
-    <button type="button" class="tree-pick ${commerce.selectedBranchId === b.id ? 'active' : ''}" data-branch-id="${b.id}">
-      <div class="tree-pick-body">
-        <div class="tree-pick-name">${esc(b.name)}</div>
-        <div class="tree-pick-meta">${b.isActive ? 'نشط' : 'موقوف'}</div>
-      </div>
-    </button>`).join('') || '<p class="muted">لا توجد فروع</p>';
+    <div class="tree-pick-wrap ${commerce.selectedBranchId === b.id ? 'active' : ''}">
+      <button type="button" class="tree-pick ${commerce.selectedBranchId === b.id ? 'active' : ''}" data-branch-id="${b.id}">
+        <div class="tree-pick-body">
+          <div class="tree-pick-name">${esc(b.name)}</div>
+          <div class="tree-pick-meta">${b.isActive ? 'نشط' : 'موقوف'}</div>
+        </div>
+      </button>
+      <button type="button" class="btn btn-icon btn-tree-edit" data-edit-branch="${b.id}" title="تعديل">✎</button>
+    </div>`).join('') || '<p class="muted">لا توجد فروع</p>';
 
   el.querySelectorAll('[data-branch-id]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       commerce.selectedBranchId = Number(btn.dataset.branchId);
+      commerce.productOffset = 0;
       renderCatalogBranches();
       await loadCatalogSections();
+    });
+  });
+  el.querySelectorAll('[data-edit-branch]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openCatalogEdit('branch', Number(btn.dataset.editBranch));
     });
   });
 }
@@ -118,81 +152,613 @@ async function loadCatalogSections() {
   commerce.sections = data.sections || [];
   if (!commerce.selectedSectionId && commerce.sections.length) {
     commerce.selectedSectionId = commerce.sections[0].id;
+  } else if (commerce.selectedSectionId && !commerce.sections.some((s) => s.id === commerce.selectedSectionId)) {
+    commerce.selectedSectionId = commerce.sections[0]?.id || null;
   }
   const el = document.getElementById('catalogSectionsList');
   el.innerHTML = commerce.sections.map((s) => `
-    <button type="button" class="tree-pick ${commerce.selectedSectionId === s.id ? 'active' : ''}" data-section-id="${s.id}">
-      <div class="tree-pick-body"><div class="tree-pick-name">${esc(s.name)}</div></div>
-    </button>`).join('') || '<p class="muted">لا توجد أقسام</p>';
+    <div class="tree-pick-wrap ${commerce.selectedSectionId === s.id ? 'active' : ''}">
+      <button type="button" class="tree-pick ${commerce.selectedSectionId === s.id ? 'active' : ''}" data-section-id="${s.id}">
+        <div class="tree-pick-body"><div class="tree-pick-name">${esc(s.name)}</div></div>
+      </button>
+      <button type="button" class="btn btn-icon btn-tree-edit" data-edit-section="${s.id}" title="تعديل">✎</button>
+    </div>`).join('') || '<p class="muted">لا توجد أقسام</p>';
 
   el.querySelectorAll('[data-section-id]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       commerce.selectedSectionId = Number(btn.dataset.sectionId);
+      commerce.productOffset = 0;
+      commerce.productFilters.showAllSections = false;
+      document.getElementById('productShowAllSections').checked = false;
       await loadCatalogSections();
-      await loadCatalogProducts();
     });
   });
+  el.querySelectorAll('[data-edit-section]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openCatalogEdit('section', Number(btn.dataset.editSection));
+    });
+  });
+  await loadAllSectionsForBranch();
   await loadCatalogProducts();
 }
 
+async function loadAllSectionsForBranch() {
+  commerce.allSections = [];
+  for (const branch of commerce.branches) {
+    const data = await commerceApi(`/catalog/branches/${branch.id}/sections`);
+    for (const s of data.sections || []) {
+      commerce.allSections.push({ ...s, branchId: branch.id, branchName: branch.name });
+    }
+  }
+}
+
+function buildProductQuery() {
+  const f = commerce.productFilters;
+  const params = new URLSearchParams();
+  const dragMode = canDragReorderProducts();
+  if (!f.showAllSections && commerce.selectedSectionId) {
+    params.set('sectionId', commerce.selectedSectionId);
+  } else if (commerce.selectedBranchId) {
+    params.set('branchId', commerce.selectedBranchId);
+  }
+  if (f.q) params.set('q', f.q);
+  if (f.active === '1') params.set('active', '1');
+  if (f.active === '0') params.set('active', '0');
+  if (f.noImage === 'no') params.set('noImage', '1');
+  if (f.sortBy) params.set('sortBy', f.sortBy);
+  params.set('limit', dragMode ? '500' : String(PRODUCT_PAGE_SIZE));
+  params.set('offset', dragMode ? '0' : String(commerce.productOffset));
+  return params.toString();
+}
+
+function canDragReorderProducts() {
+  return !commerce.productFilters.showAllSections
+    && !!commerce.selectedSectionId
+    && commerce.productFilters.sortBy === 'sort_order'
+    && !commerce.productFilters.q;
+}
+
+function renderProductPagination() {
+  const el = document.getElementById('productPagination');
+  if (!el) return;
+  if (canDragReorderProducts()) {
+    el.innerHTML = '';
+    return;
+  }
+  const total = commerce.productTotal;
+  const pages = Math.max(1, Math.ceil(total / PRODUCT_PAGE_SIZE));
+  const page = Math.floor(commerce.productOffset / PRODUCT_PAGE_SIZE) + 1;
+  if (total <= PRODUCT_PAGE_SIZE) {
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML = `
+    <button type="button" class="btn btn-soft btn-sm" id="productPagePrev" ${page <= 1 ? 'disabled' : ''}>السابق</button>
+    <span class="muted">صفحة ${page} / ${pages}</span>
+    <button type="button" class="btn btn-soft btn-sm" id="productPageNext" ${page >= pages ? 'disabled' : ''}>التالي</button>`;
+  document.getElementById('productPagePrev')?.addEventListener('click', async () => {
+    commerce.productOffset = Math.max(0, commerce.productOffset - PRODUCT_PAGE_SIZE);
+    await loadCatalogProducts();
+  });
+  document.getElementById('productPageNext')?.addEventListener('click', async () => {
+    if (commerce.productOffset + PRODUCT_PAGE_SIZE < total) {
+      commerce.productOffset += PRODUCT_PAGE_SIZE;
+      await loadCatalogProducts();
+    }
+  });
+}
+
+async function loadProductStats() {
+  const f = commerce.productFilters;
+  const params = new URLSearchParams();
+  if (!f.showAllSections && commerce.selectedSectionId) {
+    params.set('sectionId', commerce.selectedSectionId);
+  } else if (commerce.selectedBranchId) {
+    params.set('branchId', commerce.selectedBranchId);
+  }
+  try {
+    const data = await commerceApi(`/products/stats?${params}`);
+    const s = data.stats || {};
+    const el = document.getElementById('productStatsRow');
+    if (!el) return;
+    el.innerHTML = `
+      <div class="stat-card stat-mini"><div class="k">الإجمالي</div><div class="v">${fmtNumAlways(s.total)}</div></div>
+      <div class="stat-card stat-mini"><div class="k">نشط</div><div class="v">${fmtNumAlways(s.active)}</div></div>
+      <div class="stat-card stat-mini"><div class="k">موقوف</div><div class="v">${fmtNumAlways(s.inactive)}</div></div>
+      <div class="stat-card stat-mini"><div class="k">بدون صورة</div><div class="v">${fmtNumAlways(s.withoutImage)}</div></div>
+      <div class="stat-card stat-mini"><div class="k">سعر يدوي</div><div class="v">${fmtNumAlways(s.priceOverride)}</div></div>`;
+  } catch { /* ignore */ }
+}
+
+function renderProductBadges(p) {
+  const badges = [];
+  if (!p.isActive) badges.push('<span class="badge err">موقوف</span>');
+  if (p.priceOverride) badges.push('<span class="badge warn">سعر يدوي</span>');
+  if (!p.imageUrl) badges.push('<span class="badge muted-badge">بدون صورة</span>');
+  return badges.join(' ');
+}
+
+function updateBulkBar() {
+  const bar = document.getElementById('productBulkBar');
+  const count = commerce.selectedProductIds.size;
+  if (!bar) return;
+  bar.classList.toggle('hidden', count === 0);
+  const countEl = document.getElementById('productBulkCount');
+  if (countEl) countEl.textContent = `${count} محدد`;
+}
+
 async function loadCatalogProducts() {
-  if (!commerce.selectedSectionId) return;
-  const data = await commerceApi(`/catalog/sections/${commerce.selectedSectionId}/products`);
+  if (!commerce.selectedSectionId && !commerce.selectedBranchId) return;
+  commerce.selectedProductIds.clear();
+  updateBulkBar();
+  document.getElementById('productSelectAll').checked = false;
+
+  const qs = buildProductQuery();
+  const data = await commerceApi(`/products?${qs}`);
   commerce.products = data.products || [];
+  commerce.productTotal = data.total || commerce.products.length;
+
+  const dragEnabled = canDragReorderProducts();
+  document.getElementById('productDragHint')?.classList.toggle('hidden', !dragEnabled);
+
   document.getElementById('catalogProductsBody').innerHTML = commerce.products.map((p) => `
-    <tr>
-      <td>${p.imageUrl ? `<img src="${API}${p.imageUrl}" alt="" class="product-thumb">` : '—'}</td>
-      <td dir="ltr">${esc(p.barcode || p.skuNum)}</td>
-      <td>${esc(p.name)}</td>
-      <td dir="ltr">${fmtMoney(p.price)}</td>
-      <td>${esc((p.syncedAt || p.updatedAt || '—').slice(0, 19).replace('T', ' '))}</td>
-      <td>${p.isActive ? 'نشط' : 'موقوف'}</td>
+    <tr data-product-id="${p.id}" ${dragEnabled ? 'draggable="true"' : ''} class="${dragEnabled ? 'product-draggable' : ''}">
+      <td class="col-check"><input type="checkbox" class="product-check" data-id="${p.id}"></td>
+      <td class="col-drag">${dragEnabled ? '<span class="drag-handle" title="اسحب">⠿</span>' : ''}</td>
+      <td>${p.imageUrl ? `<img src="${API}${p.imageUrl}" alt="" class="product-thumb">` : '<span class="product-thumb-empty">—</span>'}</td>
+      <td dir="ltr">${esc(p.barcode || p.skuNum || '—')}</td>
       <td>
-        <button type="button" class="btn btn-soft btn-sm" data-prod-edit="${p.id}">صورة / حالة</button>
+        <strong>${esc(p.name)}</strong>
+        ${commerce.productFilters.showAllSections && p.sectionName ? `<div class="muted product-sub">${esc(p.sectionName)}</div>` : ''}
+        <div class="product-badges">${renderProductBadges(p)}</div>
+      </td>
+      <td>${esc(p.unit || '—')}</td>
+      <td dir="ltr">${fmtMoney(p.price)}</td>
+      <td dir="ltr">${p.bonusDefault || 0}</td>
+      <td dir="ltr">${p.sortOrder ?? 0}</td>
+      <td>${p.isActive ? '<span class="badge ok">نشط</span>' : '<span class="badge err">موقوف</span>'}</td>
+      <td class="product-actions">
+        <button type="button" class="btn btn-soft btn-sm" data-prod-edit="${p.id}">تعديل</button>
         <button type="button" class="btn btn-danger btn-sm" data-prod-del="${p.id}">حذف</button>
       </td>
-    </tr>`).join('') || '<tr><td colspan="7">لا توجد منتجات — أضف بالباركود بعد مزامنة Edari</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="11">لا توجد منتجات — أضف منتجاً أو نفّذ مزامنة Edari</td></tr>';
+
+  const countEl = document.getElementById('productCountLine');
+  if (countEl) {
+    const from = commerce.productTotal ? commerce.productOffset + 1 : 0;
+    const to = commerce.productOffset + commerce.products.length;
+    countEl.textContent = `عرض ${from}–${to} من ${commerce.productTotal} منتج`;
+  }
+  renderProductPagination();
+
+  document.querySelectorAll('.product-check').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      const id = Number(cb.dataset.id);
+      if (cb.checked) commerce.selectedProductIds.add(id);
+      else commerce.selectedProductIds.delete(id);
+      updateBulkBar();
+    });
+  });
 
   document.querySelectorAll('[data-prod-edit]').forEach((btn) => {
-    btn.addEventListener('click', () => editProduct(Number(btn.dataset.prodEdit)));
+    btn.addEventListener('click', () => openProductModal(Number(btn.dataset.prodEdit)));
   });
   document.querySelectorAll('[data-prod-del]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      if (!confirm('حذف هذا المنتج؟')) return;
-      await commerceApi(`/products/${btn.dataset.prodDel}`, { method: 'DELETE' });
-      await loadCatalogProducts();
+    btn.addEventListener('click', () => deleteProductById(Number(btn.dataset.prodDel)));
+  });
+
+  if (dragEnabled) initProductDragDrop();
+
+  await loadProductStats();
+}
+
+function initProductDragDrop() {
+  const tbody = document.getElementById('catalogProductsBody');
+  if (!tbody) return;
+  let dragId = null;
+
+  tbody.querySelectorAll('tr[draggable="true"]').forEach((row) => {
+    row.addEventListener('dragstart', (e) => {
+      dragId = Number(row.dataset.productId);
+      row.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    row.addEventListener('dragend', () => {
+      row.classList.remove('dragging');
+      tbody.querySelectorAll('tr').forEach((r) => r.classList.remove('drag-over'));
+    });
+    row.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      row.classList.add('drag-over');
+    });
+    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+    row.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      row.classList.remove('drag-over');
+      const targetId = Number(row.dataset.productId);
+      if (!dragId || dragId === targetId) return;
+
+      const ids = commerce.products.map((p) => p.id);
+      const fromIdx = ids.indexOf(dragId);
+      const toIdx = ids.indexOf(targetId);
+      if (fromIdx < 0 || toIdx < 0) return;
+
+      ids.splice(fromIdx, 1);
+      ids.splice(toIdx, 0, dragId);
+
+      try {
+        await commerceApi('/products/reorder', {
+          method: 'POST',
+          body: JSON.stringify({ sectionId: commerce.selectedSectionId, orderedIds: ids })
+        });
+        showToast('تم تحديث الترتيب');
+        await loadCatalogProducts();
+      } catch (err) {
+        showToast(err.message, 'err');
+      }
     });
   });
 }
 
-async function editProduct(id) {
+function fillProductSectionSelect(selectedId) {
+  const sel = document.getElementById('productSectionId');
+  if (!sel) return;
+  sel.innerHTML = commerce.allSections.map((s) =>
+    `<option value="${s.id}" ${s.id === selectedId ? 'selected' : ''}>${esc(s.branchName)} — ${esc(s.name)}</option>`
+  ).join('');
+}
+
+function setProductImagePreview(p) {
+  const box = document.getElementById('productImagePreview');
+  const removeBtn = document.getElementById('btnProductRemoveImage');
+  if (!box) return;
+  if (p?.imageUrl) {
+    box.innerHTML = `<img src="${API}${p.imageUrl}" alt="" class="product-preview-img">`;
+    removeBtn?.classList.remove('hidden');
+  } else {
+    box.innerHTML = '<span class="product-image-placeholder">📦</span>';
+    removeBtn?.classList.add('hidden');
+  }
+}
+
+function openProductModal(id = null) {
+  const modal = document.getElementById('productModal');
+  const isEdit = !!id;
+  document.getElementById('productModalTitle').textContent = isEdit ? 'تعديل منتج' : 'منتج جديد';
+  document.getElementById('productId').value = id || '';
+  document.getElementById('edariSearchBox').classList.add('hidden');
+  document.getElementById('edariSearchResults').innerHTML = '';
+  document.getElementById('edariSearchInput').value = '';
+  document.getElementById('btnProductSyncEdari').classList.toggle('hidden', !isEdit);
+
+  fillProductSectionSelect(commerce.selectedSectionId);
+
+  if (isEdit) {
+    const p = commerce.products.find((x) => x.id === id);
+    if (!p) return;
+    fillProductSectionSelect(p.sectionId);
+    document.getElementById('productName').value = p.name || '';
+    document.getElementById('productBarcode').value = p.barcode || '';
+    document.getElementById('productSkuNum').value = p.skuNum || '';
+    document.getElementById('productEdariSeq').value = p.edariSeq || '';
+    document.getElementById('productUnit').value = p.unit || '';
+    document.getElementById('productPrice').value = p.price ?? 0;
+    document.getElementById('productBonus').value = p.bonusDefault ?? 0;
+    document.getElementById('productMinQty').value = p.minOrderQty ?? 0;
+    document.getElementById('productSortOrder').value = p.sortOrder ?? 0;
+    document.getElementById('productIsActive').checked = !!p.isActive;
+    document.getElementById('productPriceOverride').checked = !!p.priceOverride;
+    document.getElementById('productDescription').value = p.description || '';
+    document.getElementById('productMetaInfo').textContent =
+      `آخر مزامنة: ${(p.syncedAt || '—').slice(0, 19).replace('T', ' ')} · آخر تعديل: ${(p.updatedAt || '—').slice(0, 19).replace('T', ' ')}`;
+    setProductImagePreview(p);
+  } else {
+    document.getElementById('productForm').reset();
+    document.getElementById('productIsActive').checked = true;
+    document.getElementById('productBonus').value = 0;
+    document.getElementById('productMinQty').value = 0;
+    document.getElementById('productSortOrder').value = 0;
+    document.getElementById('productMetaInfo').textContent = 'أضف بالباركود من Edari أو يدوياً';
+    setProductImagePreview(null);
+    fillProductSectionSelect(commerce.selectedSectionId);
+  }
+
+  modal.classList.remove('hidden');
+}
+
+function closeProductModal() {
+  document.getElementById('productModal').classList.add('hidden');
+}
+
+async function saveProductForm(e) {
+  e.preventDefault();
+  const id = document.getElementById('productId').value;
+  const body = {
+    sectionId: Number(document.getElementById('productSectionId').value),
+    name: document.getElementById('productName').value.trim(),
+    barcode: document.getElementById('productBarcode').value.trim(),
+    skuNum: document.getElementById('productSkuNum').value.trim(),
+    edariSeq: document.getElementById('productEdariSeq').value.trim(),
+    unit: document.getElementById('productUnit').value.trim(),
+    price: Number(document.getElementById('productPrice').value || 0),
+    bonusDefault: Number(document.getElementById('productBonus').value || 0),
+    minOrderQty: Number(document.getElementById('productMinQty').value || 0),
+    sortOrder: Number(document.getElementById('productSortOrder').value || 0),
+    isActive: document.getElementById('productIsActive').checked,
+    priceOverride: document.getElementById('productPriceOverride').checked,
+    description: document.getElementById('productDescription').value.trim()
+  };
+
+  if (!body.name) return showToast('الاسم مطلوب', 'err');
+
+  try {
+    if (id) {
+      await commerceApi(`/products/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+      showToast('تم حفظ المنتج');
+    } else if (body.barcode || body.skuNum) {
+      const data = await commerceApi('/products/by-barcode', {
+        method: 'POST',
+        body: JSON.stringify({ sectionId: body.sectionId, barcode: body.barcode || body.skuNum })
+      });
+      const patch = { ...body };
+      delete patch.sectionId;
+      await commerceApi(`/products/${data.product.id}`, { method: 'PUT', body: JSON.stringify(patch) });
+      showToast('تم إضافة المنتج');
+    } else {
+      await commerceApi('/products', { method: 'POST', body: JSON.stringify(body) });
+      showToast('تم إضافة المنتج');
+    }
+    closeProductModal();
+    await loadCatalogProducts();
+  } catch (err) {
+    showToast(err.message || 'فشل الحفظ', 'err');
+  }
+}
+
+async function deleteProductById(id) {
   const p = commerce.products.find((x) => x.id === id);
   if (!p) return;
+  if (!confirm(`حذف "${p.name}"؟`)) return;
+  try {
+    await commerceApi(`/products/${id}`, { method: 'DELETE' });
+    showToast('تم الحذف');
+    await loadCatalogProducts();
+  } catch (err) {
+    showToast(err.message, 'err');
+  }
+}
 
-  const active = confirm(`المنتج: ${p.name}\n\nموافق = نشط | إلغاء = موقوف`);
-  await commerceApi(`/products/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify({ isActive: active })
-  });
-
-  const fileInput = document.createElement('input');
-  fileInput.type = 'file';
-  fileInput.accept = 'image/*';
-  fileInput.onchange = async () => {
-    const file = fileInput.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
+async function uploadProductImage(id, file) {
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
       await commerceApi(`/products/${id}/image`, {
         method: 'POST',
         body: JSON.stringify({ dataUrl: reader.result })
       });
+      showToast('تم رفع الصورة');
+      const data = await commerceApi(`/products/${id}`);
+      setProductImagePreview(data.product);
       await loadCatalogProducts();
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      showToast(err.message, 'err');
+    }
   };
-  if (confirm('رفع صورة للمنتج؟')) fileInput.click();
-  else await loadCatalogProducts();
+  reader.readAsDataURL(file);
+}
+
+async function runBulkAction(action) {
+  const ids = [...commerce.selectedProductIds];
+  if (!ids.length) return;
+
+  if (action === 'move') {
+    openBulkMoveModal(ids);
+    return;
+  }
+  if (action === 'delete' && !confirm(`حذف ${ids.length} منتج؟`)) return;
+
+  try {
+    const data = await commerceApi('/products/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ ids, action, payload: {} })
+    });
+    showToast(`تم تنفيذ العملية على ${data.affected} منتج`);
+    await loadCatalogProducts();
+  } catch (err) {
+    showToast(err.message, 'err');
+  }
+}
+
+function openBulkMoveModal(ids) {
+  document.getElementById('bulkMoveCount').textContent = `نقل ${ids.length} منتج`;
+  const sel = document.getElementById('bulkMoveSectionId');
+  sel.innerHTML = commerce.allSections.map((s) =>
+    `<option value="${s.id}">${esc(s.branchName)} — ${esc(s.name)}</option>`
+  ).join('');
+  document.getElementById('bulkMoveModal').classList.remove('hidden');
+  document.getElementById('bulkMoveForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const sectionId = Number(sel.value);
+    try {
+      const data = await commerceApi('/products/bulk', {
+        method: 'POST',
+        body: JSON.stringify({ ids, action: 'move', payload: { sectionId } })
+      });
+      showToast(`نُقل ${data.affected} منتج`);
+      document.getElementById('bulkMoveModal').classList.add('hidden');
+      await loadCatalogProducts();
+    } catch (err) {
+      showToast(err.message, 'err');
+    }
+  };
+}
+
+function openCatalogEdit(type, id) {
+  const modal = document.getElementById('catalogEditModal');
+  document.getElementById('catalogEditType').value = type;
+  document.getElementById('catalogEditId').value = id;
+  document.getElementById('catalogEditDelete').classList.remove('hidden');
+
+  if (type === 'branch') {
+    const b = commerce.branches.find((x) => x.id === id);
+    if (!b) return;
+    document.getElementById('catalogEditTitle').textContent = 'تعديل فرع';
+    document.getElementById('catalogEditName').value = b.name;
+    document.getElementById('catalogEditSort').value = b.sortOrder ?? 0;
+    document.getElementById('catalogEditActive').checked = !!b.isActive;
+  } else {
+    const s = commerce.sections.find((x) => x.id === id)
+      || commerce.allSections.find((x) => x.id === id);
+    if (!s) return;
+    document.getElementById('catalogEditTitle').textContent = 'تعديل قسم';
+    document.getElementById('catalogEditName').value = s.name;
+    document.getElementById('catalogEditSort').value = s.sortOrder ?? 0;
+    document.getElementById('catalogEditActive').checked = !!s.isActive;
+  }
+  modal.classList.remove('hidden');
+}
+
+async function saveCatalogEdit(e) {
+  e.preventDefault();
+  const type = document.getElementById('catalogEditType').value;
+  const id = Number(document.getElementById('catalogEditId').value);
+  const body = {
+    name: document.getElementById('catalogEditName').value.trim(),
+    sortOrder: Number(document.getElementById('catalogEditSort').value || 0),
+    isActive: document.getElementById('catalogEditActive').checked
+  };
+  if (!body.name) return showToast('الاسم مطلوب', 'err');
+
+  try {
+    if (type === 'branch') {
+      await commerceApi(`/catalog/branches/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    } else {
+      await commerceApi(`/catalog/sections/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    }
+    showToast('تم الحفظ');
+    document.getElementById('catalogEditModal').classList.add('hidden');
+    await loadCatalogPage();
+  } catch (err) {
+    showToast(err.message, 'err');
+  }
+}
+
+async function deleteCatalogItem() {
+  const type = document.getElementById('catalogEditType').value;
+  const id = Number(document.getElementById('catalogEditId').value);
+  const label = type === 'branch' ? 'الفرع' : 'القسم';
+  if (!confirm(`حذف ${label}؟ سيتم حذف الأقسام/المنتجات التابعة.`)) return;
+  try {
+    if (type === 'branch') {
+      await commerceApi(`/catalog/branches/${id}`, { method: 'DELETE' });
+    } else {
+      await commerceApi(`/catalog/sections/${id}`, { method: 'DELETE' });
+    }
+    showToast('تم الحذف');
+    document.getElementById('catalogEditModal').classList.add('hidden');
+    await loadCatalogPage();
+  } catch (err) {
+    showToast(err.message, 'err');
+  }
+}
+
+function parseCsvLine(line) {
+  const out = [];
+  let cur = '';
+  let inQ = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (inQ) {
+      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i += 1; }
+      else if (ch === '"') inQ = false;
+      else cur += ch;
+    } else if (ch === '"') inQ = true;
+    else if (ch === ',') { out.push(cur.trim()); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur.trim());
+  return out;
+}
+
+function parseCsvToRows(text) {
+  const lines = String(text || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return [];
+  const first = parseCsvLine(lines[0]).map((h) => h.toLowerCase());
+  const hasHeader = first.some((h) => ['barcode', 'name', 'price', 'unit'].includes(h));
+  const headers = hasHeader ? first : ['barcode', 'name', 'unit', 'price', 'bonus', 'sort_order', 'active', 'price_override', 'description'];
+  const start = hasHeader ? 1 : 0;
+  const rows = [];
+  for (let i = start; i < lines.length; i += 1) {
+    const cols = parseCsvLine(lines[i]);
+    const row = {};
+    headers.forEach((h, idx) => { row[h] = cols[idx] ?? ''; });
+    rows.push(row);
+  }
+  return rows;
+}
+
+function exportProductsCsv() {
+  const qs = buildProductQuery().replace(/offset=\d+/, 'offset=0').replace(/limit=\d+/, 'limit=5000');
+  const url = `${API}/api/admin/products/export.csv?${qs}`;
+  window.open(url, '_blank');
+}
+
+async function importCsvData(text) {
+  if (!commerce.selectedSectionId) return showToast('اختر قسماً', 'err');
+  const rows = parseCsvToRows(text);
+  if (!rows.length) return showToast('لا توجد بيانات للاستيراد', 'err');
+  const data = await commerceApi('/products/import', {
+    method: 'POST',
+    body: JSON.stringify({ sectionId: commerce.selectedSectionId, rows })
+  });
+  const results = document.getElementById('importCsvResults');
+  results.classList.remove('hidden');
+  results.innerHTML = `
+    <p class="badge ok">${esc(data.message || 'تم')}</p>
+    ${data.errors?.length ? `<p class="badge err">أخطاء: ${data.errors.length}</p>` : ''}`;
+  showToast(data.message || 'تم الاستيراد');
+  await loadCatalogProducts();
+  return data;
+}
+
+let edariSearchTimer;
+let edariSearchResults = [];
+
+async function searchEdariInModal(q) {
+  const box = document.getElementById('edariSearchResults');
+  if (!q.trim()) {
+    box.innerHTML = '';
+    edariSearchResults = [];
+    return;
+  }
+  try {
+    const data = await commerceApi(`/products/edari-search?q=${encodeURIComponent(q.trim())}`);
+    edariSearchResults = data.materials || [];
+    box.innerHTML = edariSearchResults.map((m, i) => `
+      <button type="button" class="edari-result-item" data-idx="${i}">
+        <strong>${esc(m.name)}</strong>
+        <span dir="ltr">${esc(m.barcode || m.num)} · ${fmtMoney(m.price)}</span>
+      </button>`).join('') || '<p class="muted">لا توجد نتائج — نفّذ مزامنة Edari</p>';
+
+    box.querySelectorAll('.edari-result-item').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const m = edariSearchResults[Number(btn.dataset.idx)];
+        if (!m) return;
+        document.getElementById('productName').value = m.name;
+        document.getElementById('productBarcode').value = m.barcode || m.num;
+        document.getElementById('productSkuNum').value = m.num || '';
+        document.getElementById('productEdariSeq').value = m.seq || '';
+        document.getElementById('productUnit').value = m.unit || '';
+        document.getElementById('productPrice').value = m.price ?? 0;
+        document.getElementById('edariSearchBox').classList.add('hidden');
+        showToast('تم تعبئة البيانات من Edari');
+      });
+    });
+  } catch (err) {
+    box.innerHTML = `<p class="muted">${esc(err.message)}</p>`;
+  }
 }
 
 async function loadOrdersPage() {
@@ -282,28 +848,203 @@ function initCommerceAdmin() {
     await loadCatalogSections();
   });
 
-  document.getElementById('btnAddProduct')?.addEventListener('click', async () => {
-    if (!commerce.selectedSectionId) return alert('اختر قسماً');
-    const barcode = prompt('أدخل الباركود أو رقم المادة من Edari:');
-    if (!barcode?.trim()) return;
+  document.getElementById('btnAddProduct')?.addEventListener('click', () => openProductModal());
 
+  document.getElementById('btnBulkAddProducts')?.addEventListener('click', () => {
+    if (!commerce.selectedSectionId) return showToast('اختر قسماً أولاً', 'err');
+    document.getElementById('bulkBarcodesInput').value = '';
+    document.getElementById('bulkAddResults').classList.add('hidden');
+    document.getElementById('bulkAddModal').classList.remove('hidden');
+  });
+
+  document.getElementById('bulkAddClose')?.addEventListener('click', () => {
+    document.getElementById('bulkAddModal').classList.add('hidden');
+  });
+
+  document.getElementById('bulkAddForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!commerce.selectedSectionId) return showToast('اختر قسماً', 'err');
+    const text = document.getElementById('bulkBarcodesInput').value;
+    const barcodes = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (!barcodes.length) return showToast('أدخل باركود واحد على الأقل', 'err');
     try {
-      const preview = await commerceApi(`/products/edari-lookup?code=${encodeURIComponent(barcode.trim())}`);
-      const m = preview.material;
-      const ok = confirm(
-        `من Edari:\n${m.name}\nباركود: ${m.barcode || m.num}\nالسعر: ${fmtMoney(m.price)}\n\nإضافة إلى هذا القسم؟`
-      );
-      if (!ok) return;
-
-      await commerceApi('/products/by-barcode', {
+      const data = await commerceApi('/products/bulk-by-barcode', {
         method: 'POST',
-        body: JSON.stringify({ sectionId: commerce.selectedSectionId, barcode: barcode.trim() })
+        body: JSON.stringify({ sectionId: commerce.selectedSectionId, barcodes })
       });
+      const results = document.getElementById('bulkAddResults');
+      results.classList.remove('hidden');
+      results.innerHTML = `
+        <p class="badge ok">أُضيف: ${data.added}</p>
+        ${data.skipped?.length ? `<p class="muted">تخطّي: ${data.skipped.length}</p>` : ''}
+        ${data.errors?.length ? `<p class="badge err">أخطاء: ${data.errors.length}</p>` : ''}`;
+      showToast(data.message || `أُضيف ${data.added} منتج`);
       await loadCatalogProducts();
-    } catch (e) {
-      alert(e.message);
+    } catch (err) {
+      showToast(err.message, 'err');
     }
   });
+
+  document.getElementById('btnSyncSectionProducts')?.addEventListener('click', async () => {
+    if (!commerce.selectedSectionId) return showToast('اختر قسماً', 'err');
+    if (!confirm('مزامنة كل منتجات هذا القسم من Edari؟\nالمنتجات ذات السعر اليدوي لن يتغير سعرها.')) return;
+    try {
+      const data = await commerceApi(`/catalog/sections/${commerce.selectedSectionId}/sync-products`, { method: 'POST' });
+      showToast(data.message || 'تمت المزامنة');
+      await loadCatalogProducts();
+    } catch (err) {
+      showToast(err.message, 'err');
+    }
+  });
+
+  document.getElementById('productSearch')?.addEventListener('input', () => {
+    clearTimeout(commerce._searchT);
+    commerce._searchT = setTimeout(async () => {
+      commerce.productFilters.q = document.getElementById('productSearch').value.trim();
+      commerce.productOffset = 0;
+      await loadCatalogProducts();
+    }, 300);
+  });
+
+  document.getElementById('productFilterActive')?.addEventListener('change', async (e) => {
+    commerce.productFilters.active = e.target.value;
+    commerce.productOffset = 0;
+    await loadCatalogProducts();
+  });
+
+  document.getElementById('productFilterImage')?.addEventListener('change', async (e) => {
+    commerce.productFilters.noImage = e.target.value;
+    commerce.productOffset = 0;
+    await loadCatalogProducts();
+  });
+
+  document.getElementById('productSortBy')?.addEventListener('change', async (e) => {
+    commerce.productFilters.sortBy = e.target.value;
+    commerce.productOffset = 0;
+    await loadCatalogProducts();
+  });
+
+  document.getElementById('productShowAllSections')?.addEventListener('change', async (e) => {
+    commerce.productFilters.showAllSections = e.target.checked;
+    commerce.productOffset = 0;
+    await loadCatalogProducts();
+  });
+
+  document.getElementById('productSelectAll')?.addEventListener('change', (e) => {
+    const checked = e.target.checked;
+    commerce.selectedProductIds.clear();
+    document.querySelectorAll('.product-check').forEach((cb) => {
+      cb.checked = checked;
+      if (checked) commerce.selectedProductIds.add(Number(cb.dataset.id));
+    });
+    updateBulkBar();
+  });
+
+  document.getElementById('productBulkBar')?.querySelectorAll('[data-bulk]').forEach((btn) => {
+    btn.addEventListener('click', () => runBulkAction(btn.dataset.bulk));
+  });
+
+  document.getElementById('productModalClose')?.addEventListener('click', closeProductModal);
+  document.getElementById('productForm')?.addEventListener('submit', saveProductForm);
+
+  document.getElementById('btnProductSearchEdari')?.addEventListener('click', () => {
+    document.getElementById('edariSearchBox').classList.toggle('hidden');
+  });
+
+  document.getElementById('edariSearchInput')?.addEventListener('input', (e) => {
+    clearTimeout(edariSearchTimer);
+    edariSearchTimer = setTimeout(() => searchEdariInModal(e.target.value), 300);
+  });
+
+  document.getElementById('btnProductSyncEdari')?.addEventListener('click', async () => {
+    const id = document.getElementById('productId').value;
+    if (!id) return;
+    try {
+      const data = await commerceApi(`/products/${id}/sync-edari`, { method: 'POST' });
+      document.getElementById('productName').value = data.product.name || '';
+      document.getElementById('productBarcode').value = data.product.barcode || '';
+      document.getElementById('productSkuNum').value = data.product.skuNum || '';
+      document.getElementById('productEdariSeq').value = data.product.edariSeq || '';
+      document.getElementById('productUnit').value = data.product.unit || '';
+      if (!data.product.priceOverride) {
+        document.getElementById('productPrice').value = data.product.price ?? 0;
+      }
+      showToast('تم التحديث من Edari');
+      await loadCatalogProducts();
+    } catch (err) {
+      showToast(err.message, 'err');
+    }
+  });
+
+  document.getElementById('btnProductUploadImage')?.addEventListener('click', () => {
+    document.getElementById('productImageInput').click();
+  });
+
+  document.getElementById('productImageInput')?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    let id = document.getElementById('productId').value;
+    if (!id) {
+      showToast('احفظ المنتج أولاً ثم ارفع الصورة', 'err');
+      return;
+    }
+    await uploadProductImage(Number(id), file);
+    e.target.value = '';
+  });
+
+  document.getElementById('btnProductRemoveImage')?.addEventListener('click', async () => {
+    const id = document.getElementById('productId').value;
+    if (!id || !confirm('حذف صورة المنتج؟')) return;
+    try {
+      await commerceApi(`/products/${id}/image`, { method: 'DELETE' });
+      setProductImagePreview(null);
+      showToast('تم حذف الصورة');
+      await loadCatalogProducts();
+    } catch (err) {
+      showToast(err.message, 'err');
+    }
+  });
+
+  document.getElementById('btnExportProducts')?.addEventListener('click', () => exportProductsCsv());
+
+  document.getElementById('btnImportProducts')?.addEventListener('click', () => {
+    if (!commerce.selectedSectionId) return showToast('اختر قسماً', 'err');
+    document.getElementById('importCsvText').value = '';
+    document.getElementById('importCsvFile').value = '';
+    document.getElementById('importCsvResults').classList.add('hidden');
+    document.getElementById('importCsvModal').classList.remove('hidden');
+  });
+
+  document.getElementById('importCsvClose')?.addEventListener('click', () => {
+    document.getElementById('importCsvModal').classList.add('hidden');
+  });
+
+  document.getElementById('importCsvFile')?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    document.getElementById('importCsvText').value = text;
+  });
+
+  document.getElementById('importCsvForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await importCsvData(document.getElementById('importCsvText').value);
+    } catch (err) {
+      showToast(err.message, 'err');
+    }
+  });
+
+  document.getElementById('bulkMoveClose')?.addEventListener('click', () => {
+    document.getElementById('bulkMoveModal').classList.add('hidden');
+  });
+
+  document.getElementById('catalogEditClose')?.addEventListener('click', () => {
+    document.getElementById('catalogEditModal').classList.add('hidden');
+  });
+
+  document.getElementById('catalogEditForm')?.addEventListener('submit', saveCatalogEdit);
+  document.getElementById('catalogEditDelete')?.addEventListener('click', deleteCatalogItem);
 
   document.getElementById('btnPurgeProducts')?.addEventListener('click', async () => {
     const ok1 = confirm('حذف كل المنتجات من الكتalog؟\n\nلن تُحذف بيانات Edari (edari_materials) — فقط المنتجات المضافة للأقسام.');
@@ -319,7 +1060,7 @@ function initCommerceAdmin() {
       alert(data.message || `تم حذف ${data.deleted} منتج`);
       await loadCatalogProducts();
     } catch (e) {
-      alert(e.message);
+      showToast(e.message, 'err');
     }
   });
 

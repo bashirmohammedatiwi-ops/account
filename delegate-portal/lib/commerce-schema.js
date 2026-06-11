@@ -117,6 +117,8 @@ function migrateCommerceSchema(db) {
     );
   `);
 
+  migrateProductExtras(db);
+
   const branchCount = db.prepare('SELECT COUNT(*) AS c FROM catalog_branches').get().c;
   if (!branchCount) {
     db.prepare(`
@@ -128,6 +130,23 @@ function migrateCommerceSchema(db) {
       INSERT INTO catalog_sections (branch_id, name, sort_order, is_active)
       VALUES (?, 'عام', 1, 1)
     `).run(branchId);
+  }
+}
+
+function columnExists(db, table, column) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  return cols.some((c) => c.name === column);
+}
+
+function migrateProductExtras(db) {
+  if (!columnExists(db, 'products', 'price_override')) {
+    db.exec('ALTER TABLE products ADD COLUMN price_override INTEGER DEFAULT 0');
+  }
+  if (!columnExists(db, 'products', 'description')) {
+    db.exec('ALTER TABLE products ADD COLUMN description TEXT DEFAULT \'\'');
+  }
+  if (!columnExists(db, 'products', 'min_order_qty')) {
+    db.exec('ALTER TABLE products ADD COLUMN min_order_qty REAL DEFAULT 0');
   }
 }
 

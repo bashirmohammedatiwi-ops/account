@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Edari Admin — لوحة التحكم</title>
-  <link rel="stylesheet" href="admin.css">
+  <link rel="stylesheet" href="admin.css?v=20260611products2">
 </head>
 <body>
   <div id="app" class="app">
@@ -174,17 +174,68 @@
             <div class="panel-head">
               <h2 class="panel-title">منتجات القسم</h2>
               <div class="btn-row">
-                <button type="button" class="btn btn-primary btn-sm" id="btnAddProduct">+ إضافة بالباركود</button>
-                <button type="button" class="btn btn-danger btn-sm" id="btnPurgeProducts">حذف كل المنتجات</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btnAddProduct">+ إضافة منتج</button>
+                <button type="button" class="btn btn-soft btn-sm" id="btnBulkAddProducts">إضافة جماعية</button>
+                <button type="button" class="btn btn-soft btn-sm" id="btnImportProducts">استيراد CSV</button>
+                <button type="button" class="btn btn-soft btn-sm" id="btnExportProducts">تصدير CSV</button>
+                <button type="button" class="btn btn-soft btn-sm" id="btnSyncSectionProducts">مزامنة القسم</button>
+                <button type="button" class="btn btn-danger btn-sm" id="btnPurgeProducts">حذف الكل</button>
               </div>
             </div>
-            <p class="panel-desc">أدخل الباركود يدوياً — الاسم والسعر يُجلبان من Edari ويُحدَّثان مع كل مزامنة.</p>
+            <div class="product-stats-row" id="productStatsRow"></div>
+            <div class="product-toolbar">
+              <input type="search" id="productSearch" class="search" placeholder="بحث بالاسم أو الباركود...">
+              <select id="productFilterActive" class="search search-sm">
+                <option value="">كل الحالات</option>
+                <option value="1">نشط فقط</option>
+                <option value="0">موقوف فقط</option>
+              </select>
+              <select id="productFilterImage" class="search search-sm">
+                <option value="">كل الصور</option>
+                <option value="no">بدون صورة</option>
+              </select>
+              <select id="productSortBy" class="search search-sm">
+                <option value="sort_order">الترتيب</option>
+                <option value="name">الاسم</option>
+                <option value="price">السعر</option>
+                <option value="updated_at">آخر تعديل</option>
+              </select>
+              <label class="check-row check-inline">
+                <input type="checkbox" id="productShowAllSections">
+                <span>عرض كل أقسام الفرع</span>
+              </label>
+            </div>
+            <div class="product-bulk-bar hidden" id="productBulkBar">
+              <span id="productBulkCount">0 محدد</span>
+              <button type="button" class="btn btn-soft btn-sm" data-bulk="activate">تفعيل</button>
+              <button type="button" class="btn btn-soft btn-sm" data-bulk="deactivate">إيقاف</button>
+              <button type="button" class="btn btn-soft btn-sm" data-bulk="sync_edari">مزامنة Edari</button>
+              <button type="button" class="btn btn-soft btn-sm" data-bulk="move">نقل لقسم</button>
+              <button type="button" class="btn btn-danger btn-sm" data-bulk="delete">حذف</button>
+            </div>
+            <p class="muted product-drag-hint hidden" id="productDragHint">↕ اسحب الصفوف لترتيب المنتجات في القسم</p>
             <div class="table-scroll">
-              <table class="data-table compact">
-                <thead><tr><th>صورة</th><th>باركود</th><th>اسم</th><th>سعر</th><th>آخر مزامنة</th><th>حالة</th><th></th></tr></thead>
+              <table class="data-table compact" id="catalogProductsTable">
+                <thead>
+                  <tr>
+                    <th class="col-check"><input type="checkbox" id="productSelectAll" title="تحديد الكل"></th>
+                    <th class="col-drag"></th>
+                    <th>صورة</th>
+                    <th>باركود</th>
+                    <th>اسم</th>
+                    <th>وحدة</th>
+                    <th>سعر</th>
+                    <th>بونص</th>
+                    <th>ترتيب</th>
+                    <th>حالة</th>
+                    <th></th>
+                  </tr>
+                </thead>
                 <tbody id="catalogProductsBody"></tbody>
               </table>
             </div>
+            <div class="product-pagination" id="productPagination"></div>
+            <p class="muted product-count-line" id="productCountLine"></p>
           </section>
         </section>
 
@@ -387,6 +438,194 @@
     </div>
   </div>
 
+  <div class="modal hidden" id="productModal">
+    <div class="modal-sheet modal-sheet-lg">
+      <header class="modal-head">
+        <h3 id="productModalTitle">منتج جديد</h3>
+        <button type="button" class="btn btn-icon" id="productModalClose" aria-label="إغلاق">×</button>
+      </header>
+      <form id="productForm" class="modal-form">
+        <input type="hidden" id="productId">
+        <div class="product-modal-layout">
+          <div class="product-modal-media">
+            <div class="product-image-preview" id="productImagePreview">
+              <span class="product-image-placeholder">📦</span>
+            </div>
+            <div class="btn-row product-image-actions">
+              <button type="button" class="btn btn-soft btn-sm" id="btnProductUploadImage">رفع صورة</button>
+              <button type="button" class="btn btn-soft btn-sm hidden" id="btnProductRemoveImage">حذف الصورة</button>
+            </div>
+            <input type="file" id="productImageInput" accept="image/*" class="hidden">
+            <p class="field-hint" id="productMetaInfo"></p>
+          </div>
+          <div class="product-modal-fields">
+            <label class="field">
+              <span>القسم</span>
+              <select id="productSectionId" required></select>
+            </label>
+            <label class="field">
+              <span>الاسم</span>
+              <input type="text" id="productName" required>
+            </label>
+            <div class="field-row">
+              <label class="field">
+                <span>الباركود</span>
+                <input type="text" id="productBarcode" dir="ltr">
+              </label>
+              <label class="field">
+                <span>رقم المادة</span>
+                <input type="text" id="productSkuNum" dir="ltr">
+              </label>
+            </div>
+            <label class="field">
+              <span>Edari Seq</span>
+              <input type="text" id="productEdariSeq" dir="ltr" readonly class="readonly">
+            </label>
+            <div class="field-row">
+              <label class="field">
+                <span>الوحدة</span>
+                <input type="text" id="productUnit">
+              </label>
+              <label class="field">
+                <span>السعر</span>
+                <input type="number" id="productPrice" min="0" step="1" dir="ltr">
+              </label>
+            </div>
+            <div class="field-row">
+              <label class="field">
+                <span>بونص افتراضي</span>
+                <input type="number" id="productBonus" min="0" step="1" dir="ltr" value="0">
+              </label>
+              <label class="field">
+                <span>حد أدنى للطلب</span>
+                <input type="number" id="productMinQty" min="0" step="1" dir="ltr" value="0">
+              </label>
+            </div>
+            <div class="field-row">
+              <label class="field">
+                <span>ترتيب العرض</span>
+                <input type="number" id="productSortOrder" min="0" step="1" dir="ltr" value="0">
+              </label>
+              <label class="check-row check-inline field-check">
+                <input type="checkbox" id="productIsActive" checked>
+                <span>نشط</span>
+              </label>
+            </div>
+            <label class="check-row">
+              <input type="checkbox" id="productPriceOverride">
+              <span>سعر يدوي — لا يُستبدل عند مزامنة Edari</span>
+            </label>
+            <label class="field">
+              <span>وصف (اختياري)</span>
+              <textarea id="productDescription" rows="2"></textarea>
+            </label>
+            <div class="edari-search-box hidden" id="edariSearchBox">
+              <label class="field">
+                <span>بحث في Edari</span>
+                <input type="search" id="edariSearchInput" placeholder="اسم أو باركود...">
+              </label>
+              <div class="edari-search-results" id="edariSearchResults"></div>
+            </div>
+          </div>
+        </div>
+        <footer class="modal-foot product-modal-foot">
+          <button type="button" class="btn btn-soft hidden" id="btnProductSyncEdari">مزامنة من Edari</button>
+          <button type="button" class="btn btn-soft" id="btnProductSearchEdari">بحث Edari</button>
+          <button type="submit" class="btn btn-primary">حفظ</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="importCsvModal">
+    <div class="modal-sheet modal-sheet-lg">
+      <header class="modal-head">
+        <h3>استيراد منتجات من CSV</h3>
+        <button type="button" class="btn btn-icon" id="importCsvClose" aria-label="إغلاق">×</button>
+      </header>
+      <form id="importCsvForm" class="modal-form">
+        <p class="muted">الأعمدة: <code dir="ltr">barcode,name,unit,price,bonus,sort_order,active,price_override,description</code></p>
+        <p class="muted">السطر الأول = عناوين (اختياري). يُستورد إلى القسم المحدد حالياً.</p>
+        <label class="field">
+          <span>ملف CSV أو لصق البيانات</span>
+          <input type="file" id="importCsvFile" accept=".csv,text/csv">
+        </label>
+        <label class="field">
+          <span>أو الصق هنا</span>
+          <textarea id="importCsvText" rows="8" placeholder="barcode,name,price&#10;123456,منتج 1,5000" dir="ltr"></textarea>
+        </label>
+        <div id="importCsvResults" class="bulk-add-results hidden"></div>
+        <footer class="modal-foot">
+          <button type="submit" class="btn btn-primary">استيراد</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="bulkMoveModal">
+    <div class="modal-sheet">
+      <header class="modal-head">
+        <h3>نقل المنتجات المحددة</h3>
+        <button type="button" class="btn btn-icon" id="bulkMoveClose" aria-label="إغلاق">×</button>
+      </header>
+      <form id="bulkMoveForm" class="modal-form">
+        <p class="muted" id="bulkMoveCount">—</p>
+        <label class="field">
+          <span>القسم الهدف</span>
+          <select id="bulkMoveSectionId" required></select>
+        </label>
+        <footer class="modal-foot">
+          <button type="submit" class="btn btn-primary">نقل</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="catalogEditModal">
+    <div class="modal-sheet">
+      <header class="modal-head">
+        <h3 id="catalogEditTitle">تعديل</h3>
+        <button type="button" class="btn btn-icon" id="catalogEditClose" aria-label="إغلاق">×</button>
+      </header>
+      <form id="catalogEditForm" class="modal-form">
+        <input type="hidden" id="catalogEditType">
+        <input type="hidden" id="catalogEditId">
+        <label class="field"><span>الاسم</span><input type="text" id="catalogEditName" required></label>
+        <label class="field"><span>ترتيب العرض</span><input type="number" id="catalogEditSort" min="0" step="1" value="0" dir="ltr"></label>
+        <label class="check-row">
+          <input type="checkbox" id="catalogEditActive" checked>
+          <span>نشط</span>
+        </label>
+        <footer class="modal-foot catalog-edit-foot">
+          <button type="button" class="btn btn-danger btn-sm hidden" id="catalogEditDelete">حذف</button>
+          <button type="submit" class="btn btn-primary">حفظ</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="bulkAddModal">
+    <div class="modal-sheet">
+      <header class="modal-head">
+        <h3>إضافة جماعية بالباركود</h3>
+        <button type="button" class="btn btn-icon" id="bulkAddClose" aria-label="إغلاق">×</button>
+      </header>
+      <form id="bulkAddForm" class="modal-form">
+        <p class="muted">أدخل باركود أو رقم مادة في كل سطر — يُضاف إلى القسم المحدد حالياً.</p>
+        <label class="field">
+          <span>الباركودات</span>
+          <textarea id="bulkBarcodesInput" rows="10" placeholder="123456789&#10;987654321" dir="ltr"></textarea>
+        </label>
+        <div id="bulkAddResults" class="bulk-add-results hidden"></div>
+        <footer class="modal-foot">
+          <button type="submit" class="btn btn-primary">إضافة</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="adminToast"></div>
+
   <div class="modal hidden" id="agentModal">
     <div class="modal-sheet">
       <header class="modal-head">
@@ -416,6 +655,6 @@
 
   <script src="config.js"></script>
   <script src="admin.js?v=20260626full"></script>
-  <script src="admin-commerce.js?v=20260626full"></script>
+  <script src="admin-commerce.js?v=20260611products2"></script>
 </body>
 </html>

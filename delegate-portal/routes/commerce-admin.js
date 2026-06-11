@@ -18,14 +18,26 @@ const {
 } = require('../lib/catalog');
 const {
   listProducts,
+  queryProducts,
+  searchEdariMaterials,
+  productStats,
   getProduct,
   updateProduct,
   deleteProduct,
+  deleteProductImage,
   saveProductImage,
   lookupByBarcode,
   findEdariMaterialByCode,
   addProductByBarcode,
-  purgeAllCatalogProducts
+  bulkAddByBarcode,
+  bulkProductsAction,
+  createProduct,
+  syncProductFromEdari,
+  syncSectionFromEdari,
+  purgeAllCatalogProducts,
+  reorderProducts,
+  importProductsRows,
+  exportProductsCsv
 } = require('../lib/products');
 const {
   listOrders,
@@ -119,6 +131,44 @@ router.get('/catalog/sections/:id/products', (req, res) => {
   res.json({ ok: true, products: listProducts(Number(req.params.id)) });
 });
 
+router.get('/products/stats', (req, res) => {
+  const sectionId = req.query.sectionId ? Number(req.query.sectionId) : null;
+  const branchId = req.query.branchId ? Number(req.query.branchId) : null;
+  res.json({ ok: true, stats: productStats({ sectionId, branchId }) });
+});
+
+router.get('/products', (req, res) => {
+  const sectionId = req.query.sectionId ? Number(req.query.sectionId) : null;
+  const branchId = req.query.branchId ? Number(req.query.branchId) : null;
+  const q = String(req.query.q || '').trim();
+  const activeOnly = req.query.active === '1';
+  const inactiveOnly = req.query.active === '0';
+  const noImage = req.query.noImage === '1';
+  const priceOverride = req.query.priceOverride === '1' ? true
+    : req.query.priceOverride === '0' ? false : undefined;
+  const sortBy = String(req.query.sortBy || 'sort_order');
+  const sortDir = String(req.query.sortDir || 'asc');
+  const limit = Number(req.query.limit) || 200;
+  const offset = Number(req.query.offset) || 0;
+  res.json({
+    ok: true,
+    ...queryProducts({
+      sectionId, branchId, q, activeOnly, inactiveOnly, noImage, priceOverride,
+      sortBy, sortDir, limit, offset
+    })
+  });
+});
+
+router.get('/products/export.csv', (req, res) => {
+  const sectionId = req.query.sectionId ? Number(req.query.sectionId) : null;
+  const branchId = req.query.branchId ? Number(req.query.branchId) : null;
+  const q = String(req.query.q || '').trim();
+  const csv = exportProductsCsv({ sectionId, branchId, q, sortBy: 'sort_order', sortDir: 'asc' });
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="products-export.csv"');
+  res.send(`\uFEFF${csv}`);
+});
+
 router.get('/products/lookup', (req, res) => {
   const code = String(req.query.code || '').trim();
   const branchId = req.query.branchId ? Number(req.query.branchId) : null;
@@ -137,6 +187,18 @@ router.get('/products/edari-lookup', (req, res) => {
   res.json({ ok: true, material });
 });
 
+router.get('/products/edari-search', (req, res) => {
+  const q = String(req.query.q || '').trim();
+  if (!q) return res.json({ ok: true, materials: [] });
+  res.json({ ok: true, materials: searchEdariMaterials(q) });
+});
+
+router.get('/products/:id', (req, res) => {
+  const product = getProduct(Number(req.params.id));
+  if (!product) return res.status(404).json({ ok: false, error: 'المنتج غير موجود' });
+  res.json({ ok: true, product });
+});
+
 router.post('/products/by-barcode', (req, res) => {
   try {
     const sectionId = Number(req.body?.sectionId);
@@ -146,6 +208,79 @@ router.post('/products/by-barcode', (req, res) => {
     }
     const product = addProductByBarcode(sectionId, barcode);
     res.json({ ok: true, product });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/products/bulk-by-barcode', (req, res) => {
+  try {
+    const sectionId = Number(req.body?.sectionId);
+    const barcodes = Array.isArray(req.body?.barcodes) ? req.body.barcodes : [];
+    if (!sectionId || !barcodes.length) {
+      return res.status(400).json({ ok: false, error: 'القسم وقائمة الباركود مطلوبان' });
+    }
+    const result = bulkAddByBarcode(sectionId, barcodes);
+    res.json({ ok: true, ...result, message: `أُضيف ${result.added} منتج` });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/products/bulk', (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const action = String(req.body?.action || '').trim();
+    if (!ids.length || !action) {
+      return res.status(400).json({ ok: false, error: 'حدد منتجات ونوع العملية' });
+    }
+    const result = bulkProductsAction(ids, action, req.body?.payload || {});
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/products/reorder', (req, res) => {
+  try {
+    const sectionId = Number(req.body?.sectionId);
+    const orderedIds = Array.isArray(req.body?.orderedIds) ? req.body.orderedIds : [];
+    if (!sectionId || !orderedIds.length) {
+      return res.status(400).json({ ok: false, error: 'القسم وترتيب المنتجات مطلوبان' });
+    }
+    const result = reorderProducts(sectionId, orderedIds);
+    res.json({ ok: true, ...result, message: `تم تحديث ترتيب ${result.reordered} منتج` });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/products/import', (req, res) => {
+  try {
+    const sectionId = Number(req.body?.sectionId);
+    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+    if (!sectionId || !rows.length) {
+      return res.status(400).json({ ok: false, error: 'القسم وصفوف الاستيراد مطلوبان' });
+    }
+    const result = importProductsRows(sectionId, rows);
+    res.json({
+      ok: true,
+      ...result,
+      message: `أُنشئ ${result.created} · حُدّث ${result.updated} · تخطّي ${result.skipped}`
+    });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/catalog/sections/:id/sync-products', (req, res) => {
+  try {
+    const result = syncSectionFromEdari(Number(req.params.id));
+    res.json({
+      ok: true,
+      ...result,
+      message: `تم تحديث ${result.updated} من ${result.total} منتج من Edari`
+    });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
@@ -168,10 +303,32 @@ router.post('/products/purge-all', (req, res) => {
 });
 
 router.post('/products', (req, res) => {
-  return res.status(400).json({
-    ok: false,
-    error: 'أضف المنتج بالباركود فقط — البيانات تُجلب من Edari'
-  });
+  try {
+    const body = req.body || {};
+    const sectionId = Number(body.sectionId);
+    const name = String(body.name || '').trim();
+    if (!sectionId || !name) {
+      return res.status(400).json({ ok: false, error: 'القسم والاسم مطلوبان' });
+    }
+    const product = createProduct({
+      sectionId,
+      name,
+      barcode: body.barcode || '',
+      skuNum: body.skuNum || '',
+      edariSeq: body.edariSeq || '',
+      unit: body.unit || '',
+      price: body.price,
+      bonusDefault: body.bonusDefault,
+      priceOverride: body.priceOverride,
+      description: body.description || '',
+      minOrderQty: body.minOrderQty,
+      isActive: body.isActive !== false,
+      sortOrder: body.sortOrder || 0
+    });
+    res.json({ ok: true, product });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
 });
 
 router.put('/products/:id', (req, res) => {
@@ -187,6 +344,15 @@ router.delete('/products/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+router.post('/products/:id/sync-edari', (req, res) => {
+  try {
+    const product = syncProductFromEdari(Number(req.params.id));
+    res.json({ ok: true, product, message: 'تم التحديث من Edari' });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
 router.post('/products/:id/image', (req, res) => {
   try {
     const product = saveProductImage(Number(req.params.id), req.body?.dataUrl);
@@ -195,6 +361,12 @@ router.post('/products/:id/image', (req, res) => {
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
+});
+
+router.delete('/products/:id/image', (req, res) => {
+  const product = deleteProductImage(Number(req.params.id));
+  if (!product) return res.status(404).json({ ok: false, error: 'المنتج غير موجود' });
+  res.json({ ok: true, product });
 });
 
 
