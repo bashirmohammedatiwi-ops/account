@@ -10,7 +10,7 @@ const {
 } = require('../lib/accounts');
 
 const router = express.Router();
-const VALID_KINDS = new Set(['accounts', 'journal', 'invoices', 'invoiceLines']);
+const VALID_KINDS = new Set(['accounts', 'journal', 'invoices', 'invoiceLines', 'products']);
 
 router.post('/start', authSync, (req, res) => {
   try {

@@ -1161,6 +1161,22 @@ tfoot .final { background: var(--primary-light); font-weight: 700; }
   display: none;
 }
 
+.product-thumb {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border, #e2e8f0);
+  background: #f8fafc;
+}
+
+.panel-row.sync-main {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
 /* Responsive */
 @media (max-width: 1100px) {
   .stats-grid { grid-template-columns: repeat(2, 1fr); }

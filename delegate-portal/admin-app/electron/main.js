@@ -7,8 +7,21 @@ const { createBackgroundSync } = require('./background-sync');
 
 const PORT = Number(process.env.PORT || 4100);
 const BACKEND_URL = (process.env.BACKEND_URL || 'http://187.124.23.65:5005').replace(/\/$/, '');
-const USE_REMOTE = process.env.USE_LOCAL_SERVER !== '1';
-const ADMIN_URL = USE_REMOTE ? `${BACKEND_URL}/admin` : `http://127.0.0.1:${PORT}/admin`;
+const USE_LOCAL_SERVER = process.env.USE_LOCAL_SERVER === '1';
+/** Packaged: bundled admin HTML (new UI) + remote API. USE_REMOTE=1 forces old remote UI. */
+const USE_BUNDLED_UI = app.isPackaged && process.env.USE_REMOTE !== '1' && !USE_LOCAL_SERVER;
+const USE_REMOTE_UI = !USE_LOCAL_SERVER && !USE_BUNDLED_UI;
+const BUNDLED_ADMIN_PORT = PORT;
+
+function getAdminLoadTarget() {
+  if (USE_LOCAL_SERVER) {
+    return { type: 'url', url: `http://127.0.0.1:${PORT}/admin` };
+  }
+  if (USE_BUNDLED_UI) {
+    return { type: 'url', url: `http://127.0.0.1:${BUNDLED_ADMIN_PORT}/admin/` };
+  }
+  return { type: 'url', url: `${BACKEND_URL}/admin` };
+}
 const START_HIDDEN = process.argv.includes('--background') || process.argv.includes('--hidden');
 
 let mainWindow;
@@ -83,8 +96,9 @@ function checkHealth(url, maxMs = 45000) {
 }
 
 function startBackend() {
+  const localPort = USE_BUNDLED_UI ? BUNDLED_ADMIN_PORT : PORT;
   return new Promise((resolve, reject) => {
-    http.get(`http://127.0.0.1:${PORT}/api/health`, (res) => {
+    http.get(`http://127.0.0.1:${localPort}/api/health`, (res) => {
       if (res.statusCode === 200) {
         startedServer = false;
         resolve();
@@ -100,16 +114,26 @@ function startBackend() {
 function spawnServer() {
   return new Promise((resolve, reject) => {
     const portalDir = getPortalDir();
-    const serverScript = path.join(portalDir, 'server.js');
-    serverProcess = spawn(getNodeBin(), [serverScript], {
-      cwd: portalDir,
-      env: serverEnv(),
-      stdio: 'ignore',
-      windowsHide: true
-    });
+    if (USE_BUNDLED_UI) {
+      const script = path.join(__dirname, 'static-admin.js');
+      serverProcess = spawn(getNodeBin(), [script, portalDir, String(BUNDLED_ADMIN_PORT)], {
+        cwd: __dirname,
+        env: process.env,
+        stdio: 'ignore',
+        windowsHide: true
+      });
+    } else {
+      const serverScript = path.join(portalDir, 'server.js');
+      serverProcess = spawn(getNodeBin(), [serverScript], {
+        cwd: portalDir,
+        env: serverEnv(),
+        stdio: 'ignore',
+        windowsHide: true
+      });
+    }
     startedServer = true;
     serverProcess.on('error', reject);
-    checkHealth(`http://127.0.0.1:${PORT}`).then(resolve).catch(reject);
+    checkHealth(`http://127.0.0.1:${USE_BUNDLED_UI ? BUNDLED_ADMIN_PORT : PORT}`).then(resolve).catch(reject);
   });
 }
 
@@ -181,7 +205,7 @@ function runLocalSyncScript(serverUrl, syncKey, treeSeqs = [], options = {}) {
         EDARI_READER_ROOT: getEdariReaderRoot(),
         NODE_BIN: nodeBin,
         EDARI_BACKEND_URL: BACKEND_URL,
-        EDARI_USE_REMOTE: USE_REMOTE ? '1' : '0'
+        EDARI_USE_REMOTE: USE_REMOTE_UI ? '1' : '0'
       },
       windowsHide: true
     });
@@ -319,7 +343,7 @@ function createWindow({ show = !START_HIDDEN } = {}) {
       preload: path.join(__dirname, 'preload.js'),
       additionalArguments: [
         `--edari-backend=${BACKEND_URL}`,
-        `--edari-remote=${USE_REMOTE ? '1' : '0'}`
+        `--edari-remote=${USE_REMOTE_UI ? '1' : '0'}`
       ]
     }
   });
@@ -329,7 +353,8 @@ function createWindow({ show = !START_HIDDEN } = {}) {
     pushAutoSyncState(backgroundSync?.getState() || {});
   });
 
-  mainWindow.loadURL(ADMIN_URL);
+  const target = getAdminLoadTarget();
+  mainWindow.loadURL(target.url);
 
   mainWindow.on('close', (e) => {
     if (!appIsQuitting) {
@@ -494,10 +519,10 @@ ipcMain.handle('run-background-sync-now', async () => {
 
 app.whenReady().then(async () => {
   try {
-    if (USE_REMOTE) {
-      await checkHealth(BACKEND_URL);
-    } else {
+    if (USE_LOCAL_SERVER || USE_BUNDLED_UI) {
       await startBackend();
+    } else {
+      await checkHealth(BACKEND_URL);
     }
     initBackgroundSync();
     createTray();

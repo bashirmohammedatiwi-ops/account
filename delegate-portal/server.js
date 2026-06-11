@@ -9,6 +9,9 @@ const adminRoutes = require('./routes/admin');
 const syncRoutes = require('./routes/sync');
 const mobileRoutes = require('./routes/mobile');
 const delegateRoutes = require('./routes/delegate');
+const commerceAdminRoutes = require('./routes/commerce-admin');
+const commerceMobileRoutes = require('./routes/commerce-mobile');
+const { UPLOAD_ROOT } = require('./lib/products');
 
 const app = express();
 const PORT = Number(process.env.PORT || 5005);
@@ -22,9 +25,13 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin', commerceAdminRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/mobile', mobileRoutes);
+app.use('/api/mobile', commerceMobileRoutes);
 app.use('/api/delegate', delegateRoutes);
+
+app.use('/uploads', express.static(UPLOAD_ROOT, { maxAge: '7d' }));
 
 app.use('/admin', express.static(path.join(__dirname, 'public', 'admin')));
 app.get('/admin/*', (_req, res) => {

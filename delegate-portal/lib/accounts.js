@@ -4,6 +4,7 @@ const {
   assignBillNosForLines,
   resolveLineTotal
 } = require('./invoice-line-sync');
+const { importProductsFromSync } = require('./products');
 
 const usedBillNosStmt = db.prepare('SELECT bill_no FROM invoice_lines WHERE bill_seq = ?');
 
@@ -355,6 +356,12 @@ function purgeSyncScope(accountSeqs = []) {
 }
 
 function importSyncChunk(kind, rows = []) {
+  if (kind === 'products') {
+    if (!rows.length) return { imported: 0, kind };
+    const result = importProductsFromSync(rows);
+    return { imported: result.imported, kind, scanned: result.scanned };
+  }
+
   const upsert = SYNC_UPSERTS[kind];
   if (!upsert || !rows.length) {
     return { imported: 0, kind };
@@ -391,6 +398,7 @@ function finishSyncSession(logId, stats = {}) {
     journal = 0,
     invoices = 0,
     invoiceLines = 0,
+    products = 0,
     source = ''
   } = stats;
   const finished = new Date().toISOString();
@@ -403,7 +411,7 @@ function finishSyncSession(logId, stats = {}) {
     'success',
     accounts,
     journal,
-    `${prefix}تمت المزامنة: ${accounts} حساب، ${journal} حركة، ${invoices} فاتورة، ${invoiceLines} بند`,
+    `${prefix}تمت المزامنة: ${accounts} حساب، ${journal} حركة، ${invoices} فاتورة، ${invoiceLines} بند${products ? `، ${products} منتج` : ''}`,
     logId
   );
   return {
@@ -412,6 +420,7 @@ function finishSyncSession(logId, stats = {}) {
     journal,
     invoices,
     invoiceLines,
+    products,
     logId
   };
 }

@@ -141,9 +141,12 @@ async function api(path, opts = {}) {
 
 const PAGE_META = {
   dashboard: { title: 'الرئيسية', sub: 'نظرة عامة واختصارات سريعة' },
+  invoices: { title: 'الفواتير', sub: 'فواتير Edari المزامَنة من النظام الإداري' },
+  catalog: { title: 'المنتجات', sub: 'فروع، أقسام، باركود، وصور المنتجات' },
+  orders: { title: 'طلبات الشراء', sub: 'طلبات المندوبين — موافقة ومتابعة' },
   sync: { title: 'رفع البيانات', sub: 'مزامنة EdariNX مع سيرفر المندوبين' },
   agents: { title: 'المندوبون', sub: 'حسابات الدخول وصلاحيات الشجرات' },
-  trees: { title: 'كشوف الحساب', sub: 'اختر شجرة ثم زبوناً لعرض الكشف' }
+  trees: { title: 'كشوف الحساب', sub: 'استعراض الفروع والحركات' }
 };
 
 function showPage(name) {
@@ -158,9 +161,10 @@ function showPage(name) {
   if (name === 'sync') {
     void loadSyncLogs();
     startSyncLogPolling();
-  } else {
+  } else if (name !== 'sync') {
     stopSyncLogPolling();
   }
+  if (window.commercePages?.[name]) void window.commercePages[name]();
 }
 
 async function loadDashboard() {

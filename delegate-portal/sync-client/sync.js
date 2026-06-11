@@ -34,7 +34,8 @@ const CONN = {
 const UPLOAD_BATCH = {
   journal: 2500,
   invoices: 400,
-  invoiceLines: 1500
+  invoiceLines: 1500,
+  products: 800
 };
 
 const ACCOUNT_COLS = [
@@ -206,7 +207,7 @@ async function postJsonWithRetry(urlPath, body, retries = 3) {
     } catch (err) {
       lastErr = err;
       if (attempt < retries) {
-        reportProgress(5, 6, 0, `إعادة محاولة الرفع (${attempt}/${retries - 1})...`);
+        reportProgress(5, 7, 0, `إعادة محاولة الرفع (${attempt}/${retries - 1})...`);
         await new Promise((r) => setTimeout(r, 2000 * attempt));
       }
     }
@@ -229,7 +230,7 @@ async function fetchAllJournal(accSeqs) {
     all.push(...rows);
     done += part.length;
     const pct = Math.round((done / accSeqs.length) * 100);
-    reportProgress(2, 6, pct, `كل حركات الحساب: ${all.length} (${done}/${accSeqs.length} حساب)`);
+    reportProgress(2, 7, pct, `كل حركات الحساب: ${all.length} (${done}/${accSeqs.length} حساب)`);
   }
   return all;
 }
@@ -315,7 +316,7 @@ async function fetchInvoices(billSeqs) {
     );
     all.push(...rows);
     const pct = Math.round(((i + 1) / parts.length) * 100);
-    reportProgress(3, 6, pct, `فواتير بيع: ${all.length}/${billSeqs.length}`);
+    reportProgress(3, 7, pct, `فواتير بيع: ${all.length}/${billSeqs.length}`);
   }
   return all;
 }
@@ -354,7 +355,7 @@ async function fetchInvoiceLines(billSeqs) {
     const rows = await fetchInvoiceLineRows(ids);
     all.push(...rows);
     const pct = Math.round(((i + 1) / parts.length) * 100);
-    reportProgress(4, 6, pct, `بنود الفواتير: ${all.length} (${i + 1}/${parts.length})`);
+    reportProgress(4, 7, pct, `بنود الفواتير: ${all.length} (${i + 1}/${parts.length})`);
   }
 
   const missingNameMats = [...new Set(
@@ -365,7 +366,7 @@ async function fetchInvoiceLines(billSeqs) {
 
   let materials = new Map();
   if (missingNameMats.length) {
-    reportProgress(4, 6, 95, `جلب بيانات ${missingNameMats.length} مادة...`);
+    reportProgress(4, 7, 95, `جلب بيانات ${missingNameMats.length} مادة...`);
     materials = await fetchMaterialMap(missingNameMats);
   }
 
@@ -380,10 +381,20 @@ async function fetchInvoiceLines(billSeqs) {
   })).filter(isActiveInvoiceLineRow);
 }
 
+async function fetchAllProducts() {
+  reportProgress(5, 7, 0, 'جاري قراءة الأصناف من EdariNX...');
+  const rows = await query(`
+    SELECT Seq, Num, Name1, Barcode, SellPr1, DefUnit
+    FROM File13n WHERE SubCount = 0 ORDER BY Num
+  `);
+  reportProgress(5, 7, 100, `تم: ${rows.length} صنف`);
+  return rows;
+}
+
 async function uploadLegacy(payload, accountSeqs = []) {
-  reportProgress(5, 6, 50, 'رفع دفعة واحدة (وضع قديم)...');
+  reportProgress(6, 7, 50, 'رفع دفعة واحدة (وضع قديم)...');
   const data = await postJson('/api/sync/push', { ...payload, accountSeqs }, 900000);
-  reportProgress(6, 6, 100, 'اكتمل الرفع');
+  reportProgress(7, 7, 100, 'اكتمل الرفع');
   return data;
 }
 
@@ -392,10 +403,11 @@ async function uploadChunked(payload, accountSeqs = []) {
     accounts: payload.accounts.length,
     journal: payload.journal.length,
     invoices: payload.invoices.length,
-    invoiceLines: payload.invoiceLines.length
+    invoiceLines: payload.invoiceLines.length,
+    products: payload.products.length
   };
 
-  reportProgress(5, 6, 0, 'بدء الرفع إلى السيرفر...');
+  reportProgress(6, 7, 0, 'بدء الرفع إلى السيرفر...');
   let start;
   try {
     start = await postJson('/api/sync/start', { accountSeqs }, 120000);
@@ -411,7 +423,8 @@ async function uploadChunked(payload, accountSeqs = []) {
     { kind: 'accounts', rows: payload.accounts, batchSize: Math.max(payload.accounts.length, 1), label: 'حسابات' },
     { kind: 'journal', rows: payload.journal, batchSize: UPLOAD_BATCH.journal, label: 'حركات' },
     { kind: 'invoices', rows: payload.invoices, batchSize: UPLOAD_BATCH.invoices, label: 'فواتير' },
-    { kind: 'invoiceLines', rows: payload.invoiceLines, batchSize: UPLOAD_BATCH.invoiceLines, label: 'بنود' }
+    { kind: 'invoiceLines', rows: payload.invoiceLines, batchSize: UPLOAD_BATCH.invoiceLines, label: 'بنود' },
+    { kind: 'products', rows: payload.products, batchSize: UPLOAD_BATCH.products, label: 'منتجات' }
   ];
 
   const jobs = [];
@@ -429,8 +442,8 @@ async function uploadChunked(payload, accountSeqs = []) {
     const job = jobs[i];
     const pct = jobs.length ? Math.round(((i + 1) / jobs.length) * 100) : 100;
     reportProgress(
-      5,
       6,
+      7,
       pct,
       `رفع ${job.label}: ${job.index}/${job.total} (${job.part.length} سجل)`
     );
@@ -443,7 +456,7 @@ async function uploadChunked(payload, accountSeqs = []) {
     });
   }
 
-  reportProgress(6, 6, 100, 'جاري إنهاء المزامنة...');
+  reportProgress(7, 7, 100, 'جاري إنهاء المزامنة...');
   const source = String(process.env.SYNC_SOURCE || '').trim();
   return postJsonWithRetry('/api/sync/finish', {
     syncId,
@@ -468,38 +481,40 @@ async function main() {
     throw new Error('حدد شجرة واحدة على الأقل للرفع');
   }
 
-  reportProgress(1, 6, 0, 'جاري قراءة الحسابات من EdariNX...');
+  reportProgress(1, 7, 0, 'جاري قراءة الحسابات من EdariNX...');
   const allAccounts = await query(`SELECT ${ACCOUNT_COLS} FROM File11n ORDER BY Num`);
   const accounts = filterAccountsByTrees(allAccounts, treeSeqs);
-  reportProgress(1, 6, 100, `تم: ${accounts.length} حساب (${treeSeqs.length} شجرة)`);
+  reportProgress(1, 7, 100, `تم: ${accounts.length} حساب (${treeSeqs.length} شجرة)`);
 
   const leafSeqs = accounts
     .filter((a) => Number(a.SubCount) === 0)
     .map((a) => accountSeq(a));
 
-  reportProgress(1, 6, 50, 'جاري قراءة آخر مطابقة لكل حساب...');
+  reportProgress(1, 7, 50, 'جاري قراءة آخر مطابقة لكل حساب...');
   const lastMatchMap = await fetchLastMatchByAccount(leafSeqs);
   const accountsForUpload = enrichAccountsWithMatchInfo(accounts, lastMatchMap);
 
-  reportProgress(2, 6, 0, `جاري قراءة كل حركات ${leafSeqs.length} حساب (مثل النظام الإداري)...`);
+  reportProgress(2, 7, 0, `جاري قراءة كل حركات ${leafSeqs.length} حساب (مثل النظام الإداري)...`);
   const journal = await fetchAllJournal(leafSeqs);
-  reportProgress(2, 6, 100, `تم: ${journal.length} حركة`);
+  reportProgress(2, 7, 100, `تم: ${journal.length} حركة`);
 
   const billSeqs = await resolveBillSeqsFromJournal(journal);
-  reportProgress(3, 6, 0, `جاري قراءة ${billSeqs.length} فاتورة بيع...`);
+  reportProgress(3, 7, 0, `جاري قراءة ${billSeqs.length} فاتورة بيع...`);
   const invoices = await fetchInvoices(billSeqs);
-  reportProgress(3, 6, 100, `تم: ${invoices.length} فاتورة`);
+  reportProgress(3, 7, 100, `تم: ${invoices.length} فاتورة`);
 
-  reportProgress(4, 6, 0, 'جاري قراءة بنود فواتير البيع...');
+  reportProgress(4, 7, 0, 'جاري قراءة بنود فواتير البيع...');
   const invoiceLines = await fetchInvoiceLines(billSeqs);
-  reportProgress(4, 6, 100, `تم: ${invoiceLines.length} بند`);
+  reportProgress(4, 7, 100, `تم: ${invoiceLines.length} بند`);
+
+  const products = await fetchAllProducts();
 
   const allAccountSeqs = accounts.map((a) => accountSeq(a)).filter(Boolean);
   const result = await uploadChunked(
-    { accounts: accountsForUpload, journal, invoices, invoiceLines },
+    { accounts: accountsForUpload, journal, invoices, invoiceLines, products },
     allAccountSeqs
   );
-  console.log('✓ تمت المزامنة:', result.accounts, 'حساب،', result.journal, 'حركة،', result.invoices, 'فاتورة،', result.invoiceLines, 'بند');
+  console.log('✓ تمت المزامنة:', result.accounts, 'حساب،', result.journal, 'حركة،', result.invoices, 'فاتورة،', result.invoiceLines, 'بند،', result.products ?? products.length, 'منتج');
 }
 
 if (process.argv.includes('--list-trees')) {

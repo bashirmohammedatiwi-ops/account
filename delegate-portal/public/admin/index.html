@@ -22,6 +22,18 @@
           <span class="nav-icon" aria-hidden="true">⌂</span>
           <span>الرئيسية</span>
         </button>
+        <button type="button" class="nav-item" data-page="invoices">
+          <span class="nav-icon" aria-hidden="true">🧾</span>
+          <span>الفواتير</span>
+        </button>
+        <button type="button" class="nav-item" data-page="catalog">
+          <span class="nav-icon" aria-hidden="true">📦</span>
+          <span>المنتجات</span>
+        </button>
+        <button type="button" class="nav-item" data-page="orders">
+          <span class="nav-icon" aria-hidden="true">🛒</span>
+          <span>طلبات الشراء</span>
+        </button>
         <button type="button" class="nav-item" data-page="sync">
           <span class="nav-icon" aria-hidden="true">↻</span>
           <span>رفع البيانات</span>
@@ -70,6 +82,21 @@
           <div class="stats-grid" id="dashStats"></div>
 
           <div class="quick-grid">
+            <button type="button" class="quick-card" data-goto="invoices">
+              <span class="quick-icon trees">🧾</span>
+              <strong>الفواتير</strong>
+              <span>عرض فواتير Edari المزامَنة</span>
+            </button>
+            <button type="button" class="quick-card" data-goto="catalog">
+              <span class="quick-icon agents">📦</span>
+              <strong>المنتجات</strong>
+              <span>فروع، أقسام، باركود، صور</span>
+            </button>
+            <button type="button" class="quick-card" data-goto="orders">
+              <span class="quick-icon sync">🛒</span>
+              <strong>طلبات الشراء</strong>
+              <span>طلبات المندوبين الواردة</span>
+            </button>
             <button type="button" class="quick-card" data-goto="sync">
               <span class="quick-icon sync">↻</span>
               <strong>رفع البيانات</strong>
@@ -102,6 +129,88 @@
               <p class="url-preview" id="mobileUrlDisplay">—</p>
             </section>
           </div>
+        </section>
+
+        <!-- Invoices -->
+        <section class="page" id="page-invoices">
+          <div class="stats-grid" id="invoiceStats"></div>
+          <div class="panel">
+            <div class="panel-head">
+              <h2 class="panel-title">فواتير Edari</h2>
+              <div class="btn-row">
+                <input type="search" id="invoiceSearch" class="search" placeholder="بحث: رقم، زبون، باركود...">
+                <button type="button" class="btn btn-soft btn-sm" id="btnInvoiceSearch">بحث</button>
+              </div>
+            </div>
+            <div class="table-scroll">
+              <table class="data-table compact">
+                <thead><tr><th>رقم</th><th>تاريخ</th><th>زبون</th><th>نوع</th><th>إجمالي</th><th>بنود</th><th></th></tr></thead>
+                <tbody id="invoicesBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel hidden" id="invoiceDetailPanel"></div>
+        </section>
+
+        <!-- Catalog -->
+        <section class="page" id="page-catalog">
+          <div class="panel-row sync-main">
+            <section class="panel">
+              <div class="panel-head">
+                <h2 class="panel-title">فروع التجارة</h2>
+                <button type="button" class="btn btn-soft btn-sm" id="btnAddBranch">+ فرع</button>
+              </div>
+              <div class="tree-picks" id="catalogBranchesList"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h2 class="panel-title">الأقسام</h2>
+                <button type="button" class="btn btn-soft btn-sm" id="btnAddSection">+ قسم</button>
+              </div>
+              <div class="tree-picks" id="catalogSectionsList"></div>
+            </section>
+          </div>
+          <section class="panel">
+            <div class="panel-head">
+              <h2 class="panel-title">منتجات القسم</h2>
+              <div class="btn-row">
+                <button type="button" class="btn btn-soft btn-sm" id="btnImportProducts">استيراد من بنود الفواتير</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btnAddProduct">+ منتج</button>
+              </div>
+            </div>
+            <div class="table-scroll">
+              <table class="data-table compact">
+                <thead><tr><th>صورة</th><th>باركود</th><th>اسم</th><th>سعر</th><th>حالة</th><th></th></tr></thead>
+                <tbody id="catalogProductsBody"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <!-- Orders -->
+        <section class="page" id="page-orders">
+          <div class="panel">
+            <div class="panel-head">
+              <h2 class="panel-title">طلبات الشراء الواردة</h2>
+              <select id="orderStatusFilter" class="search">
+                <option value="">كل الحالات</option>
+                <option value="submitted">مرسل</option>
+                <option value="under_review">قيد المراجعة</option>
+                <option value="approved">معتمد</option>
+                <option value="rejected">مرفوض</option>
+                <option value="processing">قيد التنفيذ</option>
+                <option value="delivered">تم التسليم</option>
+              </select>
+            </div>
+            <p id="orderStats" class="panel-desc"></p>
+            <div class="table-scroll">
+              <table class="data-table compact">
+                <thead><tr><th>رقم</th><th>مندوب</th><th>زبون</th><th>حالة</th><th>بنود</th><th>مبلغ</th><th>تاريخ</th><th></th></tr></thead>
+                <tbody id="ordersBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel hidden" id="orderDetailPanel"></div>
         </section>
 
         <!-- Sync -->
@@ -305,6 +414,7 @@
   </div>
 
   <script src="config.js"></script>
-  <script src="admin.js?v=20260625log"></script>
+  <script src="admin.js?v=20260626full"></script>
+  <script src="admin-commerce.js?v=20260626full"></script>
 </body>
 </html>

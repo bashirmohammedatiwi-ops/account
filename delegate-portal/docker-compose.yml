@@ -15,7 +15,9 @@ services:
       ADMIN_PASS: ${ADMIN_PASS:-admin123}
     volumes:
       - portal_data:/app/data
+      - portal_uploads:/app/uploads
     restart: unless-stopped
 
 volumes:
   portal_data:
+  portal_uploads:

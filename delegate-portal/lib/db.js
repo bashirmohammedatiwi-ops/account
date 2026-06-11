@@ -89,6 +89,7 @@ function migrateSchema() {
     }
   }
   migrateInvoiceLinesUniqueKey();
+  require('./commerce-schema').migrateCommerceSchema(db);
 }
 
 function migrateInvoiceLinesUniqueKey() {

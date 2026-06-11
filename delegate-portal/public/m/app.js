@@ -585,7 +585,12 @@ function goToScreen(name) {
       : '';
     const kicker = document.getElementById('headerKicker');
     if (kicker) kicker.textContent = 'Edari · الفاتورة';
+  } else if (window.commerceNav?.applyScreen) {
+    window.commerceNav.applyScreen(name, { backBtn, toolbarWrap, title, crumb });
   }
+
+  document.getElementById('bottomNav')?.classList.toggle('hidden', !['trees', 'shop', 'my-orders'].includes(name));
+  window.commerceNav?.onScreen?.(name);
 }
 
 function renderTreeContext() {
@@ -1052,6 +1057,7 @@ async function openInvoice(ref, by = 'auto', acc = '') {
 }
 
 function goBack() {
+  if (window.commerceNav?.handleBack?.()) return;
   if (state.screen === 'invoice') {
     goToScreen('statement');
   } else if (state.screen === 'statement') {
@@ -1079,6 +1085,7 @@ async function loadTrees() {
 }
 
 async function refresh() {
+  if (window.commerceNav?.refresh?.()) return;
   if (state.screen === 'statement' && state.selectedBranch) {
     await openBranch(state.selectedBranch.seq);
   } else if (state.screen === 'branches' && state.selectedTree) {
