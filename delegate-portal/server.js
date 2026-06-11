@@ -36,7 +36,10 @@ app.use('/m', (req, res, next) => {
     res.set('Cache-Control', 'no-cache, must-revalidate');
   }
   next();
-}, express.static(path.join(__dirname, 'public', 'm')));
+}, express.static(path.join(__dirname, 'public', 'm'), {
+  etag: false,
+  lastModified: false
+}));
 app.get('/m/*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'm', 'index.html'));
 });

@@ -20,14 +20,10 @@ function esc(v) {
 }
 
 const ICONS = {
-  tree: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M3 12l9 5 9-5M3 17l9 5 9-5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`,
-  branch: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M5 21v-1.5a7 7 0 0114 0V21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
-  chevron: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-  users: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
-  statement: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="currentColor" stroke-width="1.8"/></svg>`
+  tree: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M3 12l9 5 9-5M3 17l9 5 9-5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`,
+  branch: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M5 21v-1.5a7 7 0 0114 0V21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+  chevron: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
 };
-
-const CARD_HUES = [248, 280, 320, 200, 260, 300];
 
 function fmtNum(v) {
   const n = Number(v);
@@ -275,9 +271,9 @@ function setSectionMeta(elId, text) {
 function renderHomeStats() {
   const totalCustomers = state.trees.reduce((s, t) => s + (Number(t.directChildren) || 0), 0);
   renderDashStats('homeStats', [
-    ['شجرات', String(state.trees.length), 'accent'],
-    ['زبائن', fmtNumAlways(totalCustomers), 'default'],
-    ['حالة', state.trees.length ? 'متصل' : 'فارغ', 'muted']
+    ['الشجرات', String(state.trees.length), 'accent'],
+    ['الزبائن', fmtNumAlways(totalCustomers), 'default'],
+    ['الحالة', state.trees.length ? 'نشط' : '—', 'muted']
   ]);
 }
 
@@ -309,8 +305,8 @@ function updateUserChrome() {
   const sub = document.getElementById('homeHeroSub');
   if (sub) {
     sub.textContent = state.trees.length
-      ? `${state.trees.length} شجرة جاهزة — اختر واحدة للبدء`
-      : 'لا توجد شجرات — تواصل مع الإدارة';
+      ? `${state.trees.length} شجرة معيّنة — اختر شجرة للمتابعة`
+      : 'لا توجد شجرات معيّنة — يرجى التواصل مع الإدارة';
   }
 }
 
@@ -466,7 +462,7 @@ function goToScreen(name) {
   if (name === 'trees') {
     backBtn.classList.add('hidden');
     toolbarWrap.classList.add('hidden');
-    title.textContent = 'لوحة الشجرات';
+    title.textContent = 'الشجرات';
     crumb.textContent = state.agent?.name ? `المندوب: ${state.agent.name}` : '';
     const kicker = document.getElementById('headerKicker');
     if (kicker) kicker.textContent = 'Edari · الرئيسية';
@@ -512,17 +508,21 @@ function renderTreeContext() {
   const s = summarizeBranches(state.branches);
   el.classList.remove('hidden');
   el.innerHTML = `
-    <div class="ed-branch-banner-glow" aria-hidden="true"></div>
-    <div class="ed-branch-banner-inner">
-      <div class="ed-branch-banner-icon">${ICONS.tree}</div>
-      <div class="ed-branch-banner-copy">
-        <span class="ed-branch-banner-num">${esc(tree.num || '—')}</span>
-        <h2 class="ed-branch-banner-title">${esc(tree.name1 || '—')}</h2>
-        <p class="ed-branch-banner-sub">${count ? `${fmtNumAlways(count)} زبون · ${fmtNumAlways(s.debit)} مدين · ${fmtNumAlways(s.credit)} دائن` : 'لا يوجد زبائن'}</p>
+    <div class="ed-branch-banner-head">
+      <span class="ed-branch-banner-label">شجرة الحساب</span>
+      <span class="ed-branch-banner-num">${esc(tree.num || '—')}</span>
+    </div>
+    <div class="ed-branch-banner-body">
+      <div class="ed-branch-banner-main">
+        <div class="ed-branch-banner-icon">${ICONS.tree}</div>
+        <div>
+          <h2 class="ed-branch-banner-title">${esc(tree.name1 || '—')}</h2>
+          <p class="ed-branch-banner-sub">${count ? `${fmtNumAlways(count)} حساب · ${fmtNumAlways(s.debit)} مدين · ${fmtNumAlways(s.credit)} دائن` : 'لا توجد حسابات فرعية'}</p>
+        </div>
       </div>
       <div class="ed-branch-banner-stat">
         <span class="ed-branch-banner-stat-val">${fmtNumAlways(count)}</span>
-        <span class="ed-branch-banner-stat-lbl">زبون</span>
+        <span class="ed-branch-banner-stat-lbl">إجمالي الحسابات</span>
       </div>
     </div>`;
 }
@@ -571,25 +571,21 @@ function renderTrees() {
     return;
   }
 
-  list.innerHTML = state.trees.map((t, i) => {
-    const hue = CARD_HUES[i % CARD_HUES.length];
-    return `
-    <button type="button" class="ed-card ed-card-tree" data-seq="${esc(t.seq)}" style="--hue:${hue};--i:${i}">
-      <div class="ed-card-stripe" aria-hidden="true"></div>
-      <div class="ed-card-top">
+  list.innerHTML = state.trees.map((t, i) => `
+    <button type="button" class="ed-card ed-card-tree" data-seq="${esc(t.seq)}" style="--i:${i}">
+      <div class="ed-card-row ed-card-row-head">
+        <span class="ed-card-index">${String(i + 1).padStart(2, '0')}</span>
         <span class="ed-card-num">${esc(t.num)}</span>
-        <span class="ed-card-icon-wrap">${ICONS.tree}</span>
       </div>
       <h4 class="ed-card-title">${esc(t.name1 || '—')}</h4>
-      <div class="ed-card-tags">
-        <span class="ed-tag ed-tag-users">${ICONS.users} ${fmtNumAlways(t.directChildren || 0)} زبون</span>
+      <div class="ed-card-meta">
+        <span class="ed-meta-item">${fmtNumAlways(t.directChildren || 0)} حساب فرعي</span>
       </div>
-      <div class="ed-card-cta">
-        <span>عرض الزبائن</span>
-        <span class="ed-card-cta-icon">${ICONS.chevron}</span>
+      <div class="ed-card-foot">
+        <span>استعراض الزبائن</span>
+        <span class="ed-card-arrow">${ICONS.chevron}</span>
       </div>
-    </button>`;
-  }).join('');
+    </button>`).join('');
 
   list.querySelectorAll('.ed-card').forEach((btn) => {
     btn.addEventListener('click', () => openTree(btn.dataset.seq));
@@ -629,22 +625,20 @@ function renderBranches() {
 
   list.innerHTML = filtered.map((b, i) => {
     const bal = branchBalanceMeta(b);
-    const hue = CARD_HUES[i % CARD_HUES.length];
     return `
-    <button type="button" class="ed-card ed-card-branch ed-card-bal-${bal.cls}" data-seq="${esc(b.seq)}" style="--hue:${hue};--i:${i}">
-      <div class="ed-card-stripe" aria-hidden="true"></div>
-      <div class="ed-card-top">
+    <button type="button" class="ed-card ed-card-branch ed-card-bal-${bal.cls}" data-seq="${esc(b.seq)}" style="--i:${i}">
+      <div class="ed-card-row ed-card-row-head">
         <span class="ed-card-num">${esc(b.num || '—')}</span>
-        <span class="ed-card-icon-wrap">${ICONS.branch}</span>
+        <span class="ed-status ed-status-${bal.cls}">${esc(bal.label)}</span>
       </div>
       <h4 class="ed-card-title">${esc(b.name1 || '—')}</h4>
-      <div class="ed-balance-block">
+      <div class="ed-balance-line">
         <span class="ed-balance-amt" dir="ltr">${esc(bal.amount)}</span>
-        <span class="ed-balance-lbl">${esc(bal.label)}</span>
+        <span class="ed-balance-lbl">الرصيد الحالي</span>
       </div>
-      <div class="ed-card-cta">
-        <span>${ICONS.statement} كشف الحساب</span>
-        <span class="ed-card-cta-icon">${ICONS.chevron}</span>
+      <div class="ed-card-foot">
+        <span>عرض كشف الحساب</span>
+        <span class="ed-card-arrow">${ICONS.chevron}</span>
       </div>
     </button>`;
   }).join('');
