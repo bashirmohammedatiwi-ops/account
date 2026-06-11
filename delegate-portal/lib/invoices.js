@@ -29,15 +29,29 @@ function extractBillNumFromText(text) {
   if (!s) return '';
   const patterns = [
     /(?:مردود|مرتجع)\s*(?:مبيعات\s*)?(?:بال)?(?:فات?[او]?رة?\s*)?(\d+)/i,
-    /(?:فات?[او]?رة?|فت?[او]?رة?)\s*(\d+)/i,
-    /(?:invoice|bill)\s*#?\s*(\d+)/i,
-    /(\d+)\s*[-–—]?\s*$/
+    /(?:مبيعات\s*)?(?:بال)?(?:فات?[او]?رة?|فت?[او]?رة?)\s*(\d+)/i,
+    /(?:invoice|bill)\s*#?\s*(\d+)/i
   ];
   for (const re of patterns) {
     const m = s.match(re);
     if (m?.[1]) return normalizeBillNum(m[1]);
   }
   return '';
+}
+
+function isInvoiceText(text) {
+  const s = String(text || '').trim();
+  if (!s) return false;
+  if (isSalesReturnText(s)) return true;
+  if (/(?:مبيعات|فات?[او]?رة?|invoice|bill)/i.test(s)) return true;
+  return false;
+}
+
+function isPaymentOrReconciliationText(text) {
+  const s = String(text || '').trim();
+  if (!s) return false;
+  if (isSalesReturnText(s)) return false;
+  return /(?:سند|تسديد|تصغير|تصفير|مطابقة|ترصيد|دفعة|خصم|حسم)/i.test(s);
 }
 
 function resolveBillNum(row) {
@@ -66,9 +80,16 @@ function lookupBillSeqByNum(billNum, accSeq) {
 }
 
 function isInvoiceMovement(row) {
-  if (normalizeBillSeq(row.bill_seq ?? row.billSeq)) return true;
+  const text = movementText(row);
+  if (isPaymentOrReconciliationText(text) && !isSalesReturnText(text)) return false;
+
+  if (normalizeBillSeq(row.bill_seq ?? row.billSeq)) {
+    if (isPaymentOrReconciliationText(text) && !/(?:فات|مبيع)/i.test(text)) return false;
+    return true;
+  }
   if (normalizeBillNum(row.bill_num ?? row.BillNum)) return true;
-  return Boolean(extractBillNumFromText(row.exp1 ?? row.Exp1 ?? row.description));
+  if (!isInvoiceText(text)) return false;
+  return Boolean(extractBillNumFromText(text));
 }
 
 function isDebitJournalRow(row) {
@@ -99,10 +120,9 @@ function lookupInvoiceKind(billSeq) {
   return row?.kind ?? null;
 }
 
-/** مردود مبيعات — حركة دائن مرتبطة بفاتورة */
+/** مردود مبيعات — حركة دائن مرتبطة بفاتورة مرتجع */
 function isSalesReturnMovement(row) {
   if (isDebitJournalRow(row)) return false;
-  if (!isInvoiceMovement(row)) return false;
 
   const text = movementText(row);
   if (isSalesReturnText(text)) return true;

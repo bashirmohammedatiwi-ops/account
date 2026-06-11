@@ -201,16 +201,11 @@ function computeOpeningBalance(rows, cutoff, account) {
   return normalizeCarriedBalance(fixBal, account);
 }
 
-/** رصيد افتتاحي — FixBal ثم Tot1/Tot2 ثم مجموع الحركات قبل FixDate */
+/** رصيد افتتاحي — FixBal أو مجموع الحركات قبل FixDate فقط (مثل Edari) */
 function resolveOpeningBalance(account, allRows, movementRows, cutoff) {
   const fixBal = parseAmount(account?.fix_bal ?? account?.fixBal);
   if (fixBal !== 0) {
     return normalizeCarriedBalance(fixBal, account);
-  }
-
-  const fromTotals = deriveOpeningBalance(account, movementRows);
-  if (fromTotals !== 0) {
-    return fromTotals;
   }
 
   if (cutoff && (cutoff.seq || isValidFixDate(cutoff.date))) {
@@ -248,6 +243,9 @@ function resolveStatementPeriod(movementRows, cutoff) {
   let periodEnd = null;
   if (lastDated) {
     periodEnd = lastDated.tx_date || lastDated.Date || lastDated.date || null;
+  }
+  if (cutoff?.date && isValidFixDate(cutoff.date)) {
+    periodEnd = new Date().toISOString();
   }
 
   return { periodStart, periodEnd };
@@ -316,6 +314,7 @@ function buildOpeningLine(openingBalance, cutoff) {
 function buildStatementLines(rows, options = {}) {
   const {
     isInvoiceMovement,
+    isSalesInvoiceMovement,
     isSalesReturnMovement,
     resolveBillSeq,
     resolveBillNum
@@ -330,7 +329,8 @@ function buildStatementLines(rows, options = {}) {
     const billNum = resolveBillNum(row);
     const billSeq = resolveBillSeq(row) || null;
     const isReturnInvoice = isSalesReturnMovement(row);
-    const hasInvoice = (isInvoiceMovement(row) && debit > 0) || isReturnInvoice;
+    const isSalesInvoice = isSalesInvoiceMovement(row);
+    const hasInvoice = isSalesInvoice || isReturnInvoice;
     const invoiceRef = billNum || billSeq || null;
     const description = buildJournalDescription(row);
     const branch2 = String(row.exp2 || row.Exp2 || '').trim() || null;
@@ -363,13 +363,13 @@ function buildStatementLines(rows, options = {}) {
   };
 }
 
-/** صف الرصيد النهائي — Edari يضع مبلغ المدين في عمود الدائن */
+/** صف الرصيد النهائي — Edari: الرصيد الحالي / رصيد دائن */
 function balanceSummaryLabel(balance, accountName = '') {
   const n = parseAmount(balance);
   const suffix = accountName ? ` ${String(accountName).trim()}` : '';
   if (n < 0) return { label: `رصيد مدين${suffix}`, amount: Math.abs(n), side: 'credit' };
   if (n > 0) return { label: `رصيد دائن${suffix}`, amount: n, side: 'debit' };
-  return { label: 'متعادل', amount: 0, side: 'none' };
+  return { label: `الرصيد الحالي${suffix}`, amount: 0, side: 'credit' };
 }
 
 function debtStatusFromBalance(bal) {

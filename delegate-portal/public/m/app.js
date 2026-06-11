@@ -89,8 +89,11 @@ function invoiceExportRefFor(line) {
 function fmtDate(v) {
   if (!v) return '—';
   const d = new Date(String(v).replace(' 00:00:00', ''));
-  if (Number.isNaN(d.getTime())) return esc(String(v).slice(0, 10));
-  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+  if (Number.isNaN(d.getTime())) {
+    const raw = String(v).slice(0, 10);
+    return esc(raw.replace(/\//g, '-'));
+  }
+  return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
 }
 
 function fmtBalanceDisplay(bal) {
@@ -637,12 +640,12 @@ function renderStatement(data) {
 
   if (lines.length) {
     document.getElementById('stmtTableSection').classList.remove('hidden');
-    document.getElementById('stmtLineCount').textContent = `${lines.length} حركة`;
-    let moveNum = 0;
+    const moveCount = lines.filter((line) => !line.isOpening).length;
+    document.getElementById('stmtLineCount').textContent = `${moveCount} حركة`;
+    const detailColspan = showBranchCol ? 3 : 2;
     const rows = lines.map((r) => {
       const showInvoiceBtn = isInvoiceLine(r) && !r.isOpening;
       const invoiceLookup = showInvoiceBtn ? invoiceLookupFor(r, branch.seq) : null;
-      const idxLabel = r.isOpening ? '∗' : String(++moveNum);
       const rowClass = [
         r.isReconciliation ? 'row-recon' : '',
         r.isOpening ? 'row-opening' : ''
@@ -655,12 +658,11 @@ function renderStatement(data) {
           </div>`
         : '<span class="num empty">—</span>';
       return `<tr class="${rowClass}">
-        <td class="col-n">${idxLabel}</td>
-        <td class="col-date">${r.isOpening ? '' : (r.date ? fmtDate(r.date) : '')}</td>
-        <td class="col-desc"><div class="stmt-desc-cell"><span class="row-tag ${txTypeClass(r)}">${txTypeLabel(r)}</span><span class="stmt-desc-text">${esc(r.description) || '—'}</span></div></td>
-        ${showBranchCol ? `<td class="col-branch">${esc(r.branch2 || '')}</td>` : ''}
         ${amtTd(r.debit, 'debit')}
         ${amtTd(r.credit, 'credit')}
+        <td class="col-desc"><span class="stmt-desc-text">${esc(r.description) || '—'}</span></td>
+        ${showBranchCol ? `<td class="col-branch">${esc(r.branch2 || '')}</td>` : ''}
+        <td class="col-date">${r.isOpening ? '' : (r.date ? fmtDate(r.date) : '')}</td>
         <td class="num col-balance ${balanceClassFor(r.balance)}" dir="ltr">${fmtEdariRunningBalance(r.balance, r.isOpening)}</td>
         <td class="col-act">${actions}</td>
       </tr>`;
@@ -672,12 +674,11 @@ function renderStatement(data) {
         <table class="data-table stmt-table" dir="rtl">
           <thead>
             <tr>
-              <th class="col-n">م</th>
-              <th class="col-date">التاريخ</th>
-              <th class="col-desc">البيان</th>
-              ${showBranchCol ? '<th class="col-branch">الفرع 2</th>' : ''}
               <th class="col-amt col-debit">مدين</th>
               <th class="col-amt col-credit">دائن</th>
+              <th class="col-desc">البيان</th>
+              ${showBranchCol ? '<th class="col-branch">الفرع 2</th>' : ''}
+              <th class="col-date">التاريخ</th>
               <th class="col-amt col-balance">حركة الرصيد</th>
               <th class="col-act">إجراءات</th>
             </tr>
@@ -685,17 +686,17 @@ function renderStatement(data) {
           <tbody>${rows}</tbody>
           <tfoot>
             <tr class="row-total">
-              <td colspan="${showBranchCol ? 4 : 3}" class="total-label"><strong>المجموع</strong></td>
               <td class="num debit" dir="ltr">${fmtNumAlways(totalDebit)}</td>
               <td class="num credit" dir="ltr">${fmtNumAlways(totalCredit)}</td>
+              <td colspan="${detailColspan}" class="total-label"><strong>المجموع</strong></td>
               <td></td>
               <td></td>
             </tr>
             <tr class="row-final">
-              <td colspan="${showBranchCol ? 4 : 3}" class="total-label"><strong>${esc(summary.label)}</strong></td>
               <td class="num debit" dir="ltr">${summary.side === 'debit' ? fmtNumAlways(summary.amount) : ''}</td>
               <td class="num credit" dir="ltr">${summary.side === 'credit' ? fmtNumAlways(summary.amount) : ''}</td>
-              <td></td>
+              <td colspan="${detailColspan}" class="total-label"><strong>${esc(summary.label)}</strong></td>
+              <td class="num col-balance" dir="ltr">${fmtEdariRunningBalance(currentBal)}</td>
               <td></td>
             </tr>
           </tfoot>

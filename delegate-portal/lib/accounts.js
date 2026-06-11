@@ -71,7 +71,7 @@ function getStatementForAccount(accSeq) {
   const cutoff = resolveLastMatchCutoff(account, rows);
   const matchAvailable = hasMatchCutoff(account, rows);
 
-  // كشف كامل كما في Edari: الحركات من FixDate (شامل) مع رصيد مدور
+  // كشف كامل كما في Edari: كل الحركات من FixDate (إن وُجد) — بدون رصيد مدور وهمي من Tot1
   let filteredRows = rows;
   let periodCutoff = null;
   if (isValidFixDate(account.fix_date)) {
@@ -80,6 +80,7 @@ function getStatementForAccount(accSeq) {
   }
 
   let openingBalance = resolveOpeningBalance(account, rows, filteredRows, periodCutoff);
+
   if (periodCutoff && filteredRows.length < rows.length && openingBalance === 0) {
     const hasPrePeriodRows = rows.some((row) => isBeforePeriodStart(row, periodCutoff));
     if (hasPrePeriodRows) {
