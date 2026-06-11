@@ -356,8 +356,8 @@ function normalizeInvoiceLineBillNos(rows = []) {
   for (const lines of grouped.values()) {
     lines.sort((a, b) => readSyncNum(a, 'BillNo', 'bill_no') - readSyncNum(b, 'BillNo', 'bill_no'));
     lines.forEach((line, index) => {
-      const billNo = readSyncNum(line, 'BillNo', 'bill_no') || (index + 1);
-      out.push({ ...line, BillNo: billNo, bill_no: billNo });
+      const billNo = readSyncNum(line, 'BillNo', 'bill_no', 'LineIndex', 'lineIndex') || (index + 1);
+      out.push({ ...line, BillNo: billNo, bill_no: billNo, LineIndex: billNo });
     });
   }
   return out;

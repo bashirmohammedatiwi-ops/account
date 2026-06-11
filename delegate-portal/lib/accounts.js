@@ -183,13 +183,13 @@ const SYNC_UPSERTS = {
     VALUES (@bill_seq, @bill_no, @mat, @mat_num, @mat_name, @quant, @bonus, @price, @line_total, @remarks, @kind)
     ON CONFLICT(bill_seq, bill_no) DO UPDATE SET
       mat=excluded.mat,
-      mat_num=CASE WHEN length(excluded.mat_num) > 0 THEN excluded.mat_num ELSE mat_num END,
-      mat_name=CASE WHEN length(excluded.mat_name) > 0 THEN excluded.mat_name ELSE mat_name END,
-      quant=CASE WHEN excluded.quant > 0 THEN excluded.quant ELSE quant END,
-      bonus=CASE WHEN excluded.bonus > 0 THEN excluded.bonus ELSE bonus END,
-      price=CASE WHEN excluded.price > 0 THEN excluded.price ELSE price END,
-      line_total=CASE WHEN excluded.line_total > 0 THEN excluded.line_total ELSE line_total END,
-      remarks=CASE WHEN length(excluded.remarks) > 0 THEN excluded.remarks ELSE remarks END,
+      mat_num=excluded.mat_num,
+      mat_name=excluded.mat_name,
+      quant=excluded.quant,
+      bonus=excluded.bonus,
+      price=excluded.price,
+      line_total=excluded.line_total,
+      remarks=excluded.remarks,
       kind=excluded.kind
   `)
 };
@@ -266,7 +266,7 @@ function readSyncNum(row, ...keys) {
   return 0;
 }
 
-function normalizeInvoiceLineBillNos(rows = []) {
+function ensureInvoiceLineBillNosForImport(rows = []) {
   const grouped = new Map();
   for (const row of rows) {
     const billSeq = String(row.BillSeq ?? row.bill_seq ?? '').replace(/[^0-9]/g, '');
@@ -275,14 +275,36 @@ function normalizeInvoiceLineBillNos(rows = []) {
     grouped.get(billSeq).push(row);
   }
 
+  const maxBillNoStmt = db.prepare(`
+    SELECT COALESCE(MAX(bill_no), 0) AS m FROM invoice_lines WHERE bill_seq = ?
+  `);
   const out = [];
-  for (const lines of grouped.values()) {
-    lines.sort((a, b) => readSyncNum(a, 'BillNo', 'bill_no') - readSyncNum(b, 'BillNo', 'bill_no'));
-    lines.forEach((line, index) => {
-      const billNo = readSyncNum(line, 'BillNo', 'bill_no') || (index + 1);
-      out.push({ ...line, BillNo: billNo, bill_no: billNo });
+
+  for (const [billSeq, lines] of grouped) {
+    lines.sort((a, b) => {
+      const ba = readSyncNum(a, 'BillNo', 'bill_no', 'LineIndex', 'lineIndex');
+      const bb = readSyncNum(b, 'BillNo', 'bill_no', 'LineIndex', 'lineIndex');
+      if (ba !== bb) return ba - bb;
+      return 0;
     });
+
+    const used = new Set();
+    let fallback = Number(maxBillNoStmt.get(billSeq)?.m || 0);
+
+    for (const line of lines) {
+      let billNo = readSyncNum(line, 'BillNo', 'bill_no', 'LineIndex', 'lineIndex');
+      if (billNo > 0 && used.has(billNo)) billNo = 0;
+      if (!billNo) {
+        do {
+          fallback += 1;
+          billNo = fallback;
+        } while (used.has(billNo));
+      }
+      used.add(billNo);
+      out.push({ ...line, BillNo: billNo, bill_no: billNo });
+    }
   }
+
   return out;
 }
 
@@ -296,7 +318,8 @@ function mapInvoiceLineRow(line) {
   const lineTotalVal = storedTotal > 0 ? storedTotal : quant * price;
   const matName = line.MatName ?? line.mat_name ?? line.Name1 ?? '';
   const mat = String(line.Mat ?? line.mat ?? '');
-  const billNo = readSyncNum(line, 'BillNo', 'bill_no');
+  const billNo = readSyncNum(line, 'BillNo', 'bill_no', 'LineIndex', 'lineIndex');
+  if (!billNo) return null;
   if (!quant && !bonus && !price && !lineTotalVal && !String(matName).trim() && !mat.trim()) {
     return null;
   }
@@ -388,7 +411,7 @@ function importSyncChunk(kind, rows = []) {
       return;
     }
     if (kind === 'invoiceLines') {
-      for (const row of normalizeInvoiceLineBillNos(rows)) {
+      for (const row of ensureInvoiceLineBillNosForImport(rows)) {
         const mapped = mapInvoiceLineRow(row);
         if (mapped) upsert.run(mapped);
       }

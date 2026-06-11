@@ -89,28 +89,6 @@ function migrateSchema() {
     }
   }
   migrateInvoiceLinesUniqueKey();
-  repairAllInvoiceLineBillNumbers();
-}
-
-function repairAllInvoiceLineBillNumbers() {
-  const groups = db.prepare(`
-    SELECT bill_seq FROM invoice_lines
-    GROUP BY bill_seq
-    HAVING SUM(CASE WHEN bill_no IS NULL OR bill_no = 0 THEN 1 ELSE 0 END) > 0
-       OR COUNT(DISTINCT bill_no) < COUNT(*)
-  `).all();
-  if (!groups.length) return;
-
-  const update = db.prepare('UPDATE invoice_lines SET bill_no = ? WHERE id = ?');
-  const tx = db.transaction(() => {
-    for (const { bill_seq } of groups) {
-      const rows = db.prepare(`
-        SELECT id FROM invoice_lines WHERE bill_seq = ? ORDER BY id
-      `).all(bill_seq);
-      rows.forEach((row, index) => update.run(index + 1, row.id));
-    }
-  });
-  tx();
 }
 
 function migrateInvoiceLinesUniqueKey() {

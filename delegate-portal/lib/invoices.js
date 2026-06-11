@@ -264,38 +264,12 @@ function mapInvoiceLineRow(row) {
 }
 
 function prepareInvoiceLinesFromDb(rows = []) {
-  if (!rows.length) return [];
-  const sorted = [...rows].sort((a, b) => {
+  return [...rows].sort((a, b) => {
     const ba = Number(a.bill_no || 0);
     const bb = Number(b.bill_no || 0);
-    if (ba && bb && ba !== bb) return ba - bb;
+    if (ba !== bb) return ba - bb;
     return Number(a.id || 0) - Number(b.id || 0);
   });
-
-  const zeroBillNoCount = sorted.filter((row) => !Number(row.bill_no || 0)).length;
-  const map = new Map();
-
-  for (const row of sorted) {
-    const billNo = Number(row.bill_no || 0);
-    const key = (!billNo || zeroBillNoCount > 1)
-      ? `${row.bill_seq}:id:${row.id}`
-      : `${row.bill_seq}:${billNo}`;
-    const prev = map.get(key);
-    if (!prev || invoiceLineRowScore(row) > invoiceLineRowScore(prev)) {
-      map.set(key, row);
-    }
-  }
-
-  return [...map.values()].sort((a, b) => {
-    const ba = Number(a.bill_no || 0);
-    const bb = Number(b.bill_no || 0);
-    if (ba && bb && ba !== bb) return ba - bb;
-    return Number(a.id || 0) - Number(b.id || 0);
-  });
-}
-
-function invoiceLineRowScore(row) {
-  return (Number(row.line_total) || 0) * 1e6 + (Number(row.quant) || 0);
 }
 
 function repairInvoiceLineBillNumbers(billSeq) {
@@ -308,8 +282,7 @@ function repairInvoiceLineBillNumbers(billSeq) {
   if (rows.length < 2) return;
 
   const zeroCount = rows.filter((row) => !Number(row.bill_no || 0)).length;
-  const distinctBillNos = new Set(rows.map((row) => Number(row.bill_no || 0))).size;
-  if (zeroCount === 0 && distinctBillNos === rows.length) return;
+  if (zeroCount === 0) return;
 
   const update = db.prepare('UPDATE invoice_lines SET bill_no = ? WHERE id = ?');
   const tx = db.transaction(() => {
