@@ -387,7 +387,8 @@ async function openOrderDetail(id) {
 
 function setBottomNavActive(name) {
   const map = {
-    trees: 'trees',
+    home: 'home',
+    trees: 'home',
     shop: 'shop',
     'shop-sections': 'shop',
     'shop-products': 'shop',
@@ -399,7 +400,7 @@ function setBottomNavActive(name) {
   document.querySelectorAll('.bottom-nav-item').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.nav === active);
   });
-  const show = ['trees', 'shop', 'my-orders'].includes(active);
+  const show = ['home', 'shop', 'my-orders'].includes(active);
   document.getElementById('bottomNav')?.classList.toggle('hidden', !show);
 }
 
@@ -409,7 +410,7 @@ window.commerceNav = {
   },
 
   applyScreen(name, { backBtn, toolbarWrap, title, crumb }) {
-    backBtn.classList.toggle('hidden', ['shop', 'my-orders', 'trees'].includes(name));
+    backBtn.classList.toggle('hidden', ['shop', 'my-orders', 'home'].includes(name));
     toolbarWrap.classList.add('hidden');
     const kicker = document.getElementById('headerKicker');
 
@@ -468,7 +469,7 @@ window.commerceNav = {
       return true;
     }
     if (state.screen === 'shop' || state.screen === 'my-orders') {
-      goToScreen('trees');
+      goToScreen('home');
       return true;
     }
     return false;
@@ -492,7 +493,9 @@ window.commerceNav = {
       return true;
     }
     return false;
-  }
+  },
+
+  lookupBarcode
 };
 
 function initCommerceMobile() {
@@ -509,7 +512,7 @@ function initCommerceMobile() {
   document.querySelectorAll('.bottom-nav-item').forEach((btn) => {
     btn.addEventListener('click', () => {
       const nav = btn.dataset.nav;
-      if (nav === 'trees') goToScreen('trees');
+      if (nav === 'home') goToScreen('home');
       else if (nav === 'shop') goToScreen('shop');
       else if (nav === 'my-orders') goToScreen('my-orders');
     });

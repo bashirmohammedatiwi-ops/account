@@ -4,7 +4,7 @@ const AGENT_KEY = 'delegateAgent';
 
 const state = {
   agent: null,
-  screen: 'trees',
+  screen: 'home',
   trees: [],
   selectedTree: null,
   branches: [],
@@ -420,7 +420,60 @@ function clearSession() {
   state.branches = [];
   state.selectedTree = null;
   state.selectedBranch = null;
-  state.screen = 'trees';
+  state.screen = 'home';
+}
+
+function renderHomeScreen() {
+  const name = state.agent?.name || '';
+  const initial = agentInitial(name);
+  const homeAvatar = document.getElementById('homeAvatar');
+  if (homeAvatar) homeAvatar.textContent = initial;
+  const homeName = document.getElementById('homeWelcomeName');
+  if (homeName) homeName.textContent = name ? `مرحباً، ${name}` : 'مرحباً';
+  const homeSub = document.getElementById('homeWelcomeSub');
+  if (homeSub) {
+    homeSub.textContent = state.trees.length
+      ? `${state.trees.length} شجرة · اختر تطبيقاً للمتابعة`
+      : 'اختر تطبيقاً للبدء';
+  }
+
+  const treesBadge = document.getElementById('homeBadgeTrees');
+  if (treesBadge) {
+    if (state.trees.length > 0) {
+      treesBadge.textContent = String(state.trees.length);
+      treesBadge.classList.remove('hidden');
+    } else {
+      treesBadge.classList.add('hidden');
+    }
+  }
+
+  const totalCustomers = state.trees.reduce((s, t) => s + (Number(t.directChildren) || 0), 0);
+  const statsEl = document.getElementById('homeQuickStats');
+  if (statsEl) {
+    statsEl.innerHTML = `
+      <div class="home-app-stat">
+        <span class="home-app-stat-val">${esc(String(state.trees.length))}</span>
+        <span class="home-app-stat-lbl">شجرة</span>
+      </div>
+      <div class="home-app-stat">
+        <span class="home-app-stat-val">${esc(fmtNumAlways(totalCustomers))}</span>
+        <span class="home-app-stat-lbl">زبون</span>
+      </div>
+      <div class="home-app-stat">
+        <span class="home-app-stat-val">${state.trees.length ? '●' : '—'}</span>
+        <span class="home-app-stat-lbl">${state.trees.length ? 'نشط' : '—'}</span>
+      </div>`;
+  }
+}
+
+function openHomeApp(app) {
+  if (app === 'accounts') goToScreen('trees');
+  else if (app === 'shop') goToScreen('shop');
+  else if (app === 'orders') goToScreen('my-orders');
+  else if (app === 'barcode') {
+    goToScreen('shop');
+    setTimeout(() => window.commerceNav?.lookupBarcode?.(), 200);
+  }
 }
 
 function setOverlay(open) {
@@ -551,13 +604,22 @@ function goToScreen(name) {
   const title = document.getElementById('screenTitle');
   const crumb = document.getElementById('breadcrumb');
 
-  if (name === 'trees') {
+  if (name === 'home') {
     backBtn.classList.add('hidden');
     toolbarWrap.classList.add('hidden');
-    title.textContent = 'الشجرات';
+    title.textContent = 'Edari';
     crumb.textContent = state.agent?.name ? `المندوب: ${state.agent.name}` : '';
     const kicker = document.getElementById('headerKicker');
     if (kicker) kicker.textContent = 'Edari · الرئيسية';
+    renderHomeScreen();
+    updateUserChrome();
+  } else if (name === 'trees') {
+    backBtn.classList.remove('hidden');
+    toolbarWrap.classList.add('hidden');
+    title.textContent = 'كشوف الحساب';
+    crumb.textContent = 'الشجرات المعيّنة';
+    const kicker = document.getElementById('headerKicker');
+    if (kicker) kicker.textContent = 'Edari · الشجرات';
     updateUserChrome();
   } else if (name === 'branches') {
     backBtn.classList.remove('hidden');
@@ -589,7 +651,7 @@ function goToScreen(name) {
     window.commerceNav.applyScreen(name, { backBtn, toolbarWrap, title, crumb });
   }
 
-  document.getElementById('bottomNav')?.classList.toggle('hidden', !['trees', 'shop', 'my-orders'].includes(name));
+  document.getElementById('bottomNav')?.classList.toggle('hidden', !['home', 'shop', 'my-orders'].includes(name));
   window.commerceNav?.onScreen?.(name);
 }
 
@@ -1066,17 +1128,20 @@ function goBack() {
     state.selectedTree = null;
     state.branches = [];
     goToScreen('trees');
+  } else if (state.screen === 'trees') {
+    goToScreen('home');
   }
 }
 
-async function loadTrees() {
+async function loadTrees(goTo) {
   setOverlay(true);
   try {
     const data = await api('/trees');
     state.trees = data.trees || [];
     renderTrees();
+    renderHomeScreen();
     updateUserChrome();
-    goToScreen('trees');
+    if (goTo) goToScreen(goTo);
   } catch (e) {
     alert(e.message);
   } finally {
@@ -1086,7 +1151,11 @@ async function loadTrees() {
 
 async function refresh() {
   if (window.commerceNav?.refresh?.()) return;
-  if (state.screen === 'statement' && state.selectedBranch) {
+  if (state.screen === 'home') {
+    await loadTrees('home');
+  } else if (state.screen === 'trees') {
+    await loadTrees('trees');
+  } else if (state.screen === 'statement' && state.selectedBranch) {
     await openBranch(state.selectedBranch.seq);
   } else if (state.screen === 'branches' && state.selectedTree) {
     await openTree(state.selectedTree.seq);
@@ -1112,7 +1181,7 @@ async function login(username, password) {
     setSession(data.token, data.agent);
     showApp();
     updateUserChrome();
-    await loadTrees();
+    await loadTrees('home');
   } catch (e) {
     errEl.textContent = e.message;
     errEl.classList.remove('hidden');
@@ -1142,7 +1211,7 @@ async function tryRestoreSession() {
     setSession(token, data.agent);
     showApp();
     updateUserChrome();
-    await loadTrees();
+    await loadTrees('home');
   } catch {
     showLogin();
   }
@@ -1178,6 +1247,10 @@ function init() {
       document.querySelectorAll('.filter-chip').forEach((c) => c.classList.toggle('active', c === chip));
       renderBranches();
     });
+  });
+
+  document.querySelectorAll('.home-app-tile').forEach((tile) => {
+    tile.addEventListener('click', () => openHomeApp(tile.dataset.app));
   });
 
   tryRestoreSession();
