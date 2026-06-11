@@ -514,7 +514,7 @@ async function main() {
     { accounts: accountsForUpload, journal, invoices, invoiceLines, products },
     allAccountSeqs
   );
-  console.log('✓ تمت المزامنة:', result.accounts, 'حساب،', result.journal, 'حركة،', result.invoices, 'فاتورة،', result.invoiceLines, 'بند،', result.products ?? products.length, 'منتج');
+  console.log('✓ تمت المزامنة:', result.accounts, 'حساب،', result.journal, 'حركة،', result.invoices, 'فاتورة،', result.invoiceLines, 'بند،', result.products ?? products.length, 'مادة Edari');
 }
 
 if (process.argv.includes('--list-trees')) {

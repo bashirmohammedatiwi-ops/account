@@ -19,12 +19,12 @@ const {
 const {
   listProducts,
   getProduct,
-  createProduct,
   updateProduct,
   deleteProduct,
   saveProductImage,
-  importFromInvoiceLines,
-  lookupByBarcode
+  lookupByBarcode,
+  findEdariMaterialByCode,
+  addProductByBarcode
 } = require('../lib/products');
 const {
   listOrders,
@@ -126,10 +126,35 @@ router.get('/products/lookup', (req, res) => {
   res.json({ ok: true, product });
 });
 
+router.get('/products/edari-lookup', (req, res) => {
+  const code = String(req.query.code || '').trim();
+  if (!code) return res.status(400).json({ ok: false, error: 'الباركود مطلوب' });
+  const material = findEdariMaterialByCode(code);
+  if (!material) {
+    return res.status(404).json({ ok: false, error: 'المادة غير موجودة — نفّذ مزامنة كاملة من Edari أولاً' });
+  }
+  res.json({ ok: true, material });
+});
+
+router.post('/products/by-barcode', (req, res) => {
+  try {
+    const sectionId = Number(req.body?.sectionId);
+    const barcode = String(req.body?.barcode || '').trim();
+    if (!sectionId || !barcode) {
+      return res.status(400).json({ ok: false, error: 'القسم والباركود مطلوبان' });
+    }
+    const product = addProductByBarcode(sectionId, barcode);
+    res.json({ ok: true, product });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
 router.post('/products', (req, res) => {
-  const { sectionId, name } = req.body || {};
-  if (!sectionId || !name) return res.status(400).json({ ok: false, error: 'القسم والاسم مطلوبان' });
-  res.json({ ok: true, product: createProduct(req.body) });
+  return res.status(400).json({
+    ok: false,
+    error: 'أضف المنتج بالباركود فقط — البيانات تُجلب من Edari'
+  });
 });
 
 router.put('/products/:id', (req, res) => {
@@ -155,11 +180,6 @@ router.post('/products/:id/image', (req, res) => {
   }
 });
 
-router.post('/products/import-invoice-lines', (req, res) => {
-  const sectionId = Number(req.body?.sectionId);
-  if (!sectionId) return res.status(400).json({ ok: false, error: 'sectionId مطلوب' });
-  res.json({ ok: true, ...importFromInvoiceLines(sectionId) });
-});
 
 router.get('/orders/stats', (_req, res) => {
   res.json({ ok: true, stats: orderStats() });

@@ -27,8 +27,35 @@ function mapProduct(row, extras = {}) {
     imageUrl: row.image_path ? `/uploads/${row.image_path.replace(/\\/g, '/')}` : '',
     isActive: !!row.is_active,
     sortOrder: row.sort_order,
+    syncedAt: row.synced_at || '',
+    updatedAt: row.updated_at || '',
     ...extras
   };
+}
+
+function mapEdariMaterial(row) {
+  if (!row) return null;
+  return {
+    seq: String(row.seq || row.Seq || ''),
+    num: String(row.num || row.Num || ''),
+    barcode: String(row.barcode || row.Barcode || row.num || row.Num || '').trim(),
+    name: String(row.name1 || row.Name1 || ''),
+    unit: String(row.unit || row.DefUnit || ''),
+    price: Number(row.sell_pr1 ?? row.SellPr1 ?? 0),
+    syncedAt: row.synced_at || ''
+  };
+}
+
+function normalizeCode(code) {
+  return String(code ?? '').trim();
+}
+
+function parseEdariSyncRow(row) {
+  const seq = String(row.Seq ?? row.seq ?? '').trim();
+  const num = String(row.Num ?? row.num ?? '').trim();
+  const barcode = String(row.Barcode ?? row.barcode ?? num).trim();
+  const name1 = String(row.Name1 ?? row.name ?? '').trim();
+  return { seq, num, barcode, name1, unit: String(row.DefUnit ?? row.unit ?? ''), sellPr1: Number(row.SellPr1 ?? row.price ?? 0) };
 }
 
 function listProducts(sectionId, { activeOnly = false } = {}) {
@@ -51,8 +78,22 @@ function getProduct(id) {
   });
 }
 
-function normalizeCode(code) {
-  return String(code ?? '').trim();
+function findEdariMaterialByCode(code) {
+  const raw = normalizeCode(code);
+  if (!raw) return null;
+  const row = db.prepare(`
+    SELECT * FROM edari_materials
+    WHERE seq = ? OR num = ? OR barcode = ?
+    ORDER BY
+      CASE
+        WHEN barcode = ? THEN 0
+        WHEN num = ? THEN 1
+        WHEN seq = ? THEN 2
+        ELSE 3
+      END
+    LIMIT 1
+  `).get(raw, raw, raw, raw, raw, raw);
+  return row ? mapEdariMaterial(row) : null;
 }
 
 function lookupByBarcode(code, { branchId, activeOnly = true } = {}) {
@@ -62,21 +103,12 @@ function lookupByBarcode(code, { branchId, activeOnly = true } = {}) {
   let row = db.prepare(`
     SELECT p.* FROM products p
     JOIN catalog_sections s ON s.id = p.section_id
-    WHERE (p.barcode = ? OR p.sku_num = ?)
+    WHERE (p.barcode = ? OR p.sku_num = ? OR p.edari_seq = ?)
     ${branchId ? 'AND s.branch_id = ?' : ''}
     ${activeOnly ? 'AND p.is_active = 1 AND s.is_active = 1' : ''}
     ORDER BY p.id
     LIMIT 1
-  `).get(...(branchId ? [raw, raw, branchId] : [raw, raw]));
-
-  if (!row) {
-    row = db.prepare(`
-      SELECT p.* FROM products p
-      WHERE (p.barcode LIKE ? OR p.sku_num LIKE ? OR p.name LIKE ?)
-      ${activeOnly ? 'AND p.is_active = 1' : ''}
-      ORDER BY p.id LIMIT 1
-    `).get(raw, raw, `%${raw}%`);
-  }
+  `).get(...(branchId ? [raw, raw, raw, branchId] : [raw, raw, raw]));
 
   return row ? getProduct(row.id) : null;
 }
@@ -84,8 +116,8 @@ function lookupByBarcode(code, { branchId, activeOnly = true } = {}) {
 function createProduct(data) {
   const r = db.prepare(`
     INSERT INTO products
-      (section_id, edari_seq, sku_num, barcode, name, unit, price, bonus_default, is_active, sort_order, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      (section_id, edari_seq, sku_num, barcode, name, unit, price, bonus_default, is_active, sort_order, synced_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
   `).run(
     data.sectionId,
     data.edariSeq || '',
@@ -96,7 +128,8 @@ function createProduct(data) {
     Number(data.price || 0),
     Number(data.bonusDefault || 0),
     data.isActive !== false ? 1 : 0,
-    data.sortOrder || 0
+    data.sortOrder || 0,
+    data.syncedAt || new Date().toISOString()
   );
   return getProduct(r.lastInsertRowid);
 }
@@ -108,6 +141,7 @@ function updateProduct(id, patch) {
     UPDATE products SET
       section_id = ?, edari_seq = ?, sku_num = ?, barcode = ?, name = ?, unit = ?,
       price = ?, bonus_default = ?, is_active = ?, sort_order = ?,
+      synced_at = COALESCE(?, synced_at),
       image_path = COALESCE(?, image_path), updated_at = datetime('now')
     WHERE id = ?
   `).run(
@@ -121,6 +155,7 @@ function updateProduct(id, patch) {
     patch.bonusDefault ?? row.bonus_default,
     patch.isActive != null ? (patch.isActive ? 1 : 0) : row.is_active,
     patch.sortOrder ?? row.sort_order,
+    patch.syncedAt ?? null,
     patch.imagePath ?? null,
     id
   );
@@ -161,85 +196,107 @@ function saveProductImage(id, dataUrl) {
   return getProduct(id);
 }
 
-function importFromInvoiceLines(sectionId) {
-  const rows = db.prepare(`
-    SELECT DISTINCT mat_num, mat, mat_name, price
-    FROM invoice_lines
-    WHERE mat_name IS NOT NULL AND mat_name != ''
-    ORDER BY mat_name
-  `).all();
+function upsertEdariMaterial(row) {
+  const parsed = parseEdariSyncRow(row);
+  if (!parsed.seq || !parsed.name1) return null;
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO edari_materials (seq, num, barcode, name1, unit, sell_pr1, synced_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(seq) DO UPDATE SET
+      num = excluded.num,
+      barcode = excluded.barcode,
+      name1 = excluded.name1,
+      unit = excluded.unit,
+      sell_pr1 = excluded.sell_pr1,
+      synced_at = excluded.synced_at
+  `).run(parsed.seq, parsed.num, parsed.barcode || parsed.num, parsed.name1, parsed.unit, parsed.sellPr1, now);
+  return parsed;
+}
 
-  const insert = db.prepare(`
-    INSERT INTO products (section_id, sku_num, barcode, name, unit, price, is_active, sort_order, updated_at)
-    SELECT ?, ?, ?, ?, '', ?, 1, 0, datetime('now')
-    WHERE NOT EXISTS (
-      SELECT 1 FROM products WHERE section_id = ? AND (barcode = ? OR sku_num = ? OR name = ?)
-    )
+function findRegisteredProductIds(parsed) {
+  const ids = new Set();
+  const stmt = db.prepare(`
+    SELECT id FROM products WHERE
+      (edari_seq != '' AND edari_seq = ?)
+      OR (barcode != '' AND barcode = ?)
+      OR (sku_num != '' AND sku_num = ?)
+      OR (barcode != '' AND barcode = ?)
+      OR (sku_num != '' AND sku_num = ?)
   `);
-
-  let imported = 0;
-  const tx = db.transaction(() => {
-    for (const row of rows) {
-      const sku = String(row.mat_num || row.mat || '').trim();
-      const barcode = sku;
-      const name = String(row.mat_name || '').trim();
-      if (!name) continue;
-      const price = Number(row.price || 0);
-      const r = insert.run(sectionId, sku, barcode, name, price, sectionId, barcode, sku, name);
-      imported += r.changes;
-    }
-  });
-  tx();
-  return { imported, scanned: rows.length };
+  for (const row of stmt.all(parsed.seq, parsed.barcode, parsed.num, parsed.num, parsed.barcode)) {
+    ids.add(row.id);
+  }
+  return [...ids];
 }
 
-function upsertProductFromSync(row, sectionId) {
-  const barcode = String(row.Barcode || row.barcode || row.Num || row.num || '').trim();
-  const sku = String(row.Num || row.num || barcode).trim();
-  const name = String(row.Name1 || row.name || '').trim();
-  if (!name) return null;
+function refreshRegisteredProductFromEdari(parsed) {
+  const now = new Date().toISOString();
+  let updated = 0;
+  for (const id of findRegisteredProductIds(parsed)) {
+    updateProduct(id, {
+      edariSeq: parsed.seq,
+      skuNum: parsed.num,
+      barcode: parsed.barcode || parsed.num,
+      name: parsed.name1,
+      unit: parsed.unit,
+      price: parsed.sellPr1,
+      syncedAt: now
+    });
+    updated += 1;
+  }
+  return updated;
+}
 
-  const existing = db.prepare(`
-    SELECT id FROM products WHERE edari_seq = ? OR barcode = ? OR sku_num = ?
-  `).get(String(row.Seq || row.seq || ''), barcode, sku);
+function addProductByBarcode(sectionId, code) {
+  const raw = normalizeCode(code);
+  if (!raw) throw new Error('الباركود مطلوب');
 
-  const payload = {
+  const section = getSection(sectionId);
+  if (!section) throw new Error('القسم غير موجود');
+
+  const material = findEdariMaterialByCode(raw);
+  if (!material?.seq) {
+    throw new Error('المادة غير موجودة في Edari — نفّذ مزامنة كاملة أولاً');
+  }
+
+  const duplicate = db.prepare(`
+    SELECT id FROM products
+    WHERE section_id = ? AND (
+      edari_seq = ? OR barcode = ? OR sku_num = ?
+    )
+  `).get(sectionId, material.seq, material.barcode || raw, material.num || raw);
+
+  if (duplicate) throw new Error('هذا المنتج مُسجَّل مسبقاً في هذا القسم');
+
+  return createProduct({
     sectionId,
-    edariSeq: String(row.Seq || row.seq || ''),
-    skuNum: sku,
-    barcode: barcode || sku,
-    name,
-    unit: String(row.DefUnit || row.unit || ''),
-    price: Number(row.SellPr1 || row.price || 0),
-    isActive: true
-  };
-
-  if (existing) return updateProduct(existing.id, payload);
-  return createProduct(payload);
+    edariSeq: material.seq,
+    skuNum: material.num,
+    barcode: material.barcode || material.num,
+    name: material.name,
+    unit: material.unit,
+    price: material.price,
+    syncedAt: material.syncedAt || new Date().toISOString()
+  });
 }
 
-function getDefaultSectionId() {
-  const row = db.prepare(`
-    SELECT s.id FROM catalog_sections s
-    JOIN catalog_branches b ON b.id = s.branch_id
-    WHERE s.is_active = 1 AND b.is_active = 1
-    ORDER BY b.sort_order, s.sort_order, s.id
-    LIMIT 1
-  `).get();
-  return row?.id || null;
-}
+/** Sync File13n cache + refresh catalog products registered by barcode (no auto-import). */
+function syncMaterialsFromEdari(rows = []) {
+  if (!rows.length) return { materials: 0, productsUpdated: 0, scanned: 0 };
 
-function importProductsFromSync(rows = []) {
-  const sectionId = getDefaultSectionId();
-  if (!sectionId || !rows.length) return { imported: 0, scanned: rows.length };
-  let imported = 0;
+  let materials = 0;
+  let productsUpdated = 0;
   const tx = db.transaction(() => {
     for (const row of rows) {
-      if (upsertProductFromSync(row, sectionId)) imported += 1;
+      const parsed = upsertEdariMaterial(row);
+      if (!parsed) continue;
+      materials += 1;
+      productsUpdated += refreshRegisteredProductFromEdari(parsed);
     }
   });
   tx();
-  return { imported, scanned: rows.length };
+  return { materials, productsUpdated, scanned: rows.length };
 }
 
 module.exports = {
@@ -247,11 +304,11 @@ module.exports = {
   listProducts,
   getProduct,
   lookupByBarcode,
+  findEdariMaterialByCode,
+  addProductByBarcode,
   createProduct,
   updateProduct,
   deleteProduct,
   saveProductImage,
-  importFromInvoiceLines,
-  upsertProductFromSync,
-  importProductsFromSync
+  syncMaterialsFromEdari
 };

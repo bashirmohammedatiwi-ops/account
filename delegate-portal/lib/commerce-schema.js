@@ -44,6 +44,20 @@ function migrateCommerceSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_products_section ON products(section_id);
     CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
     CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku_num);
+    CREATE INDEX IF NOT EXISTS idx_products_edari_seq ON products(edari_seq);
+
+    CREATE TABLE IF NOT EXISTS edari_materials (
+      seq TEXT PRIMARY KEY,
+      num TEXT,
+      barcode TEXT,
+      name1 TEXT NOT NULL,
+      unit TEXT DEFAULT '',
+      sell_pr1 REAL DEFAULT 0,
+      synced_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_edari_materials_barcode ON edari_materials(barcode);
+    CREATE INDEX IF NOT EXISTS idx_edari_materials_num ON edari_materials(num);
 
     CREATE TABLE IF NOT EXISTS agent_catalog_branches (
       agent_id INTEGER NOT NULL,

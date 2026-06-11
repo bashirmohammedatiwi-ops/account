@@ -145,12 +145,13 @@ async function loadCatalogProducts() {
       <td dir="ltr">${esc(p.barcode || p.skuNum)}</td>
       <td>${esc(p.name)}</td>
       <td dir="ltr">${fmtMoney(p.price)}</td>
+      <td>${esc((p.syncedAt || p.updatedAt || '—').slice(0, 19).replace('T', ' '))}</td>
       <td>${p.isActive ? 'نشط' : 'موقوف'}</td>
       <td>
-        <button type="button" class="btn btn-soft btn-sm" data-prod-edit="${p.id}">تعديل</button>
+        <button type="button" class="btn btn-soft btn-sm" data-prod-edit="${p.id}">صورة / حالة</button>
         <button type="button" class="btn btn-danger btn-sm" data-prod-del="${p.id}">حذف</button>
       </td>
-    </tr>`).join('') || '<tr><td colspan="6">لا توجد منتجات في هذا القسم</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="7">لا توجد منتجات — أضف بالباركود بعد مزامنة Edari</td></tr>';
 
   document.querySelectorAll('[data-prod-edit]').forEach((btn) => {
     btn.addEventListener('click', () => editProduct(Number(btn.dataset.prodEdit)));
@@ -167,14 +168,13 @@ async function loadCatalogProducts() {
 async function editProduct(id) {
   const p = commerce.products.find((x) => x.id === id);
   if (!p) return;
-  const name = prompt('اسم المنتج:', p.name);
-  if (name == null) return;
-  const price = prompt('السعر:', p.price);
-  const barcode = prompt('الباركود:', p.barcode || p.skuNum);
+
+  const active = confirm(`المنتج: ${p.name}\n\nموافق = نشط | إلغاء = موقوف`);
   await commerceApi(`/products/${id}`, {
     method: 'PUT',
-    body: JSON.stringify({ name, price: Number(price || 0), barcode, skuNum: barcode })
+    body: JSON.stringify({ isActive: active })
   });
+
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
   fileInput.accept = 'image/*';
@@ -284,25 +284,25 @@ function initCommerceAdmin() {
 
   document.getElementById('btnAddProduct')?.addEventListener('click', async () => {
     if (!commerce.selectedSectionId) return alert('اختر قسماً');
-    const name = prompt('اسم المنتج:');
-    if (!name) return;
-    const barcode = prompt('الباركود:') || '';
-    const price = Number(prompt('السعر:', '0') || 0);
-    await commerceApi('/products', {
-      method: 'POST',
-      body: JSON.stringify({ sectionId: commerce.selectedSectionId, name, barcode, skuNum: barcode, price })
-    });
-    await loadCatalogProducts();
-  });
+    const barcode = prompt('أدخل الباركود أو رقم المادة من Edari:');
+    if (!barcode?.trim()) return;
 
-  document.getElementById('btnImportProducts')?.addEventListener('click', async () => {
-    if (!commerce.selectedSectionId) return alert('اختر قسماً');
-    const data = await commerceApi('/products/import-invoice-lines', {
-      method: 'POST',
-      body: JSON.stringify({ sectionId: commerce.selectedSectionId })
-    });
-    alert(`تم استيراد ${data.imported} منتج من ${data.scanned} بند فاتورة`);
-    await loadCatalogProducts();
+    try {
+      const preview = await commerceApi(`/products/edari-lookup?code=${encodeURIComponent(barcode.trim())}`);
+      const m = preview.material;
+      const ok = confirm(
+        `من Edari:\n${m.name}\nباركود: ${m.barcode || m.num}\nالسعر: ${fmtMoney(m.price)}\n\nإضافة إلى هذا القسم؟`
+      );
+      if (!ok) return;
+
+      await commerceApi('/products/by-barcode', {
+        method: 'POST',
+        body: JSON.stringify({ sectionId: commerce.selectedSectionId, barcode: barcode.trim() })
+      });
+      await loadCatalogProducts();
+    } catch (e) {
+      alert(e.message);
+    }
   });
 
   document.getElementById('orderStatusFilter')?.addEventListener('change', () => loadOrdersPage());

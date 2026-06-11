@@ -4,7 +4,7 @@ const {
   assignBillNosForLines,
   resolveLineTotal
 } = require('./invoice-line-sync');
-const { importProductsFromSync } = require('./products');
+const { syncMaterialsFromEdari } = require('./products');
 
 const usedBillNosStmt = db.prepare('SELECT bill_no FROM invoice_lines WHERE bill_seq = ?');
 
@@ -358,8 +358,13 @@ function purgeSyncScope(accountSeqs = []) {
 function importSyncChunk(kind, rows = []) {
   if (kind === 'products') {
     if (!rows.length) return { imported: 0, kind };
-    const result = importProductsFromSync(rows);
-    return { imported: result.imported, kind, scanned: result.scanned };
+    const result = syncMaterialsFromEdari(rows);
+    return {
+      imported: result.materials,
+      kind,
+      scanned: result.scanned,
+      productsUpdated: result.productsUpdated
+    };
   }
 
   const upsert = SYNC_UPSERTS[kind];
@@ -411,7 +416,7 @@ function finishSyncSession(logId, stats = {}) {
     'success',
     accounts,
     journal,
-    `${prefix}تمت المزامنة: ${accounts} حساب، ${journal} حركة، ${invoices} فاتورة، ${invoiceLines} بند${products ? `، ${products} منتج` : ''}`,
+    `${prefix}تمت المزامنة: ${accounts} حساب، ${journal} حركة، ${invoices} فاتورة، ${invoiceLines} بند${products ? `، ${products} مادة Edari` : ''}`,
     logId
   );
   return {
