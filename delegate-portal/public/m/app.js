@@ -572,6 +572,8 @@ async function loadStatement(seq) {
     state.lastStatement = data;
     renderStatement(data);
   } catch (e) {
+    document.getElementById('stmtHero').innerHTML = '';
+    document.getElementById('stmtTableSection').classList.add('hidden');
     document.getElementById('stmtLines').innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`;
   } finally {
     setOverlay(false);

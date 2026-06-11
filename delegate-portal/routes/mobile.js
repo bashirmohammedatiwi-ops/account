@@ -110,9 +110,13 @@ router.get('/accounts/:seq/statement', authAgent, (req, res) => {
   if (!canAgentAccess(req.agent.id, req.params.seq)) {
     return res.status(403).json({ ok: false, error: 'لا تملك صلاحية هذا الحساب' });
   }
-  const stmt = getStatementForAccount(req.params.seq);
-  if (!stmt) return res.status(404).json({ ok: false, error: 'الحساب غير موجود' });
-  res.json({ ok: true, ...stmt });
+  try {
+    const stmt = getStatementForAccount(req.params.seq);
+    if (!stmt) return res.status(404).json({ ok: false, error: 'الحساب غير موجود' });
+    res.json({ ok: true, ...stmt });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'فشل تحميل كشف الحساب' });
+  }
 });
 
 async function sendInvoicePdf(req, res) {

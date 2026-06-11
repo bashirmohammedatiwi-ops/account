@@ -389,6 +389,7 @@ function resolveDebtDisplayAmount(data = {}) {
 
 module.exports = {
   parseAmount,
+  isDebitRow,
   buildStatementLines,
   balanceSummaryLabel,
   debtStatusFromBalance,
