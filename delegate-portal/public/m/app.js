@@ -20,10 +20,14 @@ function esc(v) {
 }
 
 const ICONS = {
-  tree: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M3 12l9 5 9-5M3 17l9 5 9-5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`,
-  branch: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M5 21v-1.5a7 7 0 0114 0V21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
-  chevron: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  tree: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M3 12l9 5 9-5M3 17l9 5 9-5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`,
+  branch: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M5 21v-1.5a7 7 0 0114 0V21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+  chevron: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  users: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+  statement: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="currentColor" stroke-width="1.8"/></svg>`
 };
+
+const CARD_HUES = [248, 280, 320, 200, 260, 300];
 
 function fmtNum(v) {
   const n = Number(v);
@@ -229,15 +233,85 @@ function agentInitial(name) {
   return n.charAt(0) || 'م';
 }
 
+function branchBalanceMeta(branch) {
+  const bal = Number(branch?.bal ?? 0);
+  if (bal < 0) {
+    return { cls: 'debit', label: 'مدين', amount: fmtNumAlways(Math.abs(bal)) };
+  }
+  if (bal > 0) {
+    return { cls: 'credit', label: 'دائن', amount: fmtNumAlways(bal) };
+  }
+  return { cls: 'neutral', label: 'متعادل', amount: '0' };
+}
+
+function summarizeBranches(list = []) {
+  let debit = 0;
+  let credit = 0;
+  let neutral = 0;
+  for (const b of list) {
+    const bal = Number(b.bal || 0);
+    if (bal < 0) debit += 1;
+    else if (bal > 0) credit += 1;
+    else neutral += 1;
+  }
+  return { debit, credit, neutral, total: list.length };
+}
+
+function renderDashStats(elId, items) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.innerHTML = items.map(([label, value, tone], i) => `
+    <div class="ed-metric ed-metric-${tone || 'default'}" style="--i:${i}">
+      <span class="ed-metric-val">${esc(value)}</span>
+      <span class="ed-metric-lbl">${esc(label)}</span>
+    </div>`).join('');
+}
+
+function setSectionMeta(elId, text) {
+  const el = document.getElementById(elId);
+  if (el) el.textContent = text;
+}
+
+function renderHomeStats() {
+  const totalCustomers = state.trees.reduce((s, t) => s + (Number(t.directChildren) || 0), 0);
+  renderDashStats('homeStats', [
+    ['شجرات', String(state.trees.length), 'accent'],
+    ['زبائن', fmtNumAlways(totalCustomers), 'default'],
+    ['حالة', state.trees.length ? 'متصل' : 'فارغ', 'muted']
+  ]);
+}
+
+function renderBranchStats(list = []) {
+  const statsEl = document.getElementById('branchesStats');
+  if (!statsEl) return;
+  if (!list.length) {
+    statsEl.classList.add('hidden');
+    statsEl.innerHTML = '';
+    return;
+  }
+  const s = summarizeBranches(list);
+  statsEl.classList.remove('hidden');
+  renderDashStats('branchesStats', [
+    ['إجمالي', String(s.total), 'accent'],
+    ['مدين', String(s.debit), 'debit'],
+    ['دائن', String(s.credit), 'credit'],
+    ['متعادل', String(s.neutral), 'muted']
+  ]);
+}
+
 function updateUserChrome() {
   const name = state.agent?.name || '';
   const initial = agentInitial(name);
-  document.getElementById('userAvatar').textContent = initial;
-  document.getElementById('userName').textContent = name;
-  document.getElementById('welcomeName').textContent = name;
+  const avatar = document.getElementById('welcomeAvatar');
+  if (avatar) avatar.textContent = initial;
+  document.getElementById('welcomeName').textContent = name ? `مرحباً، ${name}` : 'مرحباً';
   document.getElementById('welcomeTreeCount').textContent = String(state.trees.length);
-  document.getElementById('headerUser').classList.toggle('hidden', !name);
-  document.getElementById('welcomeBanner').classList.toggle('hidden', !name);
+  const sub = document.getElementById('homeHeroSub');
+  if (sub) {
+    sub.textContent = state.trees.length
+      ? `${state.trees.length} شجرة جاهزة — اختر واحدة للبدء`
+      : 'لا توجد شجرات — تواصل مع الإدارة';
+  }
 }
 
 function getToken() {
@@ -392,40 +466,65 @@ function goToScreen(name) {
   if (name === 'trees') {
     backBtn.classList.add('hidden');
     toolbarWrap.classList.add('hidden');
-    document.getElementById('headerUser').classList.remove('hidden');
-    title.textContent = 'الشجرات';
-    crumb.textContent = state.agent?.name ? `مرحباً ${state.agent.name}` : '';
+    title.textContent = 'لوحة الشجرات';
+    crumb.textContent = state.agent?.name ? `المندوب: ${state.agent.name}` : '';
+    const kicker = document.getElementById('headerKicker');
+    if (kicker) kicker.textContent = 'Edari · الرئيسية';
     updateUserChrome();
   } else if (name === 'branches') {
     backBtn.classList.remove('hidden');
     toolbarWrap.classList.remove('hidden');
-    document.getElementById('headerUser').classList.add('hidden');
-    title.textContent = state.selectedTree?.name1 || 'الفروع';
-    crumb.textContent = state.selectedTree?.name1 || '';
+    title.textContent = state.selectedTree?.name1 || 'الزبائن';
+    crumb.textContent = state.selectedTree?.num ? `شجرة ${state.selectedTree.num}` : '';
+    const kicker = document.getElementById('headerKicker');
+    if (kicker) kicker.textContent = 'Edari · الزبائن';
     renderTreeContext();
   } else if (name === 'statement') {
     backBtn.classList.remove('hidden');
     toolbarWrap.classList.add('hidden');
-    document.getElementById('headerUser').classList.add('hidden');
     title.textContent = state.selectedBranch?.name1 || 'كشف الحساب';
     crumb.textContent = state.selectedBranch?.name1
       ? `كشف حساب · ${state.selectedBranch.name1}`
       : 'كشف حساب';
+    const kicker = document.getElementById('headerKicker');
+    if (kicker) kicker.textContent = 'Edari · الكشف';
   } else if (name === 'invoice') {
     backBtn.classList.remove('hidden');
     toolbarWrap.classList.add('hidden');
-    document.getElementById('headerUser').classList.add('hidden');
     title.textContent = 'تفاصيل الفاتورة';
     crumb.textContent = state.selectedInvoice?.num
       ? `فاتورة ${state.selectedInvoice.num}`
       : '';
+    const kicker = document.getElementById('headerKicker');
+    if (kicker) kicker.textContent = 'Edari · الفاتورة';
   }
 }
 
 function renderTreeContext() {
   const el = document.getElementById('treeContext');
-  el.classList.add('hidden');
-  el.innerHTML = '';
+  const tree = state.selectedTree;
+  if (!tree?.seq) {
+    el.classList.add('hidden');
+    el.innerHTML = '';
+    return;
+  }
+  const count = state.branches.length;
+  const s = summarizeBranches(state.branches);
+  el.classList.remove('hidden');
+  el.innerHTML = `
+    <div class="ed-branch-banner-glow" aria-hidden="true"></div>
+    <div class="ed-branch-banner-inner">
+      <div class="ed-branch-banner-icon">${ICONS.tree}</div>
+      <div class="ed-branch-banner-copy">
+        <span class="ed-branch-banner-num">${esc(tree.num || '—')}</span>
+        <h2 class="ed-branch-banner-title">${esc(tree.name1 || '—')}</h2>
+        <p class="ed-branch-banner-sub">${count ? `${fmtNumAlways(count)} زبون · ${fmtNumAlways(s.debit)} مدين · ${fmtNumAlways(s.credit)} دائن` : 'لا يوجد زبائن'}</p>
+      </div>
+      <div class="ed-branch-banner-stat">
+        <span class="ed-branch-banner-stat-val">${fmtNumAlways(count)}</span>
+        <span class="ed-branch-banner-stat-lbl">زبون</span>
+      </div>
+    </div>`;
 }
 
 function filterBranches(list) {
@@ -458,32 +557,41 @@ function renderCountBar(elId, count, title, subtitle) {
 }
 
 function renderTrees() {
+  renderHomeStats();
   if (!state.trees.length) {
-    renderCountBar('treesMeta', null, 'لا توجد شجرات', 'تواصل مع الإدارة');
+    setSectionMeta('treesMeta', 'لا توجد شجرات معيّنة — تواصل مع الإدارة');
   } else {
-    renderCountBar('treesMeta', state.trees.length, 'شجرة', 'إجمالي الشجرات المعيّنة');
+    const customers = state.trees.reduce((s, t) => s + (Number(t.directChildren) || 0), 0);
+    setSectionMeta('treesMeta', `${state.trees.length} شجرة · ${fmtNumAlways(customers)} زبون`);
   }
 
   const list = document.getElementById('treesList');
   if (!state.trees.length) {
-    list.innerHTML = '<div class="empty-state"><div class="icon">🌳</div><p>لا توجد شجرات — تواصل مع الإدارة</p></div>';
+    list.innerHTML = '<div class="empty-state empty-state-home"><div class="icon">🌳</div><p>لا توجد شجرات — تواصل مع الإدارة</p></div>';
     return;
   }
 
-  list.innerHTML = state.trees.map((t) => `
-    <button type="button" class="nav-card" data-seq="${esc(t.seq)}">
-      <div class="nav-card-icon tree">${ICONS.tree}</div>
-      <div class="nav-card-body">
-        <div class="nav-card-top">
-          <div class="nav-card-name">${esc(t.name1 || '—')}</div>
-          <span class="nav-card-num">${esc(t.num)}</span>
-        </div>
-        <div class="nav-card-sub">${t.directChildren || 0} زبون</div>
+  list.innerHTML = state.trees.map((t, i) => {
+    const hue = CARD_HUES[i % CARD_HUES.length];
+    return `
+    <button type="button" class="ed-card ed-card-tree" data-seq="${esc(t.seq)}" style="--hue:${hue};--i:${i}">
+      <div class="ed-card-stripe" aria-hidden="true"></div>
+      <div class="ed-card-top">
+        <span class="ed-card-num">${esc(t.num)}</span>
+        <span class="ed-card-icon-wrap">${ICONS.tree}</span>
       </div>
-      <span class="nav-card-arrow">${ICONS.chevron}</span>
-    </button>`).join('');
+      <h4 class="ed-card-title">${esc(t.name1 || '—')}</h4>
+      <div class="ed-card-tags">
+        <span class="ed-tag ed-tag-users">${ICONS.users} ${fmtNumAlways(t.directChildren || 0)} زبون</span>
+      </div>
+      <div class="ed-card-cta">
+        <span>عرض الزبائن</span>
+        <span class="ed-card-cta-icon">${ICONS.chevron}</span>
+      </div>
+    </button>`;
+  }).join('');
 
-  list.querySelectorAll('.nav-card').forEach((btn) => {
+  list.querySelectorAll('.ed-card').forEach((btn) => {
     btn.addEventListener('click', () => openTree(btn.dataset.seq));
   });
 }
@@ -499,35 +607,49 @@ function resetBranchFilters() {
 
 function renderBranches() {
   const filtered = filterBranches(state.branches);
+  renderBranchStats(state.branches);
+  renderTreeContext();
+
   if (!state.branches.length) {
-    renderCountBar('branchesMeta', 0, 'فرع', 'لا توجد فروع في هذه الشجرة');
+    setSectionMeta('branchesMeta', 'لا يوجد زبائن في هذه الشجرة');
   } else if (filtered.length === state.branches.length) {
-    renderCountBar('branchesMeta', filtered.length, 'فرع', 'إجمالي الفروع في الشجرة');
+    setSectionMeta('branchesMeta', `${fmtNumAlways(filtered.length)} زبون — اضغط لعرض كشف الحساب`);
   } else {
-    renderCountBar('branchesMeta', filtered.length, 'فرع', `من ${state.branches.length} فرع`);
+    setSectionMeta('branchesMeta', `${fmtNumAlways(filtered.length)} من ${fmtNumAlways(state.branches.length)} زبون`);
   }
 
   const list = document.getElementById('branchesList');
   if (!filtered.length) {
     const msg = state.branches.length && (state.branchSearch || state.branchFilter !== 'all')
       ? 'لا توجد نتائج — جرّب تغيير البحث أو الفلتر'
-      : 'لا توجد فروع في هذه الشجرة';
-    list.innerHTML = `<div class="empty-state"><div class="icon">👥</div><p>${msg}</p></div>`;
+      : 'لا يوجد زبائن في هذه الشجرة';
+    list.innerHTML = `<div class="empty-state empty-state-branches"><div class="icon">👥</div><p>${msg}</p></div>`;
     return;
   }
 
-  list.innerHTML = filtered.map((b) => `
-    <button type="button" class="nav-card" data-seq="${esc(b.seq)}">
-      <div class="nav-card-icon branch">${ICONS.branch}</div>
-      <div class="nav-card-body">
-        <div class="nav-card-top">
-          <div class="nav-card-name">${esc(b.name1 || '—')}</div>
-        </div>
+  list.innerHTML = filtered.map((b, i) => {
+    const bal = branchBalanceMeta(b);
+    const hue = CARD_HUES[i % CARD_HUES.length];
+    return `
+    <button type="button" class="ed-card ed-card-branch ed-card-bal-${bal.cls}" data-seq="${esc(b.seq)}" style="--hue:${hue};--i:${i}">
+      <div class="ed-card-stripe" aria-hidden="true"></div>
+      <div class="ed-card-top">
+        <span class="ed-card-num">${esc(b.num || '—')}</span>
+        <span class="ed-card-icon-wrap">${ICONS.branch}</span>
       </div>
-      <span class="nav-card-arrow">${ICONS.chevron}</span>
-    </button>`).join('');
+      <h4 class="ed-card-title">${esc(b.name1 || '—')}</h4>
+      <div class="ed-balance-block">
+        <span class="ed-balance-amt" dir="ltr">${esc(bal.amount)}</span>
+        <span class="ed-balance-lbl">${esc(bal.label)}</span>
+      </div>
+      <div class="ed-card-cta">
+        <span>${ICONS.statement} كشف الحساب</span>
+        <span class="ed-card-cta-icon">${ICONS.chevron}</span>
+      </div>
+    </button>`;
+  }).join('');
 
-  list.querySelectorAll('.nav-card').forEach((btn) => {
+  list.querySelectorAll('.ed-card').forEach((btn) => {
     btn.addEventListener('click', () => openBranch(btn.dataset.seq));
   });
 }

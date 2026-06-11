@@ -31,7 +31,12 @@ app.get('/admin/*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin', 'index.html'));
 });
 
-app.use('/m', express.static(path.join(__dirname, 'public', 'm')));
+app.use('/m', (req, res, next) => {
+  if (/\.(css|js|html)$/i.test(req.path)) {
+    res.set('Cache-Control', 'no-cache, must-revalidate');
+  }
+  next();
+}, express.static(path.join(__dirname, 'public', 'm')));
 app.get('/m/*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'm', 'index.html'));
 });

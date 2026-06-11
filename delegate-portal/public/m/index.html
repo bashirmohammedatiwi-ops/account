@@ -4,54 +4,75 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="theme-color" content="#0f766e">
+  <meta name="theme-color" content="#312e81">
   <title>Edari — كشف حساب</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=20260619a">
 </head>
-<body>
+<body class="ed-body">
   <!-- Login -->
   <div id="loginScreen" class="login-screen">
-    <div class="login-card">
-      <div class="login-brand">
-        <div class="login-logo">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
-            <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
-          </svg>
-        </div>
-        <div>
-          <p class="login-brand-name">Edari</p>
-          <p class="login-brand-tag">بوابة المندوبين</p>
-        </div>
+    <div class="login-bg" aria-hidden="true">
+      <span class="login-orb login-orb-a"></span>
+      <span class="login-orb login-orb-b"></span>
+      <span class="login-orb login-orb-c"></span>
+    </div>
+    <div class="login-shell">
+      <div class="login-showcase" aria-hidden="true">
+        <p class="login-showcase-tag">Edari Delegate</p>
+        <h2>إدارة حسابات<br>زبائنك بسهولة</h2>
+        <ul class="login-showcase-list">
+          <li>كشوف حساب فورية</li>
+          <li>فواتير ومردودات</li>
+          <li>تصدير PDF</li>
+        </ul>
       </div>
-      <h1>مرحباً بك</h1>
-      <p class="login-sub">سجّل دخولك لعرض كشوف حسابات الزبائن</p>
-      <form id="loginForm">
-        <label class="field">
-          <span class="field-label">اسم المستخدم</span>
-          <input type="text" id="loginUsername" autocomplete="username" placeholder="أدخل اسم المستخدم" required>
-        </label>
-        <label class="field">
-          <span class="field-label">كلمة المرور</span>
-          <input type="password" id="loginPassword" autocomplete="current-password" placeholder="••••••••" required>
-        </label>
-        <p class="login-error hidden" id="loginError"></p>
-        <button type="submit" class="btn primary full" id="btnLogin">دخول</button>
-      </form>
+      <div class="login-card">
+        <div class="login-brand">
+          <div class="login-logo">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+              <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div>
+            <p class="login-brand-name">Edari</p>
+            <p class="login-brand-tag">بوابة المندوبين</p>
+          </div>
+        </div>
+        <h1>تسجيل الدخول</h1>
+        <p class="login-sub">ادخل بياناتك للوصول إلى شجراتك وزبائنك</p>
+        <form id="loginForm">
+          <label class="field">
+            <span class="field-label">اسم المستخدم</span>
+            <input type="text" id="loginUsername" autocomplete="username" placeholder="أدخل اسم المستخدم" required>
+          </label>
+          <label class="field">
+            <span class="field-label">كلمة المرور</span>
+            <input type="password" id="loginPassword" autocomplete="current-password" placeholder="••••••••" required>
+          </label>
+          <p class="login-error hidden" id="loginError"></p>
+          <button type="submit" class="btn primary full" id="btnLogin">
+            <span>دخول إلى الحساب</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </form>
+      </div>
     </div>
   </div>
 
   <!-- App -->
   <div id="appShell" class="hidden">
-    <header class="app-header">
+    <header class="app-header ed-header">
+      <div class="ed-header-bg" aria-hidden="true"></div>
       <div class="header-row">
         <button type="button" class="back-btn hidden" id="btnBack" aria-label="رجوع">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <div class="header-center">
+          <p class="ed-header-kicker" id="headerKicker">Edari Delegate</p>
           <h1 id="screenTitle">الشجرات</h1>
           <p class="breadcrumb" id="breadcrumb"></p>
         </div>
@@ -64,16 +85,9 @@
           </button>
         </div>
       </div>
-      <div class="header-user hidden" id="headerUser">
-        <div class="user-avatar" id="userAvatar">م</div>
-        <div class="user-info">
-          <span class="user-name" id="userName"></span>
-          <span class="user-role">مندوب مبيعات</span>
-        </div>
-      </div>
     </header>
 
-    <div class="toolbar hidden" id="toolbarWrap">
+    <div class="toolbar ed-toolbar hidden" id="toolbarWrap">
       <div class="search-bar" id="searchBarWrap">
         <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
@@ -89,27 +103,47 @@
     </div>
 
     <main class="app-main">
-      <!-- Trees -->
+      <!-- Trees (home) -->
       <section class="screen active" id="screen-trees">
-        <div class="welcome-banner hidden" id="welcomeBanner">
-          <div class="welcome-text">
-            <p class="welcome-greet">مرحباً</p>
-            <p class="welcome-name" id="welcomeName"></p>
-          </div>
-          <div class="welcome-stat">
-            <span class="welcome-stat-val" id="welcomeTreeCount">0</span>
-            <span class="welcome-stat-lbl">شجرة</span>
+        <div class="ed-layout ed-layout-home">
+          <aside class="ed-panel ed-panel-home">
+            <div class="ed-panel-glow" aria-hidden="true"></div>
+            <div class="ed-welcome-block">
+              <div class="ed-avatar-ring" id="welcomeAvatarWrap">
+                <span id="welcomeAvatar">م</span>
+              </div>
+              <p class="ed-welcome-kicker">لوحة المندوب</p>
+              <h2 class="ed-welcome-title" id="welcomeName">مرحباً</h2>
+              <p class="ed-welcome-sub" id="homeHeroSub">اختر شجرة لاستعراض الزبائن</p>
+            </div>
+            <div class="ed-metrics" id="homeStats"></div>
+          </aside>
+          <div class="ed-main-col">
+            <div class="ed-content-head">
+              <div>
+                <h3 class="ed-content-title">الشجرات المعيّنة</h3>
+                <p class="ed-content-meta" id="treesMeta">—</p>
+              </div>
+              <span class="ed-count-badge" id="welcomeTreeCount">0</span>
+            </div>
+            <div class="ed-grid ed-grid-trees" id="treesList"></div>
           </div>
         </div>
-        <div class="screen-meta" id="treesMeta"></div>
-        <div class="cards-list" id="treesList"></div>
       </section>
 
       <!-- Branches -->
       <section class="screen" id="screen-branches">
-        <div class="tree-context hidden" id="treeContext"></div>
-        <div class="screen-meta" id="branchesMeta"></div>
-        <div class="cards-list" id="branchesList"></div>
+        <div class="ed-layout ed-layout-branches">
+          <div class="ed-branch-banner hidden" id="treeContext"></div>
+          <div class="ed-metrics ed-metrics-row hidden" id="branchesStats"></div>
+          <div class="ed-content-head ed-content-head-branch">
+            <div>
+              <h3 class="ed-content-title">دليل الزبائن</h3>
+              <p class="ed-content-meta" id="branchesMeta">—</p>
+            </div>
+          </div>
+          <div class="ed-grid ed-grid-branches" id="branchesList"></div>
+        </div>
       </section>
 
       <!-- Statement -->
@@ -167,6 +201,6 @@
       <p>جاري التحميل...</p>
     </div>
   </div>
-  <script src="app.js?v=20260616"></script>
+  <script src="app.js?v=20260619a"></script>
 </body>
 </html>
