@@ -330,8 +330,12 @@ async function fetchMaterialMap(matSeqs) {
 }
 
 function readSyncNum(row, ...keys) {
+  if (!row) return 0;
+  const entries = Object.entries(row);
   for (const key of keys) {
-    const value = row?.[key];
+    const lower = key.toLowerCase();
+    const hit = entries.find(([name]) => String(name).toLowerCase() === lower);
+    const value = hit ? hit[1] : row[key];
     if (value == null || value === '') continue;
     const n = Number(value);
     if (!Number.isNaN(n)) return n;

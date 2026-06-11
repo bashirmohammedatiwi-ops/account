@@ -89,6 +89,28 @@ function migrateSchema() {
     }
   }
   migrateInvoiceLinesUniqueKey();
+  repairAllInvoiceLineBillNumbers();
+}
+
+function repairAllInvoiceLineBillNumbers() {
+  const groups = db.prepare(`
+    SELECT bill_seq FROM invoice_lines
+    GROUP BY bill_seq
+    HAVING SUM(CASE WHEN bill_no IS NULL OR bill_no = 0 THEN 1 ELSE 0 END) > 0
+       OR COUNT(DISTINCT bill_no) < COUNT(*)
+  `).all();
+  if (!groups.length) return;
+
+  const update = db.prepare('UPDATE invoice_lines SET bill_no = ? WHERE id = ?');
+  const tx = db.transaction(() => {
+    for (const { bill_seq } of groups) {
+      const rows = db.prepare(`
+        SELECT id FROM invoice_lines WHERE bill_seq = ? ORDER BY id
+      `).all(bill_seq);
+      rows.forEach((row, index) => update.run(index + 1, row.id));
+    }
+  });
+  tx();
 }
 
 function migrateInvoiceLinesUniqueKey() {
@@ -126,8 +148,14 @@ function migrateInvoiceLinesUniqueKey() {
       VALUES
         (@bill_seq, @bill_no, @mat, @mat_num, @mat_name, @quant, @bonus, @price, @line_total, @remarks, @kind)
     `);
+    const counters = new Map();
     for (const row of rows) {
-      insert.run(row);
+      let billNo = Number(row.bill_no || 0);
+      if (!billNo) {
+        billNo = (counters.get(row.bill_seq) || 0) + 1;
+        counters.set(row.bill_seq, billNo);
+      }
+      insert.run({ ...row, bill_no: billNo });
     }
 
     db.exec(`

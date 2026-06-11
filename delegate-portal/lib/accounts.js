@@ -253,8 +253,12 @@ function mapInvoiceRow(inv, now) {
 }
 
 function readSyncNum(row, ...keys) {
+  if (!row) return 0;
+  const entries = Object.entries(row);
   for (const key of keys) {
-    const value = row?.[key];
+    const lower = key.toLowerCase();
+    const hit = entries.find(([name]) => String(name).toLowerCase() === lower);
+    const value = hit ? hit[1] : row[key];
     if (value == null || value === '') continue;
     const n = Number(value);
     if (!Number.isNaN(n)) return n;
@@ -293,7 +297,6 @@ function mapInvoiceLineRow(line) {
   const matName = line.MatName ?? line.mat_name ?? line.Name1 ?? '';
   const mat = String(line.Mat ?? line.mat ?? '');
   const billNo = readSyncNum(line, 'BillNo', 'bill_no');
-  if (!billNo) return null;
   if (!quant && !bonus && !price && !lineTotalVal && !String(matName).trim() && !mat.trim()) {
     return null;
   }
