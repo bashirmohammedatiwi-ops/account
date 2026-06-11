@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css?v=20260620pro">
-  <link rel="stylesheet" href="portal-pro.css?v=20260620pro">
+  <link rel="stylesheet" href="portal-pro.css?v=20260621br">
 </head>
 <body class="ed-body">
   <!-- Login -->
@@ -140,16 +140,19 @@
 
       <!-- Branches -->
       <section class="screen" id="screen-branches">
-        <div class="ed-layout ed-layout-branches">
-          <div class="ed-branch-banner hidden" id="treeContext"></div>
-          <div class="ed-metrics ed-metrics-row hidden" id="branchesStats"></div>
-          <div class="ed-content-head ed-content-head-branch">
-            <div>
-              <h3 class="ed-content-title">سجل الزبائن</h3>
-              <p class="ed-content-meta" id="branchesMeta">—</p>
+        <div class="br-page">
+          <div class="br-tree-bar hidden" id="treeContext"></div>
+          <div class="br-summary hidden" id="branchesStats"></div>
+          <div class="br-list-toolbar">
+            <div class="br-list-head">
+              <div>
+                <h3 class="br-list-title">سجل الزبائن</h3>
+                <p class="br-list-meta" id="branchesMeta">—</p>
+              </div>
+              <span class="br-list-count hidden" id="branchesCount" aria-hidden="true">0</span>
             </div>
           </div>
-          <div class="ed-grid ed-grid-branches" id="branchesList"></div>
+          <div class="br-list" id="branchesList" role="list"></div>
         </div>
       </section>
 
@@ -208,6 +211,6 @@
       <p>جاري التحميل...</p>
     </div>
   </div>
-  <script src="app.js?v=20260620pro"></script>
+  <script src="app.js?v=20260621br"></script>
 </body>
 </html>

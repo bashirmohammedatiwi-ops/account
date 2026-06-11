@@ -229,6 +229,55 @@ function agentInitial(name) {
   return n.charAt(0) || 'م';
 }
 
+function branchDebtMeta(branch) {
+  const bal = Number(branch?.bal ?? 0);
+  const debt = bal < 0 ? Math.abs(bal) : 0;
+  if (debt > 0) {
+    return {
+      cls: 'has-debt',
+      statusCls: 'debit',
+      statusLabel: 'مدين',
+      amount: fmtNumAlways(debt),
+      debt
+    };
+  }
+  if (bal > 0) {
+    return {
+      cls: 'credit',
+      statusCls: 'credit',
+      statusLabel: 'دائن',
+      amount: '0',
+      debt: 0
+    };
+  }
+  return {
+    cls: 'clear',
+    statusCls: 'neutral',
+    statusLabel: 'متعادل',
+    amount: '0',
+    debt: 0
+  };
+}
+
+function summarizeBranchDebts(list = []) {
+  let withDebt = 0;
+  let totalDebt = 0;
+  let credit = 0;
+  let clear = 0;
+  for (const b of list) {
+    const meta = branchDebtMeta(b);
+    if (meta.debt > 0) {
+      withDebt += 1;
+      totalDebt += meta.debt;
+    } else if (Number(b.bal || 0) > 0) {
+      credit += 1;
+    } else {
+      clear += 1;
+    }
+  }
+  return { withDebt, totalDebt, credit, clear, total: list.length };
+}
+
 function branchBalanceMeta(branch) {
   const bal = Number(branch?.bal ?? 0);
   if (bal < 0) {
@@ -285,13 +334,13 @@ function renderBranchStats(list = []) {
     statsEl.innerHTML = '';
     return;
   }
-  const s = summarizeBranches(list);
+  const s = summarizeBranchDebts(list);
   statsEl.classList.remove('hidden');
   renderDashStats('branchesStats', [
-    ['إجمالي', String(s.total), 'accent'],
-    ['مدين', String(s.debit), 'debit'],
+    ['إجمالي الديون', fmtNumAlways(s.totalDebt), 'debit'],
+    ['حسابات مدينة', String(s.withDebt), 'accent'],
     ['دائن', String(s.credit), 'credit'],
-    ['متعادل', String(s.neutral), 'muted']
+    ['بدون ديون', String(s.clear), 'muted']
   ]);
 }
 
@@ -505,24 +554,24 @@ function renderTreeContext() {
     return;
   }
   const count = state.branches.length;
-  const s = summarizeBranches(state.branches);
+  const s = summarizeBranchDebts(state.branches);
   el.classList.remove('hidden');
   el.innerHTML = `
-    <div class="ed-branch-banner-head">
-      <span class="ed-branch-banner-label">شجرة الحساب</span>
-      <span class="ed-branch-banner-num">${esc(tree.num || '—')}</span>
+    <div class="br-tree-bar-head">
+      <span class="br-tree-bar-label">شجرة الحساب</span>
+      <span class="br-tree-bar-num">${esc(tree.num || '—')}</span>
     </div>
-    <div class="ed-branch-banner-body">
-      <div class="ed-branch-banner-main">
-        <div class="ed-branch-banner-icon">${ICONS.tree}</div>
+    <div class="br-tree-bar-body">
+      <div class="br-tree-bar-main">
+        <div class="br-tree-bar-icon">${ICONS.tree}</div>
         <div>
-          <h2 class="ed-branch-banner-title">${esc(tree.name1 || '—')}</h2>
-          <p class="ed-branch-banner-sub">${count ? `${fmtNumAlways(count)} حساب · ${fmtNumAlways(s.debit)} مدين · ${fmtNumAlways(s.credit)} دائن` : 'لا توجد حسابات فرعية'}</p>
+          <h2 class="br-tree-bar-title">${esc(tree.name1 || '—')}</h2>
+          <p class="br-tree-bar-sub">${count ? `${fmtNumAlways(count)} حساب · ${fmtNumAlways(s.withDebt)} مدين · ${fmtNumAlways(s.credit)} دائن` : 'لا توجد حسابات'}</p>
         </div>
       </div>
-      <div class="ed-branch-banner-stat">
-        <span class="ed-branch-banner-stat-val">${fmtNumAlways(count)}</span>
-        <span class="ed-branch-banner-stat-lbl">إجمالي الحسابات</span>
+      <div class="br-tree-bar-debt">
+        <span class="br-tree-bar-debt-val" dir="ltr">${fmtNumAlways(s.totalDebt)}</span>
+        <span class="br-tree-bar-debt-lbl">إجمالي الديون</span>
       </div>
     </div>`;
 }
@@ -606,12 +655,18 @@ function renderBranches() {
   renderBranchStats(state.branches);
   renderTreeContext();
 
+  const countEl = document.getElementById('branchesCount');
+  if (countEl) {
+    countEl.textContent = String(filtered.length);
+    countEl.classList.toggle('hidden', !filtered.length);
+  }
+
   if (!state.branches.length) {
     setSectionMeta('branchesMeta', 'لا يوجد زبائن في هذه الشجرة');
   } else if (filtered.length === state.branches.length) {
-    setSectionMeta('branchesMeta', `${fmtNumAlways(filtered.length)} زبون — اضغط لعرض كشف الحساب`);
+    setSectionMeta('branchesMeta', `${fmtNumAlways(filtered.length)} حساب — اضغط لعرض كشف الحساب`);
   } else {
-    setSectionMeta('branchesMeta', `${fmtNumAlways(filtered.length)} من ${fmtNumAlways(state.branches.length)} زبون`);
+    setSectionMeta('branchesMeta', `${fmtNumAlways(filtered.length)} من ${fmtNumAlways(state.branches.length)} حساب`);
   }
 
   const list = document.getElementById('branchesList');
@@ -619,31 +674,33 @@ function renderBranches() {
     const msg = state.branches.length && (state.branchSearch || state.branchFilter !== 'all')
       ? 'لا توجد نتائج — جرّب تغيير البحث أو الفلتر'
       : 'لا يوجد زبائن في هذه الشجرة';
-    list.innerHTML = `<div class="empty-state empty-state-branches"><div class="icon">👥</div><p>${msg}</p></div>`;
+    list.innerHTML = `<div class="br-empty" role="listitem"><p>${msg}</p></div>`;
     return;
   }
 
   list.innerHTML = filtered.map((b, i) => {
-    const bal = branchBalanceMeta(b);
+    const debt = branchDebtMeta(b);
     return `
-    <button type="button" class="ed-card ed-card-branch ed-card-bal-${bal.cls}" data-seq="${esc(b.seq)}" style="--i:${i}">
-      <div class="ed-card-row ed-card-row-head">
-        <span class="ed-card-num">${esc(b.num || '—')}</span>
-        <span class="ed-status ed-status-${bal.cls}">${esc(bal.label)}</span>
+    <button type="button" class="br-card br-card-${debt.cls}" data-seq="${esc(b.seq)}" style="--i:${i}" role="listitem">
+      <div class="br-debt-band">
+        <span class="br-debt-label">الديون</span>
+        <span class="br-debt-amt" dir="ltr">${esc(debt.amount)}</span>
       </div>
-      <h4 class="ed-card-title">${esc(b.name1 || '—')}</h4>
-      <div class="ed-balance-line">
-        <span class="ed-balance-amt" dir="ltr">${esc(bal.amount)}</span>
-        <span class="ed-balance-lbl">الرصيد الحالي</span>
-      </div>
-      <div class="ed-card-foot">
-        <span>عرض كشف الحساب</span>
-        <span class="ed-card-arrow">${ICONS.chevron}</span>
+      <div class="br-card-body">
+        <div class="br-card-top">
+          <span class="br-acc-num">${esc(b.num || '—')}</span>
+          <span class="br-status br-status-${debt.statusCls}">${esc(debt.statusLabel)}</span>
+        </div>
+        <h4 class="br-acc-name">${esc(b.name1 || '—')}</h4>
+        <div class="br-card-action">
+          <span>عرض كشف الحساب</span>
+          <span class="br-card-arrow">${ICONS.chevron}</span>
+        </div>
       </div>
     </button>`;
   }).join('');
 
-  list.querySelectorAll('.ed-card').forEach((btn) => {
+  list.querySelectorAll('.br-card').forEach((btn) => {
     btn.addEventListener('click', () => openBranch(btn.dataset.seq));
   });
 }
