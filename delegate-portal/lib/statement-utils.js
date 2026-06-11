@@ -387,6 +387,16 @@ function resolveDebtDisplayAmount(data = {}) {
   return 0;
 }
 
+/** مبلغ الديون من حقول الحساب (Tot1/Tot2/Bal) — للقوائم بدون بناء كشف كامل */
+function resolveDebtFromAccount(account = {}) {
+  return resolveDebtDisplayAmount({
+    totalDebit: account.tot1 ?? account.Tot1,
+    totalCredit: account.tot2 ?? account.Tot2,
+    finalBalance: account.bal ?? account.Bal,
+    account: { bal: account.bal ?? account.Bal }
+  });
+}
+
 module.exports = {
   parseAmount,
   isDebitRow,
@@ -394,6 +404,7 @@ module.exports = {
   balanceSummaryLabel,
   debtStatusFromBalance,
   resolveDebtDisplayAmount,
+  resolveDebtFromAccount,
   resolveStatementTotals,
   resolveFinalBalance,
   formatRunningBalance,

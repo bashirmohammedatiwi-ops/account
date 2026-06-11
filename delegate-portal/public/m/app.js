@@ -229,9 +229,22 @@ function agentInitial(name) {
   return n.charAt(0) || 'م';
 }
 
-function branchDebtMeta(branch) {
+function resolveBranchDebtAmount(branch) {
+  if (branch && branch.debtAmount != null && !Number.isNaN(Number(branch.debtAmount))) {
+    return Math.max(0, Number(branch.debtAmount));
+  }
+  const tot1 = Number(branch?.tot1 ?? 0);
+  const tot2 = Number(branch?.tot2 ?? 0);
+  const net = tot1 - tot2;
+  if (net > 0) return net;
   const bal = Number(branch?.bal ?? 0);
-  const debt = bal < 0 ? Math.abs(bal) : 0;
+  if (bal < 0) return Math.abs(bal);
+  return 0;
+}
+
+function branchDebtMeta(branch) {
+  const debt = resolveBranchDebtAmount(branch);
+  const bal = Number(branch?.bal ?? 0);
   if (debt > 0) {
     return {
       cls: 'has-debt',
@@ -596,7 +609,8 @@ function filterBranches(list) {
     const num = String(b.num || '');
     if (q && !name.includes(q) && !num.includes(q)) return false;
     const bal = Number(b.bal || 0);
-    if (state.branchFilter === 'debit' && bal >= 0) return false;
+    const debt = resolveBranchDebtAmount(b);
+    if (state.branchFilter === 'debit' && debt <= 0) return false;
     if (state.branchFilter === 'credit' && bal <= 0) return false;
     return true;
   });

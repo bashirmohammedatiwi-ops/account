@@ -8,7 +8,7 @@ const {
   getStatementForAccount,
   agentAllowedSeqs
 } = require('../lib/accounts');
-const { debtStatusFromBalance, balanceSummaryLabel } = require('../lib/statement-utils');
+const { debtStatusFromBalance, balanceSummaryLabel, resolveDebtFromAccount } = require('../lib/statement-utils');
 const { getInvoiceForExport, canAgentAccessInvoice } = require('../lib/invoices');
 const { buildStatementPdf, buildInvoicePdf } = require('../lib/pdf-export');
 
@@ -83,6 +83,7 @@ router.get('/accounts/:seq/children', authAgent, (req, res) => {
     tot1: c.tot1,
     tot2: c.tot2,
     subCount: c.sub_count,
+    debtAmount: resolveDebtFromAccount(c),
     debtStatus: debtStatusFromBalance(c.bal),
     summary: balanceSummaryLabel(c.bal)
   }));
