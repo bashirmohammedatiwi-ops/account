@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css?v=20260620pro">
-  <link rel="stylesheet" href="portal-pro.css?v=20260621br">
+  <link rel="stylesheet" href="portal-pro.css?v=20260622bc">
 </head>
 <body class="ed-body">
   <!-- Login -->
@@ -140,19 +140,19 @@
 
       <!-- Branches -->
       <section class="screen" id="screen-branches">
-        <div class="br-page">
-          <div class="br-tree-bar hidden" id="treeContext"></div>
-          <div class="br-summary hidden" id="branchesStats"></div>
-          <div class="br-list-toolbar">
-            <div class="br-list-head">
-              <div>
-                <h3 class="br-list-title">سجل الزبائن</h3>
-                <p class="br-list-meta" id="branchesMeta">—</p>
-              </div>
-              <span class="br-list-count hidden" id="branchesCount" aria-hidden="true">0</span>
+        <div class="bc-page">
+          <header class="bc-tree-head hidden" id="treeContext"></header>
+          <div class="bc-stats-wrap hidden" id="branchesStats"></div>
+          <div class="bc-section-bar">
+            <div class="bc-section-copy">
+              <h3 class="bc-section-title">الزبائن</h3>
+              <p class="bc-section-meta" id="branchesMeta">—</p>
             </div>
+            <span class="bc-section-count hidden" id="branchesCount">0</span>
           </div>
-          <div class="br-list" id="branchesList" role="list"></div>
+          <div class="bc-list-wrap">
+            <div class="bc-list" id="branchesList" role="list"></div>
+          </div>
         </div>
       </section>
 
@@ -211,6 +211,6 @@
       <p>جاري التحميل...</p>
     </div>
   </div>
-  <script src="app.js?v=20260621br"></script>
+  <script src="app.js?v=20260622bc"></script>
 </body>
 </html>

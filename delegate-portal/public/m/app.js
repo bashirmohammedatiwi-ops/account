@@ -326,6 +326,11 @@ function renderHomeStats() {
   ]);
 }
 
+function branchInitial(name) {
+  const n = String(name || 'ز').trim();
+  return n.charAt(0) || 'ز';
+}
+
 function renderBranchStats(list = []) {
   const statsEl = document.getElementById('branchesStats');
   if (!statsEl) return;
@@ -336,12 +341,25 @@ function renderBranchStats(list = []) {
   }
   const s = summarizeBranchDebts(list);
   statsEl.classList.remove('hidden');
-  renderDashStats('branchesStats', [
-    ['إجمالي الديون', fmtNumAlways(s.totalDebt), 'debit'],
-    ['حسابات مدينة', String(s.withDebt), 'accent'],
-    ['دائن', String(s.credit), 'credit'],
-    ['بدون ديون', String(s.clear), 'muted']
-  ]);
+  statsEl.innerHTML = `
+    <div class="bc-stats">
+      <div class="bc-stat bc-stat-debt">
+        <span class="bc-stat-val" dir="ltr">${esc(fmtNumAlways(s.totalDebt))}</span>
+        <span class="bc-stat-lbl">إجمالي الديون</span>
+      </div>
+      <div class="bc-stat bc-stat-accent">
+        <span class="bc-stat-val">${esc(String(s.withDebt))}</span>
+        <span class="bc-stat-lbl">حسابات مدينة</span>
+      </div>
+      <div class="bc-stat bc-stat-credit">
+        <span class="bc-stat-val">${esc(String(s.credit))}</span>
+        <span class="bc-stat-lbl">دائن</span>
+      </div>
+      <div class="bc-stat bc-stat-muted">
+        <span class="bc-stat-val">${esc(String(s.clear))}</span>
+        <span class="bc-stat-lbl">بدون ديون</span>
+      </div>
+    </div>`;
 }
 
 function updateUserChrome() {
@@ -557,21 +575,16 @@ function renderTreeContext() {
   const s = summarizeBranchDebts(state.branches);
   el.classList.remove('hidden');
   el.innerHTML = `
-    <div class="br-tree-bar-head">
-      <span class="br-tree-bar-label">شجرة الحساب</span>
-      <span class="br-tree-bar-num">${esc(tree.num || '—')}</span>
-    </div>
-    <div class="br-tree-bar-body">
-      <div class="br-tree-bar-main">
-        <div class="br-tree-bar-icon">${ICONS.tree}</div>
-        <div>
-          <h2 class="br-tree-bar-title">${esc(tree.name1 || '—')}</h2>
-          <p class="br-tree-bar-sub">${count ? `${fmtNumAlways(count)} حساب · ${fmtNumAlways(s.withDebt)} مدين · ${fmtNumAlways(s.credit)} دائن` : 'لا توجد حسابات'}</p>
-        </div>
+    <div class="bc-tree-top">
+      <div class="bc-tree-badge">${ICONS.tree}</div>
+      <div class="bc-tree-info">
+        <p class="bc-tree-kicker">${esc(tree.num || '—')}</p>
+        <h2 class="bc-tree-name">${esc(tree.name1 || '—')}</h2>
+        <p class="bc-tree-sub">${count ? `${fmtNumAlways(count)} حساب · ${fmtNumAlways(s.withDebt)} مدين` : 'لا توجد حسابات'}</p>
       </div>
-      <div class="br-tree-bar-debt">
-        <span class="br-tree-bar-debt-val" dir="ltr">${fmtNumAlways(s.totalDebt)}</span>
-        <span class="br-tree-bar-debt-lbl">إجمالي الديون</span>
+      <div class="bc-tree-debt">
+        <span class="bc-tree-debt-lbl">إجمالي الديون</span>
+        <span class="bc-tree-debt-val" dir="ltr">${fmtNumAlways(s.totalDebt)}</span>
       </div>
     </div>`;
 }
@@ -674,33 +687,39 @@ function renderBranches() {
     const msg = state.branches.length && (state.branchSearch || state.branchFilter !== 'all')
       ? 'لا توجد نتائج — جرّب تغيير البحث أو الفلتر'
       : 'لا يوجد زبائن في هذه الشجرة';
-    list.innerHTML = `<div class="br-empty" role="listitem"><p>${msg}</p></div>`;
+    list.innerHTML = `<div class="bc-empty" role="listitem"><p>${msg}</p></div>`;
     return;
   }
 
   list.innerHTML = filtered.map((b, i) => {
     const debt = branchDebtMeta(b);
+    const initial = branchInitial(b.name1);
     return `
-    <button type="button" class="br-card br-card-${debt.cls}" data-seq="${esc(b.seq)}" style="--i:${i}" role="listitem">
-      <div class="br-debt-band">
-        <span class="br-debt-label">الديون</span>
-        <span class="br-debt-amt" dir="ltr">${esc(debt.amount)}</span>
+    <button type="button" class="bc-card bc-card-${debt.cls}" data-seq="${esc(b.seq)}" style="--i:${i}" role="listitem">
+      <div class="bc-card-head">
+        <div class="bc-identity">
+          <span class="bc-avatar" aria-hidden="true">${esc(initial)}</span>
+          <div class="bc-name-wrap">
+            <h4 class="bc-branch-name">${esc(b.name1 || '—')}</h4>
+            <span class="bc-branch-num">${esc(b.num || '—')}</span>
+          </div>
+        </div>
+        <span class="bc-open-icon">${ICONS.chevron}</span>
       </div>
-      <div class="br-card-body">
-        <div class="br-card-top">
-          <span class="br-acc-num">${esc(b.num || '—')}</span>
-          <span class="br-status br-status-${debt.statusCls}">${esc(debt.statusLabel)}</span>
+      <div class="bc-debt-showcase">
+        <div class="bc-debt-box">
+          <span class="bc-debt-label">الديون</span>
+          <span class="bc-debt-amount" dir="ltr">${esc(debt.amount)}</span>
         </div>
-        <h4 class="br-acc-name">${esc(b.name1 || '—')}</h4>
-        <div class="br-card-action">
-          <span>عرض كشف الحساب</span>
-          <span class="br-card-arrow">${ICONS.chevron}</span>
-        </div>
+        <span class="bc-status bc-status-${debt.statusCls}">${esc(debt.statusLabel)}</span>
+      </div>
+      <div class="bc-card-foot">
+        <span>عرض كشف الحساب</span>
       </div>
     </button>`;
   }).join('');
 
-  list.querySelectorAll('.br-card').forEach((btn) => {
+  list.querySelectorAll('.bc-card').forEach((btn) => {
     btn.addEventListener('click', () => openBranch(btn.dataset.seq));
   });
 }

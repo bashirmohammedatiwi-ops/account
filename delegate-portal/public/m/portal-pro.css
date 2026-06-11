@@ -637,197 +637,227 @@
 }
 
 /* ═══════════════════════════════════════
-   Branches page — full redesign
+   Branches page — bc (complete redesign)
    ═══════════════════════════════════════ */
 #screen-branches {
   padding: 0;
-  background: var(--surface-alt);
+  background: var(--bg);
 }
 
-#screen-branches.active ~ .toolbar,
-#appShell:has(#screen-branches.active) .ed-toolbar {
-  background: var(--surface);
+#screen-branches.active {
+  display: flex;
+  flex-direction: column;
 }
 
-.br-page {
+.bc-page {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 0;
   width: 100%;
-  max-width: 920px;
+  max-width: 1040px;
   margin-inline: auto;
 }
 
-.br-tree-bar {
+/* ── Tree header ── */
+.bc-tree-head {
   flex-shrink: 0;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  animation: brFadeDown 0.35s ease both;
+  animation: bcReveal 0.4s ease both;
 }
 
-@keyframes brFadeDown {
-  from { opacity: 0; transform: translateY(-8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.br-tree-bar-head {
+.bc-tree-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 16px;
+  gap: 14px;
+  padding: 16px;
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-alt) 100%);
+}
+
+.bc-tree-badge {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius);
   background: var(--header-bg);
   color: #fff;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
 }
 
-.br-tree-bar-label {
-  font-size: 0.68rem;
-  font-weight: 700;
-  opacity: 0.85;
-}
-
-.br-tree-bar-num {
-  font-size: 0.75rem;
-  font-weight: 700;
-  direction: ltr;
-  opacity: 0.92;
-}
-
-.br-tree-bar-body {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 14px 16px;
-}
-
-.br-tree-bar-main {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.bc-tree-info {
   flex: 1;
   min-width: 0;
 }
 
-.br-tree-bar-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-sm);
-  background: var(--accent-soft);
+.bc-tree-kicker {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
   color: var(--accent);
-  border: 1px solid var(--border);
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
+  direction: ltr;
+  text-align: right;
 }
 
-.br-tree-bar-title {
-  margin: 0;
-  font-size: 1rem;
+.bc-tree-name {
+  margin: 4px 0 0;
+  font-size: 1.05rem;
   font-weight: 800;
   color: var(--navy);
   line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.br-tree-bar-sub {
+.bc-tree-sub {
   margin: 4px 0 0;
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: var(--muted);
 }
 
-.br-tree-bar-debt {
+.bc-tree-debt {
   flex-shrink: 0;
   text-align: center;
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--danger-soft);
-  border: 1px solid #fecaca;
-  min-width: 88px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: var(--header-bg);
+  color: #fff;
+  min-width: 96px;
+  border-bottom: 3px solid var(--gold-line);
 }
 
-.br-tree-bar-debt-val {
+.bc-tree-debt-lbl {
+  display: block;
+  font-size: 0.58rem;
+  font-weight: 700;
+  opacity: 0.75;
+  margin-bottom: 4px;
+}
+
+.bc-tree-debt-val {
   display: block;
   font-size: 1.05rem;
   font-weight: 800;
-  color: var(--danger);
   line-height: 1.1;
+  color: #fecaca;
 }
 
-.br-tree-bar-debt-lbl {
-  display: block;
-  margin-top: 2px;
-  font-size: 0.6rem;
-  font-weight: 700;
-  color: var(--danger);
-  opacity: 0.85;
-}
-
-.br-summary {
+/* ── Stats strip ── */
+.bc-stats-wrap {
   flex-shrink: 0;
   padding: 12px 16px 0;
-  animation: brFadeDown 0.4s ease both;
+  animation: bcReveal 0.45s ease both;
 }
 
-.br-summary .ed-metrics-row {
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
+.bc-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
 }
 
-.br-list-toolbar {
+.bc-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 8px;
+  text-align: center;
+}
+
+.bc-stat-val {
+  display: block;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--navy);
+}
+
+.bc-stat-lbl {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.bc-stat-debt .bc-stat-val { color: var(--danger); }
+.bc-stat-debt { border-color: #fecaca; background: var(--danger-soft); }
+.bc-stat-accent .bc-stat-val { color: var(--accent); }
+.bc-stat-credit .bc-stat-val { color: var(--success); }
+.bc-stat-muted .bc-stat-val { color: var(--muted); }
+
+/* ── Section bar ── */
+.bc-section-bar {
   flex-shrink: 0;
-  padding: 12px 16px 8px;
-  background: var(--surface-alt);
-}
-
-.br-list-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding: 14px 16px 10px;
+  background: var(--bg);
 }
 
-.br-list-title {
+.bc-section-title {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   font-weight: 800;
   color: var(--navy);
 }
 
-.br-list-meta {
-  margin: 4px 0 0;
-  font-size: 0.74rem;
+.bc-section-meta {
+  margin: 3px 0 0;
+  font-size: 0.72rem;
   font-weight: 600;
   color: var(--muted);
 }
 
-.br-list-count {
-  min-width: 36px;
-  height: 36px;
+.bc-section-count {
+  min-width: 32px;
+  height: 32px;
   padding: 0 10px;
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  border-radius: 999px;
+  background: var(--accent-soft);
   border: 1px solid var(--border);
-  color: var(--navy);
-  font-size: 0.92rem;
+  color: var(--accent-dark);
+  font-size: 0.85rem;
   font-weight: 800;
   display: grid;
   place-items: center;
 }
 
-.br-list {
+/* ── List ── */
+.bc-list-wrap {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  padding: 4px 16px calc(16px + var(--safe-bottom, 0px));
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  overflow: hidden;
+  padding: 0 16px calc(12px + var(--safe-bottom, 0px));
 }
 
-.br-card {
+.bc-list {
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 8px;
+}
+
+@keyframes bcReveal {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bcCardIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Branch card ── */
+.bc-card {
   display: block;
   width: 100%;
   text-align: right;
@@ -842,168 +872,209 @@
   -webkit-appearance: none;
   appearance: none;
   box-shadow: var(--shadow-sm);
-  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-  animation: brSlideUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
-  animation-delay: calc(var(--i, 0) * 35ms);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  animation: bcCardIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--i, 0) * 40ms);
 }
 
-@keyframes brSlideUp {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.br-card:active {
-  transform: scale(0.985);
-  box-shadow: inset 0 0 0 1px var(--border-strong);
-}
-
-.br-debt-band {
+.bc-card-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  padding: 11px 14px;
-  background: var(--surface-alt);
+  gap: 10px;
+  padding: 14px 14px 10px;
   border-bottom: 1px solid var(--border);
+  background: var(--surface);
 }
 
-.br-card-has-debt .br-debt-band {
-  background: var(--danger-soft);
-  border-bottom-color: #fecaca;
-}
-
-.br-debt-label {
-  font-size: 0.72rem;
-  font-weight: 800;
-  color: var(--muted);
-  letter-spacing: 0.02em;
-}
-
-.br-card-has-debt .br-debt-label {
-  color: var(--danger);
-}
-
-.br-debt-amt {
-  font-size: 1.15rem;
-  font-weight: 800;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.br-card-has-debt .br-debt-amt {
-  color: var(--danger);
-}
-
-.br-card-body {
-  padding: 12px 14px 14px;
+.bc-identity {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
 }
 
-.br-card-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+.bc-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius-sm);
+  background: var(--header-bg);
+  color: #fff;
+  font-size: 1.1rem;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
 }
 
-.br-acc-num {
-  font-size: 0.72rem;
+.bc-name-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.bc-branch-name {
+  margin: 0;
+  font-size: 1.08rem;
+  font-weight: 800;
+  color: var(--navy);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.bc-branch-num {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 0.68rem;
   font-weight: 700;
   color: var(--accent);
   background: var(--accent-soft);
-  padding: 3px 9px;
+  padding: 3px 8px;
   border-radius: 4px;
   direction: ltr;
 }
 
-.br-status {
-  font-size: 0.65rem;
-  font-weight: 800;
-  padding: 4px 9px;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-}
-
-.br-status-debit {
-  color: var(--danger);
-  background: var(--danger-soft);
-  border-color: #fecaca;
-}
-
-.br-status-credit {
-  color: var(--success);
-  background: var(--success-soft);
-  border-color: #a7f3d0;
-}
-
-.br-status-neutral {
-  color: var(--muted);
-  background: var(--surface-alt);
-}
-
-.br-acc-name {
-  margin: 0;
-  font-size: 0.98rem;
-  font-weight: 800;
-  color: var(--navy);
-  line-height: 1.45;
-}
-
-.br-card-action {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 4px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--border);
-  font-size: 0.76rem;
-  font-weight: 700;
-  color: var(--accent);
-}
-
-.br-card-arrow {
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
+.bc-open-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--surface-muted);
   color: var(--muted);
   display: grid;
   place-items: center;
+  flex-shrink: 0;
   transition: background 0.15s, color 0.15s, transform 0.15s;
 }
 
-.br-card-has-debt {
-  border-right: 3px solid var(--danger);
+/* Debt showcase — hero block */
+.bc-debt-showcase {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--surface-alt);
 }
 
-.br-card-credit {
-  border-right: 3px solid var(--success);
+.bc-card-has-debt .bc-debt-showcase {
+  background: linear-gradient(135deg, var(--danger-soft) 0%, #fff5f5 100%);
 }
 
-.br-card-clear {
-  border-right: 3px solid var(--muted);
+.bc-debt-box {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-right: 4px solid var(--muted);
 }
 
-.br-empty {
-  padding: 48px 20px;
+.bc-card-has-debt .bc-debt-box {
+  border-color: #fecaca;
+  border-right-color: var(--danger);
+  background: #fff;
+  box-shadow: 0 4px 16px rgba(185, 28, 28, 0.08);
+}
+
+.bc-card-credit .bc-debt-box {
+  border-right-color: var(--success);
+}
+
+.bc-debt-label {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+  margin-bottom: 6px;
+}
+
+.bc-card-has-debt .bc-debt-label {
+  color: var(--danger);
+}
+
+.bc-debt-amount {
+  display: block;
+  font-size: 1.45rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.bc-card-has-debt .bc-debt-amount {
+  color: var(--danger);
+  font-size: 1.55rem;
+}
+
+.bc-status {
+  align-self: center;
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  writing-mode: horizontal-tb;
+}
+
+.bc-status-debit {
+  color: var(--danger);
+  background: #fff;
+  border-color: #fecaca;
+}
+
+.bc-status-credit {
+  color: var(--success);
+  background: var(--success-soft);
+  border-color: #a7f3d0;
+}
+
+.bc-status-neutral {
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.bc-card-foot {
+  padding: 10px 14px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--surface);
+  border-top: 1px dashed var(--border);
+  text-align: center;
+}
+
+.bc-card:active {
+  transform: scale(0.985);
+}
+
+.bc-card-has-debt {
+  border-top: 3px solid var(--danger);
+}
+
+.bc-card-credit {
+  border-top: 3px solid var(--success);
+}
+
+.bc-card-clear {
+  border-top: 3px solid var(--border-strong);
+}
+
+.bc-empty {
+  padding: 56px 24px;
   text-align: center;
   background: var(--surface);
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius);
-  animation: brFadeDown 0.35s ease both;
 }
 
-.br-empty p {
+.bc-empty p {
   margin: 0;
   font-size: 0.88rem;
   font-weight: 600;
@@ -1011,61 +1082,99 @@
 }
 
 @media (hover: hover) {
-  .br-card:hover {
+  .bc-card:hover {
     border-color: var(--border-strong);
     box-shadow: var(--shadow);
-    transform: translateY(-2px);
+    transform: translateY(-3px);
   }
 
-  .br-card:hover .br-card-arrow {
-    background: var(--accent-soft);
-    color: var(--accent);
-    border-color: var(--accent);
-    transform: translateX(-3px);
+  .bc-card:hover .bc-open-icon {
+    background: var(--header-bg);
+    color: #fff;
+    border-color: var(--header-bg);
+    transform: translateX(-4px);
+  }
+}
+
+@media (max-width: 520px) {
+  .bc-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .bc-tree-debt {
+    display: none;
+  }
+
+  .bc-debt-showcase {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .bc-status {
+    align-self: flex-start;
   }
 }
 
 @media (min-width: 768px) {
-  .br-page {
-    max-width: 1000px;
-    padding-top: 4px;
+  .bc-list-wrap {
+    padding-inline: 20px;
   }
 
-  .br-list {
+  .bc-stats-wrap,
+  .bc-section-bar {
+    padding-inline: 20px;
+  }
+
+  .bc-tree-top {
+    padding: 18px 20px;
+  }
+
+  .bc-list {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: 14px;
     align-content: start;
   }
 
-  .br-card {
+  .bc-card {
+    display: flex;
+    flex-direction: column;
     height: 100%;
   }
 
-  .br-card-body {
+  .bc-debt-showcase {
     flex: 1;
+    flex-direction: column;
+    align-items: stretch;
   }
 
-  .br-card-action {
+  .bc-status {
+    align-self: flex-start;
+  }
+
+  .bc-card-foot {
     margin-top: auto;
   }
 
-  .br-debt-amt {
-    font-size: 1.22rem;
+  .bc-branch-name {
+    font-size: 1.12rem;
+  }
+
+  .bc-debt-amount {
+    font-size: 1.6rem;
+  }
+
+  .bc-card-has-debt .bc-debt-amount {
+    font-size: 1.75rem;
   }
 }
 
 @media (min-width: 1024px) {
-  .br-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
-    padding-inline: 20px;
+  .bc-page {
+    max-width: 1100px;
   }
 
-  .br-list-toolbar,
-  .br-summary,
-  .br-tree-bar-head,
-  .br-tree-bar-body {
-    padding-inline: 20px;
+  .bc-list {
+    gap: 16px;
   }
 }
