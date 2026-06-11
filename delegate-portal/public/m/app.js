@@ -648,6 +648,10 @@ function goToScreen(name) {
     window.commerceNav.applyScreen(name, { backBtn, toolbarWrap, title, crumb });
   }
 
+  if (name !== 'home') {
+    backBtn.classList.remove('hidden');
+  }
+
   window.commerceNav?.onScreen?.(name);
 }
 
@@ -1125,6 +1129,8 @@ function goBack() {
     state.branches = [];
     goToScreen('trees');
   } else if (state.screen === 'trees') {
+    goToScreen('home');
+  } else {
     goToScreen('home');
   }
 }

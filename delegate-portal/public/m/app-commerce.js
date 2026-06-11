@@ -370,7 +370,7 @@ window.commerceNav = {
   },
 
   applyScreen(name, { backBtn, toolbarWrap, title, crumb }) {
-    backBtn.classList.toggle('hidden', ['shop', 'my-orders', 'home'].includes(name));
+    backBtn.classList.remove('hidden');
     toolbarWrap.classList.add('hidden');
     const kicker = document.getElementById('headerKicker');
 
