@@ -67,14 +67,39 @@ function endOfCalendarDay(value) {
   return d.getTime();
 }
 
+function startOfCalendarDay(value) {
+  const d = parseEdariDate(value);
+  if (!d) return null;
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function isBeforePeriodStart(row, cutoff) {
+  if (cutoff?.seq) {
+    return rowAtOrBeforeCutoff(row, cutoff);
+  }
+  const start = startOfCalendarDay(cutoff?.date);
+  if (start == null) return false;
+  return journalSortKey(row).t < start;
+}
+
+function isOnOrAfterPeriodStart(row, cutoff) {
+  if (!cutoff) return true;
+  if (cutoff.seq) {
+    return isJournalAfter(row, cutoff);
+  }
+  const start = startOfCalendarDay(cutoff?.date);
+  if (start == null) return true;
+  return journalSortKey(row).t >= start;
+}
+
 function filterRowsSinceLastMatch(rows, cutoff) {
   if (!cutoff) return rows;
   if (cutoff.seq) {
     return rows.filter((row) => isJournalAfter(row, cutoff));
   }
   if (isValidFixDate(cutoff.date)) {
-    const marker = endOfCalendarDay(cutoff.date);
-    return rows.filter((row) => journalSortKey(row).t > marker);
+    return rows.filter((row) => isOnOrAfterPeriodStart(row, cutoff));
   }
   return rows;
 }
@@ -94,7 +119,13 @@ function computeBalanceThroughCutoff(rows, cutoff) {
   if (!cutoff) return 0;
   let balance = 0;
   for (const row of sortJournalRowsAsc(rows)) {
-    if (!rowAtOrBeforeCutoff(row, cutoff)) break;
+    if (cutoff.seq) {
+      if (!rowAtOrBeforeCutoff(row, cutoff)) break;
+    } else if (isValidFixDate(cutoff.date)) {
+      if (!isBeforePeriodStart(row, cutoff)) break;
+    } else {
+      break;
+    }
     const am = parseAmount(row.am ?? row.Am);
     const debit = isDebitRow(row) ? am : 0;
     const credit = isDebitRow(row) ? 0 : am;
@@ -170,6 +201,58 @@ function computeOpeningBalance(rows, cutoff, account) {
   return normalizeCarriedBalance(fixBal, account);
 }
 
+/** رصيد افتتاحي — FixBal ثم Tot1/Tot2 ثم مجموع الحركات قبل FixDate */
+function resolveOpeningBalance(account, allRows, movementRows, cutoff) {
+  const fixBal = parseAmount(account?.fix_bal ?? account?.fixBal);
+  if (fixBal !== 0) {
+    return normalizeCarriedBalance(fixBal, account);
+  }
+
+  const fromTotals = deriveOpeningBalance(account, movementRows);
+  if (fromTotals !== 0) {
+    return fromTotals;
+  }
+
+  if (cutoff && (cutoff.seq || isValidFixDate(cutoff.date))) {
+    const throughCutoff = computeBalanceThroughCutoff(allRows, cutoff);
+    if (throughCutoff !== 0) {
+      return normalizeCarriedBalance(throughCutoff, account);
+    }
+  }
+
+  return 0;
+}
+
+function buildJournalDescription(row) {
+  const parts = [];
+  for (const value of [row.exp1, row.Exp1, row.exp2, row.Exp2, row.remarks, row.Remarks]) {
+    const text = String(value || '').trim();
+    if (!text || parts.includes(text)) continue;
+    parts.push(text);
+  }
+  return parts.join(' · ');
+}
+
+function resolveStatementPeriod(movementRows, cutoff) {
+  const datedRows = sortJournalRowsAsc(movementRows || []);
+  const firstDated = datedRows.find((row) => parseEdariDate(row.tx_date || row.Date || row.date));
+  const lastDated = [...datedRows].reverse().find((row) => parseEdariDate(row.tx_date || row.Date || row.date));
+
+  let periodStart = null;
+  if (cutoff?.date && isValidFixDate(cutoff.date)) {
+    periodStart = cutoff.date;
+  } else if (firstDated) {
+    periodStart = firstDated.tx_date || firstDated.Date || firstDated.date || null;
+  }
+
+  let periodEnd = null;
+  if (lastDated) {
+    periodEnd = lastDated.tx_date || lastDated.Date || lastDated.date || null;
+  }
+
+  return { periodStart, periodEnd };
+}
+
 function sumLineAmounts(lines, field) {
   return (lines || []).reduce((s, l) => s + parseAmount(l[field]), 0);
 }
@@ -206,10 +289,11 @@ function resolveFinalBalance({ accountBal, totalDebit, totalCredit, stmtFinalBal
 }
 
 function buildOpeningLine(openingBalance, cutoff) {
-  if (!cutoff) return null;
+  if (!cutoff?.seq && !isValidFixDate(cutoff?.date)) return null;
   const balance = parseAmount(openingBalance);
   const debit = balance < 0 ? Math.abs(balance) : 0;
   const credit = balance > 0 ? balance : 0;
+  if (!debit && !credit) return null;
   return {
     seq: null,
     debit,
@@ -248,12 +332,14 @@ function buildStatementLines(rows, options = {}) {
     const isReturnInvoice = isSalesReturnMovement(row);
     const hasInvoice = (isInvoiceMovement(row) && debit > 0) || isReturnInvoice;
     const invoiceRef = billNum || billSeq || null;
-    const description = row.exp1 || row.Exp1 || row.remarks || row.Remarks || '';
+    const description = buildJournalDescription(row);
+    const branch2 = String(row.exp2 || row.Exp2 || '').trim() || null;
     return {
       seq: row.seq ?? row.Seq,
       debit,
       credit,
       description,
+      branch2,
       date: row.tx_date || row.Date || row.DtCreated,
       billNum: billNum || null,
       billSeq,
@@ -316,6 +402,12 @@ module.exports = {
   filterRowsSinceLastMatch,
   computeBalanceThroughCutoff,
   computeOpeningBalance,
+  resolveOpeningBalance,
+  buildJournalDescription,
+  resolveStatementPeriod,
+  isBeforePeriodStart,
+  isOnOrAfterPeriodStart,
+  startOfCalendarDay,
   buildOpeningLine,
   normalizeCarriedBalance,
   deriveOpeningBalance,

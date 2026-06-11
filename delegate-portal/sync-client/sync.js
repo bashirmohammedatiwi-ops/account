@@ -216,7 +216,7 @@ async function fetchAllJournal(accSeqs) {
   for (const part of parts) {
     const ids = part.join(',');
     const rows = await query(
-      `SELECT Seq, Acc, "Date", Am, Dept, Exp1, Remarks, BillNum, BillSeq, BillKind FROM File12n
+      `SELECT Seq, Acc, "Date", Am, Dept, Exp1, Exp2, Remarks, BillNum, BillSeq, BillKind FROM File12n
        WHERE Acc IN (${ids})
        ORDER BY Acc, "Date", Seq`
     );

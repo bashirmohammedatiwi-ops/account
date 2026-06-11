@@ -575,20 +575,40 @@ async function loadStatement(seq) {
   }
 }
 
+function formatStatementAccountTitle(acc) {
+  const num = String(acc?.num || '').trim();
+  const name = [acc?.name1, acc?.name2].filter(Boolean).join(' - ').trim() || '—';
+  const address = String(acc?.address || '').trim();
+  let title = name;
+  if (num) title = `${title} / ${num}`;
+  if (address) title += ` · العنوان: ${address}`;
+  return title;
+}
+
+function formatStatementPeriod(data, acc, openingNote = '') {
+  const start = data?.periodStart || acc?.fixDate;
+  const end = data?.periodEnd;
+  const parts = [];
+  if (start && end) parts.push(`من ${fmtDate(start)} إلى ${fmtDate(end)}`);
+  else if (start) parts.push(`من ${fmtDate(start)}`);
+  else if (end) parts.push(`إلى ${fmtDate(end)}`);
+  parts.push('العملة: دينار عراقي');
+  if (openingNote) parts.push(openingNote.replace(/^ · /, ''));
+  return parts.join(' · ');
+}
+
 function renderStatement(data) {
   const acc = data.account || state.selectedBranch;
   const branch = state.selectedBranch;
   const lines = data.lines || [];
   const { totalDebit, totalCredit, summary } = data;
   const currentBal = data.finalBalance ?? acc.bal ?? 0;
-  const treeLabel = state.selectedTree?.num ? `شجرة ${state.selectedTree.num}` : '';
   const openingBal = Number(data.openingBalance ?? 0);
   const openingNote = openingBal !== 0
-    ? ` · رصيد مدور ${fmtNumAlways(openingBal < 0 ? Math.abs(openingBal) : openingBal)}`
+    ? `رصيد مدور ${fmtNumAlways(openingBal < 0 ? Math.abs(openingBal) : openingBal)}`
     : '';
-  const periodNote = data.periodStart || acc.fixDate
-    ? `من ${fmtDate(data.periodStart || acc.fixDate)}${openingNote}`
-    : '';
+  const periodNote = formatStatementPeriod(data, acc, openingNote);
+  const showBranchCol = lines.some((line) => line.branch2);
 
   renderDebtField(data.debtAmount ?? 0);
 
@@ -597,8 +617,8 @@ function renderStatement(data) {
       <div class="doc-head-row">
         <div class="doc-head-main">
           <span class="doc-label">كشف حساب</span>
-          <strong class="doc-title">${esc(acc.name1)}</strong>
-          <span class="doc-meta-line">${[treeLabel, acc.address ? esc(acc.address) : '', periodNote ? esc(periodNote) : ''].filter(Boolean).join(' · ')}</span>
+          <strong class="doc-title">${esc(formatStatementAccountTitle(acc))}</strong>
+          <span class="doc-meta-line">${esc(periodNote)}</span>
         </div>
       </div>
       <table class="doc-meta-table stmt-meta-table">
@@ -638,6 +658,7 @@ function renderStatement(data) {
         <td class="col-n">${idxLabel}</td>
         <td class="col-date">${r.isOpening ? '' : (r.date ? fmtDate(r.date) : '')}</td>
         <td class="col-desc"><div class="stmt-desc-cell"><span class="row-tag ${txTypeClass(r)}">${txTypeLabel(r)}</span><span class="stmt-desc-text">${esc(r.description) || '—'}</span></div></td>
+        ${showBranchCol ? `<td class="col-branch">${esc(r.branch2 || '')}</td>` : ''}
         ${amtTd(r.debit, 'debit')}
         ${amtTd(r.credit, 'credit')}
         <td class="num col-balance ${balanceClassFor(r.balance)}" dir="ltr">${fmtEdariRunningBalance(r.balance, r.isOpening)}</td>
@@ -654,6 +675,7 @@ function renderStatement(data) {
               <th class="col-n">م</th>
               <th class="col-date">التاريخ</th>
               <th class="col-desc">البيان</th>
+              ${showBranchCol ? '<th class="col-branch">الفرع 2</th>' : ''}
               <th class="col-amt col-debit">مدين</th>
               <th class="col-amt col-credit">دائن</th>
               <th class="col-amt col-balance">حركة الرصيد</th>
@@ -663,14 +685,14 @@ function renderStatement(data) {
           <tbody>${rows}</tbody>
           <tfoot>
             <tr class="row-total">
-              <td colspan="3" class="total-label"><strong>المجموع</strong></td>
+              <td colspan="${showBranchCol ? 4 : 3}" class="total-label"><strong>المجموع</strong></td>
               <td class="num debit" dir="ltr">${fmtNumAlways(totalDebit)}</td>
               <td class="num credit" dir="ltr">${fmtNumAlways(totalCredit)}</td>
               <td></td>
               <td></td>
             </tr>
             <tr class="row-final">
-              <td colspan="3" class="total-label"><strong>${esc(summary.label)}</strong></td>
+              <td colspan="${showBranchCol ? 4 : 3}" class="total-label"><strong>${esc(summary.label)}</strong></td>
               <td class="num debit" dir="ltr">${summary.side === 'debit' ? fmtNumAlways(summary.amount) : ''}</td>
               <td class="num credit" dir="ltr">${summary.side === 'credit' ? fmtNumAlways(summary.amount) : ''}</td>
               <td></td>

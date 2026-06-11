@@ -62,14 +62,16 @@ function getStatementForAccount(accSeq) {
     filterRowsSinceLastMatch,
     buildOpeningLine,
     isValidFixDate,
-    deriveOpeningBalance
+    resolveOpeningBalance,
+    resolveStatementPeriod,
+    isBeforePeriodStart
   } = require('./statement-utils');
   const { resolveLastMatchCutoff, hasMatchCutoff } = require('./reconciliation-utils');
 
   const cutoff = resolveLastMatchCutoff(account, rows);
   const matchAvailable = hasMatchCutoff(account, rows);
 
-  // كشف كامل كما في Edari: كل الحركات من FixDate (إن وُجد) وليس من آخر مطابقة فقط
+  // كشف كامل كما في Edari: الحركات من FixDate (شامل) مع رصيد مدور
   let filteredRows = rows;
   let periodCutoff = null;
   if (isValidFixDate(account.fix_date)) {
@@ -77,13 +79,24 @@ function getStatementForAccount(accSeq) {
     filteredRows = filterRowsSinceLastMatch(rows, periodCutoff);
   }
 
-  const openingBalance = deriveOpeningBalance(account, filteredRows);
+  let openingBalance = resolveOpeningBalance(account, rows, filteredRows, periodCutoff);
+  if (periodCutoff && filteredRows.length < rows.length && openingBalance === 0) {
+    const hasPrePeriodRows = rows.some((row) => isBeforePeriodStart(row, periodCutoff));
+    if (hasPrePeriodRows) {
+      filteredRows = rows;
+      periodCutoff = null;
+      openingBalance = 0;
+    }
+  }
+
   const stmt = buildStatementLines(filteredRows, { openingBalance });
 
-  const openingLine = buildOpeningLine(openingBalance, periodCutoff || { date: account.fix_date || '', source: 'fix_date' });
-  if (openingLine && (openingLine.debit || openingLine.credit)) {
+  const openingLine = buildOpeningLine(openingBalance, periodCutoff);
+  if (openingLine) {
     stmt.lines.unshift(openingLine);
   }
+
+  const { periodStart, periodEnd } = resolveStatementPeriod(filteredRows, periodCutoff);
 
   const { totalDebit, totalCredit } = resolveStatementTotals({
     lines: stmt.lines,
@@ -126,7 +139,8 @@ function getStatementForAccount(accSeq) {
     summary: balanceSummaryLabel(finalBalance, account.name1),
     openingBalance,
     sinceLastMatch: false,
-    periodStart: periodCutoff?.date || null,
+    periodStart,
+    periodEnd,
     lastMatch: cutoff
       ? { seq: cutoff.seq || null, date: cutoff.date || '', source: cutoff.source || null }
       : null,
@@ -147,11 +161,11 @@ const SYNC_UPSERTS = {
       synced_at=excluded.synced_at
   `),
   journal: db.prepare(`
-    INSERT INTO journal (seq, acc_seq, tx_date, am, is_debit, exp1, bill_num, bill_seq, bill_kind)
-    VALUES (@seq, @acc_seq, @tx_date, @am, @is_debit, @exp1, @bill_num, @bill_seq, @bill_kind)
+    INSERT INTO journal (seq, acc_seq, tx_date, am, is_debit, exp1, exp2, bill_num, bill_seq, bill_kind)
+    VALUES (@seq, @acc_seq, @tx_date, @am, @is_debit, @exp1, @exp2, @bill_num, @bill_seq, @bill_kind)
     ON CONFLICT(seq, acc_seq) DO UPDATE SET
       tx_date=excluded.tx_date, am=excluded.am, is_debit=excluded.is_debit,
-      exp1=excluded.exp1, bill_num=excluded.bill_num,
+      exp1=excluded.exp1, exp2=excluded.exp2, bill_num=excluded.bill_num,
       bill_seq=excluded.bill_seq, bill_kind=excluded.bill_kind
   `),
   invoices: db.prepare(`
@@ -208,6 +222,7 @@ function mapJournalRow(j) {
     am: Number(j.Am ?? j.am ?? 0),
     is_debit: dept === 'True' || dept === true || dept === 1 ? 1 : 0,
     exp1: String(j.Exp1 ?? j.exp1 ?? j.Remarks ?? j.remarks ?? '').trim(),
+    exp2: String(j.Exp2 ?? j.exp2 ?? '').trim(),
     bill_num: String(j.BillNum ?? j.bill_num ?? ''),
     bill_seq: billSeq,
     bill_kind: String(j.BillKind ?? j.bill_kind ?? '')

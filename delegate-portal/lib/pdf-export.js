@@ -504,7 +504,10 @@ async function buildStatementPdf(stmt, meta = {}) {
   const openingBal = Number(stmt.openingBalance ?? 0);
   const periodParts = [];
   const periodStart = stmt.periodStart || acc.fixDate;
-  if (periodStart) periodParts.push(`من ${fmtDate(periodStart)}`);
+  const periodEnd = stmt.periodEnd;
+  if (periodStart && periodEnd) periodParts.push(`من ${fmtDate(periodStart)} إلى ${fmtDate(periodEnd)}`);
+  else if (periodStart) periodParts.push(`من ${fmtDate(periodStart)}`);
+  else if (periodEnd) periodParts.push(`إلى ${fmtDate(periodEnd)}`);
   if (openingBal) periodParts.push(`رصيد مدور ${fmtNum(Math.abs(openingBal))}`);
   const periodNote = periodParts.join(' · ');
   const bal = Number(stmt.finalBalance ?? acc.bal ?? 0);

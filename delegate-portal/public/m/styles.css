@@ -1155,6 +1155,15 @@ body {
   padding-inline: 8px;
 }
 
+.data-table.stmt-table .col-branch {
+  width: 72px;
+  min-width: 68px;
+  max-width: 88px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
 .data-table.stmt-table .col-amt {
   width: 76px;
   min-width: 76px;

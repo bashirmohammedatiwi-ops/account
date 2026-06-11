@@ -27,6 +27,9 @@ function migrateSchema() {
     if (!columnExists('journal', 'bill_kind')) {
       db.exec('ALTER TABLE journal ADD COLUMN bill_kind TEXT');
     }
+    if (!columnExists('journal', 'exp2')) {
+      db.exec('ALTER TABLE journal ADD COLUMN exp2 TEXT');
+    }
     db.exec('CREATE INDEX IF NOT EXISTS idx_journal_bill ON journal(bill_seq)');
   }
   if (columnExists('accounts', 'seq')) {
@@ -137,6 +140,7 @@ function initSchema() {
       am REAL DEFAULT 0,
       is_debit INTEGER DEFAULT 0,
       exp1 TEXT,
+      exp2 TEXT,
       bill_num TEXT,
       bill_seq TEXT,
       bill_kind TEXT,
