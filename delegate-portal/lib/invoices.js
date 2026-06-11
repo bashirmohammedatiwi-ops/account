@@ -57,7 +57,10 @@ function isPaymentOrReconciliationText(text) {
 function resolveBillNum(row) {
   const fromField = normalizeBillNum(row.bill_num ?? row.BillNum);
   if (fromField) return fromField;
-  return extractBillNumFromText(row.exp1 ?? row.Exp1 ?? row.description);
+  const text = movementText(row);
+  if (isPaymentOrReconciliationText(text) && !isSalesReturnText(text)) return '';
+  if (!isInvoiceText(text)) return '';
+  return extractBillNumFromText(text);
 }
 
 function normalizeAccSeq(value) {
@@ -120,19 +123,22 @@ function lookupInvoiceKind(billSeq) {
   return row?.kind ?? null;
 }
 
-/** مردود مبيعات — حركة دائن مرتبطة بفاتورة مرتجع */
+/** مردود مبيعات — حركة دائن صريحة فقط (لا سند/خصm/تصفير) */
 function isSalesReturnMovement(row) {
   if (isDebitJournalRow(row)) return false;
 
   const text = movementText(row);
+  if (isPaymentOrReconciliationText(text) && !isSalesReturnText(text)) return false;
   if (isSalesReturnText(text)) return true;
 
   const billKind = row.bill_kind ?? row.BillKind;
-  if (isReturnInvoiceKind(billKind)) return true;
+  if (isReturnInvoiceKind(billKind) && isSalesReturnText(text)) return true;
 
-  const billSeq = normalizeBillSeq(row.bill_seq ?? row.billSeq) || resolveBillSeq(row);
-  const invKind = lookupInvoiceKind(billSeq);
-  if (isReturnInvoiceKind(invKind)) return true;
+  const billSeq = normalizeBillSeq(row.bill_seq ?? row.billSeq);
+  if (billSeq && isSalesReturnText(text)) {
+    const invKind = lookupInvoiceKind(billSeq);
+    if (isReturnInvoiceKind(invKind)) return true;
+  }
 
   return false;
 }

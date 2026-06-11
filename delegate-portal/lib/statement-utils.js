@@ -287,7 +287,6 @@ function resolveFinalBalance({ accountBal, totalDebit, totalCredit, stmtFinalBal
 }
 
 function buildOpeningLine(openingBalance, cutoff) {
-  if (!cutoff?.seq && !isValidFixDate(cutoff?.date)) return null;
   const balance = parseAmount(openingBalance);
   const debit = balance < 0 ? Math.abs(balance) : 0;
   const credit = balance > 0 ? balance : 0;
@@ -328,9 +327,10 @@ function buildStatementLines(rows, options = {}) {
     balance = balance - debit + credit;
     const billNum = resolveBillNum(row);
     const billSeq = resolveBillSeq(row) || null;
-    const isReturnInvoice = isSalesReturnMovement(row);
-    const isSalesInvoice = isSalesInvoiceMovement(row);
-    const hasInvoice = isSalesInvoice || isReturnInvoice;
+    const isRecon = isReconciliationMovement(row);
+    const isReturnInvoice = !isRecon && isSalesReturnMovement(row);
+    const isSalesInvoice = !isRecon && isSalesInvoiceMovement(row);
+    const hasInvoice = !isRecon && (isSalesInvoice || isReturnInvoice);
     const invoiceRef = billNum || billSeq || null;
     const description = buildJournalDescription(row);
     const branch2 = String(row.exp2 || row.Exp2 || '').trim() || null;
@@ -347,8 +347,8 @@ function buildStatementLines(rows, options = {}) {
       invoiceRef: hasInvoice ? invoiceRef : null,
       hasInvoice,
       isReturnInvoice,
-      isReconciliation: isReconciliationMovement(row),
-      clickable: Boolean(hasInvoice && invoiceRef && (debit > 0 || credit > 0)),
+      isReconciliation: isRecon,
+      clickable: Boolean(!isRecon && hasInvoice && invoiceRef && (debit > 0 || credit > 0)),
       balance
     };
   });

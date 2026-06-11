@@ -51,7 +51,7 @@ function fmtNumAlways(v) {
 }
 
 function isInvoiceLine(line) {
-  if (line?.isOpening || !line?.hasInvoice) return false;
+  if (line?.isOpening || line?.isReconciliation || !line?.hasInvoice) return false;
   if (line?.isReturnInvoice) return Number(line?.credit) > 0;
   return Number(line?.debit) > 0;
 }

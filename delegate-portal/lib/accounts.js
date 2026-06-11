@@ -59,40 +59,40 @@ function getStatementForAccount(accSeq) {
     resolveDebtDisplayAmount,
     resolveStatementTotals,
     resolveFinalBalance,
-    filterRowsSinceLastMatch,
     buildOpeningLine,
     isValidFixDate,
-    resolveOpeningBalance,
     resolveStatementPeriod,
-    isBeforePeriodStart
+    parseAmount,
+    isDebitRow,
+    normalizeCarriedBalance
   } = require('./statement-utils');
   const { resolveLastMatchCutoff, hasMatchCutoff } = require('./reconciliation-utils');
 
   const cutoff = resolveLastMatchCutoff(account, rows);
   const matchAvailable = hasMatchCutoff(account, rows);
 
-  // كشف كامل كما في Edari: كل الحركات من FixDate (إن وُجد) — بدون رصيد مدور وهمي من Tot1
-  let filteredRows = rows;
-  let periodCutoff = null;
-  if (isValidFixDate(account.fix_date)) {
-    periodCutoff = { date: account.fix_date, seq: '', source: 'fix_date' };
-    filteredRows = filterRowsSinceLastMatch(rows, periodCutoff);
-  }
+  // Edari: كل حركات الحساب — لا فلترة FixDate؛ رصيد مدور فقط عند FixBal وعدم وجود مدين
+  const filteredRows = rows;
+  const periodCutoff = isValidFixDate(account.fix_date)
+    ? { date: account.fix_date, seq: '', source: 'fix_date' }
+    : null;
 
-  let openingBalance = resolveOpeningBalance(account, rows, filteredRows, periodCutoff);
+  const hasDebitMovements = rows.some((row) => {
+    const am = parseAmount(row.am);
+    return am > 0 && isDebitRow(row);
+  });
 
-  if (periodCutoff && filteredRows.length < rows.length && openingBalance === 0) {
-    const hasPrePeriodRows = rows.some((row) => isBeforePeriodStart(row, periodCutoff));
-    if (hasPrePeriodRows) {
-      filteredRows = rows;
-      periodCutoff = null;
-      openingBalance = 0;
-    }
+  let openingBalance = 0;
+  const fixBal = parseAmount(account.fix_bal);
+  if (!hasDebitMovements && fixBal !== 0) {
+    openingBalance = normalizeCarriedBalance(fixBal, account);
   }
 
   const stmt = buildStatementLines(filteredRows, { openingBalance });
 
-  const openingLine = buildOpeningLine(openingBalance, periodCutoff);
+  const openingLine = openingBalance !== 0
+    ? buildOpeningLine(openingBalance, periodCutoff)
+    : null;
   if (openingLine) {
     stmt.lines.unshift(openingLine);
   }
