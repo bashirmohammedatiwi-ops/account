@@ -8,6 +8,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 const path = require('path');
 const {
   assignBillNosForLines,
+  chunkInvoiceLinesByBill,
   isActiveInvoiceLineRow,
   resolveLineTotal
 } = require(path.join(__dirname, '..', 'lib', 'invoice-line-sync'));
@@ -416,7 +417,9 @@ async function uploadChunked(payload, accountSeqs = []) {
   const jobs = [];
   for (const item of uploadPlan) {
     if (!item.rows.length) continue;
-    const parts = chunk(item.rows, item.batchSize);
+    const parts = item.kind === 'invoiceLines'
+      ? chunkInvoiceLinesByBill(item.rows, item.batchSize)
+      : chunk(item.rows, item.batchSize);
     for (let i = 0; i < parts.length; i++) {
       jobs.push({ ...item, part: parts[i], index: i + 1, total: parts.length });
     }

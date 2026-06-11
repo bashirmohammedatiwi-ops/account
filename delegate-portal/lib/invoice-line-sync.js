@@ -12,43 +12,91 @@ function readSyncNum(row, ...keys) {
   return 0;
 }
 
-/** Assign unique bill_no per invoice — handles duplicate/missing BillNo from Edari */
-function assignBillNosForLines(rows = [], { getMaxBillNo = () => 0 } = {}) {
+function billSeqOf(row) {
+  return String(row.BillSeq ?? row.bill_seq ?? '').replace(/[^0-9]/g, '');
+}
+
+/**
+ * Assign unique sequential bill_no per invoice.
+ * Edari BillNo/LineIndex are unreliable — we preserve row order and never reuse numbers
+ * already stored in the database (important for chunked sync uploads).
+ */
+function assignBillNosForLines(rows = [], { getMaxBillNo = () => 0, getUsedBillNos = null } = {}) {
   const grouped = new Map();
-  for (const row of rows) {
-    const billSeq = String(row.BillSeq ?? row.bill_seq ?? '').replace(/[^0-9]/g, '');
-    if (!billSeq) continue;
+  rows.forEach((row, index) => {
+    const billSeq = billSeqOf(row);
+    if (!billSeq) return;
     if (!grouped.has(billSeq)) grouped.set(billSeq, []);
-    grouped.get(billSeq).push(row);
-  }
+    grouped.get(billSeq).push({ row, index });
+  });
 
   const out = [];
-  for (const [billSeq, lines] of grouped) {
-    lines.sort((a, b) => {
-      const ba = readSyncNum(a, 'BillNo', 'bill_no', 'LineIndex', 'lineIndex');
-      const bb = readSyncNum(b, 'BillNo', 'bill_no', 'LineIndex', 'lineIndex');
-      if (ba !== bb) return ba - bb;
-      return readSyncNum(a, 'Mat', 'mat') - readSyncNum(b, 'Mat', 'mat');
+  for (const [billSeq, items] of grouped) {
+    items.sort((a, b) => {
+      const ba = readSyncNum(a.row, 'BillNo', 'bill_no');
+      const bb = readSyncNum(b.row, 'BillNo', 'bill_no');
+      if (ba > 0 && bb > 0 && ba !== bb) return ba - bb;
+      return a.index - b.index;
     });
 
-    const used = new Set();
-    let fallback = Number(getMaxBillNo(billSeq) || 0);
+    const used = new Set(
+      (typeof getUsedBillNos === 'function' ? getUsedBillNos(billSeq) : [])
+        .map((n) => Number(n))
+        .filter((n) => n > 0)
+    );
+    let next = Math.max(Number(getMaxBillNo(billSeq) || 0), 0, ...used);
 
-    for (const line of lines) {
-      let billNo = readSyncNum(line, 'BillNo', 'bill_no', 'LineIndex', 'lineIndex');
-      if (billNo > 0 && used.has(billNo)) billNo = 0;
-      if (!billNo) {
-        do {
-          fallback += 1;
-          billNo = fallback;
-        } while (used.has(billNo));
-      }
-      used.add(billNo);
-      out.push({ ...line, BillNo: billNo, bill_no: billNo, LineIndex: billNo });
+    for (const { row } of items) {
+      do {
+        next += 1;
+      } while (used.has(next));
+      used.add(next);
+      out.push({ ...row, BillNo: next, bill_no: next, LineIndex: next });
     }
   }
 
   return out;
+}
+
+/** Keep invoice line batches intact — never split one bill across upload chunks. */
+function chunkInvoiceLinesByBill(rows = [], maxSize = 1500) {
+  if (!rows.length) return [];
+  const groups = new Map();
+  rows.forEach((row, index) => {
+    const billSeq = billSeqOf(row);
+    if (!billSeq) return;
+    if (!groups.has(billSeq)) groups.set(billSeq, []);
+    groups.get(billSeq).push({ row, index });
+  });
+
+  const orderedGroups = [...groups.values()].sort(
+    (a, b) => Math.min(...a.map((item) => item.index)) - Math.min(...b.map((item) => item.index))
+  );
+
+  const chunks = [];
+  let current = [];
+
+  for (const group of orderedGroups) {
+    const lines = group.map((item) => item.row);
+    if (lines.length > maxSize) {
+      if (current.length) {
+        chunks.push(current);
+        current = [];
+      }
+      for (let i = 0; i < lines.length; i += maxSize) {
+        chunks.push(lines.slice(i, i + maxSize));
+      }
+      continue;
+    }
+    if (current.length && current.length + lines.length > maxSize) {
+      chunks.push(current);
+      current = [];
+    }
+    current.push(...lines);
+  }
+
+  if (current.length) chunks.push(current);
+  return chunks;
 }
 
 function isActiveInvoiceLineRow(line) {
@@ -75,7 +123,9 @@ function resolveLineTotal(line) {
 
 module.exports = {
   readSyncNum,
+  billSeqOf,
   assignBillNosForLines,
+  chunkInvoiceLinesByBill,
   isActiveInvoiceLineRow,
   resolveLineTotal
 };

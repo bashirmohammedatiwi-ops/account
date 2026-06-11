@@ -5,7 +5,7 @@ const {
   resolveLineTotal
 } = require('./invoice-line-sync');
 
-const primedInvoiceLineBills = new Set();
+const usedBillNosStmt = db.prepare('SELECT bill_no FROM invoice_lines WHERE bill_seq = ?');
 
 function getChildren(parentSeq) {
   return db.prepare(
@@ -265,7 +265,11 @@ const maxBillNoStmt = db.prepare(`
 
 function ensureInvoiceLineBillNosForImport(rows = []) {
   return assignBillNosForLines(rows, {
-    getMaxBillNo: (billSeq) => Number(maxBillNoStmt.get(billSeq)?.m || 0)
+    getMaxBillNo: (billSeq) => Number(maxBillNoStmt.get(billSeq)?.m || 0),
+    getUsedBillNos: (billSeq) => usedBillNosStmt
+      .all(billSeq)
+      .map((row) => Number(row.bill_no))
+      .filter((n) => n > 0)
   });
 }
 
@@ -299,7 +303,6 @@ function mapInvoiceLineRow(line) {
 }
 
 function startSyncSession(accountSeqs = []) {
-  primedInvoiceLineBills.clear();
   const started = new Date().toISOString();
   const logId = db.prepare(
     'INSERT INTO sync_logs (started_at, status, message) VALUES (?, ?, ?)'
@@ -372,18 +375,6 @@ function importSyncChunk(kind, rows = []) {
       return;
     }
     if (kind === 'invoiceLines') {
-      const deleteLines = db.prepare('DELETE FROM invoice_lines WHERE bill_seq = ?');
-      const billSeqs = [...new Set(
-        rows
-          .map((row) => String(row.BillSeq ?? row.bill_seq ?? '').replace(/[^0-9]/g, ''))
-          .filter(Boolean)
-      )];
-      for (const seq of billSeqs) {
-        if (!primedInvoiceLineBills.has(seq)) {
-          deleteLines.run(seq);
-          primedInvoiceLineBills.add(seq);
-        }
-      }
       for (const row of ensureInvoiceLineBillNosForImport(rows)) {
         const mapped = mapInvoiceLineRow(row);
         if (mapped) upsert.run(mapped);

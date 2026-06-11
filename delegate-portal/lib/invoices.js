@@ -285,8 +285,11 @@ function repairInvoiceLineBillNumbers(billSeq) {
   `).all(seq);
   if (rows.length < 2) return;
 
-  const zeroCount = rows.filter((row) => !Number(row.bill_no || 0)).length;
-  if (zeroCount === 0) return;
+  const billNos = rows.map((row) => Number(row.bill_no || 0));
+  const zeroCount = billNos.filter((n) => !n).length;
+  const uniqueCount = new Set(billNos.filter((n) => n > 0)).size;
+  const needsRepair = zeroCount > 0 || uniqueCount < rows.length;
+  if (!needsRepair) return;
 
   const update = db.prepare('UPDATE invoice_lines SET bill_no = ? WHERE id = ?');
   const tx = db.transaction(() => {
