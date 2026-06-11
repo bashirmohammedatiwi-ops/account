@@ -1,4 +1,4 @@
-/* Mobile commerce: catalog browse, barcode, cart, orders */
+/* Mobile commerce: catalog browse, cart, orders */
 const commerce = {
   branches: [],
   sections: [],
@@ -170,27 +170,6 @@ async function openShopProducts() {
     goToScreen('shop-products');
   } catch (e) {
     alert(e.message);
-  } finally {
-    setOverlay(false);
-  }
-}
-
-async function lookupBarcode() {
-  const code = prompt('أدخل الباركود أو رقم المادة:');
-  if (!code?.trim()) return;
-  setOverlay(true);
-  try {
-    const branchId = commerce.selectedBranch?.id || '';
-    const qs = branchId ? `&branchId=${branchId}` : '';
-    const data = await commerceApi(`/products/lookup?code=${encodeURIComponent(code.trim())}${qs}`);
-    const p = data.product;
-    if (!p) throw new Error('المنتج غير موجود');
-    const q = prompt(`تم العثور على: ${p.name}\nالكمية:`, '1');
-    if (q == null) return;
-    addToCart(p, q);
-    alert(`أُضيف إلى السلة: ${p.name}`);
-  } catch (e) {
-    alert(e.message || 'المنتج غير موجود');
   } finally {
     setOverlay(false);
   }
@@ -385,25 +364,6 @@ async function openOrderDetail(id) {
   }
 }
 
-function setBottomNavActive(name) {
-  const map = {
-    home: 'home',
-    trees: 'home',
-    shop: 'shop',
-    'shop-sections': 'shop',
-    'shop-products': 'shop',
-    'shop-cart': 'shop',
-    'my-orders': 'my-orders',
-    'order-detail': 'my-orders'
-  };
-  const active = map[name] || name;
-  document.querySelectorAll('.bottom-nav-item').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.nav === active);
-  });
-  const show = ['home', 'shop', 'my-orders'].includes(active);
-  document.getElementById('bottomNav')?.classList.toggle('hidden', !show);
-}
-
 window.commerceNav = {
   isCommerceRoot(name) {
     return ['shop', 'my-orders'].includes(name);
@@ -446,7 +406,6 @@ window.commerceNav = {
   },
 
   onScreen(name) {
-    setBottomNavActive(name);
     if (name === 'shop') void loadShopBranches();
     if (name === 'my-orders') void loadMyOrders();
   },
@@ -493,14 +452,10 @@ window.commerceNav = {
       return true;
     }
     return false;
-  },
-
-  lookupBarcode
+  }
 };
 
 function initCommerceMobile() {
-  document.getElementById('btnBarcodeScan')?.addEventListener('click', () => lookupBarcode());
-  document.getElementById('btnBarcodeScan2')?.addEventListener('click', () => lookupBarcode());
   document.getElementById('btnOpenCart')?.addEventListener('click', openCart);
   document.getElementById('btnSubmitOrder')?.addEventListener('click', () => submitOrder());
 
@@ -508,26 +463,6 @@ function initCommerceMobile() {
     clearTimeout(commerce.customerSearchTimer);
     commerce.customerSearchTimer = setTimeout(() => searchCartCustomers(e.target.value), 300);
   });
-
-  document.querySelectorAll('.bottom-nav-item').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const nav = btn.dataset.nav;
-      if (nav === 'home') goToScreen('home');
-      else if (nav === 'shop') goToScreen('shop');
-      else if (nav === 'my-orders') goToScreen('my-orders');
-    });
-  });
-
-  const obs = new MutationObserver(() => {
-    const shell = document.getElementById('appShell');
-    if (shell && !shell.classList.contains('hidden')) {
-      document.getElementById('bottomNav')?.classList.remove('hidden');
-      setBottomNavActive(state.screen);
-    } else {
-      document.getElementById('bottomNav')?.classList.add('hidden');
-    }
-  });
-  obs.observe(document.getElementById('appShell'), { attributes: true, attributeFilter: ['class'] });
 }
 
 initCommerceMobile();

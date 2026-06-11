@@ -470,10 +470,6 @@ function openHomeApp(app) {
   if (app === 'accounts') goToScreen('trees');
   else if (app === 'shop') goToScreen('shop');
   else if (app === 'orders') goToScreen('my-orders');
-  else if (app === 'barcode') {
-    goToScreen('shop');
-    setTimeout(() => window.commerceNav?.lookupBarcode?.(), 200);
-  }
 }
 
 function setOverlay(open) {
@@ -651,7 +647,6 @@ function goToScreen(name) {
     window.commerceNav.applyScreen(name, { backBtn, toolbarWrap, title, crumb });
   }
 
-  document.getElementById('bottomNav')?.classList.toggle('hidden', !['home', 'shop', 'my-orders'].includes(name));
   window.commerceNav?.onScreen?.(name);
 }
 
