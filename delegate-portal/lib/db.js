@@ -64,13 +64,13 @@ function migrateSchema() {
     CREATE TABLE IF NOT EXISTS invoice_lines (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       bill_seq TEXT NOT NULL,
-      bill_no INTEGER,
+      bill_no INTEGER NOT NULL,
       mat TEXT,
       mat_name TEXT,
       quant REAL DEFAULT 0,
       price REAL DEFAULT 0,
       kind TEXT,
-      UNIQUE(bill_seq, bill_no, mat)
+      UNIQUE(bill_seq, bill_no)
     );
     CREATE INDEX IF NOT EXISTS idx_invoice_lines_bill ON invoice_lines(bill_seq);
   `);
@@ -88,6 +88,55 @@ function migrateSchema() {
       db.exec('ALTER TABLE invoice_lines ADD COLUMN remarks TEXT');
     }
   }
+  migrateInvoiceLinesUniqueKey();
+}
+
+function migrateInvoiceLinesUniqueKey() {
+  const table = db.prepare(`
+    SELECT sql FROM sqlite_master WHERE type='table' AND name='invoice_lines'
+  `).get();
+  if (!table?.sql || !table.sql.includes('UNIQUE(bill_seq, bill_no, mat)')) return;
+
+  const tx = db.transaction(() => {
+    db.exec(`
+      CREATE TABLE invoice_lines_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        bill_seq TEXT NOT NULL,
+        bill_no INTEGER NOT NULL,
+        mat TEXT,
+        mat_num TEXT,
+        mat_name TEXT,
+        quant REAL DEFAULT 0,
+        bonus REAL DEFAULT 0,
+        price REAL DEFAULT 0,
+        line_total REAL DEFAULT 0,
+        remarks TEXT,
+        kind TEXT,
+        UNIQUE(bill_seq, bill_no)
+      )
+    `);
+
+    const rows = db.prepare(`
+      SELECT * FROM invoice_lines
+      ORDER BY bill_seq, bill_no, line_total DESC, quant DESC, id DESC
+    `).all();
+    const insert = db.prepare(`
+      INSERT OR IGNORE INTO invoice_lines_v2
+        (bill_seq, bill_no, mat, mat_num, mat_name, quant, bonus, price, line_total, remarks, kind)
+      VALUES
+        (@bill_seq, @bill_no, @mat, @mat_num, @mat_name, @quant, @bonus, @price, @line_total, @remarks, @kind)
+    `);
+    for (const row of rows) {
+      insert.run(row);
+    }
+
+    db.exec(`
+      DROP TABLE invoice_lines;
+      ALTER TABLE invoice_lines_v2 RENAME TO invoice_lines;
+      CREATE INDEX IF NOT EXISTS idx_invoice_lines_bill ON invoice_lines(bill_seq);
+    `);
+  });
+  tx();
 }
 
 function initSchema() {
@@ -170,7 +219,7 @@ function initSchema() {
     CREATE TABLE IF NOT EXISTS invoice_lines (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       bill_seq TEXT NOT NULL,
-      bill_no INTEGER,
+      bill_no INTEGER NOT NULL,
       mat TEXT,
       mat_num TEXT,
       mat_name TEXT,
@@ -180,7 +229,7 @@ function initSchema() {
       line_total REAL DEFAULT 0,
       remarks TEXT,
       kind TEXT,
-      UNIQUE(bill_seq, bill_no, mat)
+      UNIQUE(bill_seq, bill_no)
     );
 
     CREATE INDEX IF NOT EXISTS idx_invoice_lines_bill ON invoice_lines(bill_seq);

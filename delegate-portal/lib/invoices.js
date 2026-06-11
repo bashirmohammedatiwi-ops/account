@@ -263,6 +263,24 @@ function mapInvoiceLineRow(row) {
   };
 }
 
+function dedupeRawInvoiceLines(rows = []) {
+  const map = new Map();
+  for (const row of rows) {
+    const billNo = Number(row.bill_no || 0);
+    if (!billNo) continue;
+    const key = `${row.bill_seq}:${billNo}`;
+    const prev = map.get(key);
+    if (!prev || invoiceLineRowScore(row) > invoiceLineRowScore(prev)) {
+      map.set(key, row);
+    }
+  }
+  return [...map.values()].sort((a, b) => Number(a.bill_no || 0) - Number(b.bill_no || 0));
+}
+
+function invoiceLineRowScore(row) {
+  return (Number(row.line_total) || 0) * 1e6 + (Number(row.quant) || 0);
+}
+
 function getInvoiceByBillSeq(billSeq) {
   const seq = normalizeBillSeq(billSeq);
   if (!seq) return null;
@@ -274,7 +292,9 @@ function getInvoiceByBillSeq(billSeq) {
   const lines = db.prepare(`
     SELECT * FROM invoice_lines WHERE bill_seq = ? ORDER BY bill_no
   `).all(seq);
-  const mappedLines = filterActiveInvoiceLines(lines.map(mapInvoiceLineRow));
+  const mappedLines = filterActiveInvoiceLines(
+    dedupeRawInvoiceLines(lines).map(mapInvoiceLineRow)
+  );
   const totals = resolveInvoiceTotals(invoice, mappedLines);
   const mappedInvoice = mapInvoiceRow(invoice, account, totals);
   return {

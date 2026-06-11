@@ -329,6 +329,36 @@ async function fetchMaterialMap(matSeqs) {
   return map;
 }
 
+function readSyncNum(row, ...keys) {
+  for (const key of keys) {
+    const value = row?.[key];
+    if (value == null || value === '') continue;
+    const n = Number(value);
+    if (!Number.isNaN(n)) return n;
+  }
+  return 0;
+}
+
+function normalizeInvoiceLineBillNos(rows = []) {
+  const grouped = new Map();
+  for (const row of rows) {
+    const billSeq = String(row.BillSeq ?? row.bill_seq ?? '').replace(/[^0-9]/g, '');
+    if (!billSeq) continue;
+    if (!grouped.has(billSeq)) grouped.set(billSeq, []);
+    grouped.get(billSeq).push(row);
+  }
+
+  const out = [];
+  for (const lines of grouped.values()) {
+    lines.sort((a, b) => readSyncNum(a, 'BillNo', 'bill_no') - readSyncNum(b, 'BillNo', 'bill_no'));
+    lines.forEach((line, index) => {
+      const billNo = readSyncNum(line, 'BillNo', 'bill_no') || (index + 1);
+      out.push({ ...line, BillNo: billNo, bill_no: billNo });
+    });
+  }
+  return out;
+}
+
 async function fetchInvoiceLineRows(ids) {
   const baseCols = 'BillSeq, BillNo, Mat, MatName, Quant, Price, OBonus, MatRem, Kind';
   const withSum = `${baseCols}, Sum`;
@@ -363,21 +393,22 @@ async function fetchInvoiceLines(billSeqs) {
     materials = await fetchMaterialMap(missingNameMats);
   }
 
-  return all.map((line) => {
+  return normalizeInvoiceLineBillNos(all.map((line) => {
     const mat = materials.get(String(line.Mat));
-    const quant = Number(line.Quant || 0);
-    const price = Number(line.Price || 0);
-    const storedTotal = Number(line.Sum ?? line.sum ?? 0);
+    const quant = readSyncNum(line, 'Quant', 'quant');
+    const price = readSyncNum(line, 'Price', 'price');
+    const bonus = readSyncNum(line, 'OBonus', 'bonus');
+    const storedTotal = readSyncNum(line, 'Sum', 'sum', 'line_total');
     return {
       ...line,
       MatNum: mat?.num || '',
       MatName: (line.MatName || '').trim() || mat?.name1 || '',
       line_total: storedTotal > 0 ? storedTotal : quant * price
     };
-  }).filter((line) => {
-    const quant = Number(line.Quant || 0);
-    const bonus = Number(line.OBonus || 0);
-    const price = Number(line.Price || 0);
+  })).filter((line) => {
+    const quant = readSyncNum(line, 'Quant', 'quant');
+    const bonus = readSyncNum(line, 'OBonus', 'bonus');
+    const price = readSyncNum(line, 'Price', 'price');
     const total = Number(line.line_total || 0);
     const name = String(line.MatName || '').trim();
     const mat = String(line.Mat || '').trim();
