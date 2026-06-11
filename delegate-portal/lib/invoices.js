@@ -160,18 +160,27 @@ function roundAmount(n) {
   return Math.round(x * 100) / 100;
 }
 
-/** مبلغ السطر: الكمية × السعر، مع تصحيح إن كان المخزّن في Edari مختلفاً */
+/** مبلغ السطر — نثق بقيمة Edari المخزّنة، ثم الكمية × السعر */
 function lineTotal(quant, price, stored) {
+  const storedN = roundAmount(stored);
+  if (storedN > 0) return storedN;
   const q = Number(quant || 0);
   const p = Number(price || 0);
-  const computed = roundAmount(q * p);
-  const storedN = roundAmount(stored);
-  if (storedN > 0 && computed > 0) {
-    if (Math.abs(storedN - computed) <= 1) return storedN;
-    return computed;
-  }
-  if (storedN > 0) return storedN;
-  return computed;
+  return roundAmount(q * p);
+}
+
+function isActiveInvoiceLine(line) {
+  const quant = Number(line?.quant ?? 0);
+  const bonus = Number(line?.bonus ?? 0);
+  const price = Number(line?.price ?? 0);
+  const total = Number(line?.lineTotal ?? line?.line_total ?? 0);
+  const name = String(line?.matName ?? line?.mat_name ?? '').trim();
+  const mat = String(line?.mat ?? '').trim();
+  return quant !== 0 || bonus !== 0 || price !== 0 || total !== 0 || Boolean(name) || Boolean(mat);
+}
+
+function filterActiveInvoiceLines(lines = []) {
+  return (lines || []).filter(isActiveInvoiceLine);
 }
 
 /**
@@ -182,14 +191,26 @@ function resolveInvoiceTotals(header, lines = []) {
   const discount = roundAmount(Math.max(0, Number(header?.discount ?? 0)));
   const headerTotal = roundAmount(Math.max(0, Number(header?.total ?? 0)));
   const headerPayment = roundAmount(Math.max(0, Number(header?.payment ?? 0)));
+  const headerLineCount = Number(header?.line_count ?? 0);
 
+  const activeLines = filterActiveInvoiceLines(lines);
   const linesSum = roundAmount(
-    lines.reduce((s, l) => s + roundAmount(l.lineTotal ?? 0), 0)
+    activeLines.reduce((s, l) => s + roundAmount(l.lineTotal ?? 0), 0)
   );
 
   let total = headerTotal;
-  if (lines.length > 0 && linesSum > 0) {
+  if (linesSum > 0) {
     total = linesSum;
+    if (
+      headerTotal > 0
+      && headerLineCount > 0
+      && activeLines.length < headerLineCount
+      && headerTotal > linesSum
+    ) {
+      total = headerTotal;
+    } else if (headerTotal > 0 && Math.abs(headerTotal - linesSum) <= Math.max(1, headerTotal * 0.002)) {
+      total = headerTotal;
+    }
   } else if (!total && linesSum > 0) {
     total = linesSum;
   }
@@ -253,7 +274,7 @@ function getInvoiceByBillSeq(billSeq) {
   const lines = db.prepare(`
     SELECT * FROM invoice_lines WHERE bill_seq = ? ORDER BY bill_no
   `).all(seq);
-  const mappedLines = lines.map(mapInvoiceLineRow);
+  const mappedLines = filterActiveInvoiceLines(lines.map(mapInvoiceLineRow));
   const totals = resolveInvoiceTotals(invoice, mappedLines);
   const mappedInvoice = mapInvoiceRow(invoice, account, totals);
   return {
@@ -375,5 +396,7 @@ module.exports = {
   mapInvoiceLineRow,
   resolveInvoiceTotals,
   lineTotal,
+  isActiveInvoiceLine,
+  filterActiveInvoiceLines,
   roundAmount
 };

@@ -156,21 +156,31 @@ function invMoneyTd(val, cls) {
 }
 
 function invoiceLineTotal(line) {
+  const stored = Math.round(Number(line.lineTotal) || 0);
+  if (stored > 0) return stored;
   const q = Number(line.quant) || 0;
   const p = Number(line.price) || 0;
-  const stored = Math.round(Number(line.lineTotal) || 0);
-  const computed = Math.round(q * p);
-  if (stored > 0 && computed > 0 && Math.abs(stored - computed) > 1) return computed;
-  return stored || computed;
+  return Math.round(q * p);
 }
 
 /** توحيد الإجمالي والصافي مع مجموع البنود (إجمالي − حسومات) */
 function reconcileInvoiceTotals(inv, lines) {
   const discount = Math.max(0, Math.round(Number(inv.discount) || 0));
+  const headerTotal = Math.round(Number(inv.total) || 0);
+  const headerLineCount = Number(inv.lineCount || 0);
   const linesSum = lines.reduce((s, l) => s + invoiceLineTotal(l), 0);
-  const total = lines.length && linesSum > 0
-    ? linesSum
-    : Math.round(Number(inv.total) || 0);
+  let total = linesSum > 0 ? linesSum : headerTotal;
+  if (
+    headerTotal > 0
+    && linesSum > 0
+    && headerLineCount > 0
+    && lines.length < headerLineCount
+    && headerTotal > linesSum
+  ) {
+    total = headerTotal;
+  } else if (headerTotal > 0 && linesSum > 0 && Math.abs(headerTotal - linesSum) <= Math.max(1, headerTotal * 0.002)) {
+    total = headerTotal;
+  }
   const netPay = Math.max(0, total - discount);
   return { ...inv, total, discount, netPay };
 }
@@ -960,6 +970,7 @@ async function openInvoice(ref, by = 'auto', acc = '') {
             <span class="doc-label">شركة ديما الحياة</span>
             <strong class="doc-title">${esc(inv.kindLabel || 'فاتورة مبيعات')}</strong>
             <span class="doc-meta-line">رقم ${esc(inv.num || ref)} · ${fmtDate(inv.date)}</span>
+            ${inv.remarks ? `<span class="doc-meta-line doc-meta-note">${esc(inv.remarks)}</span>` : ''}
           </div>
           <div class="doc-head-side">
             <strong class="doc-client">${esc(inv.accountName || state.selectedBranch?.name1 || '—')}</strong>

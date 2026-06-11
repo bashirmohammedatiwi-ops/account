@@ -1241,6 +1241,10 @@ body,
   line-height: 1.45;
 }
 
+.doc-meta-note {
+  color: var(--accent-dark);
+}
+
 .doc-meta-table {
   width: 100%;
   border-collapse: collapse;

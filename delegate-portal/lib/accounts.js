@@ -252,18 +252,23 @@ function mapInvoiceLineRow(line) {
   const quant = Number(line.Quant ?? line.quant ?? 0);
   const price = Number(line.Price ?? line.price ?? 0);
   const bonus = Number(line.OBonus ?? line.bonus ?? 0);
-  const storedTotal = Number(line.sum ?? line.line_total ?? 0);
-  const lineTotal = storedTotal > 0 ? storedTotal : quant * price;
+  const storedTotal = Number(line.sum ?? line.Sum ?? line.line_total ?? 0);
+  const lineTotalVal = storedTotal > 0 ? storedTotal : quant * price;
+  const matName = line.MatName ?? line.mat_name ?? line.Name1 ?? '';
+  const mat = String(line.Mat ?? line.mat ?? '');
+  if (!quant && !bonus && !price && !lineTotalVal && !String(matName).trim() && !mat.trim()) {
+    return null;
+  }
   return {
     bill_seq: billSeq,
     bill_no: Number(line.BillNo ?? line.bill_no ?? 0),
-    mat: String(line.Mat ?? line.mat ?? ''),
+    mat,
     mat_num: String(line.MatNum ?? line.mat_num ?? line.Num ?? ''),
-    mat_name: line.MatName ?? line.mat_name ?? line.Name1 ?? '',
+    mat_name: matName,
     quant,
     bonus,
     price,
-    line_total: lineTotal,
+    line_total: lineTotalVal,
     remarks: line.MatRem ?? line.remarks ?? '',
     kind: String(line.Kind ?? line.kind ?? '')
   };

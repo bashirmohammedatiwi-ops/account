@@ -262,11 +262,40 @@ function enrichAccountsWithMatchInfo(accounts, lastMatchMap) {
 
 function collectBillSeqs(journal) {
   const seqs = new Set();
+  const nums = new Set();
   for (const row of journal) {
     const seq = normalizeBillSeq(row.BillSeq ?? row.bill_seq);
-    if (seq) seqs.add(seq);
+    if (seq) {
+      seqs.add(seq);
+      continue;
+    }
+    const num = normalizeBillNum(row.BillNum ?? row.bill_num) || extractBillNumFromText(row.Exp1 ?? row.exp1);
+    if (num) nums.add(num);
   }
-  return [...seqs];
+  return { seqs, nums };
+}
+
+async function lookupBillSeqsByNums(nums) {
+  const map = new Map();
+  if (!nums.length) return map;
+  for (const part of chunk(nums, 120)) {
+    const list = part.join(',');
+    const rows = await query(`SELECT Seq, Num FROM File15n WHERE Num IN (${list})`);
+    for (const row of rows) {
+      map.set(String(row.Num), String(row.Seq));
+    }
+  }
+  return map;
+}
+
+async function resolveBillSeqsFromJournal(journal) {
+  const { seqs, nums } = collectBillSeqs(journal);
+  const resolved = new Set(seqs);
+  if (nums.size) {
+    const byNum = await lookupBillSeqsByNums([...nums]);
+    for (const seq of byNum.values()) resolved.add(seq);
+  }
+  return [...resolved];
 }
 
 async function fetchInvoices(billSeqs) {
@@ -300,15 +329,23 @@ async function fetchMaterialMap(matSeqs) {
   return map;
 }
 
+async function fetchInvoiceLineRows(ids) {
+  const baseCols = 'BillSeq, BillNo, Mat, MatName, Quant, Price, OBonus, MatRem, Kind';
+  const withSum = `${baseCols}, Sum`;
+  try {
+    return await query(`SELECT ${withSum} FROM file14n WHERE BillSeq IN (${ids}) ORDER BY BillSeq, BillNo`);
+  } catch {
+    return await query(`SELECT ${baseCols} FROM file14n WHERE BillSeq IN (${ids}) ORDER BY BillSeq, BillNo`);
+  }
+}
+
 async function fetchInvoiceLines(billSeqs) {
   if (!billSeqs.length) return [];
   const all = [];
   const parts = chunk(billSeqs, 100);
   for (let i = 0; i < parts.length; i++) {
     const ids = parts[i].join(',');
-    const rows = await query(
-      `SELECT BillSeq, BillNo, Mat, MatName, Quant, Price, OBonus, MatRem, Kind FROM file14n WHERE BillSeq IN (${ids}) ORDER BY BillSeq, BillNo`
-    );
+    const rows = await fetchInvoiceLineRows(ids);
     all.push(...rows);
     const pct = Math.round(((i + 1) / parts.length) * 100);
     reportProgress(4, 6, pct, `بنود الفواتير: ${all.length} (${i + 1}/${parts.length})`);
@@ -316,14 +353,13 @@ async function fetchInvoiceLines(billSeqs) {
 
   const missingNameMats = [...new Set(
     all
-      .filter((line) => !(line.MatName || '').trim())
       .map((line) => String(line.Mat || '').replace(/[^0-9]/g, ''))
       .filter(Boolean)
   )];
 
   let materials = new Map();
   if (missingNameMats.length) {
-    reportProgress(4, 6, 95, `جلب أسماء ${missingNameMats.length} مادة...`);
+    reportProgress(4, 6, 95, `جلب بيانات ${missingNameMats.length} مادة...`);
     materials = await fetchMaterialMap(missingNameMats);
   }
 
@@ -331,12 +367,21 @@ async function fetchInvoiceLines(billSeqs) {
     const mat = materials.get(String(line.Mat));
     const quant = Number(line.Quant || 0);
     const price = Number(line.Price || 0);
+    const storedTotal = Number(line.Sum ?? line.sum ?? 0);
     return {
       ...line,
       MatNum: mat?.num || '',
       MatName: (line.MatName || '').trim() || mat?.name1 || '',
-      line_total: quant * price
+      line_total: storedTotal > 0 ? storedTotal : quant * price
     };
+  }).filter((line) => {
+    const quant = Number(line.Quant || 0);
+    const bonus = Number(line.OBonus || 0);
+    const price = Number(line.Price || 0);
+    const total = Number(line.line_total || 0);
+    const name = String(line.MatName || '').trim();
+    const mat = String(line.Mat || '').trim();
+    return quant !== 0 || bonus !== 0 || price !== 0 || total !== 0 || Boolean(name) || Boolean(mat);
   });
 }
 
@@ -439,7 +484,7 @@ async function main() {
   const journal = await fetchAllJournal(leafSeqs);
   reportProgress(2, 6, 100, `تم: ${journal.length} حركة`);
 
-  const billSeqs = collectBillSeqs(journal);
+  const billSeqs = await resolveBillSeqsFromJournal(journal);
   reportProgress(3, 6, 0, `جاري قراءة ${billSeqs.length} فاتورة بيع...`);
   const invoices = await fetchInvoices(billSeqs);
   reportProgress(3, 6, 100, `تم: ${invoices.length} فاتورة`);
