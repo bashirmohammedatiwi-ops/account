@@ -107,8 +107,15 @@ function preparePortal() {
     copyRecursive(src, path.join(PORTAL_OUT, item));
   }
 
-  console.log('تثبيت dependencies للبوابة...');
-  execSync('npm ci --omit=dev', { cwd: PORTAL_OUT, stdio: 'inherit' });
+  const parentModules = path.join(PORTAL_SRC, 'node_modules');
+  const outModules = path.join(PORTAL_OUT, 'node_modules');
+  if (fs.existsSync(parentModules)) {
+    console.log('نسخ node_modules من delegate-portal...');
+    copyRecursive(parentModules, outModules);
+  } else {
+    console.log('تثبيت dependencies للبوابة...');
+    execSync('npm ci --omit=dev', { cwd: PORTAL_OUT, stdio: 'inherit' });
+  }
 }
 
 function prepareEdariReader() {

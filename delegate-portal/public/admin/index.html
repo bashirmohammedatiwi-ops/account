@@ -176,12 +176,25 @@
                 </div>
               </details>
 
+              <section class="panel" id="syncLivePanel">
+                <div class="panel-head">
+                  <h2 class="panel-title">النشاط المباشر</h2>
+                  <span class="badge pending hidden sync-source-badge" id="syncSourceBadge">رفع تلقائي</span>
+                </div>
+                <div class="sync-live-feed" id="syncLiveFeed">
+                  <p class="muted">سيظهر هنا نشاط الرفع اليدوي والتلقائي فوراً</p>
+                </div>
+              </section>
+
               <section class="panel">
-                <h2 class="panel-title">سجل الرفع</h2>
+                <div class="panel-head">
+                  <h2 class="panel-title">سجل الرفع</h2>
+                  <button type="button" class="btn btn-soft btn-sm" id="btnRefreshSyncLogs">تحديث</button>
+                </div>
                 <div class="table-scroll">
                   <table class="data-table compact">
                     <thead>
-                      <tr><th>#</th><th>البداية</th><th>الحالة</th><th>حسابات</th><th>حركات</th></tr>
+                      <tr><th>#</th><th>البداية</th><th>النهاية</th><th>الحالة</th><th>حسابات</th><th>حركات</th><th>التفاصيل</th></tr>
                     </thead>
                     <tbody id="syncLogsBody"></tbody>
                   </table>
@@ -292,6 +305,6 @@
   </div>
 
   <script src="config.js"></script>
-  <script src="admin.js"></script>
+  <script src="admin.js?v=20260625log"></script>
 </body>
 </html>

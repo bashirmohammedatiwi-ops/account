@@ -119,6 +119,11 @@ function pushSyncProgress(text) {
   mainWindow.webContents.send('sync-progress', line);
 }
 
+function pushSyncActivity(payload = {}) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('sync-activity', payload);
+}
+
 function pushAutoSyncState(state) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.webContents.send('auto-sync-state', state);
@@ -137,14 +142,22 @@ function parseSyncResult(stdout) {
 
 let activeSyncPromise = null;
 
-function runLocalSyncScript(serverUrl, syncKey, treeSeqs = []) {
+function runLocalSyncScript(serverUrl, syncKey, treeSeqs = [], options = {}) {
   if (activeSyncPromise) return activeSyncPromise;
+
+  const source = options.source === 'auto' ? 'auto' : 'manual';
 
   activeSyncPromise = new Promise((resolve, reject) => {
     if (!Array.isArray(treeSeqs) || !treeSeqs.length) {
       activeSyncPromise = null;
       return reject(new Error('حدد شجرة واحدة على الأقل للرفع'));
     }
+
+    pushSyncActivity({
+      phase: 'start',
+      source,
+      message: source === 'auto' ? 'بدء رفع تلقائي...' : 'بدء الرفع...'
+    });
 
     const portalDir = getPortalDir();
     const script = path.join(portalDir, 'sync-client', 'sync.js');
@@ -164,6 +177,7 @@ function runLocalSyncScript(serverUrl, syncKey, treeSeqs = []) {
         ...process.env,
         SYNC_SERVER: syncTarget,
         SYNC_API_KEY: syncKey,
+        SYNC_SOURCE: source,
         EDARI_READER_ROOT: getEdariReaderRoot(),
         NODE_BIN: nodeBin,
         EDARI_BACKEND_URL: BACKEND_URL,
@@ -188,10 +202,19 @@ function runLocalSyncScript(serverUrl, syncKey, treeSeqs = []) {
         if (trimmed) pushSyncProgress(trimmed);
       });
     });
-    child.on('error', reject);
+    child.on('error', (err) => {
+      pushSyncActivity({ phase: 'error', source, message: err.message });
+      reject(err);
+    });
     child.on('close', (code) => {
-      if (code !== 0) return reject(new Error(stdout.trim() || `Sync exit ${code}`));
-      resolve(parseSyncResult(stdout));
+      if (code !== 0) {
+        const message = stdout.trim() || `Sync exit ${code}`;
+        pushSyncActivity({ phase: 'error', source, message });
+        return reject(new Error(message));
+      }
+      const result = parseSyncResult(stdout);
+      pushSyncActivity({ phase: 'complete', source, result });
+      resolve(result);
     });
   }).finally(() => {
     activeSyncPromise = null;
@@ -425,10 +448,12 @@ function initBackgroundSync() {
       updateTrayMenu();
     },
     onNotify: (msg) => {
+      const text = String(msg || '').trim();
+      if (text) pushSyncProgress(text);
       if (tray && !mainWindow?.isVisible()) {
         tray.displayBalloon?.({
           title: 'Edari Admin',
-          content: String(msg || ''),
+          content: text,
           iconType: 'info'
         });
       }
@@ -438,7 +463,7 @@ function initBackgroundSync() {
 }
 
 ipcMain.handle('run-local-sync', (_e, { serverUrl, syncKey, treeSeqs }) => {
-  return runLocalSyncScript(serverUrl, syncKey, treeSeqs);
+  return runLocalSyncScript(serverUrl, syncKey, treeSeqs, { source: 'manual' });
 });
 
 ipcMain.handle('list-edari-trees', () => {

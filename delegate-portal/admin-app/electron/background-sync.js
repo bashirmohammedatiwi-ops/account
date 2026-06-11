@@ -128,11 +128,13 @@ function createBackgroundSync({
     onNotify?.('بدء رفع البيانات تلقائياً...');
 
     try {
-      const result = await runSync(serverUrl, syncKey, treeSeqs);
-      onNotify?.(`اكتمل الرفع: ${result.accounts} حساب، ${result.journal} حركة`);
+      const result = await runSync(serverUrl, syncKey, treeSeqs, { source: 'auto' });
+      const invPart = result.invoices ? `، ${result.invoices} فاتورة` : '';
+      const linesPart = result.invoiceLines ? `، ${result.invoiceLines} بند` : '';
+      onNotify?.(`اكتمل الرفع التلقائي: ${result.accounts} حساب، ${result.journal} حركة${invPart}${linesPart}`);
       return { ok: true, result };
     } catch (err) {
-      onNotify?.(`فشل الرفع: ${err.message}`);
+      onNotify?.(`فشل الرفع التلقائي: ${err.message}`);
       return { ok: false, error: err.message };
     } finally {
       state.syncing = false;

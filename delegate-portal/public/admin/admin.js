@@ -155,6 +155,12 @@ function showPage(name) {
   if (titleEl) titleEl.textContent = meta.title;
   if (subEl) subEl.textContent = meta.sub;
   if (name === 'trees') initExplorer();
+  if (name === 'sync') {
+    void loadSyncLogs();
+    startSyncLogPolling();
+  } else {
+    stopSyncLogPolling();
+  }
 }
 
 async function loadDashboard() {
@@ -173,10 +179,12 @@ async function loadDashboard() {
 
   if (last) {
     const cls = last.status === 'success' ? 'ok' : last.status === 'error' ? 'off' : 'pending';
+    const msg = String(last.message || '').trim();
     document.getElementById('lastSyncInfo').innerHTML = `
-      <p><span class="badge ${cls}">${esc(last.status)}</span></p>
+      <p><span class="badge ${cls}">${esc(syncStatusLabel(last.status))}</span></p>
       <p style="margin:8px 0 0">${fmtDate(last.started_at)}</p>
-      <p class="muted">${last.accounts_count || 0} حساب · ${last.journal_count || 0} حركة</p>`;
+      <p class="muted">${last.accounts_count || 0} حساب · ${last.journal_count || 0} حركة</p>
+      ${msg ? `<p class="muted sync-last-msg">${esc(msg)}</p>` : ''}`;
   } else {
     document.getElementById('lastSyncInfo').textContent = 'لم تُنفَّذ مزامنة بعد';
   }
@@ -420,16 +428,150 @@ async function loadAgents() {
 
 async function loadSyncLogs() {
   const data = await api('/api/admin/sync/logs');
-  document.getElementById('syncLogsBody').innerHTML = (data.logs || []).map((l) => `
+  const body = document.getElementById('syncLogsBody');
+  if (!body) return;
+  body.innerHTML = (data.logs || []).map((l) => {
+    const cls = l.status === 'success' ? 'ok' : l.status === 'error' ? 'off' : 'pending';
+    const msg = String(l.message || '').trim();
+    const autoTag = /\[تلقائي\]|تلقائي|auto/i.test(msg)
+      ? '<span class="badge pending sync-kind-auto">تلقائي</span>'
+      : '<span class="badge sync-kind-manual">يدوي</span>';
+    return `
     <tr>
       <td>${l.id}</td>
       <td>${fmtDate(l.started_at)}</td>
       <td>${fmtDate(l.finished_at)}</td>
-      <td><span class="badge ${l.status === 'success' ? 'ok' : l.status === 'error' ? 'off' : 'pending'}">${l.status}</span></td>
-      <td>${l.accounts_count || 0}</td>
-      <td>${l.journal_count || 0}</td>
-      <td>${l.message || ''}</td>
-    </tr>`).join('') || '<tr><td colspan="7">لا يوجد سجل</td></tr>';
+      <td>${autoTag} <span class="badge ${cls}">${esc(syncStatusLabel(l.status))}</span></td>
+      <td dir="ltr">${l.accounts_count || 0}</td>
+      <td dir="ltr">${l.journal_count || 0}</td>
+      <td class="sync-log-msg">${esc(msg || '—')}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7">لا يوجد سجل</td></tr>';
+}
+
+function syncStatusLabel(status) {
+  if (status === 'success') return 'نجح';
+  if (status === 'error') return 'فشل';
+  if (status === 'running') return 'جاري';
+  return status || '—';
+}
+
+let syncLogPollTimer = null;
+
+function startSyncLogPolling() {
+  stopSyncLogPolling();
+  syncLogPollTimer = setInterval(() => {
+    if (document.getElementById('page-sync')?.classList.contains('active') && !syncInProgress) {
+      void loadSyncLogs();
+    }
+  }, 15000);
+}
+
+function stopSyncLogPolling() {
+  if (syncLogPollTimer) clearInterval(syncLogPollTimer);
+  syncLogPollTimer = null;
+}
+
+let syncActivitySource = 'manual';
+const syncLiveLines = [];
+const SYNC_LIVE_MAX = 40;
+
+function updateSyncSourceBadge() {
+  const badge = document.getElementById('syncSourceBadge');
+  if (!badge) return;
+  if (!syncInProgress) {
+    badge.classList.add('hidden');
+    return;
+  }
+  badge.classList.remove('hidden');
+  badge.textContent = syncActivitySource === 'auto' ? 'رفع تلقائي' : 'رفع يدوي';
+  badge.className = `badge ${syncActivitySource === 'auto' ? 'pending' : 'ok'} sync-source-badge`;
+}
+
+function appendSyncLiveLine(line, source = syncActivitySource) {
+  const feed = document.getElementById('syncLiveFeed');
+  if (!feed || !line) return;
+  const stamp = new Date().toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  syncLiveLines.unshift({ line: String(line), stamp, source });
+  if (syncLiveLines.length > SYNC_LIVE_MAX) syncLiveLines.length = SYNC_LIVE_MAX;
+  feed.innerHTML = syncLiveLines.map((item) => `
+    <div class="sync-live-line">
+      <span class="sync-live-time">${esc(item.stamp)}</span>
+      <span class="badge ${item.source === 'auto' ? 'pending' : 'ok'} sync-live-kind">${item.source === 'auto' ? 'تلقائي' : 'يدوي'}</span>
+      <span class="sync-live-text">${esc(item.line)}</span>
+    </div>`).join('');
+}
+
+function showSyncProgressPanel(show = true) {
+  const prog = document.getElementById('syncProgress');
+  if (!prog) return;
+  prog.classList.toggle('hidden', !show);
+}
+
+async function handleSyncFinished(activity = {}) {
+  syncInProgress = false;
+  updateSyncSourceBadge();
+  updateAutoSyncDisplay();
+
+  if (activity.phase === 'complete' && activity.result) {
+    const r = activity.result;
+    const invPart = r.invoices ? `، ${r.invoices} فاتورة` : '';
+    const linesPart = r.invoiceLines ? `، ${r.invoiceLines} بند` : '';
+    applySyncProgressLine(`تم! ${r.accounts} حساب، ${r.journal} حركة${invPart}${linesPart}`);
+    const bar = document.getElementById('syncProgressBar');
+    const step = document.getElementById('syncProgressStep');
+    if (bar) bar.style.width = '100%';
+    if (step) step.textContent = 'اكتملت المزامنة';
+  }
+
+  if (activity.phase === 'error') {
+    applySyncProgressLine(`خطأ: ${activity.message || 'فشل الرفع'}`);
+    const bar = document.getElementById('syncProgressBar');
+    if (bar) bar.style.width = '0%';
+  }
+
+  await loadSyncLogs();
+  await loadDashboard();
+  await loadTrees();
+  if (explorer.selectedTreeSeq) await selectExplorerTree(explorer.selectedTreeSeq);
+
+  const hideDelay = activity.source === 'auto' ? 12000 : 5000;
+  setTimeout(() => {
+    if (!syncInProgress) showSyncProgressPanel(false);
+  }, hideDelay);
+}
+
+function initSyncLiveFeed() {
+  if (window.__syncLiveFeedReady) return;
+  window.__syncLiveFeedReady = true;
+
+  if (window.edariDesktop?.onSyncProgress) {
+    window.edariDesktop.onSyncProgress((line) => {
+      if (!line) return;
+      applySyncProgressLine(line);
+      appendSyncLiveLine(line);
+      showSyncProgressPanel(true);
+    });
+  }
+
+  if (window.edariDesktop?.onSyncActivity) {
+    window.edariDesktop.onSyncActivity(async (activity) => {
+      if (activity.phase === 'start') {
+        syncInProgress = true;
+        syncActivitySource = activity.source === 'auto' ? 'auto' : 'manual';
+        updateSyncSourceBadge();
+        showSyncProgressPanel(true);
+        applySyncProgressLine(activity.message || (syncActivitySource === 'auto' ? 'بدء رفع تلقائي...' : 'بدء الرفع...'));
+        appendSyncLiveLine(activity.message || 'بدء الرفع', syncActivitySource);
+        updateAutoSyncDisplay();
+        return;
+      }
+      if (activity.phase === 'complete' || activity.phase === 'error') {
+        appendSyncLiveLine(activity.message || (activity.phase === 'complete' ? 'اكتمل الرفع' : 'فشل الرفع'), activity.source);
+        await handleSyncFinished(activity);
+      }
+    });
+  }
 }
 
 function getSelectedSyncTreeSeqs() {
@@ -635,6 +777,12 @@ function applyMainAutoSyncState(state = {}) {
   const loginChk = document.getElementById('startAtLoginEnabled');
   if (loginChk) loginChk.checked = state.startAtLogin !== false;
   updateAutoSyncDisplay();
+  if (state.syncing) {
+    syncActivitySource = 'auto';
+    updateSyncSourceBadge();
+    showSyncProgressPanel(true);
+    applySyncProgressLine('رفع تلقائي جارٍ في الخلفية...');
+  }
   if (autoSync.enabled) {
     setAutoSyncHint(
       state.syncing
@@ -735,26 +883,21 @@ async function runSync(opts = {}) {
   }
 
   syncInProgress = true;
+  syncActivitySource = 'manual';
+  updateSyncSourceBadge();
   updateAutoSyncDisplay();
 
   applySyncServerUrl(serverUrl);
   localStorage.setItem('syncApiKey', syncKey);
   saveSyncTreeSelection();
 
-  const prog = document.getElementById('syncProgress');
   const bar = document.getElementById('syncProgressBar');
   const step = document.getElementById('syncProgressStep');
-  prog.classList.remove('hidden');
+  showSyncProgressPanel(true);
   if (bar) bar.style.width = '0%';
   if (step) step.textContent = 'الخطوة 1 من 6';
   applySyncProgressLine('التحقق من اتصال سيرفر الرفع...');
-
-  let stopProgress = null;
-  if (window.edariDesktop?.onSyncProgress) {
-    stopProgress = window.edariDesktop.onSyncProgress((line) => {
-      if (line) applySyncProgressLine(line);
-    });
-  }
+  appendSyncLiveLine('بدء رفع يدوي...', 'manual');
 
   try {
     await verifySyncTarget(serverUrl, syncKey);
@@ -784,6 +927,7 @@ async function runSync(opts = {}) {
     await persistBackgroundSyncSettings();
   } catch (e) {
     applySyncProgressLine(`خطأ: ${e.message}`);
+    appendSyncLiveLine(`خطأ: ${e.message}`, syncActivitySource);
     if (bar) bar.style.width = '0%';
     if (auto) {
       setAutoSyncHint(`خطأ: ${e.message}`);
@@ -794,10 +938,11 @@ async function runSync(opts = {}) {
     updateAutoSyncDisplay();
     return false;
   } finally {
-    stopProgress?.();
-    syncInProgress = false;
-    updateAutoSyncDisplay();
-    setTimeout(() => prog.classList.add('hidden'), auto ? 8000 : 5000);
+    if (!window.edariDesktop?.onSyncActivity) {
+      syncInProgress = false;
+      updateAutoSyncDisplay();
+      setTimeout(() => showSyncProgressPanel(false), auto ? 8000 : 5000);
+    }
   }
   return true;
 }
@@ -832,6 +977,7 @@ document.getElementById('btnSyncTreesNone')?.addEventListener('click', () => {
   saveSyncTreeSelection();
 });
 document.getElementById('btnSyncTreesReload')?.addEventListener('click', loadSyncTrees);
+document.getElementById('btnRefreshSyncLogs')?.addEventListener('click', () => { void loadSyncLogs(); });
 
 document.getElementById('agentForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -902,6 +1048,7 @@ async function refreshAll() {
   await loadAgents();
   await loadSyncLogs();
   await initAutoSync();
+  initSyncLiveFeed();
 }
 
 const savedKey = localStorage.getItem('syncApiKey');

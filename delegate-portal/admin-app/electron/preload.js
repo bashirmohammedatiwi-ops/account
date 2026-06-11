@@ -26,5 +26,10 @@ contextBridge.exposeInMainWorld('edariDesktop', {
     const listener = (_event, state) => handler(state);
     ipcRenderer.on('auto-sync-state', listener);
     return () => ipcRenderer.removeListener('auto-sync-state', listener);
+  },
+  onSyncActivity: (handler) => {
+    const listener = (_event, payload) => handler(payload);
+    ipcRenderer.on('sync-activity', listener);
+    return () => ipcRenderer.removeListener('sync-activity', listener);
   }
 });

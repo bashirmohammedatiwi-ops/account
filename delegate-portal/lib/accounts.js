@@ -390,9 +390,11 @@ function finishSyncSession(logId, stats = {}) {
     accounts = 0,
     journal = 0,
     invoices = 0,
-    invoiceLines = 0
+    invoiceLines = 0,
+    source = ''
   } = stats;
   const finished = new Date().toISOString();
+  const prefix = source === 'auto' ? '[تلقائي] ' : '';
   db.prepare(`
     UPDATE sync_logs SET finished_at=?, status=?, accounts_count=?, journal_count=?, message=?
     WHERE id=?
@@ -401,7 +403,7 @@ function finishSyncSession(logId, stats = {}) {
     'success',
     accounts,
     journal,
-    `تمت المزامنة: ${accounts} حساب، ${journal} حركة، ${invoices} فاتورة، ${invoiceLines} بند`,
+    `${prefix}تمت المزامنة: ${accounts} حساب، ${journal} حركة، ${invoices} فاتورة، ${invoiceLines} بند`,
     logId
   );
   return {

@@ -444,7 +444,11 @@ async function uploadChunked(payload, accountSeqs = []) {
   }
 
   reportProgress(6, 6, 100, 'جاري إنهاء المزامنة...');
-  return postJsonWithRetry('/api/sync/finish', { syncId, stats });
+  const source = String(process.env.SYNC_SOURCE || '').trim();
+  return postJsonWithRetry('/api/sync/finish', {
+    syncId,
+    stats: source ? { ...stats, source } : stats
+  });
 }
 
 async function listEdariTrees() {
