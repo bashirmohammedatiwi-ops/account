@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css?v=20260611nonav">
-  <link rel="stylesheet" href="portal-pro.css?v=20260611home">
+  <link rel="stylesheet" href="portal-pro.css?v=20260611home2">
 </head>
 <body class="ed-body">
   <!-- Login -->
@@ -111,65 +111,83 @@
     <main class="app-main">
       <!-- Home launcher -->
       <section class="screen active" id="screen-home">
-        <div class="home-app-page">
-          <div class="home-app-bg" aria-hidden="true"></div>
-          <header class="home-app-hero">
-            <div class="home-app-avatar-wrap">
-              <div class="home-app-avatar-ring">
-                <div class="home-app-avatar" id="homeAvatar">م</div>
-              </div>
-              <span class="home-app-status" id="homeStatusDot" title="متصل"></span>
-            </div>
-            <p class="home-app-kicker">Edari · بوابة المندوب</p>
-            <h2 class="home-app-title" id="homeWelcomeName">مرحباً</h2>
-            <p class="home-app-sub" id="homeWelcomeSub">اختر تطبيقاً للبدء</p>
-          </header>
-
-          <div class="home-app-grid" id="homeAppGrid">
-            <button type="button" class="home-app-tile" data-app="accounts">
-              <div class="home-app-icon-frame home-app-theme-teal">
-                <div class="home-app-icon-inner">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M4 19.5A2.5 2.5 0 016.5 17H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" stroke="currentColor" stroke-width="2"/>
-                    <path d="M8 7h8M8 11h8M8 15h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                  </svg>
-                </div>
-              </div>
-              <span class="home-app-label">كشوف الحساب</span>
-              <span class="home-app-desc">الشجرات والزبائن</span>
-              <span class="home-app-badge hidden" id="homeBadgeTrees">0</span>
-            </button>
-
-            <button type="button" class="home-app-tile" data-app="shop">
-              <div class="home-app-icon-frame home-app-theme-blue">
-                <div class="home-app-icon-inner">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" stroke="currentColor" stroke-width="2"/>
-                    <path d="M3.3 7.3L12 12l8.7-4.7M12 22V12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                  </svg>
-                </div>
-              </div>
-              <span class="home-app-label">المنتجات</span>
-              <span class="home-app-desc">كتalog وطلبات</span>
-            </button>
-
-            <button type="button" class="home-app-tile" data-app="orders">
-              <div class="home-app-icon-frame home-app-theme-amber">
-                <div class="home-app-icon-inner">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4H6z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-                    <path d="M3 6h18M16 10a4 4 0 01-8 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                  </svg>
-                </div>
-              </div>
-              <span class="home-app-label">طلباتي</span>
-              <span class="home-app-desc">متابعة الطلبات</span>
-              <span class="home-app-badge hidden" id="homeBadgeOrders">0</span>
-            </button>
+        <div class="home-page">
+          <div class="home-page-bg" aria-hidden="true">
+            <div class="home-page-orb home-page-orb-1"></div>
+            <div class="home-page-orb home-page-orb-2"></div>
+            <div class="home-page-orb home-page-orb-3"></div>
           </div>
 
-          <div class="home-app-stats" id="homeQuickStats"></div>
+          <div class="home-page-inner">
+            <header class="home-hero-card">
+              <div class="home-hero-top">
+                <div class="home-avatar-stack">
+                  <div class="home-avatar-ring">
+                    <div class="home-avatar" id="homeAvatar">م</div>
+                  </div>
+                  <span class="home-status-dot" id="homeStatusDot" title="متصل"></span>
+                </div>
+                <div class="home-hero-text">
+                  <p class="home-hero-kicker">Edari · بوابة المندوب</p>
+                  <h2 class="home-hero-title" id="homeWelcomeName">مرحباً</h2>
+                  <p class="home-hero-sub" id="homeWelcomeSub">اختر تطبيقاً للبدء</p>
+                </div>
+              </div>
+            </header>
+
+            <section class="home-apps-section" aria-label="التطبيقات">
+              <div class="home-section-head">
+                <h3 class="home-section-title">التطبيقات</h3>
+                <p class="home-section-sub">اضغط على أيقونة للدخول</p>
+              </div>
+
+              <div class="home-apps-grid" id="homeAppGrid">
+                <button type="button" class="home-app-tile" data-app="accounts">
+                  <div class="home-app-icon-wrap home-app-theme-teal">
+                    <div class="home-app-icon-circle">
+                      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M4 19.5A2.5 2.5 0 016.5 17H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" stroke="currentColor" stroke-width="2"/>
+                        <path d="M8 7h8M8 11h8M8 15h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                      </svg>
+                    </div>
+                  </div>
+                  <span class="home-app-name">كشوف الحساب</span>
+                  <span class="home-app-hint">الشجرات والزبائن</span>
+                  <span class="home-app-badge hidden" id="homeBadgeTrees">0</span>
+                </button>
+
+                <button type="button" class="home-app-tile" data-app="shop">
+                  <div class="home-app-icon-wrap home-app-theme-blue">
+                    <div class="home-app-icon-circle">
+                      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" stroke="currentColor" stroke-width="2"/>
+                        <path d="M3.3 7.3L12 12l8.7-4.7M12 22V12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                      </svg>
+                    </div>
+                  </div>
+                  <span class="home-app-name">المنتجات</span>
+                  <span class="home-app-hint">كتalog وطلبات</span>
+                </button>
+
+                <button type="button" class="home-app-tile" data-app="orders">
+                  <div class="home-app-icon-wrap home-app-theme-amber">
+                    <div class="home-app-icon-circle">
+                      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4H6z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                        <path d="M3 6h18M16 10a4 4 0 01-8 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                      </svg>
+                    </div>
+                  </div>
+                  <span class="home-app-name">طلباتي</span>
+                  <span class="home-app-hint">متابعة الطلبات</span>
+                  <span class="home-app-badge hidden" id="homeBadgeOrders">0</span>
+                </button>
+              </div>
+            </section>
+
+            <footer class="home-stats-bar" id="homeQuickStats" aria-label="ملخص سريع"></footer>
+          </div>
         </div>
       </section>
 

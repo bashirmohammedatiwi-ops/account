@@ -450,18 +450,19 @@ function renderHomeScreen() {
   const totalCustomers = state.trees.reduce((s, t) => s + (Number(t.directChildren) || 0), 0);
   const statsEl = document.getElementById('homeQuickStats');
   if (statsEl) {
+    const activeClass = state.trees.length ? ' is-active' : '';
     statsEl.innerHTML = `
-      <div class="home-app-stat">
-        <span class="home-app-stat-val">${esc(String(state.trees.length))}</span>
-        <span class="home-app-stat-lbl">شجرة</span>
+      <div class="home-stat-item">
+        <span class="home-stat-val">${esc(String(state.trees.length))}</span>
+        <span class="home-stat-lbl">شجرة</span>
       </div>
-      <div class="home-app-stat">
-        <span class="home-app-stat-val">${esc(fmtNumAlways(totalCustomers))}</span>
-        <span class="home-app-stat-lbl">زبون</span>
+      <div class="home-stat-item">
+        <span class="home-stat-val">${esc(fmtNumAlways(totalCustomers))}</span>
+        <span class="home-stat-lbl">زبون</span>
       </div>
-      <div class="home-app-stat">
-        <span class="home-app-stat-val">${state.trees.length ? '●' : '—'}</span>
-        <span class="home-app-stat-lbl">${state.trees.length ? 'نشط' : '—'}</span>
+      <div class="home-stat-item${activeClass}">
+        <span class="home-stat-val">${state.trees.length ? '●' : '—'}</span>
+        <span class="home-stat-lbl">${state.trees.length ? 'نشط' : '—'}</span>
       </div>`;
   }
 }
