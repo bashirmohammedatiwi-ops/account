@@ -695,26 +695,23 @@ function renderBranches() {
     const debt = branchDebtMeta(b);
     const initial = branchInitial(b.name1);
     return `
-    <button type="button" class="bc-card bc-card-${debt.cls}" data-seq="${esc(b.seq)}" style="--i:${i}" role="listitem">
-      <div class="bc-card-head">
-        <div class="bc-identity">
+    <button type="button" class="bc-card bc-card-${debt.cls}" data-seq="${esc(b.seq)}" style="--i:${Math.min(i, 8)}" role="listitem">
+      <div class="bc-card-inner">
+        <div class="bc-card-head">
           <span class="bc-avatar" aria-hidden="true">${esc(initial)}</span>
-          <div class="bc-name-wrap">
+          <div class="bc-head-text">
             <h4 class="bc-branch-name">${esc(b.name1 || '—')}</h4>
-            <span class="bc-branch-num">${esc(b.num || '—')}</span>
+            <span class="bc-pill bc-pill-${debt.statusCls}">${esc(debt.statusLabel)}</span>
           </div>
         </div>
-        <span class="bc-open-icon">${ICONS.chevron}</span>
-      </div>
-      <div class="bc-debt-showcase">
-        <div class="bc-debt-box">
+        <div class="bc-debt-block">
           <span class="bc-debt-label">الديون</span>
           <span class="bc-debt-amount" dir="ltr">${esc(debt.amount)}</span>
         </div>
-        <span class="bc-status bc-status-${debt.statusCls}">${esc(debt.statusLabel)}</span>
       </div>
       <div class="bc-card-foot">
         <span>عرض كشف الحساب</span>
+        <span class="bc-card-arrow">${ICONS.chevron}</span>
       </div>
     </button>`;
   }).join('');
