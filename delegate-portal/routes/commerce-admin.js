@@ -24,7 +24,8 @@ const {
   saveProductImage,
   lookupByBarcode,
   findEdariMaterialByCode,
-  addProductByBarcode
+  addProductByBarcode,
+  purgeAllCatalogProducts
 } = require('../lib/products');
 const {
   listOrders,
@@ -147,6 +148,22 @@ router.post('/products/by-barcode', (req, res) => {
     res.json({ ok: true, product });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/products/purge-all', (req, res) => {
+  const confirm = String(req.body?.confirm || '').trim();
+  if (confirm !== 'DELETE_ALL_PRODUCTS') {
+    return res.status(400).json({
+      ok: false,
+      error: 'أرسل confirm: "DELETE_ALL_PRODUCTS" للتأكيد'
+    });
+  }
+  try {
+    const result = purgeAllCatalogProducts();
+    res.json({ ok: true, ...result, message: `تم حذف ${result.deleted} منتج من الكتalog` });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 

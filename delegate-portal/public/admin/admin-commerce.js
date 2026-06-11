@@ -305,6 +305,24 @@ function initCommerceAdmin() {
     }
   });
 
+  document.getElementById('btnPurgeProducts')?.addEventListener('click', async () => {
+    const ok1 = confirm('حذف كل المنتجات من الكتalog؟\n\nلن تُحذف بيانات Edari (edari_materials) — فقط المنتجات المضافة للأقسام.');
+    if (!ok1) return;
+    const typed = prompt('اكتب DELETE_ALL_PRODUCTS للتأكيد:');
+    if (typed !== 'DELETE_ALL_PRODUCTS') return alert('تم الإلغاء — لم يُحذف شيء');
+
+    try {
+      const data = await commerceApi('/products/purge-all', {
+        method: 'POST',
+        body: JSON.stringify({ confirm: 'DELETE_ALL_PRODUCTS' })
+      });
+      alert(data.message || `تم حذف ${data.deleted} منتج`);
+      await loadCatalogProducts();
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+
   document.getElementById('orderStatusFilter')?.addEventListener('change', () => loadOrdersPage());
 }
 

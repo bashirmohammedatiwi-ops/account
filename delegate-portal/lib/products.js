@@ -299,6 +299,28 @@ function syncMaterialsFromEdari(rows = []) {
   return { materials, productsUpdated, scanned: rows.length };
 }
 
+function purgeAllCatalogProducts() {
+  const rows = db.prepare('SELECT id, image_path FROM products').all();
+  let deleted = 0;
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE order_lines SET product_id = NULL WHERE product_id IS NOT NULL').run();
+    deleted = db.prepare('DELETE FROM products').run().changes;
+  });
+  tx();
+
+  let imagesRemoved = 0;
+  for (const row of rows) {
+    if (!row.image_path) continue;
+    const full = path.join(UPLOAD_ROOT, row.image_path);
+    if (fs.existsSync(full)) {
+      fs.unlinkSync(full);
+      imagesRemoved += 1;
+    }
+  }
+
+  return { deleted, imagesRemoved };
+}
+
 module.exports = {
   UPLOAD_ROOT,
   listProducts,
@@ -310,5 +332,6 @@ module.exports = {
   updateProduct,
   deleteProduct,
   saveProductImage,
-  syncMaterialsFromEdari
+  syncMaterialsFromEdari,
+  purgeAllCatalogProducts
 };
