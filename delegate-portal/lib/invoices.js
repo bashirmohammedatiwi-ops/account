@@ -160,13 +160,17 @@ function roundAmount(n) {
   return Math.round(x * 100) / 100;
 }
 
-/** مبلغ السطر — نثق بقيمة Edari المخزّنة، ثم الكمية × السعر */
+/** مبلغ السطر — نثق بقيمة Edari إلا إذا خالفت الكمية × السعر */
 function lineTotal(quant, price, stored) {
-  const storedN = roundAmount(stored);
-  if (storedN > 0) return storedN;
   const q = Number(quant || 0);
   const p = Number(price || 0);
-  return roundAmount(q * p);
+  const computed = roundAmount(q * p);
+  const storedN = roundAmount(stored);
+  if (storedN > 0 && computed > 0 && Math.abs(storedN - computed) > 1) {
+    return computed;
+  }
+  if (storedN > 0) return storedN;
+  return computed;
 }
 
 function isActiveInvoiceLine(line) {

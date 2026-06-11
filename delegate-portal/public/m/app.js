@@ -156,11 +156,13 @@ function invMoneyTd(val, cls) {
 }
 
 function invoiceLineTotal(line) {
-  const stored = Math.round(Number(line.lineTotal) || 0);
-  if (stored > 0) return stored;
   const q = Number(line.quant) || 0;
   const p = Number(line.price) || 0;
-  return Math.round(q * p);
+  const computed = Math.round(q * p);
+  const stored = Math.round(Number(line.lineTotal) || 0);
+  if (stored > 0 && computed > 0 && Math.abs(stored - computed) > 1) return computed;
+  if (stored > 0) return stored;
+  return computed;
 }
 
 /** توحيد الإجمالي والصافي مع مجموع البنود (إجمالي − حسومات) */

@@ -6,6 +6,11 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
 const path = require('path');
+const {
+  assignBillNosForLines,
+  isActiveInvoiceLineRow,
+  resolveLineTotal
+} = require(path.join(__dirname, '..', 'lib', 'invoice-line-sync'));
 const edariRoot = process.env.EDARI_READER_ROOT
   || path.join(__dirname, '..', '..', 'edari-reader');
 const odbcBridge = require(path.join(edariRoot, 'lib', 'odbc-bridge'));
@@ -329,40 +334,6 @@ async function fetchMaterialMap(matSeqs) {
   return map;
 }
 
-function readSyncNum(row, ...keys) {
-  if (!row) return 0;
-  const entries = Object.entries(row);
-  for (const key of keys) {
-    const lower = key.toLowerCase();
-    const hit = entries.find(([name]) => String(name).toLowerCase() === lower);
-    const value = hit ? hit[1] : row[key];
-    if (value == null || value === '') continue;
-    const n = Number(value);
-    if (!Number.isNaN(n)) return n;
-  }
-  return 0;
-}
-
-function normalizeInvoiceLineBillNos(rows = []) {
-  const grouped = new Map();
-  for (const row of rows) {
-    const billSeq = String(row.BillSeq ?? row.bill_seq ?? '').replace(/[^0-9]/g, '');
-    if (!billSeq) continue;
-    if (!grouped.has(billSeq)) grouped.set(billSeq, []);
-    grouped.get(billSeq).push(row);
-  }
-
-  const out = [];
-  for (const lines of grouped.values()) {
-    lines.sort((a, b) => readSyncNum(a, 'BillNo', 'bill_no') - readSyncNum(b, 'BillNo', 'bill_no'));
-    lines.forEach((line, index) => {
-      const billNo = readSyncNum(line, 'BillNo', 'bill_no', 'LineIndex', 'lineIndex') || (index + 1);
-      out.push({ ...line, BillNo: billNo, bill_no: billNo, LineIndex: billNo });
-    });
-  }
-  return out;
-}
-
 async function fetchInvoiceLineRows(ids) {
   const baseCols = 'BillSeq, BillNo, Mat, MatName, Quant, Price, OBonus, MatRem, Kind';
   const withSum = `${baseCols}, Sum`;
@@ -397,27 +368,15 @@ async function fetchInvoiceLines(billSeqs) {
     materials = await fetchMaterialMap(missingNameMats);
   }
 
-  return normalizeInvoiceLineBillNos(all.map((line) => {
+  return assignBillNosForLines(all.map((line) => {
     const mat = materials.get(String(line.Mat));
-    const quant = readSyncNum(line, 'Quant', 'quant');
-    const price = readSyncNum(line, 'Price', 'price');
-    const bonus = readSyncNum(line, 'OBonus', 'bonus');
-    const storedTotal = readSyncNum(line, 'Sum', 'sum', 'line_total');
     return {
       ...line,
       MatNum: mat?.num || '',
       MatName: (line.MatName || '').trim() || mat?.name1 || '',
-      line_total: storedTotal > 0 ? storedTotal : quant * price
+      line_total: resolveLineTotal(line)
     };
-  })).filter((line) => {
-    const quant = readSyncNum(line, 'Quant', 'quant');
-    const bonus = readSyncNum(line, 'OBonus', 'bonus');
-    const price = readSyncNum(line, 'Price', 'price');
-    const total = Number(line.line_total || 0);
-    const name = String(line.MatName || '').trim();
-    const mat = String(line.Mat || '').trim();
-    return quant !== 0 || bonus !== 0 || price !== 0 || total !== 0 || Boolean(name) || Boolean(mat);
-  });
+  })).filter(isActiveInvoiceLineRow);
 }
 
 async function uploadLegacy(payload, accountSeqs = []) {
