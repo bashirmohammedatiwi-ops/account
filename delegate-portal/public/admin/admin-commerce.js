@@ -1,4 +1,4 @@
-/* Admin: invoices, catalog, orders */
+/* Admin: catalog, orders */
 const PRODUCT_PAGE_SIZE = 50;
 
 const commerce = {
@@ -11,7 +11,6 @@ const commerce = {
   selectedBranchId: null,
   selectedSectionId: null,
   selectedProductIds: new Set(),
-  selectedInvoice: null,
   selectedOrder: null,
   productFilters: {
     q: '',
@@ -40,69 +39,6 @@ function fmtMoney(v) {
   const n = Number(v);
   if (Number.isNaN(n)) return '—';
   return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
-}
-
-async function loadInvoicesPage() {
-  const q = document.getElementById('invoiceSearch')?.value?.trim() || '';
-  const data = await commerceApi(`/invoices?q=${encodeURIComponent(q)}&limit=100`);
-  const stats = await commerceApi('/invoices/stats');
-  const statsEl = document.getElementById('invoiceStats');
-  if (statsEl && stats.stats) {
-    statsEl.innerHTML = `
-      <div class="stat-card"><div class="k">إجمالي الفواتير</div><div class="v">${fmtNumAlways(stats.stats.total)}</div></div>
-      <div class="stat-card"><div class="k">اليوم</div><div class="v">${fmtNumAlways(stats.stats.todayCount)}</div></div>
-      <div class="stat-card"><div class="k">هذا الأسبوع</div><div class="v">${fmtNumAlways(stats.stats.weekCount)}</div></div>`;
-  }
-  document.getElementById('invoicesBody').innerHTML = (data.invoices || []).map((inv) => `
-    <tr>
-      <td dir="ltr">${esc(inv.num)}</td>
-      <td>${esc(inv.date || '—')}</td>
-      <td>${esc(inv.accountName || '—')}</td>
-      <td>${esc(inv.kindLabel)}</td>
-      <td dir="ltr">${fmtMoney(inv.total)}</td>
-      <td dir="ltr">${inv.lineCount}</td>
-      <td>
-        <button type="button" class="btn btn-soft btn-sm" data-inv-view="${esc(inv.seq)}">عرض</button>
-        <a class="btn btn-soft btn-sm" href="${getApiBase()}/api/admin/invoices/${encodeURIComponent(inv.seq)}.pdf" target="_blank">PDF</a>
-      </td>
-    </tr>`).join('') || '<tr><td colspan="7">لا توجد فواتير — نفّذ مزامنة أولاً</td></tr>';
-
-  document.querySelectorAll('[data-inv-view]').forEach((btn) => {
-    btn.addEventListener('click', () => openAdminInvoice(btn.dataset.invView));
-  });
-}
-
-async function openAdminInvoice(seq) {
-  const panel = document.getElementById('invoiceDetailPanel');
-  panel.classList.remove('hidden');
-  panel.innerHTML = '<p class="muted">جاري التحميل...</p>';
-  const data = await commerceApi(`/invoices/${encodeURIComponent(seq)}`);
-  commerce.selectedInvoice = data.invoice;
-  const lines = data.lines || [];
-  panel.innerHTML = `
-    <div class="panel-head">
-      <h3>فاتورة ${esc(data.invoice.num)} · ${esc(data.invoice.date)}</h3>
-      <button type="button" class="btn btn-soft btn-sm" id="btnCloseInvoiceDetail">إغلاق</button>
-    </div>
-    <p><strong>${esc(data.invoice.accountName)}</strong> · ${esc(data.invoice.kindLabel)}</p>
-    <p class="muted">${lines.length} بند · إجمالي ${fmtMoney(data.invoice.total)} · صافي ${fmtMoney(data.invoice.netPay)}</p>
-    <div class="table-scroll">
-      <table class="data-table compact">
-        <thead><tr><th>الباركود</th><th>المادة</th><th>كمية</th><th>هدية</th><th>سعر</th><th>مبلغ</th></tr></thead>
-        <tbody>${lines.map((l, i) => `
-          <tr>
-            <td dir="ltr">${esc(l.matNum || l.mat)}</td>
-            <td>${esc(l.matName)}</td>
-            <td dir="ltr">${l.quant}</td>
-            <td dir="ltr">${l.bonus || 0}</td>
-            <td dir="ltr">${fmtMoney(l.price)}</td>
-            <td dir="ltr">${fmtMoney(l.lineTotal)}</td>
-          </tr>`).join('')}</tbody>
-      </table>
-    </div>`;
-  document.getElementById('btnCloseInvoiceDetail')?.addEventListener('click', () => {
-    panel.classList.add('hidden');
-  });
 }
 
 async function loadCatalogPage() {
@@ -1197,11 +1133,6 @@ async function openOrderDetail(id) {
 }
 
 function initCommerceAdmin() {
-  document.getElementById('btnInvoiceSearch')?.addEventListener('click', () => loadInvoicesPage());
-  document.getElementById('invoiceSearch')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') loadInvoicesPage();
-  });
-
   document.getElementById('btnAddBranch')?.addEventListener('click', () => openCatalogCreate('branch'));
 
   document.getElementById('btnAddSection')?.addEventListener('click', () => openCatalogCreate('section'));
@@ -1440,7 +1371,6 @@ function initCommerceAdmin() {
 }
 
 window.commercePages = {
-  invoices: loadInvoicesPage,
   catalog: loadCatalogPage,
   orders: loadOrdersPage
 };

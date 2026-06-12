@@ -4,7 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Edari Admin — لوحة التحكم</title>
-  <link rel="stylesheet" href="admin.css?v=20260614edari">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="admin.css?v=20260607redesign">
 </head>
 <body>
   <div id="app" class="app">
@@ -19,23 +22,23 @@
 
       <nav class="sidebar-nav">
         <button type="button" class="nav-item active" data-page="dashboard">
-          <span class="nav-icon" aria-hidden="true">⌂</span>
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/><path d="M9 20v-6h6v6"/></svg></span>
           <span>الرئيسية</span>
         </button>
         <button type="button" class="nav-item" data-page="catalog">
-          <span class="nav-icon" aria-hidden="true">📦</span>
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7.5 12 12.5l8.7-5"/><path d="M12 22V12.5"/></svg></span>
           <span>المنتجات</span>
         </button>
         <button type="button" class="nav-item" data-page="orders">
-          <span class="nav-icon" aria-hidden="true">🛒</span>
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></span>
           <span>طلبات الشراء</span>
         </button>
         <button type="button" class="nav-item" data-page="sync">
-          <span class="nav-icon" aria-hidden="true">↻</span>
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg></span>
           <span>رفع البيانات</span>
         </button>
         <button type="button" class="nav-item" data-page="agents">
-          <span class="nav-icon" aria-hidden="true">👤</span>
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
           <span>المندوبون</span>
         </button>
       </nav>
@@ -75,22 +78,22 @@
 
           <div class="quick-grid">
             <button type="button" class="quick-card" data-goto="catalog">
-              <span class="quick-icon agents">📦</span>
+              <span class="quick-icon products"><svg viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/></svg></span>
               <strong>المنتجات</strong>
               <span>فروع، أقسام، باركود، صور</span>
             </button>
             <button type="button" class="quick-card" data-goto="orders">
-              <span class="quick-icon sync">🛒</span>
+              <span class="quick-icon orders"><svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></span>
               <strong>طلبات الشراء</strong>
               <span>طلبات المندوبين الواردة</span>
             </button>
             <button type="button" class="quick-card" data-goto="sync">
-              <span class="quick-icon sync">↻</span>
+              <span class="quick-icon sync"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg></span>
               <strong>رفع البيانات</strong>
               <span>مزامنة EdariNX مع السيرفر</span>
             </button>
             <button type="button" class="quick-card" data-goto="agents">
-              <span class="quick-icon agents">+</span>
+              <span class="quick-icon agents"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
               <strong>المندوبون</strong>
               <span>إضافة وصلاحيات الشجرات</span>
             </button>
@@ -132,17 +135,22 @@
             </section>
           </div>
           <section class="panel">
-            <div class="panel-head">
-              <div>
-                <h2 class="panel-title">منتجات القسم</h2>
-                <p class="panel-desc muted">الاسم والعدد (رصيد المخزون) والسعر (نصف الجملة) من Edari — زر «تحديث من Edari الآن» يحدّث المنتجات المضافة فقط</p>
+            <div class="panel-head panel-head-stack">
+              <div class="panel-head-main">
+                <div>
+                  <h2 class="panel-title">منتجات القسم</h2>
+                  <p class="panel-desc muted">الاسم والعدد والسعر من Edari — «تحديث من Edari الآن» يحدّث المنتجات المضافة فقط</p>
+                </div>
+                <div class="btn-row btn-row-primary">
+                  <button type="button" class="btn btn-primary btn-sm" id="btnAddProduct">+ إضافة منتج</button>
+                  <button type="button" class="btn btn-accent btn-sm" id="btnRefreshProductPrices" title="تحديث الاسم والعدد والسعر من Edari للمنتجات المضافة">تحديث من Edari الآن</button>
+                </div>
               </div>
-              <div class="btn-row">
-                <button type="button" class="btn btn-primary btn-sm" id="btnAddProduct">+ إضافة منتج</button>
+              <div class="btn-row btn-row-secondary">
                 <button type="button" class="btn btn-soft btn-sm" id="btnBulkAddProducts">إضافة جماعية</button>
                 <button type="button" class="btn btn-soft btn-sm" id="btnImportProducts">استيراد CSV</button>
                 <button type="button" class="btn btn-soft btn-sm" id="btnExportProducts">تصدير CSV</button>
-                <button type="button" class="btn btn-accent btn-sm" id="btnRefreshProductPrices" title="تحديث الاسم والعدد والسعر من Edari للمنتجات المضافة">تحديث من Edari الآن</button>
+                <span class="toolbar-divider" aria-hidden="true"></span>
                 <button type="button" class="btn btn-soft btn-sm" id="btnSyncSectionProducts">مزامنة القسم</button>
                 <button type="button" class="btn btn-danger btn-sm" id="btnPurgeProducts">حذف الكل</button>
               </div>
@@ -429,7 +437,7 @@
             <span class="field-label">صورة المنتج</span>
             <div class="product-modal-media-row">
               <div class="product-image-preview" id="productImagePreview">
-                <span class="product-image-placeholder">📦</span>
+                <span class="product-image-placeholder">صورة</span>
               </div>
               <div class="product-image-side">
                 <div class="btn-row product-image-actions">
@@ -568,7 +576,7 @@
   </div>
 
   <script src="config.js"></script>
-  <script src="admin.js?v=20260614edari"></script>
-  <script src="admin-commerce.js?v=20260614edari"></script>
+  <script src="admin.js?v=20260607redesign"></script>
+  <script src="admin-commerce.js?v=20260607redesign"></script>
 </body>
 </html>
