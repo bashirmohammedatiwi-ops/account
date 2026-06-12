@@ -166,25 +166,26 @@ function syncProductRow(productId) {
   if (qEl) qEl.textContent = String(d.quant || 0);
   if (bEl) bEl.textContent = String(d.bonus || 0);
   const active = (d.quant || 0) > 0 || (d.bonus || 0) > 0;
-  row.classList.toggle('showcase-card-active', active);
-  const photo = row.querySelector('.showcase-card-photo');
-  let badge = row.querySelector('.showcase-card-badge');
-  if (active && photo && !badge) {
-    photo.insertAdjacentHTML('beforeend', '<span class="showcase-card-badge">✓ في الفاتورة</span>');
+  row.classList.toggle('sc-card-active', active);
+  const visual = row.querySelector('.sc-card-visual');
+  let badge = row.querySelector('.sc-card-badge');
+  if (active && visual && !badge) {
+    visual.insertAdjacentHTML('beforeend', '<span class="sc-card-badge">✓ في الفاتورة</span>');
   } else if (!active && badge) {
     badge.remove();
   }
 }
 
-function renderStepper(productId, field, value) {
+function renderQtyBlock(productId, field, value) {
   const isGift = field === 'bonus';
+  const attr = isGift ? 'b' : 'q';
   return `
-    <div class="showcase-stepper${isGift ? ' showcase-stepper-gift' : ''}">
-      <span class="showcase-stepper-label">${isGift ? '🎁 هدايا' : 'الكمية'}</span>
-      <div class="inv-stepper">
-        <button type="button" class="inv-step-btn" data-draft-action data-product-id="${productId}" data-field="${field}" data-delta="-1">−</button>
-        <span class="inv-step-val" dir="ltr" data-draft-${isGift ? 'b' : 'q'}>${value}</span>
-        <button type="button" class="inv-step-btn" data-draft-action data-product-id="${productId}" data-field="${field}" data-delta="1">+</button>
+    <div class="sc-qty-block${isGift ? ' sc-qty-block-gift' : ''}">
+      <span class="sc-qty-label">${isGift ? '🎁 هدايا' : 'الكمية'}</span>
+      <div class="sc-qty-stepper" role="group" aria-label="${isGift ? 'هدايا' : 'الكمية'}">
+        <button type="button" class="sc-qty-btn sc-qty-btn-minus" data-draft-action data-product-id="${productId}" data-field="${field}" data-delta="-1" aria-label="نقص">−</button>
+        <span class="sc-qty-val" dir="ltr" data-draft-${attr}>${value}</span>
+        <button type="button" class="sc-qty-btn sc-qty-btn-plus" data-draft-action data-product-id="${productId}" data-field="${field}" data-delta="1" aria-label="زيادة">+</button>
       </div>
     </div>`;
 }
@@ -201,25 +202,26 @@ function renderProductCard(p) {
   const stock = Number(p.minOrderQty ?? 0);
   const img = productImageSrc(p);
   return `
-    <article class="showcase-card${active ? ' showcase-card-active' : ''}" data-product-id="${p.id}">
-      <div class="showcase-card-photo">
+    <article class="sc-card${active ? ' sc-card-active' : ''}" data-product-id="${p.id}">
+      <div class="sc-card-visual">
         ${img
-    ? `<img src="${img}" alt="${esc(p.name)}" class="showcase-card-img" loading="lazy">`
-    : '<div class="showcase-card-img showcase-card-img-empty">📦</div>'}
-        ${active ? '<span class="showcase-card-badge">✓ في الفاتورة</span>' : ''}
+    ? `<img src="${img}" alt="${esc(p.name)}" class="sc-card-img" loading="lazy">`
+    : '<div class="sc-card-img sc-card-img-empty" aria-hidden="true">📦</div>'}
       </div>
-      <div class="showcase-card-body">
-        <h3 class="showcase-card-name">${esc(p.name)}</h3>
-        <p class="showcase-card-barcode" dir="ltr">${esc(p.barcode || p.skuNum || '—')}</p>
-        <div class="showcase-card-pricing">
-          <strong class="showcase-card-price" dir="ltr">${fmtInvInt(p.price)}</strong>
-          <span class="showcase-card-price-label">نصف جملة</span>
-          ${stock > 0 ? `<span class="showcase-stock">رصيد ${fmtInvInt(stock)}</span>` : ''}
+      <div class="sc-card-body">
+        <div class="sc-card-info">
+          <h3 class="sc-card-title">${esc(p.name)}</h3>
+          <p class="sc-card-code" dir="ltr">${esc(p.barcode || p.skuNum || '—')}</p>
+          <div class="sc-card-price-row">
+            <strong class="sc-card-price" dir="ltr">${fmtInvInt(p.price)}</strong>
+            <span class="sc-card-price-tag">نصف جملة</span>
+            ${stock > 0 ? `<span class="sc-card-stock">رصيد ${fmtInvInt(stock)}</span>` : ''}
+          </div>
         </div>
-      </div>
-      <div class="showcase-card-controls">
-        ${renderStepper(p.id, 'quant', d.quant || 0)}
-        ${renderStepper(p.id, 'bonus', d.bonus || 0)}
+        <div class="sc-card-actions">
+          ${renderQtyBlock(p.id, 'quant', d.quant || 0)}
+          ${renderQtyBlock(p.id, 'bonus', d.bonus || 0)}
+        </div>
       </div>
     </article>`;
 }
@@ -239,6 +241,10 @@ function renderProductsList() {
   const items = filteredProducts();
   list.innerHTML = items.map(renderProductCard).join('')
     || '<div class="empty-state"><p>لا توجد منتجات مطابقة</p></div>';
+  items.forEach((p) => {
+    const d = getDraft(p.id);
+    if ((d.quant || 0) > 0 || (d.bonus || 0) > 0) syncProductRow(p.id);
+  });
   updateInvoiceUI();
 }
 
@@ -440,7 +446,7 @@ function updateInvoiceUI() {
   const bar = document.getElementById('invoiceActionBar');
   const openBtn = document.getElementById('btnOpenInvoice');
   if (bar) bar.classList.toggle('has-lines', count > 0);
-  if (openBtn) openBtn.classList.toggle('has-lines', count > 0);
+  if (openBtn) openBtn.classList.toggle('has-items', count > 0);
 }
 
 function clearInvoiceDraft({ resetNotes = true } = {}) {
@@ -450,13 +456,13 @@ function clearInvoiceDraft({ resetNotes = true } = {}) {
     const notesEl = document.getElementById('invoiceNotes');
     if (notesEl) notesEl.value = '';
   }
-  document.querySelectorAll('.showcase-card').forEach((row) => {
-    row.classList.remove('showcase-card-active');
+  document.querySelectorAll('.sc-card').forEach((row) => {
+    row.classList.remove('sc-card-active');
     const qEl = row.querySelector('[data-draft-q]');
     const bEl = row.querySelector('[data-draft-b]');
     if (qEl) qEl.textContent = '0';
     if (bEl) bEl.textContent = '0';
-    row.querySelector('.showcase-card-badge')?.remove();
+    row.querySelector('.sc-card-badge')?.remove();
   });
   clearInvoiceStorage();
   updateInvoiceUI();

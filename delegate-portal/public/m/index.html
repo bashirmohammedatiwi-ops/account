@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260613showcase4">
+  <link rel="stylesheet" href="styles.css?v=20260613showcase5">
   <link rel="stylesheet" href="portal-pro.css?v=20260611home2">
 </head>
 <body class="ed-body">
@@ -307,37 +307,29 @@
         <div class="inv-shop-grid" id="shopSectionsList"></div>
       </section>
 
-      <!-- Shop: products + live invoice showcase -->
+      <!-- Shop: products showcase (iPad / customer display) -->
       <section class="screen screen-showcase" id="screen-shop-products">
-        <header class="showcase-header">
-          <div class="showcase-header-main">
-            <h3 class="inv-page-title">عرض وطلب</h3>
-            <p class="inv-page-meta" id="shopProductsMeta">—</p>
+        <header class="showcase-topbar">
+          <div class="showcase-topbar-brand">
+            <span class="showcase-topbar-kicker">عرض وطلب</span>
+            <h3 class="showcase-topbar-title" id="shopProductsMeta">—</h3>
           </div>
-          <p class="showcase-hint">صور المنتجات للعرض على الزبون · زر «عرض الفاتورة» في الأسفل</p>
+          <div class="showcase-topbar-search inv-search-wrap">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <input type="search" id="shopProductSearch" placeholder="بحث بالاسم أو الباركود..." autocomplete="off">
+          </div>
           <div class="inv-resume-banner hidden" id="invoiceResumeBanner">
             <span id="invoiceResumeText">لديك فاتورة محفوظة</span>
           </div>
         </header>
 
-        <div class="showcase-layout showcase-layout-full">
-          <main class="showcase-main showcase-main-full">
-            <div class="showcase-main-head">
-              <h4 class="showcase-section-label">المنتجات — للعرض على الزبون</h4>
-              <div class="inv-search-wrap">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                <input type="search" id="shopProductSearch" placeholder="بحث بالاسم أو الباركود..." autocomplete="off">
-              </div>
-            </div>
-            <div class="showcase-product-list" id="shopProductsList"></div>
-          </main>
-        </div>
+        <div class="showcase-catalog" id="shopProductsList"></div>
 
-        <footer class="showcase-action-bar showcase-action-bar-minimal" id="invoiceActionBar">
-          <button type="button" class="btn showcase-invoice-open showcase-invoice-open-only" id="btnOpenInvoice">
-            <span class="showcase-invoice-open-icon" aria-hidden="true">🧾</span>
-            <span class="showcase-invoice-open-text">عرض الفاتورة</span>
-            <span class="showcase-invoice-open-badge" id="invoiceOpenBadge">0</span>
+        <footer class="showcase-dock" id="invoiceActionBar">
+          <button type="button" class="showcase-dock-btn" id="btnOpenInvoice">
+            <span class="showcase-dock-btn-icon" aria-hidden="true">🧾</span>
+            <span class="showcase-dock-btn-label">عرض الفاتورة</span>
+            <span class="showcase-dock-badge" id="invoiceOpenBadge">0</span>
           </button>
         </footer>
       </section>
@@ -427,6 +419,6 @@
     </div>
   </div>
   <script src="app.js?v=20260613commerce"></script>
-  <script src="app-commerce.js?v=20260613showcase4"></script>
+  <script src="app-commerce.js?v=20260613showcase5"></script>
 </body>
 </html>
