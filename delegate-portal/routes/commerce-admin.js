@@ -29,6 +29,7 @@ const {
   lookupByBarcode,
   findEdariMaterialByCode,
   edariMaterialStats,
+  cacheEdariMaterial,
   addProductByBarcode,
   bulkAddByBarcode,
   bulkProductsAction,
@@ -192,6 +193,18 @@ router.get('/products/edari-lookup', (req, res) => {
   res.json({ ok: true, material });
 });
 
+router.post('/products/edari-cache', (req, res) => {
+  try {
+    const material = cacheEdariMaterial(req.body?.material || req.body);
+    if (!material) {
+      return res.status(400).json({ ok: false, error: 'بيانات المادة غير كافية' });
+    }
+    res.json({ ok: true, material });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
 router.get('/products/edari-search', (req, res) => {
   const q = String(req.query.q || '').trim();
   if (!q) return res.json({ ok: true, materials: [] });
@@ -212,8 +225,10 @@ router.post('/products/by-barcode', (req, res) => {
     if (!sectionId || !barcode) {
       return res.status(400).json({ ok: false, error: 'القسم والباركود مطلوبان' });
     }
+    if (body.material?.seq) cacheEdariMaterial(body.material);
     const product = addProductByBarcode(sectionId, barcode, {
       name: body.name,
+      material: body.material,
       bonusDefault: body.bonusDefault,
       minOrderQty: body.minOrderQty,
       sortOrder: body.sortOrder,

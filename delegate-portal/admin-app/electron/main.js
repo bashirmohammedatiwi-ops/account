@@ -521,6 +521,18 @@ ipcMain.handle('run-background-sync-now', async () => {
   return backgroundSync?.runNow();
 });
 
+ipcMain.handle('lookup-edari-material', async (_e, code) => {
+  try {
+    const lookupPath = path.join(getPortalDir(), 'sync-client', 'material-lookup.js');
+    const { lookupEdariMaterial } = require(lookupPath);
+    const material = await lookupEdariMaterial(code);
+    if (!material) return { ok: false, error: 'المادة غير موجودة في Edari' };
+    return { ok: true, material };
+  } catch (err) {
+    return { ok: false, error: err.message || 'فشل الاتصال بـ Edari' };
+  }
+});
+
 function showStartupError(err) {
   const message = String(err?.message || err || 'خطأ غير معروف');
   console.error(message);

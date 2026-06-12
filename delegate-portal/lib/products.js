@@ -92,7 +92,7 @@ function parseEdariSyncRow(row) {
     barcode,
     name1,
     name2: String(row.Name2 ?? row.name2 ?? '').trim(),
-    unit: String(row.DefUnit ?? row.unit ?? ''),
+    unit: String(row.Unt1 ?? row.DefUnit ?? row.unit ?? '').trim().replace(/^0$/, ''),
     sellPr1: Number(row.SellPr1 ?? row.price ?? 0),
     sellPr2: Number(row.SellPr2 ?? row.sell_pr2 ?? 0),
     bonus: Number(row.Bonus ?? row.bonus ?? 0),
@@ -562,6 +562,34 @@ function bulkProductsAction(ids = [], action, payload = {}) {
   return { affected, action, ids: uniqueIds };
 }
 
+function normalizeClientMaterial(material, code = '') {
+  if (!material?.seq) return null;
+  const inTot = Number(material.inTot ?? 0);
+  const outTot = Number(material.outTot ?? 0);
+  const sellPr1 = Number(material.priceRetail ?? material.sellPr1 ?? 0);
+  const sellPr2 = Number(material.wholesalePrice ?? material.sellPr2 ?? 0);
+  const stockQty = Number(material.stockQty ?? material.qty ?? edariStockQty(inTot, outTot));
+  const wholesale = edariWholesalePrice(sellPr1, sellPr2 || material.price);
+  return {
+    seq: String(material.seq),
+    num: String(material.num || ''),
+    barcode: String(material.barcode || material.num || code).trim(),
+    name: String(material.name || material.name1 || ''),
+    name2: String(material.name2 || ''),
+    unit: String(material.unit || ''),
+    priceRetail: sellPr1,
+    wholesalePrice: wholesale,
+    price: wholesale,
+    bonus: Number(material.bonus || 0),
+    inTot,
+    outTot,
+    stockQty,
+    qty: stockQty,
+    remarks: String(material.remarks || ''),
+    syncedAt: material.syncedAt || new Date().toISOString()
+  };
+}
+
 function addProductByBarcode(sectionId, code, options = {}) {
   const raw = normalizeCode(code);
   if (!raw) throw new Error('الباركود مطلوب');
@@ -569,7 +597,9 @@ function addProductByBarcode(sectionId, code, options = {}) {
   const section = getSection(sectionId);
   if (!section) throw new Error('القسم غير موجود');
 
-  const material = findEdariMaterialByCode(raw);
+  if (options.material?.seq) cacheEdariMaterial(options.material);
+
+  const material = normalizeClientMaterial(options.material, raw) || findEdariMaterialByCode(raw);
   if (!material?.seq) {
     throw new Error('المادة غير موجودة في Edari — نفّذ مزامنة كاملة أولاً');
   }
@@ -583,6 +613,13 @@ function addProductByBarcode(sectionId, code, options = {}) {
 
   if (duplicate) throw new Error('هذا المنتج مُسجَّل مسبقاً في هذا القسم');
 
+  const resolvedPrice = Number(options.price) > 0
+    ? Number(options.price)
+    : Number(material.wholesalePrice ?? material.price ?? 0);
+  const resolvedQty = Number(options.minOrderQty) > 0
+    ? Number(options.minOrderQty)
+    : Number(material.stockQty ?? material.qty ?? 0);
+
   return createProduct({
     sectionId,
     edariSeq: material.seq,
@@ -590,15 +627,36 @@ function addProductByBarcode(sectionId, code, options = {}) {
     barcode: material.barcode || material.num,
     name: String(options.name || '').trim() || material.name,
     unit: material.unit,
-    price: material.wholesalePrice ?? material.price,
+    price: resolvedPrice,
     bonusDefault: Number(material.bonus) || 0,
     priceOverride: false,
     description: material.remarks || '',
-    minOrderQty: Number(material.stockQty ?? material.qty) || 0,
+    minOrderQty: resolvedQty,
     sortOrder: Number(options.sortOrder || 0),
     isActive: options.isActive !== false,
     syncedAt: material.syncedAt || new Date().toISOString()
   });
+}
+
+/** Upsert one Edari material into local cache (from live ODBC lookup or API). */
+function cacheEdariMaterial(material) {
+  if (!material?.seq) return null;
+  upsertEdariMaterial({
+    Seq: material.seq,
+    Num: material.num,
+    Barcode: material.barcode || material.num,
+    Name1: material.name,
+    Name2: material.name2,
+    Unt1: material.unit,
+    DefUnit: material.unit,
+    SellPr1: material.priceRetail ?? material.sellPr1 ?? material.price,
+    SellPr2: material.wholesalePrice ?? material.sellPr2 ?? material.price,
+    Bonus: material.bonus,
+    InTot: material.inTot,
+    OutTot: material.outTot,
+    Remarks: material.remarks
+  });
+  return findEdariMaterialByCode(material.barcode || material.num || material.seq);
 }
 
 /** Sync File13n cache + refresh catalog products registered by barcode (no auto-import). */
@@ -763,6 +821,7 @@ module.exports = {
   lookupByBarcode,
   findEdariMaterialByCode,
   edariMaterialStats,
+  cacheEdariMaterial,
   addProductByBarcode,
   bulkAddByBarcode,
   bulkProductsAction,

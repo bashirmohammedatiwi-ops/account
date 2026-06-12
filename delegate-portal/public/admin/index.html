@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Edari Admin — لوحة التحكم</title>
-  <link rel="stylesheet" href="admin.css?v=20260611products2">
+  <link rel="stylesheet" href="admin.css?v=20260612productimg">
 </head>
 <body>
   <div id="app" class="app">
@@ -480,43 +480,22 @@
             </label>
           </div>
           <p class="field-hint">العدد والسعر يُحدَّثان تلقائياً عند مزامنة Edari — لا يمكن تعديلهما يدوياً</p>
-        </div>
 
-        <div class="product-modal-advanced hidden">
-          <div class="product-modal-layout">
-            <div class="product-modal-media">
+          <div class="product-modal-media">
+            <span class="field-label">صورة المنتج</span>
+            <div class="product-modal-media-row">
               <div class="product-image-preview" id="productImagePreview">
                 <span class="product-image-placeholder">📦</span>
               </div>
-              <div class="btn-row product-image-actions">
-                <button type="button" class="btn btn-soft btn-sm" id="btnProductUploadImage">رفع صورة</button>
-                <button type="button" class="btn btn-soft btn-sm hidden" id="btnProductRemoveImage">حذف الصورة</button>
+              <div class="product-image-side">
+                <div class="btn-row product-image-actions">
+                  <button type="button" class="btn btn-soft btn-sm" id="btnProductUploadImage">رفع صورة</button>
+                  <button type="button" class="btn btn-soft btn-sm hidden" id="btnProductRemoveImage">حذف الصورة</button>
+                </div>
+                <p class="field-hint" id="productImageHint">PNG أو JPG — تظهر في تطبيق المندوب</p>
               </div>
-              <input type="file" id="productImageInput" accept="image/*" class="hidden">
-              <p class="field-hint" id="productMetaInfo"></p>
             </div>
-            <div class="product-modal-fields">
-              <label class="field">
-                <span>الوحدة</span>
-                <input type="text" id="productUnitEdit" dir="ltr">
-              </label>
-              <label class="field">
-                <span>حد أدنى للطلب</span>
-                <input type="number" id="productMinQty" min="0" step="1" dir="ltr" value="0">
-              </label>
-              <label class="field">
-                <span>ترتيب العرض</span>
-                <input type="number" id="productSortOrderEdit" min="0" step="1" dir="ltr" value="0">
-              </label>
-              <label class="check-row">
-                <input type="checkbox" id="productIsActiveEdit" checked>
-                <span>نشط</span>
-              </label>
-              <label class="field">
-                <span>وصف (اختياري)</span>
-                <textarea id="productDescriptionEdit" rows="2"></textarea>
-              </label>
-            </div>
+            <input type="file" id="productImageInput" accept="image/*" class="hidden">
           </div>
         </div>
 
@@ -646,6 +625,6 @@
 
   <script src="config.js"></script>
   <script src="admin.js?v=20260607catalog"></script>
-  <script src="admin-commerce.js?v=20260607stock"></script>
+  <script src="admin-commerce.js?v=20260612pricefix"></script>
 </body>
 </html>

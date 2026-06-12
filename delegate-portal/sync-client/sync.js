@@ -384,7 +384,7 @@ async function fetchInvoiceLines(billSeqs) {
 async function fetchAllProducts() {
   reportProgress(5, 7, 0, 'جاري قراءة الأصناف من EdariNX...');
   const rows = await query(`
-    SELECT Seq, Num, Name1, Name2, Barcode, SellPr1, SellPr2, DefUnit, Bonus, Remarks, InTot, OutTot
+    SELECT Seq, Num, Name1, Name2, Barcode, SellPr1, SellPr2, SellPr3, SellPr4, Unt1, DefUnit, Bonus, Remarks, InTot, OutTot
     FROM File13n WHERE SubCount = 0 ORDER BY Num
   `);
   reportProgress(5, 7, 100, `تم: ${rows.length} صنف`);

@@ -1266,16 +1266,31 @@ tfoot .final { background: var(--primary-light); font-weight: 700; }
   margin-bottom: 12px;
 }
 
-.product-modal-layout {
-  display: grid;
-  grid-template-columns: 160px 1fr;
-  gap: 20px;
-}
-
 .product-modal-media {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  margin-top: 4px;
+}
+
+.product-modal-media .field-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-muted, #64748b);
+}
+
+.product-modal-media-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.product-image-side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
 }
 
 .product-image-preview {
@@ -1297,7 +1312,7 @@ tfoot .final { background: var(--primary-light); font-weight: 700; }
 
 .product-image-placeholder { font-size: 2.5rem; opacity: 0.5; }
 
-.product-image-actions { flex-direction: column; }
+.product-image-actions { flex-wrap: wrap; }
 
 .product-modal-fields {
   display: flex;
