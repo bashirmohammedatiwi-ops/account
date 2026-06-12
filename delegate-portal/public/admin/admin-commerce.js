@@ -270,8 +270,7 @@ async function loadProductStats() {
       <div class="stat-card stat-mini"><div class="k">في الكتalog</div><div class="v">${fmtNumAlways(s.total)}</div></div>
       <div class="stat-card stat-mini"><div class="k">نشط</div><div class="v">${fmtNumAlways(s.active)}</div></div>
       <div class="stat-card stat-mini"><div class="k">أصناف Edari</div><div class="v">${fmtNumAlways(em.total)}</div></div>
-      <div class="stat-card stat-mini"><div class="k">بدون صورة</div><div class="v">${fmtNumAlways(s.withoutImage)}</div></div>
-      <div class="stat-card stat-mini"><div class="k">سعر يدوي</div><div class="v">${fmtNumAlways(s.priceOverride)}</div></div>`;
+      <div class="stat-card stat-mini"><div class="k">بدون صورة</div><div class="v">${fmtNumAlways(s.withoutImage)}</div></div>`;
   } catch { /* ignore */ }
 }
 
@@ -423,7 +422,6 @@ function renderProductBadges(p) {
   const badges = [];
   if (p.edariSeq) badges.push('<span class="badge ok">Edari</span>');
   if (!p.isActive) badges.push('<span class="badge err">موقوف</span>');
-  if (p.priceOverride) badges.push('<span class="badge warn">سعر يدوي</span>');
   if (!p.imageUrl) badges.push('<span class="badge muted-badge">بدون صورة</span>');
   return badges.join(' ');
 }
@@ -1209,7 +1207,7 @@ function initCommerceAdmin() {
 
   document.getElementById('btnSyncSectionProducts')?.addEventListener('click', async () => {
     if (!commerce.selectedSectionId) return showToast('اختر قسماً', 'err');
-    if (!confirm('مزامنة كل منتجات هذا القسم من Edari؟\nالمنتجات ذات السعر اليدوي لن يتغير سعرها.')) return;
+    if (!confirm('مزامنة كل منتجات هذا القسم من Edari؟\nسيتم تحديث الأسعار والكميات من الإداري.')) return;
     try {
       const data = await commerceApi(`/catalog/sections/${commerce.selectedSectionId}/sync-products`, { method: 'POST' });
       showToast(data.message || 'تمت المزامنة');
