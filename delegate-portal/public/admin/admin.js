@@ -142,7 +142,7 @@ async function api(path, opts = {}) {
 const PAGE_META = {
   dashboard: { title: 'الرئيسية', sub: 'نظرة عامة واختصارات سريعة' },
   invoices: { title: 'الفواتير', sub: 'فواتير Edari المزامَنة من النظام الإداري' },
-  catalog: { title: 'المنتجات', sub: 'فروع، أقسام، باركود، وصور المنتجات' },
+  catalog: { title: 'المنتجات', sub: 'إضافة بالباركود من Edari — لا استيراد من الفواتير' },
   orders: { title: 'طلبات الشراء', sub: 'طلبات المندوبين — موافقة ومتابعة' },
   sync: { title: 'رفع البيانات', sub: 'مزامنة EdariNX مع سيرفر المندوبين' },
   agents: { title: 'المندوبون', sub: 'حسابات الدخول وصلاحيات الشجرات' },

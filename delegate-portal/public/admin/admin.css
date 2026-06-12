@@ -265,7 +265,7 @@ body {
 
 .panel-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 14px;
@@ -1313,6 +1313,75 @@ tfoot .final { background: var(--primary-light); font-weight: 700; }
 .field input.readonly {
   background: var(--surface-2);
   color: var(--muted);
+}
+
+.panel-desc {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+}
+
+.edari-live-preview {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  background: var(--surface-2);
+}
+
+.edari-live-preview.edari-live-ok {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.06);
+}
+
+.edari-live-preview.edari-live-err {
+  border-color: rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.04);
+}
+
+.edari-live-preview.edari-live-loading {
+  opacity: 0.85;
+}
+
+.edari-live-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.edari-live-name {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.edari-live-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  margin-top: 10px;
+}
+
+.edari-live-grid .k {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.edari-live-remarks {
+  margin: 10px 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.edari-live-title {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.field-barcode input {
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
 }
 
 .product-modal-foot {

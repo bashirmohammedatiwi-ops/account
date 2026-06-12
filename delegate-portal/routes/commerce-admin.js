@@ -28,6 +28,7 @@ const {
   saveProductImage,
   lookupByBarcode,
   findEdariMaterialByCode,
+  edariMaterialStats,
   addProductByBarcode,
   bulkAddByBarcode,
   bulkProductsAction,
@@ -177,6 +178,10 @@ router.get('/products/lookup', (req, res) => {
   res.json({ ok: true, product });
 });
 
+router.get('/products/edari-stats', (_req, res) => {
+  res.json({ ok: true, stats: edariMaterialStats() });
+});
+
 router.get('/products/edari-lookup', (req, res) => {
   const code = String(req.query.code || '').trim();
   if (!code) return res.status(400).json({ ok: false, error: 'الباركود مطلوب' });
@@ -201,12 +206,21 @@ router.get('/products/:id', (req, res) => {
 
 router.post('/products/by-barcode', (req, res) => {
   try {
-    const sectionId = Number(req.body?.sectionId);
-    const barcode = String(req.body?.barcode || '').trim();
+    const body = req.body || {};
+    const sectionId = Number(body.sectionId);
+    const barcode = String(body.barcode || '').trim();
     if (!sectionId || !barcode) {
       return res.status(400).json({ ok: false, error: 'القسم والباركود مطلوبان' });
     }
-    const product = addProductByBarcode(sectionId, barcode);
+    const product = addProductByBarcode(sectionId, barcode, {
+      bonusDefault: body.bonusDefault,
+      minOrderQty: body.minOrderQty,
+      sortOrder: body.sortOrder,
+      isActive: body.isActive,
+      priceOverride: body.priceOverride,
+      price: body.price,
+      description: body.description
+    });
     res.json({ ok: true, product });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
@@ -302,33 +316,11 @@ router.post('/products/purge-all', (req, res) => {
   }
 });
 
-router.post('/products', (req, res) => {
-  try {
-    const body = req.body || {};
-    const sectionId = Number(body.sectionId);
-    const name = String(body.name || '').trim();
-    if (!sectionId || !name) {
-      return res.status(400).json({ ok: false, error: 'القسم والاسم مطلوبان' });
-    }
-    const product = createProduct({
-      sectionId,
-      name,
-      barcode: body.barcode || '',
-      skuNum: body.skuNum || '',
-      edariSeq: body.edariSeq || '',
-      unit: body.unit || '',
-      price: body.price,
-      bonusDefault: body.bonusDefault,
-      priceOverride: body.priceOverride,
-      description: body.description || '',
-      minOrderQty: body.minOrderQty,
-      isActive: body.isActive !== false,
-      sortOrder: body.sortOrder || 0
-    });
-    res.json({ ok: true, product });
-  } catch (err) {
-    res.status(400).json({ ok: false, error: err.message });
-  }
+router.post('/products', (_req, res) => {
+  res.status(400).json({
+    ok: false,
+    error: 'أضف المنتج بالباركود من Edari — الاسم والسعر يُجلبان تلقائياً'
+  });
 });
 
 router.put('/products/:id', (req, res) => {

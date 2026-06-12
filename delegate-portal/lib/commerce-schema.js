@@ -51,8 +51,12 @@ function migrateCommerceSchema(db) {
       num TEXT,
       barcode TEXT,
       name1 TEXT NOT NULL,
+      name2 TEXT,
       unit TEXT DEFAULT '',
       sell_pr1 REAL DEFAULT 0,
+      sell_pr2 REAL DEFAULT 0,
+      bonus REAL DEFAULT 0,
+      remarks TEXT,
       synced_at TEXT DEFAULT (datetime('now'))
     );
 
@@ -130,6 +134,18 @@ function migrateCommerceSchema(db) {
       INSERT INTO catalog_sections (branch_id, name, sort_order, is_active)
       VALUES (?, 'عام', 1, 1)
     `).run(branchId);
+  }
+
+  const edariCols = [
+    ['name2', 'TEXT'],
+    ['sell_pr2', 'REAL DEFAULT 0'],
+    ['bonus', 'REAL DEFAULT 0'],
+    ['remarks', 'TEXT']
+  ];
+  for (const [col, type] of edariCols) {
+    try {
+      db.exec(`ALTER TABLE edari_materials ADD COLUMN ${col} ${type}`);
+    } catch { /* exists */ }
   }
 }
 

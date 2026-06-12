@@ -172,7 +172,10 @@
           </div>
           <section class="panel">
             <div class="panel-head">
-              <h2 class="panel-title">منتجات القسم</h2>
+              <div>
+                <h2 class="panel-title">منتجات القسم</h2>
+                <p class="panel-desc muted">التفاصيل من Edari (File13n) فقط — أضف بالباركود ويُرفع للسيرفر عند الحفظ</p>
+              </div>
               <div class="btn-row">
                 <button type="button" class="btn btn-primary btn-sm" id="btnAddProduct">+ إضافة منتج</button>
                 <button type="button" class="btn btn-soft btn-sm" id="btnBulkAddProducts">إضافة جماعية</button>
@@ -463,24 +466,25 @@
               <span>القسم</span>
               <select id="productSectionId" required></select>
             </label>
+            <label class="field field-barcode">
+              <span>الباركود أو رقم المادة</span>
+              <input type="text" id="productBarcode" dir="ltr" autocomplete="off" placeholder="امسح أو اكتب الباركود...">
+            </label>
+            <div class="edari-live-preview hidden" id="edariLivePreview"></div>
             <label class="field">
               <span>الاسم</span>
               <input type="text" id="productName" required>
             </label>
             <div class="field-row">
               <label class="field">
-                <span>الباركود</span>
-                <input type="text" id="productBarcode" dir="ltr">
-              </label>
-              <label class="field">
                 <span>رقم المادة</span>
                 <input type="text" id="productSkuNum" dir="ltr">
               </label>
+              <label class="field">
+                <span>Edari Seq</span>
+                <input type="text" id="productEdariSeq" dir="ltr" readonly class="readonly">
+              </label>
             </div>
-            <label class="field">
-              <span>Edari Seq</span>
-              <input type="text" id="productEdariSeq" dir="ltr" readonly class="readonly">
-            </label>
             <div class="field-row">
               <label class="field">
                 <span>الوحدة</span>
@@ -530,8 +534,7 @@
         </div>
         <footer class="modal-foot product-modal-foot">
           <button type="button" class="btn btn-soft hidden" id="btnProductSyncEdari">مزامنة من Edari</button>
-          <button type="button" class="btn btn-soft" id="btnProductSearchEdari">بحث Edari</button>
-          <button type="submit" class="btn btn-primary">حفظ</button>
+          <button type="submit" class="btn btn-primary" id="productSaveBtn">إضافة للكتalog</button>
         </footer>
       </form>
     </div>
@@ -544,8 +547,8 @@
         <button type="button" class="btn btn-icon" id="importCsvClose" aria-label="إغلاق">×</button>
       </header>
       <form id="importCsvForm" class="modal-form">
-        <p class="muted">الأعمدة: <code dir="ltr">barcode,name,unit,price,bonus,sort_order,active,price_override,description</code></p>
-        <p class="muted">السطر الأول = عناوين (اختياري). يُستورد إلى القسم المحدد حالياً.</p>
+        <p class="muted">عمود واحد على الأقل: <code dir="ltr">barcode</code> — يجب أن يكون موجوداً في Edari. يُستورد إلى القسم المحدد.</p>
+        <p class="muted">أعمدة اختيارية: <code dir="ltr">bonus,sort_order,active,price_override,description</code></p>
         <label class="field">
           <span>ملف CSV أو لصق البيانات</span>
           <input type="file" id="importCsvFile" accept=".csv,text/csv">
@@ -611,7 +614,7 @@
         <button type="button" class="btn btn-icon" id="bulkAddClose" aria-label="إغلاق">×</button>
       </header>
       <form id="bulkAddForm" class="modal-form">
-        <p class="muted">أدخل باركود أو رقم مادة في كل سطر — يُضاف إلى القسم المحدد حالياً.</p>
+        <p class="muted">باركود أو رقم مادة في كل سطر — يُجلب من Edari ويُرفع للسيرفر فقط عند الإضافة.</p>
         <label class="field">
           <span>الباركودات</span>
           <textarea id="bulkBarcodesInput" rows="10" placeholder="123456789&#10;987654321" dir="ltr"></textarea>
