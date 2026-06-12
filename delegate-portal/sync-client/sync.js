@@ -15,6 +15,7 @@ const {
 const edariRoot = process.env.EDARI_READER_ROOT
   || path.join(__dirname, '..', '..', 'edari-reader');
 const odbcBridge = require(path.join(edariRoot, 'lib', 'odbc-bridge'));
+const { getEdariConnection } = require('./edari-connection');
 
 const SERVER = process.argv.includes('--server')
   ? process.argv[process.argv.indexOf('--server') + 1]
@@ -23,13 +24,6 @@ const SERVER = process.argv.includes('--server')
 const SYNC_KEY = process.argv.includes('--key')
   ? process.argv[process.argv.indexOf('--key') + 1]
   : (process.env.SYNC_API_KEY || 'edari-sync-local-key-2025');
-
-const CONN = {
-  mode: 'tcp',
-  alias: process.env.EDARI_ALIAS || '2025',
-  server: process.env.EDARI_SERVER || '127.0.0.1',
-  port: Number(process.env.EDARI_PORT || 16000)
-};
 
 const UPLOAD_BATCH = {
   journal: 2500,
@@ -46,7 +40,7 @@ const ACCOUNT_COLS = [
 const { MATCH_SQL, isReconciliationMovement } = require('../lib/reconciliation-utils');
 
 async function query(sql) {
-  const r = await odbcBridge.runQuery({ ...CONN, sql });
+  const r = await odbcBridge.runQuery({ ...getEdariConnection(), sql });
   if (!r.ok) throw new Error(r.error || 'Query failed');
   return r.rows;
 }

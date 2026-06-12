@@ -150,12 +150,10 @@ async function api(path, opts = {}) {
 
 const PAGE_META = {
   dashboard: { title: 'الرئيسية', sub: 'نظرة عامة واختصارات سريعة' },
-  invoices: { title: 'الفواتير', sub: 'فواتير Edari المزامَنة من النظام الإداري' },
-  catalog: { title: 'المنتجات', sub: 'إضافة بالباركود من Edari — لا استيراد من الفواتير' },
+  catalog: { title: 'المنتجات', sub: 'إضافة بالباركود من Edari' },
   orders: { title: 'طلبات الشراء', sub: 'طلبات المندوبين — موافقة ومتابعة' },
   sync: { title: 'رفع البيانات', sub: 'مزامنة EdariNX مع سيرفر المندوبين' },
-  agents: { title: 'المندوبون', sub: 'حسابات الدخول وصلاحيات الشجرات' },
-  trees: { title: 'كشوف الحساب', sub: 'استعراض الفروع والحركات' }
+  agents: { title: 'المندوبون', sub: 'حسابات الدخول وصلاحيات الشجرات' }
 };
 
 function showPage(name) {
@@ -166,9 +164,9 @@ function showPage(name) {
   const subEl = document.getElementById('pageSubtitle');
   if (titleEl) titleEl.textContent = meta.title;
   if (subEl) subEl.textContent = meta.sub;
-  if (name === 'trees') initExplorer();
   if (name === 'sync') {
     void loadSyncLogs();
+    void loadEdariConnectionSettings();
     startSyncLogPolling();
   } else if (name !== 'sync') {
     stopSyncLogPolling();
@@ -180,10 +178,9 @@ async function loadDashboard() {
   const data = await api('/api/admin/dashboard');
   const { counts, last } = data;
   document.getElementById('dashStats').innerHTML = [
-    ['حسابات', counts.accounts, ''],
-    ['حركات', counts.journal, ''],
-    ['مندوبون', counts.agents, 'نشطون'],
-    ['شجرات', treesCache.length, 'متاحة']
+    ['حسابات', counts.accounts, 'مزامَنة'],
+    ['حركات', counts.journal, 'مزامَنة'],
+    ['مندوبون', counts.agents, 'نشطون']
   ].map(([k, v, note]) => `
     <div class="stat-card">
       <div class="k">${esc(k)}${note ? ` · ${esc(note)}` : ''}</div>
@@ -619,13 +616,142 @@ function saveSyncTreeSelection() {
 async function persistBackgroundSyncSettings(override = {}) {
   if (!window.edariDesktop?.saveBackgroundSyncSettings) return null;
   const treeSeqs = override.treeSeqs ?? getEffectiveSyncTreeSeqs();
+  const edari = override.edari ?? readEdariForm();
   return window.edariDesktop.saveBackgroundSyncSettings({
     serverUrl: resolveSyncServerUrl(),
     syncKey: document.getElementById('syncApiKey')?.value?.trim() || '',
     treeSeqs,
     autoSyncEnabled: document.getElementById('autoSyncEnabled')?.checked !== false,
+    edari,
     ...override
   });
+}
+
+const EDARI_LS_KEY = 'edariConnection';
+
+const DEFAULT_EDARI_UI = {
+  mode: 'tcp',
+  alias: '2025',
+  server: '127.0.0.1',
+  port: 16000,
+  dataRoot: 'D:\\Future of Technology\\EdariNX\\Data',
+  databasePath: 'D:\\Future of Technology\\EdariNX\\Data\\2025'
+};
+
+function readEdariForm() {
+  return {
+    mode: document.getElementById('edariMode')?.value === 'internal' ? 'internal' : 'tcp',
+    alias: document.getElementById('edariAlias')?.value?.trim() || '2025',
+    server: document.getElementById('edariServer')?.value?.trim() || '127.0.0.1',
+    port: Number(document.getElementById('edariPort')?.value || 16000),
+    dataRoot: document.getElementById('edariDataRoot')?.value?.trim() || '',
+    databasePath: document.getElementById('edariDatabasePath')?.value?.trim() || ''
+  };
+}
+
+function fillEdariForm(edari = {}) {
+  const e = { ...DEFAULT_EDARI_UI, ...edari };
+  const modeEl = document.getElementById('edariMode');
+  if (modeEl) modeEl.value = e.mode === 'internal' ? 'internal' : 'tcp';
+  const set = (id, val) => {
+    const el = document.getElementById(id);
+    if (el != null && val != null) el.value = val;
+  };
+  set('edariAlias', e.alias);
+  set('edariDataRoot', e.dataRoot);
+  set('edariDatabasePath', e.databasePath);
+  set('edariServer', e.server);
+  set('edariPort', e.port);
+}
+
+function setEdariConnStatus(msg, type = '') {
+  const el = document.getElementById('edariConnStatus');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = `field-hint edari-conn-status${type ? ` is-${type}` : ''}`;
+}
+
+async function loadEdariConnectionSettings() {
+  let edari = { ...DEFAULT_EDARI_UI };
+  try {
+    if (window.edariDesktop?.getEdariSettings) {
+      const data = await window.edariDesktop.getEdariSettings();
+      edari = { ...edari, ...(data.edari || {}) };
+    } else {
+      const saved = localStorage.getItem(EDARI_LS_KEY);
+      if (saved) edari = { ...edari, ...JSON.parse(saved) };
+    }
+  } catch {
+    /* ignore */
+  }
+  fillEdariForm(edari);
+  localStorage.setItem(EDARI_LS_KEY, JSON.stringify(edari));
+}
+
+async function saveEdariConnectionSettings() {
+  const edari = readEdariForm();
+  localStorage.setItem(EDARI_LS_KEY, JSON.stringify(edari));
+  if (window.edariDesktop?.saveEdariSettings) {
+    await window.edariDesktop.saveEdariSettings(edari);
+  } else {
+    await persistBackgroundSyncSettings({ edari });
+  }
+  setEdariConnStatus('تم حفظ إعدادات Edari');
+}
+
+async function testEdariConnectionSettings() {
+  const edari = readEdariForm();
+  setEdariConnStatus('جاري اختبار الاتصال...');
+  if (!window.edariDesktop?.testEdariConnection) {
+    setEdariConnStatus('اختبار الاتصال متاح من تطبيق Admin (Electron) فقط', 'warn');
+    return;
+  }
+  try {
+    const data = await window.edariDesktop.testEdariConnection(edari);
+    if (!data.ok) throw new Error(data.error || 'فشل الاتصال');
+    setEdariConnStatus(data.message || `تم الاتصال — ${data.alias}`, 'ok');
+  } catch (e) {
+    setEdariConnStatus(e.message, 'err');
+  }
+}
+
+async function discoverEdariDatabases() {
+  const dataRoot = document.getElementById('edariDataRoot')?.value?.trim();
+  if (!dataRoot) {
+    setEdariConnStatus('أدخل مجلد Data أولاً', 'err');
+    return;
+  }
+  setEdariConnStatus('جاري البحث عن القواعد...');
+  if (!window.edariDesktop?.listEdariDatabases) {
+    setEdariConnStatus('الاكتشاف متاح من تطبيق Admin (Electron) فقط', 'warn');
+    return;
+  }
+  try {
+    const data = await window.edariDesktop.listEdariDatabases({ dataRoot });
+    if (!data.ok) throw new Error(data.error || 'فشل الاكتشاف');
+    const pick = document.getElementById('edariDatabasePick');
+    const items = [];
+    for (const db of data.databases || []) {
+      items.push({ name: db.name, path: db.path, label: `${db.name} — ${db.tableCount} جدول` });
+    }
+    for (const a of data.aliases || []) {
+      if (!items.some((x) => x.name === a.name)) {
+        items.push({ name: a.name, path: a.path, label: `${a.name} (nxServer) — ${a.path}` });
+      }
+    }
+    if (!items.length) {
+      pick?.classList.add('hidden');
+      setEdariConnStatus('لم تُعثر على قواعد في هذا المجلد', 'warn');
+      return;
+    }
+    pick.innerHTML = `<option value="">— اختر قاعدة —</option>${items.map((it, i) =>
+      `<option value="${i}">${esc(it.label)}</option>`).join('')}`;
+    pick.classList.remove('hidden');
+    pick._items = items;
+    setEdariConnStatus(`وُجد ${items.length} قاعدة — اختر من القائمة`, 'ok');
+  } catch (e) {
+    setEdariConnStatus(e.message, 'err');
+  }
 }
 
 function renderSyncTreeChecks(trees, selected = []) {
@@ -1057,6 +1183,7 @@ async function refreshAll() {
   await loadConfig();
   await loadTrees();
   await loadSyncTrees();
+  await loadEdariConnectionSettings();
   await loadDashboard();
   await loadAgents();
   await loadSyncLogs();
@@ -1083,6 +1210,20 @@ document.getElementById('btnCopyMobileUrl').addEventListener('click', async () =
   } catch {
     prompt('انسخ الرابط:', url);
   }
+});
+
+document.getElementById('btnEdariSave')?.addEventListener('click', () => void saveEdariConnectionSettings());
+document.getElementById('btnEdariTest')?.addEventListener('click', () => void testEdariConnectionSettings());
+document.getElementById('btnEdariDiscover')?.addEventListener('click', () => void discoverEdariDatabases());
+document.getElementById('edariDatabasePick')?.addEventListener('change', (e) => {
+  const pick = e.target;
+  const item = pick._items?.[Number(pick.value)];
+  if (!item) return;
+  const aliasEl = document.getElementById('edariAlias');
+  const pathEl = document.getElementById('edariDatabasePath');
+  if (aliasEl) aliasEl.value = item.name;
+  if (pathEl) pathEl.value = item.path;
+  setEdariConnStatus(`تم اختيار ${item.name}`, 'ok');
 });
 
 refreshAll();

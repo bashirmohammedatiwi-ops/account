@@ -1277,6 +1277,10 @@ tfoot .final { background: var(--primary-light); font-weight: 700; }
   color: var(--danger, #dc2626);
 }
 
+.edari-conn-status.is-ok { color: #059669; }
+.edari-conn-status.is-err { color: var(--danger, #dc2626); }
+.edari-conn-status.is-warn { color: #b45309; }
+
 #productAddSectionHint {
   margin-bottom: 12px;
 }

@@ -6,13 +6,7 @@ const path = require('path');
 const edariRoot = process.env.EDARI_READER_ROOT
   || path.join(__dirname, '..', '..', 'edari-reader');
 const odbcBridge = require(path.join(edariRoot, 'lib', 'odbc-bridge'));
-
-const CONN = {
-  mode: 'tcp',
-  alias: process.env.EDARI_ALIAS || '2025',
-  server: process.env.EDARI_SERVER || '127.0.0.1',
-  port: Number(process.env.EDARI_PORT || 16000)
-};
+const { getEdariConnection } = require('./edari-connection');
 
 const MATERIAL_SELECT = `
   Seq, Num, Name1, Name2, Barcode, SellPr1, SellPr2, SellPr3, SellPr4,
@@ -76,7 +70,7 @@ async function lookupEdariMaterial(code) {
     WHERE SubCount = 0 AND (${conditions.join(' OR ')})
   `;
 
-  const result = await odbcBridge.runQuery({ ...CONN, sql });
+  const result = await odbcBridge.runQuery({ ...getEdariConnection(), sql });
   if (!result.ok) throw new Error(result.error || 'فشل الاتصال بـ Edari');
   if (!result.rows?.length) return null;
   return mapMaterialRow(result.rows[0]);
@@ -122,7 +116,7 @@ async function lookupEdariMaterialsByCodes(codes = []) {
       FROM File13n
       WHERE SubCount = 0 AND (${cond.join(' OR ')})
     `;
-    const result = await odbcBridge.runQuery({ ...CONN, sql });
+    const result = await odbcBridge.runQuery({ ...getEdariConnection(), sql });
     if (!result.ok) throw new Error(result.error || 'فشل الاتصال بـ Edari');
     for (const row of result.rows || []) {
       bySeq.set(String(row.Seq), row);

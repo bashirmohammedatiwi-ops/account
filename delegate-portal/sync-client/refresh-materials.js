@@ -9,16 +9,10 @@ const path = require('path');
 const edariRoot = process.env.EDARI_READER_ROOT
   || path.join(__dirname, '..', '..', 'edari-reader');
 const odbcBridge = require(path.join(edariRoot, 'lib', 'odbc-bridge'));
-
-const CONN = {
-  mode: 'tcp',
-  alias: process.env.EDARI_ALIAS || '2025',
-  server: process.env.EDARI_SERVER || '127.0.0.1',
-  port: Number(process.env.EDARI_PORT || 16000)
-};
+const { getEdariConnection } = require('./edari-connection');
 
 async function query(sql) {
-  const r = await odbcBridge.runQuery({ ...CONN, sql });
+  const r = await odbcBridge.runQuery({ ...getEdariConnection(), sql });
   if (!r.ok) throw new Error(r.error || 'Query failed');
   return r.rows;
 }

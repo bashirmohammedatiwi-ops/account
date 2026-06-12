@@ -26,11 +26,24 @@ function createBackgroundSync({
       syncKey: '',
       treeSeqs: [],
       autoSyncEnabled: true,
-      startAtLogin: true
+      startAtLogin: true,
+      edari: {
+        mode: 'tcp',
+        alias: '2025',
+        server: '127.0.0.1',
+        port: 16000,
+        dataRoot: 'D:\\Future of Technology\\EdariNX\\Data',
+        databasePath: 'D:\\Future of Technology\\EdariNX\\Data\\2025'
+      }
     };
     try {
       if (fs.existsSync(file)) {
-        return { ...defaults, ...JSON.parse(fs.readFileSync(file, 'utf8')) };
+        const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+        return {
+          ...defaults,
+          ...parsed,
+          edari: { ...defaults.edari, ...(parsed.edari || {}) }
+        };
       }
     } catch {
       /* ignore */
@@ -39,7 +52,11 @@ function createBackgroundSync({
   }
 
   function persistSettings(patch = {}) {
-    settings = { ...settings, ...patch };
+    const next = { ...settings, ...patch };
+    if (patch.edari) {
+      next.edari = { ...(settings.edari || {}), ...patch.edari };
+    }
+    settings = next;
     fs.mkdirSync(path.dirname(getSettingsPath()), { recursive: true });
     fs.writeFileSync(getSettingsPath(), JSON.stringify(settings, null, 2), 'utf8');
     emitState();

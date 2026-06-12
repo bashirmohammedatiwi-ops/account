@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Edari Admin — لوحة التحكم</title>
-  <link rel="stylesheet" href="admin.css?v=20260612productimg">
+  <link rel="stylesheet" href="admin.css?v=20260614edari">
 </head>
 <body>
   <div id="app" class="app">
@@ -22,10 +22,6 @@
           <span class="nav-icon" aria-hidden="true">⌂</span>
           <span>الرئيسية</span>
         </button>
-        <button type="button" class="nav-item" data-page="invoices">
-          <span class="nav-icon" aria-hidden="true">🧾</span>
-          <span>الفواتير</span>
-        </button>
         <button type="button" class="nav-item" data-page="catalog">
           <span class="nav-icon" aria-hidden="true">📦</span>
           <span>المنتجات</span>
@@ -41,10 +37,6 @@
         <button type="button" class="nav-item" data-page="agents">
           <span class="nav-icon" aria-hidden="true">👤</span>
           <span>المندوبون</span>
-        </button>
-        <button type="button" class="nav-item" data-page="trees">
-          <span class="nav-icon" aria-hidden="true">☰</span>
-          <span>كشوف الحساب</span>
         </button>
       </nav>
 
@@ -82,11 +74,6 @@
           <div class="stats-grid" id="dashStats"></div>
 
           <div class="quick-grid">
-            <button type="button" class="quick-card" data-goto="invoices">
-              <span class="quick-icon trees">🧾</span>
-              <strong>الفواتير</strong>
-              <span>عرض فواتير Edari المزامَنة</span>
-            </button>
             <button type="button" class="quick-card" data-goto="catalog">
               <span class="quick-icon agents">📦</span>
               <strong>المنتجات</strong>
@@ -107,11 +94,6 @@
               <strong>المندوبون</strong>
               <span>إضافة وصلاحيات الشجرات</span>
             </button>
-            <button type="button" class="quick-card" data-goto="trees">
-              <span class="quick-icon trees">☰</span>
-              <strong>كشوف الحساب</strong>
-              <span>استعراض الفروع والحركات</span>
-            </button>
           </div>
 
           <div class="panel-row">
@@ -129,27 +111,6 @@
               <p class="url-preview" id="mobileUrlDisplay">—</p>
             </section>
           </div>
-        </section>
-
-        <!-- Invoices -->
-        <section class="page" id="page-invoices">
-          <div class="stats-grid" id="invoiceStats"></div>
-          <div class="panel">
-            <div class="panel-head">
-              <h2 class="panel-title">فواتير Edari</h2>
-              <div class="btn-row">
-                <input type="search" id="invoiceSearch" class="search" placeholder="بحث: رقم، زبون، باركود...">
-                <button type="button" class="btn btn-soft btn-sm" id="btnInvoiceSearch">بحث</button>
-              </div>
-            </div>
-            <div class="table-scroll">
-              <table class="data-table compact">
-                <thead><tr><th>رقم</th><th>تاريخ</th><th>زبون</th><th>نوع</th><th>إجمالي</th><th>بنود</th><th></th></tr></thead>
-                <tbody id="invoicesBody"></tbody>
-              </table>
-            </div>
-          </div>
-          <div class="panel hidden" id="invoiceDetailPanel"></div>
         </section>
 
         <!-- Catalog -->
@@ -320,6 +281,49 @@
                 </label>
               </section>
 
+              <details class="panel panel-details" open>
+                <summary>إعدادات قاعدة Edari (الإداري)</summary>
+                <div class="form-stack">
+                  <p class="field-hint">حدّث هذه الإعدادات عند تغيير سنة القاعدة أو مسار EdariNX — تُستخدم في المزامنة وتحديث المنتجات.</p>
+                  <label class="field">
+                    <span>نوع الاتصال</span>
+                    <select id="edariMode">
+                      <option value="tcp">TCP — عبر nxServer (الافتراضي)</option>
+                      <option value="internal">Internal — مجلد مباشر</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>اسم القاعدة (Alias)</span>
+                    <input type="text" id="edariAlias" dir="ltr" placeholder="2025">
+                  </label>
+                  <label class="field">
+                    <span>مجلد Data الجذر</span>
+                    <input type="text" id="edariDataRoot" dir="ltr" placeholder="D:\...\EdariNX\Data">
+                  </label>
+                  <label class="field">
+                    <span>مسار مجلد القاعدة</span>
+                    <input type="text" id="edariDatabasePath" dir="ltr" placeholder="D:\...\EdariNX\Data\2025">
+                  </label>
+                  <label class="field">
+                    <span>سيرفر nxServer</span>
+                    <input type="text" id="edariServer" dir="ltr" value="127.0.0.1">
+                  </label>
+                  <label class="field">
+                    <span>منفذ nxServer</span>
+                    <input type="number" id="edariPort" dir="ltr" value="16000" min="1" max="65535">
+                  </label>
+                  <div class="btn-row">
+                    <button type="button" class="btn btn-soft btn-sm" id="btnEdariDiscover">اكتشاف القواعد</button>
+                    <button type="button" class="btn btn-soft btn-sm" id="btnEdariTest">اختبار الاتصال</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="btnEdariSave">حفظ</button>
+                  </div>
+                  <select id="edariDatabasePick" class="search hidden" aria-label="اختر قاعدة مكتشفة">
+                    <option value="">— اختر قاعدة مكتشفة —</option>
+                  </select>
+                  <p class="field-hint" id="edariConnStatus">—</p>
+                </div>
+              </details>
+
               <details class="panel panel-details">
                 <summary>إعدادات الاتصال</summary>
                 <div class="form-stack">
@@ -374,67 +378,6 @@
             <button type="button" class="btn btn-primary" id="btnAddAgent">+ مندوب جديد</button>
           </div>
           <div class="agent-grid" id="agentsGrid"></div>
-        </section>
-
-        <!-- Explorer -->
-        <section class="page" id="page-trees">
-          <div class="explorer-toolbar">
-            <div class="steps">
-              <span class="step active">① شجرة</span>
-              <span class="step">② زبون</span>
-              <span class="step">③ كشف</span>
-            </div>
-            <input type="search" id="explorerSearch" class="search" placeholder="بحث سريع برقم أو اسم...">
-          </div>
-
-          <div class="explorer-layout">
-            <section class="explorer-col">
-              <div class="col-head">
-                <h3>الشجرات</h3>
-                <span class="col-meta" id="explorerTreesMeta">—</span>
-              </div>
-              <div class="pick-list" id="explorerTrees"></div>
-            </section>
-
-            <section class="explorer-col">
-              <div class="col-head">
-                <h3 id="explorerBranchesTitle">الزبائن</h3>
-                <span class="col-meta" id="explorerBranchesMeta">—</span>
-              </div>
-              <div class="filter-bar">
-                <input type="search" id="branchSearch" class="search" placeholder="بحث...">
-                <div class="seg">
-                  <button type="button" class="seg-btn active" data-filter="all">الكل</button>
-                  <button type="button" class="seg-btn" data-filter="debit">مدين</button>
-                  <button type="button" class="seg-btn" data-filter="credit">دائن</button>
-                </div>
-              </div>
-              <div class="pick-list" id="explorerBranches"></div>
-            </section>
-
-            <section class="explorer-col explorer-col-wide">
-              <div id="explorerStmtEmpty" class="empty-state">
-                <p>اختر زبوناً لعرض كشف الحساب</p>
-              </div>
-              <div id="explorerStmtContent" class="hidden stmt-panel">
-                <div class="stmt-top" id="explorerStmtHeader"></div>
-                <div class="mini-stats" id="explorerStmtCards"></div>
-                <div class="stmt-bar">
-                  <h3>كشف الحساب</h3>
-                  <span id="explorerStmtMeta">—</span>
-                </div>
-                <div class="table-scroll stmt-scroll">
-                  <table class="data-table">
-                    <thead>
-                      <tr><th>مدين</th><th>دائن</th><th>البيان</th><th>التاريخ</th><th>حركة الرصيد</th></tr>
-                    </thead>
-                    <tbody id="explorerStmtBody"></tbody>
-                    <tfoot id="explorerStmtFoot"></tfoot>
-                  </table>
-                </div>
-              </div>
-            </section>
-          </div>
         </section>
       </main>
     </div>
@@ -625,7 +568,7 @@
   </div>
 
   <script src="config.js"></script>
-  <script src="admin.js?v=20260607catalog"></script>
-  <script src="admin-commerce.js?v=20260613prices5"></script>
+  <script src="admin.js?v=20260614edari"></script>
+  <script src="admin-commerce.js?v=20260614edari"></script>
 </body>
 </html>

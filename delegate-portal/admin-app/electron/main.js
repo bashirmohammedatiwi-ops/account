@@ -68,6 +68,31 @@ function getSettingsPath() {
   return path.join(app.getPath('userData'), 'background-sync.json');
 }
 
+function loadEdariConnectionModule() {
+  return require(path.join(getPortalDir(), 'sync-client', 'edari-connection'));
+}
+
+function getEdariSettings() {
+  const { DEFAULT_EDARI } = loadEdariConnectionModule();
+  const saved = backgroundSync?.getSettings?.() || {};
+  return { ...DEFAULT_EDARI, ...(saved.edari || {}) };
+}
+
+function edariEnvExtra(settings = null) {
+  const { connectionToEnv } = loadEdariConnectionModule();
+  return connectionToEnv(settings || getEdariSettings());
+}
+
+function portalChildEnv(extra = {}) {
+  return {
+    ...process.env,
+    EDARI_READER_ROOT: getEdariReaderRoot(),
+    NODE_BIN: getNodeBin(),
+    ...edariEnvExtra(),
+    ...extra
+  };
+}
+
 function serverEnv() {
   const portalDir = getPortalDir();
   return {
@@ -201,16 +226,13 @@ function runLocalSyncScript(serverUrl, syncKey, treeSeqs = [], options = {}) {
       '--trees', treeSeqs.join(',')
     ], {
       cwd: portalDir,
-      env: {
-        ...process.env,
+      env: portalChildEnv({
         SYNC_SERVER: syncTarget,
         SYNC_API_KEY: syncKey,
         SYNC_SOURCE: source,
-        EDARI_READER_ROOT: getEdariReaderRoot(),
-        NODE_BIN: nodeBin,
         EDARI_BACKEND_URL: BACKEND_URL,
         EDARI_USE_REMOTE: USE_REMOTE_UI ? '1' : '0'
-      },
+      }),
       windowsHide: true
     });
 
@@ -414,11 +436,7 @@ function runFetchEdariMaterialsScript() {
 
     const child = spawn(nodeBin, [script], {
       cwd: portalDir,
-      env: {
-        ...process.env,
-        EDARI_READER_ROOT: getEdariReaderRoot(),
-        NODE_BIN: nodeBin
-      },
+      env: portalChildEnv(),
       windowsHide: true
     });
 
@@ -447,11 +465,7 @@ function runListEdariTreesScript() {
 
     const child = spawn(nodeBin, [script, '--list-trees'], {
       cwd: portalDir,
-      env: {
-        ...process.env,
-        EDARI_READER_ROOT: getEdariReaderRoot(),
-        NODE_BIN: nodeBin
-      },
+      env: portalChildEnv(),
       windowsHide: true
     });
 
@@ -534,12 +548,57 @@ ipcMain.handle('list-edari-trees', () => {
 
 ipcMain.handle('fetch-edari-catalog-materials', async (_e, { codes }) => {
   try {
+    Object.assign(process.env, edariEnvExtra());
     const lookupPath = path.join(getPortalDir(), 'sync-client', 'material-lookup.js');
+    delete require.cache[require.resolve(lookupPath)];
     const { lookupEdariMaterialsByCodes } = require(lookupPath);
     const rows = await lookupEdariMaterialsByCodes(Array.isArray(codes) ? codes : []);
     return { ok: true, rows, count: rows.length };
   } catch (err) {
     return { ok: false, error: err.message || 'فشل الاتصال بـ Edari' };
+  }
+});
+
+ipcMain.handle('get-edari-settings', () => {
+  return { ok: true, edari: getEdariSettings() };
+});
+
+ipcMain.handle('save-edari-settings', (_e, edari) => {
+  backgroundSync?.saveSettings({ edari: edari || {} });
+  return { ok: true, edari: getEdariSettings() };
+});
+
+ipcMain.handle('test-edari-connection', async (_e, edari) => {
+  try {
+    const { getEdariConnection } = loadEdariConnectionModule();
+    const odbcBridge = require(path.join(getEdariReaderRoot(), 'lib', 'odbc-bridge'));
+    const conn = getEdariConnection(edari || getEdariSettings());
+    const result = await odbcBridge.testConnection(conn);
+    if (result?.ok === false) {
+      return { ok: false, error: result.error || 'فشل الاتصال' };
+    }
+    return { ok: true, message: 'تم الاتصال بقاعدة Edari بنجاح', alias: conn.alias };
+  } catch (err) {
+    return { ok: false, error: err.message || 'فشل الاتصال' };
+  }
+});
+
+ipcMain.handle('list-edari-databases', async (_e, { dataRoot } = {}) => {
+  try {
+    const scanner = require(path.join(getEdariReaderRoot(), 'lib', 'scanner'));
+    const root = String(dataRoot || getEdariSettings().dataRoot || '').trim();
+    if (!root) return { ok: false, error: 'مجلد Data مطلوب' };
+    const databases = scanner.listDatabases(root);
+    let aliases = [];
+    try {
+      const { fetchAliases } = require(path.join(getEdariReaderRoot(), 'lib', 'nexus-admin'));
+      aliases = await fetchAliases();
+    } catch {
+      /* nxServer admin optional */
+    }
+    return { ok: true, databases, aliases, dataRoot: root };
+  } catch (err) {
+    return { ok: false, error: err.message || 'تعذّر قراءة المجلد' };
   }
 });
 
@@ -571,7 +630,9 @@ ipcMain.handle('run-background-sync-now', async () => {
 
 ipcMain.handle('lookup-edari-material', async (_e, code) => {
   try {
+    Object.assign(process.env, edariEnvExtra());
     const lookupPath = path.join(getPortalDir(), 'sync-client', 'material-lookup.js');
+    delete require.cache[require.resolve(lookupPath)];
     const { lookupEdariMaterial } = require(lookupPath);
     const material = await lookupEdariMaterial(code);
     if (!material) return { ok: false, error: 'المادة غير موجودة في Edari' };
