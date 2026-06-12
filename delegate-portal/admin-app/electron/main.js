@@ -405,6 +405,39 @@ function createWindow({ show = !START_HIDDEN } = {}) {
   ]));
 }
 
+function runFetchEdariMaterialsScript() {
+  return new Promise((resolve, reject) => {
+    const portalDir = getPortalDir();
+    const script = path.join(portalDir, 'sync-client', 'refresh-materials.js');
+    const nodeBin = getNodeBin();
+    let stdout = '';
+
+    const child = spawn(nodeBin, [script], {
+      cwd: portalDir,
+      env: {
+        ...process.env,
+        EDARI_READER_ROOT: getEdariReaderRoot(),
+        NODE_BIN: nodeBin
+      },
+      windowsHide: true
+    });
+
+    child.stdout.on('data', (d) => { stdout += d.toString(); });
+    child.stderr.on('data', (d) => { stdout += d.toString(); });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code !== 0) return reject(new Error(stdout.trim() || `Refresh materials exit ${code}`));
+      const line = stdout.split(/\r?\n/).reverse().find((row) => row.startsWith('@MATERIALS|'));
+      if (!line) return reject(new Error('تعذّر قراءة المواد من Edari'));
+      try {
+        resolve(JSON.parse(line.slice('@MATERIALS|'.length)));
+      } catch (err) {
+        reject(err);
+      }
+    });
+  });
+}
+
 function runListEdariTreesScript() {
   return new Promise((resolve, reject) => {
     const portalDir = getPortalDir();
@@ -497,6 +530,10 @@ ipcMain.handle('run-local-sync', (_e, { serverUrl, syncKey, treeSeqs }) => {
 
 ipcMain.handle('list-edari-trees', () => {
   return runListEdariTreesScript();
+});
+
+ipcMain.handle('fetch-edari-materials', () => {
+  return runFetchEdariMaterialsScript();
 });
 
 ipcMain.handle('get-auto-sync-state', () => backgroundSync?.getState() || {});

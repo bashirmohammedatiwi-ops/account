@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('edariDesktop', {
   useRemote: readLaunchArg('edari-remote', '1') !== '0',
   runLocalSync: (serverUrl, syncKey, treeSeqs) => ipcRenderer.invoke('run-local-sync', { serverUrl, syncKey, treeSeqs }),
   listEdariTrees: () => ipcRenderer.invoke('list-edari-trees'),
+  fetchEdariMaterials: () => ipcRenderer.invoke('fetch-edari-materials'),
   getAutoSyncState: () => ipcRenderer.invoke('get-auto-sync-state'),
   saveBackgroundSyncSettings: (patch) => ipcRenderer.invoke('save-background-sync-settings', patch),
   setAutoSyncEnabled: (enabled) => ipcRenderer.invoke('set-auto-sync-enabled', enabled),

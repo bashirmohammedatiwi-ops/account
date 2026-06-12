@@ -452,17 +452,20 @@ function refreshRegisteredProductFromEdari(parsed) {
   let updated = 0;
   const wholesale = edariWholesalePrice(parsed.sellPr1, parsed.sellPr2);
   for (const id of findRegisteredProductIds(parsed)) {
-    updateProduct(id, {
+    const row = db.prepare('SELECT price_override FROM products WHERE id = ?').get(id);
+    const patch = {
       edariSeq: parsed.seq,
       skuNum: parsed.num,
       barcode: parsed.barcode || parsed.num,
       name: parsed.name1,
       unit: parsed.unit,
-      price: wholesale,
       minOrderQty: Number(parsed.stockQty) || 0,
-      priceOverride: false,
       syncedAt: now
-    });
+    };
+    if (!row?.price_override) {
+      patch.price = wholesale;
+    }
+    updateProduct(id, patch);
     updated += 1;
   }
   return updated;
@@ -473,21 +476,47 @@ function syncProductFromEdari(id) {
   if (!product) throw new Error('المنتج غير موجود');
   const material = findEdariMaterialByCode(product.edariSeq || product.barcode || product.skuNum);
   if (!material?.seq) throw new Error('المادة غير موجودة في Edari — نفّذ مزامنة كاملة أولاً');
-  return updateProduct(id, {
+  const patch = {
     edariSeq: material.seq,
     skuNum: material.num,
     barcode: material.barcode || material.num,
     name: material.name,
     unit: material.unit,
-    price: material.wholesalePrice ?? material.price,
     minOrderQty: Number(material.stockQty ?? material.qty) || 0,
-    priceOverride: false,
     syncedAt: new Date().toISOString()
-  });
+  };
+  if (!product.priceOverride) {
+    patch.price = material.wholesalePrice ?? material.price;
+  }
+  return updateProduct(id, patch);
 }
 
 function syncSectionFromEdari(sectionId) {
   const rows = db.prepare('SELECT id FROM products WHERE section_id = ?').all(sectionId);
+  let updated = 0;
+  const errors = [];
+  for (const row of rows) {
+    try {
+      syncProductFromEdari(row.id);
+      updated += 1;
+    } catch (err) {
+      errors.push({ id: row.id, error: err.message });
+    }
+  }
+  return { updated, total: rows.length, errors };
+}
+
+function refreshCatalogPricesFromCache({ sectionId, branchId } = {}) {
+  let sql = 'SELECT id FROM products WHERE 1=1';
+  const params = [];
+  if (sectionId) {
+    sql += ' AND section_id = ?';
+    params.push(sectionId);
+  } else if (branchId) {
+    sql += ' AND section_id IN (SELECT id FROM catalog_sections WHERE branch_id = ?)';
+    params.push(branchId);
+  }
+  const rows = db.prepare(sql).all(...params);
   let updated = 0;
   const errors = [];
   for (const row of rows) {
@@ -833,6 +862,7 @@ module.exports = {
   syncProductFromEdari,
   syncSectionFromEdari,
   syncMaterialsFromEdari,
+  refreshCatalogPricesFromCache,
   purgeAllCatalogProducts,
   reorderProducts,
   importProductsRows,
