@@ -1,9 +1,10 @@
-const { app, BrowserWindow, Menu, ipcMain, Tray, nativeImage } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, Tray, nativeImage, dialog } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
 const { createBackgroundSync } = require('./background-sync');
+const { startStaticAdmin } = require('./static-admin');
 
 const PORT = Number(process.env.PORT || 4100);
 const BACKEND_URL = (process.env.BACKEND_URL || 'http://187.124.23.65:5005').replace(/\/$/, '');
@@ -27,6 +28,7 @@ const START_HIDDEN = process.argv.includes('--background') || process.argv.inclu
 let mainWindow;
 let tray;
 let serverProcess;
+let staticAdminServer;
 let startedServer = false;
 let appIsQuitting = false;
 let backgroundSync;
@@ -115,25 +117,27 @@ function spawnServer() {
   return new Promise((resolve, reject) => {
     const portalDir = getPortalDir();
     if (USE_BUNDLED_UI) {
-      const script = path.join(__dirname, 'static-admin.js');
-      serverProcess = spawn(getNodeBin(), [script, portalDir, String(BUNDLED_ADMIN_PORT)], {
-        cwd: __dirname,
-        env: process.env,
-        stdio: 'ignore',
-        windowsHide: true
-      });
-    } else {
-      const serverScript = path.join(portalDir, 'server.js');
-      serverProcess = spawn(getNodeBin(), [serverScript], {
-        cwd: portalDir,
-        env: serverEnv(),
-        stdio: 'ignore',
-        windowsHide: true
-      });
+      startStaticAdmin(portalDir, BUNDLED_ADMIN_PORT)
+        .then((server) => {
+          staticAdminServer = server;
+          startedServer = true;
+          return checkHealth(`http://127.0.0.1:${BUNDLED_ADMIN_PORT}`);
+        })
+        .then(resolve)
+        .catch(reject);
+      return;
     }
+
+    const serverScript = path.join(portalDir, 'server.js');
+    serverProcess = spawn(getNodeBin(), [serverScript], {
+      cwd: portalDir,
+      env: serverEnv(),
+      stdio: 'ignore',
+      windowsHide: true
+    });
     startedServer = true;
     serverProcess.on('error', reject);
-    checkHealth(`http://127.0.0.1:${USE_BUNDLED_UI ? BUNDLED_ADMIN_PORT : PORT}`).then(resolve).catch(reject);
+    checkHealth(`http://127.0.0.1:${PORT}`).then(resolve).catch(reject);
   });
 }
 
@@ -517,6 +521,17 @@ ipcMain.handle('run-background-sync-now', async () => {
   return backgroundSync?.runNow();
 });
 
+function showStartupError(err) {
+  const message = String(err?.message || err || 'خطأ غير معروف');
+  console.error(message);
+  if (!START_HIDDEN) {
+    dialog.showErrorBox(
+      'Edari Admin — تعذّر التشغيل',
+      `${message}\n\nتأكد من:\n• اتصال الإنترنت\n• أن السيرفر يعمل: ${BACKEND_URL}\n• إعادة تثبيت التطبيق إن استمرت المشكلة`
+    );
+  }
+}
+
 app.whenReady().then(async () => {
   try {
     if (USE_LOCAL_SERVER || USE_BUNDLED_UI) {
@@ -535,7 +550,7 @@ app.whenReady().then(async () => {
       }, 15000);
     }
   } catch (err) {
-    console.error(err);
+    showStartupError(err);
     if (!START_HIDDEN) app.quit();
   }
 });
@@ -551,6 +566,10 @@ app.on('activate', () => {
 app.on('before-quit', () => {
   appIsQuitting = true;
   backgroundSync?.shutdown();
+  if (staticAdminServer) {
+    staticAdminServer.close();
+    staticAdminServer = null;
+  }
   if (startedServer && serverProcess) {
     serverProcess.kill();
   }

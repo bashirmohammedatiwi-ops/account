@@ -63,7 +63,7 @@ async function loadInvoicesPage() {
       <td dir="ltr">${inv.lineCount}</td>
       <td>
         <button type="button" class="btn btn-soft btn-sm" data-inv-view="${esc(inv.seq)}">عرض</button>
-        <a class="btn btn-soft btn-sm" href="${API}/api/admin/invoices/${encodeURIComponent(inv.seq)}.pdf" target="_blank">PDF</a>
+        <a class="btn btn-soft btn-sm" href="${getApiBase()}/api/admin/invoices/${encodeURIComponent(inv.seq)}.pdf" target="_blank">PDF</a>
       </td>
     </tr>`).join('') || '<tr><td colspan="7">لا توجد فواتير — نفّذ مزامنة أولاً</td></tr>';
 
@@ -311,7 +311,7 @@ async function loadCatalogProducts() {
     <tr data-product-id="${p.id}" ${dragEnabled ? 'draggable="true"' : ''} class="${dragEnabled ? 'product-draggable' : ''}">
       <td class="col-check"><input type="checkbox" class="product-check" data-id="${p.id}"></td>
       <td class="col-drag">${dragEnabled ? '<span class="drag-handle" title="اسحب">⠿</span>' : ''}</td>
-      <td>${p.imageUrl ? `<img src="${API}${p.imageUrl}" alt="" class="product-thumb">` : '<span class="product-thumb-empty">—</span>'}</td>
+      <td>${p.imageUrl ? `<img src="${getApiBase()}${p.imageUrl}" alt="" class="product-thumb">` : '<span class="product-thumb-empty">—</span>'}</td>
       <td dir="ltr">${esc(p.barcode || p.skuNum || '—')}</td>
       <td>
         <strong>${esc(p.name)}</strong>
@@ -420,7 +420,7 @@ function setProductImagePreview(p) {
   const removeBtn = document.getElementById('btnProductRemoveImage');
   if (!box) return;
   if (p?.imageUrl) {
-    box.innerHTML = `<img src="${API}${p.imageUrl}" alt="" class="product-preview-img">`;
+    box.innerHTML = `<img src="${getApiBase()}${p.imageUrl}" alt="" class="product-preview-img">`;
     removeBtn?.classList.remove('hidden');
   } else {
     box.innerHTML = '<span class="product-image-placeholder">📦</span>';
@@ -722,6 +722,22 @@ function openBulkMoveModal(ids) {
   };
 }
 
+function openCatalogCreate(type) {
+  if (type === 'section' && !commerce.selectedBranchId) {
+    return showToast('اختر فرعاً أولاً', 'err');
+  }
+  const modal = document.getElementById('catalogEditModal');
+  document.getElementById('catalogEditType').value = type;
+  document.getElementById('catalogEditId').value = '';
+  document.getElementById('catalogEditDelete').classList.add('hidden');
+  document.getElementById('catalogEditTitle').textContent = type === 'branch' ? 'فرع جديد' : 'قسم جديد';
+  document.getElementById('catalogEditName').value = '';
+  document.getElementById('catalogEditSort').value = 0;
+  document.getElementById('catalogEditActive').checked = true;
+  modal.classList.remove('hidden');
+  setTimeout(() => document.getElementById('catalogEditName')?.focus(), 120);
+}
+
 function openCatalogEdit(type, id) {
   const modal = document.getElementById('catalogEditModal');
   document.getElementById('catalogEditType').value = type;
@@ -750,7 +766,8 @@ function openCatalogEdit(type, id) {
 async function saveCatalogEdit(e) {
   e.preventDefault();
   const type = document.getElementById('catalogEditType').value;
-  const id = Number(document.getElementById('catalogEditId').value);
+  const idRaw = document.getElementById('catalogEditId').value;
+  const id = idRaw ? Number(idRaw) : 0;
   const body = {
     name: document.getElementById('catalogEditName').value.trim(),
     sortOrder: Number(document.getElementById('catalogEditSort').value || 0),
@@ -759,16 +776,28 @@ async function saveCatalogEdit(e) {
   if (!body.name) return showToast('الاسم مطلوب', 'err');
 
   try {
-    if (type === 'branch') {
-      await commerceApi(`/catalog/branches/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    if (id) {
+      if (type === 'branch') {
+        await commerceApi(`/catalog/branches/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+      } else {
+        await commerceApi(`/catalog/sections/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+      }
+    } else if (type === 'branch') {
+      const data = await commerceApi('/catalog/branches', { method: 'POST', body: JSON.stringify(body) });
+      commerce.selectedBranchId = data.branch?.id || commerce.selectedBranchId;
     } else {
-      await commerceApi(`/catalog/sections/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+      if (!commerce.selectedBranchId) return showToast('اختر فرعاً أولاً', 'err');
+      const data = await commerceApi('/catalog/sections', {
+        method: 'POST',
+        body: JSON.stringify({ ...body, branchId: commerce.selectedBranchId })
+      });
+      commerce.selectedSectionId = data.section?.id || commerce.selectedSectionId;
     }
-    showToast('تم الحفظ');
+    showToast(id ? 'تم الحفظ' : 'تمت الإضافة');
     document.getElementById('catalogEditModal').classList.add('hidden');
     await loadCatalogPage();
   } catch (err) {
-    showToast(err.message, 'err');
+    showToast(err.message || 'فشل الحفظ', 'err');
   }
 }
 
@@ -828,7 +857,7 @@ function parseCsvToRows(text) {
 
 function exportProductsCsv() {
   const qs = buildProductQuery().replace(/offset=\d+/, 'offset=0').replace(/limit=\d+/, 'limit=5000');
-  const url = `${API}/api/admin/products/export.csv?${qs}`;
+  const url = `${getApiBase()}/api/admin/products/export.csv?${qs}`;
   window.open(url, '_blank');
 }
 
@@ -957,23 +986,9 @@ function initCommerceAdmin() {
     if (e.key === 'Enter') loadInvoicesPage();
   });
 
-  document.getElementById('btnAddBranch')?.addEventListener('click', async () => {
-    const name = prompt('اسم الفرع التجاري:');
-    if (!name) return;
-    await commerceApi('/catalog/branches', { method: 'POST', body: JSON.stringify({ name }) });
-    await loadCatalogPage();
-  });
+  document.getElementById('btnAddBranch')?.addEventListener('click', () => openCatalogCreate('branch'));
 
-  document.getElementById('btnAddSection')?.addEventListener('click', async () => {
-    if (!commerce.selectedBranchId) return alert('اختر فرعاً');
-    const name = prompt('اسم القسم:');
-    if (!name) return;
-    await commerceApi('/catalog/sections', {
-      method: 'POST',
-      body: JSON.stringify({ branchId: commerce.selectedBranchId, name })
-    });
-    await loadCatalogSections();
-  });
+  document.getElementById('btnAddSection')?.addEventListener('click', () => openCatalogCreate('section'));
 
   document.getElementById('btnAddProduct')?.addEventListener('click', () => openProductModal());
 

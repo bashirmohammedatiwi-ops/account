@@ -1,22 +1,31 @@
-const API = resolveApiBase();
-
 function resolveApiBase() {
-  const saved = localStorage.getItem('backendUrl');
-  if (saved) return saved.replace(/\/$/, '');
+  const remote = (
+    window.edariDesktop?.backendUrl
+    || window.ADMIN_CONFIG?.BACKEND_URL
+    || ''
+  ).trim().replace(/\/$/, '');
 
-  const configured = String(window.ADMIN_CONFIG?.BACKEND_URL || '').trim();
-  if (configured) {
+  const saved = (localStorage.getItem('backendUrl') || '').trim().replace(/\/$/, '');
+  if (saved && !isLocalhostUrl(saved)) return saved;
+
+  if (remote) {
     try {
-      const cfgOrigin = new URL(configured).origin;
-      if (window.location.origin && window.location.origin !== 'null' && window.location.origin === cfgOrigin) {
+      const remoteOrigin = new URL(remote).origin;
+      if (window.location.origin && window.location.origin !== 'null' && window.location.origin === remoteOrigin) {
         return '';
       }
     } catch { /* ignore */ }
-    return configured.replace(/\/$/, '');
+    return remote;
   }
 
   return '';
 }
+
+function getApiBase() {
+  return resolveApiBase();
+}
+
+window.getApiBase = getApiBase;
 
 function getBackendDisplayUrl() {
   return resolveApiBase() || window.location.origin || window.ADMIN_CONFIG?.BACKEND_URL || '—';
@@ -133,7 +142,7 @@ function fmtDate(v) {
 
 async function api(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
-  const res = await fetch(`${API}${path}`, { ...opts, headers });
+  const res = await fetch(`${getApiBase()}${path}`, { ...opts, headers });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
