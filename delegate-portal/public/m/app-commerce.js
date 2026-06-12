@@ -247,23 +247,14 @@ function todayInvoiceDate() {
   return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
 }
 
-function renderEdariInvoiceDocument(lines, meta = {}) {
+function renderInvoiceHeroBlock(lines, meta = {}) {
   const {
     title = 'فاتورة طلب مندوب',
     clientName = '—',
     clientNum = '',
     docNum = 'مسودة',
-    remarks = '',
-    readonly = false
+    remarks = ''
   } = meta;
-
-  if (!lines.length) {
-    return `
-      <div class="inv-order-doc-empty-compact">
-        <span>🧾</span>
-        <p>أضف منتجات بالضغط على <strong>+</strong> — تظهر هنا كفاتورة Edari</p>
-      </div>`;
-  }
 
   const total = lines.reduce((s, l) => s + orderLineTotal(l), 0);
   const qtySum = lines.reduce((s, l) => s + Number(l.quant || 0), 0);
@@ -272,7 +263,7 @@ function renderEdariInvoiceDocument(lines, meta = {}) {
   return `
     <div class="doc-panel invoice-doc inv-order-doc">
       <div class="doc-head-row">
-        <img class="doc-logo" src="assets/logo.png" alt="" width="40" height="40">
+        <img class="doc-logo" src="assets/logo.png" alt="" width="36" height="36">
         <div class="doc-head-main">
           <span class="doc-label">شركة ديما الحياة</span>
           <strong class="doc-title">${esc(title)}</strong>
@@ -294,21 +285,33 @@ function renderEdariInvoiceDocument(lines, meta = {}) {
           </tr>
         </tbody>
       </table>
-      <div class="table-scroll">
-        <table class="data-table inv-table" dir="rtl">
-          <thead>
-            <tr>
-              <th class="col-n">م</th>
-              <th class="col-barcode">الباركود</th>
-              <th class="col-name">اسم المادة</th>
-              <th class="col-amt">الكمية</th>
-              <th class="col-amt">هدية</th>
-              <th class="col-amt">سعر الوحدة</th>
-              <th class="col-amt">المبلغ</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${lines.map((line, i) => {
+    </div>`;
+}
+
+function renderInvoiceLinesBlock(lines, meta = {}) {
+  const { readonly = false } = meta;
+  if (!lines.length) {
+    return '<div class="empty-state"><div class="icon">🧾</div><p>الفاتورة فارغة — أضف منتجات بالضغط على +</p></div>';
+  }
+
+  const total = lines.reduce((s, l) => s + orderLineTotal(l), 0);
+
+  return `
+    <div class="table-scroll">
+      <table class="data-table inv-table" dir="rtl">
+        <thead>
+          <tr>
+            <th class="col-n">م</th>
+            <th class="col-barcode">الباركود</th>
+            <th class="col-name">اسم المادة</th>
+            <th class="col-amt">الكمية</th>
+            <th class="col-amt">هدية</th>
+            <th class="col-amt">سعر الوحدة</th>
+            <th class="col-amt">المبلغ</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${lines.map((line, i) => {
     const qtyCells = readonly
       ? `${qtyTd(line.quant)}${qtyTd(line.bonus)}`
       : `<td class="col-amt inv-editable-qty">
@@ -335,34 +338,57 @@ function renderEdariInvoiceDocument(lines, meta = {}) {
               ${invMoneyTd(orderLineTotal(line), 'net')}
             </tr>`;
   }).join('')}
-          </tbody>
-          <tfoot>
-            <tr class="row-sum">
-              <td colspan="6" class="total-label">إجمالي الفاتورة</td>
-              <td class="num" dir="ltr">${fmtInvInt(total)}</td>
-            </tr>
-            <tr class="row-total">
-              <td colspan="6" class="total-label">الصافي للدفع</td>
-              <td class="num net" dir="ltr">${fmtInvInt(total)}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+        </tbody>
+        <tfoot>
+          <tr class="row-sum">
+            <td colspan="6" class="total-label">إجمالي الفاتورة</td>
+            <td class="num" dir="ltr">${fmtInvInt(total)}</td>
+          </tr>
+          <tr class="row-total">
+            <td colspan="6" class="total-label">الصافي للدفع</td>
+            <td class="num net" dir="ltr">${fmtInvInt(total)}</td>
+          </tr>
+        </tfoot>
+      </table>
     </div>`;
 }
 
+function renderEdariInvoiceDocument(lines, meta = {}) {
+  if (!lines.length) {
+    return `
+      <div class="inv-order-doc-empty-compact">
+        <span>🧾</span>
+        <p>أضف منتجات بالضغط على <strong>+</strong> — تظهر هنا كفاتورة Edari</p>
+      </div>`;
+  }
+  return renderInvoiceHeroBlock(lines, meta) + renderInvoiceLinesBlock(lines, meta);
+}
+
 function renderLiveInvoicePanel() {
-  const panel = document.getElementById('invoiceModalPanel');
-  if (!panel) return;
+  const hero = document.getElementById('invoiceModalHero');
+  const linesEl = document.getElementById('invoiceModalLines');
+  const countEl = document.getElementById('invoiceModalLineCount');
+  if (!hero || !linesEl) return;
+
   const lines = buildOrderLines();
   const c = commerce.invoiceCustomer;
-  panel.innerHTML = renderEdariInvoiceDocument(lines, {
+  const meta = {
     clientName: c?.name1 || '—',
     clientNum: c?.num || '',
     docNum: 'مسودة',
     remarks: commerce.invoiceNotes || '',
     readonly: false
-  });
+  };
+
+  if (!lines.length) {
+    hero.innerHTML = '';
+    linesEl.innerHTML = renderInvoiceLinesBlock(lines, meta);
+    if (countEl) countEl.textContent = '0 بند';
+  } else {
+    hero.innerHTML = renderInvoiceHeroBlock(lines, meta);
+    linesEl.innerHTML = renderInvoiceLinesBlock(lines, meta);
+    if (countEl) countEl.textContent = `${lines.length} ${lines.length === 1 ? 'بند' : 'بنود'}`;
+  }
   renderModalInvoiceCustomer();
 }
 
@@ -374,7 +400,7 @@ function renderModalInvoiceCustomer() {
     el.innerHTML = `<strong>${esc(c.name1)}</strong><span dir="ltr">${esc(c.num || '')}</span>`;
     el.classList.add('has-customer');
   } else {
-    el.innerHTML = '<span class="muted">لم يُختر زبون — يمكن اختياره من الشريط السفلي</span>';
+    el.innerHTML = '<span class="muted">لم يُختر زبون — اختر من الكشوفات</span>';
     el.classList.remove('has-customer');
   }
 }
@@ -403,31 +429,13 @@ function closeInvoiceModal() {
   document.body.classList.remove('inv-sheet-open');
 }
 
-function renderActionBarCustomer() {
-  const el = document.getElementById('actionBarCustomer');
-  if (!el) return;
-  const c = commerce.invoiceCustomer;
-  if (c?.seq) {
-    el.innerHTML = `<strong>${esc(c.name1)}</strong><span dir="ltr">${esc(c.num || '')}</span>`;
-    el.classList.add('has-customer');
-  } else {
-    el.innerHTML = '<span class="muted">لم يُختر زبون — اختر من الكشوفات</span>';
-    el.classList.remove('has-customer');
-  }
-}
-
 function updateInvoiceUI() {
   if (isInvoiceModalOpen()) renderLiveInvoicePanel();
-  renderActionBarCustomer();
   const total = invoiceTotalAmount();
   const count = invoiceLineCount();
-  const totalEl = document.getElementById('invoiceActionTotal');
-  const countEl = document.getElementById('invoiceActionCount');
   const badgeEl = document.getElementById('invoiceOpenBadge');
   const modalTotal = document.getElementById('invoiceModalTotal');
-  if (totalEl) totalEl.textContent = fmtInvInt(total);
   if (modalTotal) modalTotal.textContent = fmtInvInt(total);
-  if (countEl) countEl.textContent = `${count} ${count === 1 ? 'بند' : 'بنود'}`;
   if (badgeEl) badgeEl.textContent = String(count);
   const bar = document.getElementById('invoiceActionBar');
   const openBtn = document.getElementById('btnOpenInvoice');
@@ -561,6 +569,7 @@ async function submitInvoice() {
       })
     });
     clearInvoiceDraft({ resetNotes: true });
+    closeInvoiceModal();
     alert(`تم إرسال الطلب ${data.order?.orderNo || ''} إلى لوحة التحكم`);
     goToScreen('my-orders');
     await loadMyOrders();
@@ -828,7 +837,7 @@ function initCommerceMobile() {
     adjustDraft(btn.dataset.productId, btn.dataset.field, Number(btn.dataset.delta));
   });
 
-  document.getElementById('invoiceModalPanel')?.addEventListener('click', (e) => {
+  document.getElementById('invoiceModalLines')?.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-invoice-action]');
     if (!btn) return;
     adjustDraft(btn.dataset.productId, btn.dataset.field, Number(btn.dataset.delta));
@@ -836,7 +845,6 @@ function initCommerceMobile() {
 
   document.getElementById('btnOpenInvoice')?.addEventListener('click', () => openInvoiceModal());
   document.getElementById('btnCloseInvoice')?.addEventListener('click', closeInvoiceModal);
-  document.getElementById('btnCloseInvoiceFoot')?.addEventListener('click', closeInvoiceModal);
   document.getElementById('invoiceOverlay')?.addEventListener('click', (e) => {
     if (e.target.id === 'invoiceOverlay') closeInvoiceModal();
   });

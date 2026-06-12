@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260613showcase3">
+  <link rel="stylesheet" href="styles.css?v=20260613showcase4">
   <link rel="stylesheet" href="portal-pro.css?v=20260611home2">
 </head>
 <body class="ed-body">
@@ -314,7 +314,7 @@
             <h3 class="inv-page-title">عرض وطلب</h3>
             <p class="inv-page-meta" id="shopProductsMeta">—</p>
           </div>
-          <p class="showcase-hint">صور المنتجات للعرض على الزبون · اضغط «عرض الفاتورة» في الأسفل</p>
+          <p class="showcase-hint">صور المنتجات للعرض على الزبون · زر «عرض الفاتورة» في الأسفل</p>
           <div class="inv-resume-banner hidden" id="invoiceResumeBanner">
             <span id="invoiceResumeText">لديك فاتورة محفوظة</span>
           </div>
@@ -333,33 +333,12 @@
           </main>
         </div>
 
-        <footer class="showcase-action-bar" id="invoiceActionBar">
-          <div class="showcase-action-customer-row">
-            <div class="showcase-invoice-customer" id="actionBarCustomer">
-              <span class="muted">لم يُختر زبون — اختر من الكشوفات</span>
-            </div>
-            <button type="button" class="btn soft btn-sm" id="btnPickCustomer">اختر زبون</button>
-          </div>
-          <label class="field showcase-notes">
-            <span class="field-label">ملاحظات</span>
-            <textarea id="invoiceNotes" rows="1" placeholder="ملاحظات للإدارة (اختياري)..."></textarea>
-          </label>
-          <div class="showcase-action-foot">
-            <div class="showcase-action-total">
-              <span>إجمالي الفاتورة</span>
-              <strong id="invoiceActionTotal" dir="ltr">0</strong>
-              <span class="showcase-action-count" id="invoiceActionCount">0 بند</span>
-            </div>
-            <button type="button" class="btn showcase-invoice-open" id="btnOpenInvoice">
-              <span class="showcase-invoice-open-icon" aria-hidden="true">🧾</span>
-              <span class="showcase-invoice-open-text">عرض الفاتورة</span>
-              <span class="showcase-invoice-open-badge" id="invoiceOpenBadge">0</span>
-            </button>
-            <div class="showcase-action-btns">
-              <button type="button" class="btn soft" id="btnClearInvoice">تفريغ</button>
-              <button type="button" class="btn primary" id="btnSubmitInvoice">إرسال للوحة التحكم</button>
-            </div>
-          </div>
+        <footer class="showcase-action-bar showcase-action-bar-minimal" id="invoiceActionBar">
+          <button type="button" class="btn showcase-invoice-open showcase-invoice-open-only" id="btnOpenInvoice">
+            <span class="showcase-invoice-open-icon" aria-hidden="true">🧾</span>
+            <span class="showcase-invoice-open-text">عرض الفاتورة</span>
+            <span class="showcase-invoice-open-badge" id="invoiceOpenBadge">0</span>
+          </button>
         </footer>
       </section>
 
@@ -391,15 +370,34 @@
           <button type="button" class="icon-btn" id="btnCloseInvoice" aria-label="إغلاق">×</button>
         </header>
         <div class="inv-sheet-body inv-sheet-body-invoice">
-          <div class="showcase-invoice-customer showcase-invoice-customer-modal" id="modalInvoiceCustomer"></div>
-          <div class="showcase-invoice-doc" id="invoiceModalPanel"></div>
+          <div class="inv-modal-toolbar">
+            <div class="showcase-invoice-customer" id="modalInvoiceCustomer">
+              <span class="muted">لم يُختر زبون — اختر من الكشوفات</span>
+            </div>
+            <button type="button" class="btn soft btn-sm" id="btnPickCustomer">اختر زبون</button>
+          </div>
+          <label class="field inv-modal-notes">
+            <span class="field-label">ملاحظات</span>
+            <textarea id="invoiceNotes" rows="2" placeholder="ملاحظات للإدارة (اختياري)..."></textarea>
+          </label>
+          <div class="invoice-hero" id="invoiceModalHero"></div>
+          <div class="invoice-lines-section">
+            <div class="section-head">
+              <h3>بنود الفاتورة</h3>
+              <span class="section-count" id="invoiceModalLineCount">0 بند</span>
+            </div>
+            <div id="invoiceModalLines"></div>
+          </div>
         </div>
         <footer class="inv-sheet-foot inv-sheet-foot-invoice">
           <div class="showcase-modal-total">
             <span>إجمالي الفاتورة</span>
             <strong id="invoiceModalTotal" dir="ltr">0</strong>
           </div>
-          <button type="button" class="btn soft" id="btnCloseInvoiceFoot">إغلاق</button>
+          <div class="showcase-modal-actions">
+            <button type="button" class="btn soft" id="btnClearInvoice">تفريغ</button>
+            <button type="button" class="btn primary" id="btnSubmitInvoice">إرسال للوحة التحكم</button>
+          </div>
         </footer>
       </div>
     </div>
@@ -429,6 +427,6 @@
     </div>
   </div>
   <script src="app.js?v=20260613commerce"></script>
-  <script src="app-commerce.js?v=20260613showcase3"></script>
+  <script src="app-commerce.js?v=20260613showcase4"></script>
 </body>
 </html>
