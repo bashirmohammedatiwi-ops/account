@@ -39,8 +39,17 @@ function mapProduct(row, extras = {}) {
   };
 }
 
+function edariWholesalePrice(sellPr1, sellPr2) {
+  const wholesale = Number(sellPr2);
+  if (wholesale > 0) return wholesale;
+  return Number(sellPr1) || 0;
+}
+
 function mapEdariMaterial(row) {
   if (!row) return null;
+  const sellPr1 = Number(row.sell_pr1 ?? row.SellPr1 ?? 0);
+  const sellPr2 = Number(row.sell_pr2 ?? row.SellPr2 ?? 0);
+  const bonus = Number(row.bonus ?? row.Bonus ?? 0);
   return {
     seq: String(row.seq || row.Seq || ''),
     num: String(row.num || row.Num || ''),
@@ -48,9 +57,11 @@ function mapEdariMaterial(row) {
     name: String(row.name1 || row.Name1 || ''),
     name2: String(row.name2 || row.Name2 || ''),
     unit: String(row.unit || row.DefUnit || ''),
-    price: Number(row.sell_pr1 ?? row.SellPr1 ?? 0),
-    price2: Number(row.sell_pr2 ?? row.SellPr2 ?? 0),
-    bonus: Number(row.bonus ?? row.Bonus ?? 0),
+    priceRetail: sellPr1,
+    wholesalePrice: edariWholesalePrice(sellPr1, sellPr2),
+    price: edariWholesalePrice(sellPr1, sellPr2),
+    bonus,
+    qty: bonus,
     remarks: String(row.remarks || row.Remarks || ''),
     syncedAt: row.synced_at || ''
   };
@@ -422,19 +433,19 @@ function findRegisteredProductIds(parsed) {
 function refreshRegisteredProductFromEdari(parsed) {
   const now = new Date().toISOString();
   let updated = 0;
+  const wholesale = edariWholesalePrice(parsed.sellPr1, parsed.sellPr2);
   for (const id of findRegisteredProductIds(parsed)) {
-    const row = db.prepare('SELECT price_override, bonus_default FROM products WHERE id = ?').get(id);
-    const patch = {
+    updateProduct(id, {
       edariSeq: parsed.seq,
       skuNum: parsed.num,
       barcode: parsed.barcode || parsed.num,
       name: parsed.name1,
       unit: parsed.unit,
+      price: wholesale,
+      minOrderQty: Number(parsed.bonus) || 0,
+      priceOverride: false,
       syncedAt: now
-    };
-    if (!row?.price_override) patch.price = parsed.sellPr1;
-    if (parsed.bonus && !Number(row?.bonus_default)) patch.bonusDefault = parsed.bonus;
-    updateProduct(id, patch);
+    });
     updated += 1;
   }
   return updated;
@@ -445,17 +456,17 @@ function syncProductFromEdari(id) {
   if (!product) throw new Error('المنتج غير موجود');
   const material = findEdariMaterialByCode(product.edariSeq || product.barcode || product.skuNum);
   if (!material?.seq) throw new Error('المادة غير موجودة في Edari — نفّذ مزامنة كاملة أولاً');
-  const patch = {
+  return updateProduct(id, {
     edariSeq: material.seq,
     skuNum: material.num,
     barcode: material.barcode || material.num,
     name: material.name,
     unit: material.unit,
+    price: material.wholesalePrice ?? material.price,
+    minOrderQty: Number(material.bonus) || 0,
+    priceOverride: false,
     syncedAt: new Date().toISOString()
-  };
-  if (!product.priceOverride) patch.price = material.price;
-  if (material.bonus) patch.bonusDefault = material.bonus;
-  return updateProduct(id, patch);
+  });
 }
 
 function syncSectionFromEdari(sectionId) {
@@ -542,32 +553,8 @@ function addProductByBarcode(sectionId, code, options = {}) {
   if (!section) throw new Error('القسم غير موجود');
 
   const material = findEdariMaterialByCode(raw);
-  const manualName = String(options.name || '').trim();
-  const formPrice = options.price != null ? Number(options.price) : null;
-
   if (!material?.seq) {
-    if (!manualName || formPrice == null) {
-      throw new Error('أدخل الاسم والسعر — أو باركود موجود في Edari');
-    }
-    const duplicate = db.prepare(`
-      SELECT id FROM products
-      WHERE section_id = ? AND (barcode = ? OR sku_num = ?)
-    `).get(sectionId, raw, raw);
-    if (duplicate) throw new Error('هذا المنتج مُسجَّل مسبقاً في هذا القسم');
-
-    return createProduct({
-      sectionId,
-      barcode: raw,
-      skuNum: raw,
-      name: manualName,
-      unit: options.unit || '',
-      price: formPrice,
-      minOrderQty: Number(options.minOrderQty ?? 1),
-      priceOverride: true,
-      isActive: options.isActive !== false,
-      sortOrder: Number(options.sortOrder || 0),
-      description: options.description || ''
-    });
+    throw new Error('المادة غير موجودة في Edari — نفّذ مزامنة كاملة أولاً');
   }
 
   const duplicate = db.prepare(`
@@ -579,21 +566,18 @@ function addProductByBarcode(sectionId, code, options = {}) {
 
   if (duplicate) throw new Error('هذا المنتج مُسجَّل مسبقاً في هذا القسم');
 
-  const price = formPrice != null ? formPrice : material.price;
-  const priceOverride = formPrice != null && formPrice !== Number(material.price);
-
   return createProduct({
     sectionId,
     edariSeq: material.seq,
     skuNum: material.num,
     barcode: material.barcode || material.num,
-    name: manualName || material.name,
+    name: String(options.name || '').trim() || material.name,
     unit: material.unit,
-    price,
-    bonusDefault: options.bonusDefault != null ? Number(options.bonusDefault) : material.bonus,
-    priceOverride: options.priceOverride != null ? !!options.priceOverride : priceOverride,
-    description: options.description || material.remarks || '',
-    minOrderQty: Number(options.minOrderQty ?? 1),
+    price: material.wholesalePrice ?? material.price,
+    bonusDefault: Number(material.bonus) || 0,
+    priceOverride: false,
+    description: material.remarks || '',
+    minOrderQty: Number(material.bonus) || 0,
     sortOrder: Number(options.sortOrder || 0),
     isActive: options.isActive !== false,
     syncedAt: material.syncedAt || new Date().toISOString()

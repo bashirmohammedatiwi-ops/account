@@ -174,7 +174,7 @@
             <div class="panel-head">
               <div>
                 <h2 class="panel-title">منتجات القسم</h2>
-                <p class="panel-desc muted">أضف بالباركود — الاسم والسعر والعدد فقط</p>
+                <p class="panel-desc muted">الباركود والاسم — العدد والسعر (نصف الجملة) من Edari ويتحدّثان بالمزامنة</p>
               </div>
               <div class="btn-row">
                 <button type="button" class="btn btn-primary btn-sm" id="btnAddProduct">+ إضافة منتج</button>
@@ -467,18 +467,19 @@
           <div class="edari-live-preview hidden" id="edariLivePreview"></div>
           <label class="field">
             <span>الاسم</span>
-            <input type="text" id="productName" required>
+            <input type="text" id="productName" required readonly class="readonly">
           </label>
           <div class="field-row">
             <label class="field">
-              <span>العدد</span>
-              <input type="number" id="productQty" min="0" step="1" dir="ltr" value="1">
+              <span>العدد (من Edari)</span>
+              <input type="number" id="productQty" min="0" step="1" dir="ltr" value="0" readonly class="readonly">
             </label>
             <label class="field">
-              <span>السعر</span>
-              <input type="number" id="productPrice" min="0" step="1" dir="ltr" required>
+              <span>سعر نصف الجملة</span>
+              <input type="number" id="productPrice" min="0" step="1" dir="ltr" readonly class="readonly" required>
             </label>
           </div>
+          <p class="field-hint">العدد والسعر يُحدَّثان تلقائياً عند مزامنة Edari — لا يمكن تعديلهما يدوياً</p>
         </div>
 
         <div class="product-modal-advanced hidden">
@@ -510,10 +511,6 @@
               <label class="check-row">
                 <input type="checkbox" id="productIsActiveEdit" checked>
                 <span>نشط</span>
-              </label>
-              <label class="check-row">
-                <input type="checkbox" id="productPriceOverrideEdit">
-                <span>سعر يدوي — لا يُستبدل عند مزامنة Edari</span>
               </label>
               <label class="field">
                 <span>وصف (اختياري)</span>
@@ -649,6 +646,6 @@
 
   <script src="config.js"></script>
   <script src="admin.js?v=20260607catalog"></script>
-  <script src="admin-commerce.js?v=20260607simple"></script>
+  <script src="admin-commerce.js?v=20260607edari"></script>
 </body>
 </html>
