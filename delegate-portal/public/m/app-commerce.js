@@ -165,7 +165,15 @@ function syncProductRow(productId) {
   const bEl = row.querySelector('[data-draft-b]');
   if (qEl) qEl.textContent = String(d.quant || 0);
   if (bEl) bEl.textContent = String(d.bonus || 0);
-  row.classList.toggle('showcase-row-active', (d.quant || 0) > 0 || (d.bonus || 0) > 0);
+  const active = (d.quant || 0) > 0 || (d.bonus || 0) > 0;
+  row.classList.toggle('showcase-card-active', active);
+  const photo = row.querySelector('.showcase-card-photo');
+  let badge = row.querySelector('.showcase-card-badge');
+  if (active && photo && !badge) {
+    photo.insertAdjacentHTML('beforeend', '<span class="showcase-card-badge">✓ في الفاتورة</span>');
+  } else if (!active && badge) {
+    badge.remove();
+  }
 }
 
 function renderStepper(productId, field, value) {
@@ -193,22 +201,23 @@ function renderProductCard(p) {
   const stock = Number(p.minOrderQty ?? 0);
   const img = productImageSrc(p);
   return `
-    <article class="showcase-row${active ? ' showcase-row-active' : ''}" data-product-id="${p.id}">
-      <div class="showcase-row-media">
+    <article class="showcase-card${active ? ' showcase-card-active' : ''}" data-product-id="${p.id}">
+      <div class="showcase-card-photo">
         ${img
-    ? `<img src="${img}" alt="" class="showcase-row-img" loading="lazy">`
-    : '<div class="showcase-row-img showcase-row-img-empty">📦</div>'}
+    ? `<img src="${img}" alt="${esc(p.name)}" class="showcase-card-img" loading="lazy">`
+    : '<div class="showcase-card-img showcase-card-img-empty">📦</div>'}
+        ${active ? '<span class="showcase-card-badge">✓ في الفاتورة</span>' : ''}
       </div>
-      <div class="showcase-row-info">
-        <h3 class="showcase-row-name">${esc(p.name)}</h3>
-        <p class="showcase-row-barcode" dir="ltr">${esc(p.barcode || p.skuNum || '—')}</p>
-        <div class="showcase-row-meta">
-          <span class="showcase-row-price" dir="ltr">${fmtInvInt(p.price)}</span>
-          <span class="showcase-row-price-label">نصف جملة</span>
+      <div class="showcase-card-body">
+        <h3 class="showcase-card-name">${esc(p.name)}</h3>
+        <p class="showcase-card-barcode" dir="ltr">${esc(p.barcode || p.skuNum || '—')}</p>
+        <div class="showcase-card-pricing">
+          <strong class="showcase-card-price" dir="ltr">${fmtInvInt(p.price)}</strong>
+          <span class="showcase-card-price-label">نصف جملة</span>
           ${stock > 0 ? `<span class="showcase-stock">رصيد ${fmtInvInt(stock)}</span>` : ''}
         </div>
       </div>
-      <div class="showcase-row-actions">
+      <div class="showcase-card-controls">
         ${renderStepper(p.id, 'quant', d.quant || 0)}
         ${renderStepper(p.id, 'bonus', d.bonus || 0)}
       </div>
@@ -343,7 +352,7 @@ function renderEdariInvoiceDocument(lines, meta = {}) {
 }
 
 function renderLiveInvoicePanel() {
-  const panel = document.getElementById('liveInvoicePanel');
+  const panel = document.getElementById('invoiceModalPanel');
   if (!panel) return;
   const lines = buildOrderLines();
   const c = commerce.invoiceCustomer;
@@ -354,6 +363,44 @@ function renderLiveInvoicePanel() {
     remarks: commerce.invoiceNotes || '',
     readonly: false
   });
+  renderModalInvoiceCustomer();
+}
+
+function renderModalInvoiceCustomer() {
+  const el = document.getElementById('modalInvoiceCustomer');
+  if (!el) return;
+  const c = commerce.invoiceCustomer;
+  if (c?.seq) {
+    el.innerHTML = `<strong>${esc(c.name1)}</strong><span dir="ltr">${esc(c.num || '')}</span>`;
+    el.classList.add('has-customer');
+  } else {
+    el.innerHTML = '<span class="muted">لم يُختر زبون — يمكن اختياره من الشريط السفلي</span>';
+    el.classList.remove('has-customer');
+  }
+}
+
+function isInvoiceModalOpen() {
+  const overlay = document.getElementById('invoiceOverlay');
+  return overlay && !overlay.classList.contains('hidden');
+}
+
+function openInvoiceModal() {
+  renderLiveInvoicePanel();
+  const overlay = document.getElementById('invoiceOverlay');
+  overlay?.classList.remove('hidden');
+  overlay?.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('inv-sheet-open');
+  const total = invoiceTotalAmount();
+  const modalTotal = document.getElementById('invoiceModalTotal');
+  if (modalTotal) modalTotal.textContent = fmtInvInt(total);
+}
+
+function closeInvoiceModal() {
+  const overlay = document.getElementById('invoiceOverlay');
+  overlay?.classList.add('hidden');
+  overlay?.setAttribute('aria-hidden', 'true');
+  if (!document.getElementById('customerOverlay')?.classList.contains('hidden')) return;
+  document.body.classList.remove('inv-sheet-open');
 }
 
 function renderActionBarCustomer() {
@@ -370,18 +417,22 @@ function renderActionBarCustomer() {
 }
 
 function updateInvoiceUI() {
-  renderLiveInvoicePanel();
+  if (isInvoiceModalOpen()) renderLiveInvoicePanel();
   renderActionBarCustomer();
   const total = invoiceTotalAmount();
   const count = invoiceLineCount();
   const totalEl = document.getElementById('invoiceActionTotal');
   const countEl = document.getElementById('invoiceActionCount');
+  const badgeEl = document.getElementById('invoiceOpenBadge');
+  const modalTotal = document.getElementById('invoiceModalTotal');
   if (totalEl) totalEl.textContent = fmtInvInt(total);
+  if (modalTotal) modalTotal.textContent = fmtInvInt(total);
   if (countEl) countEl.textContent = `${count} ${count === 1 ? 'بند' : 'بنود'}`;
+  if (badgeEl) badgeEl.textContent = String(count);
   const bar = document.getElementById('invoiceActionBar');
-  const panel = document.getElementById('showcaseInvoicePanel');
+  const openBtn = document.getElementById('btnOpenInvoice');
   if (bar) bar.classList.toggle('has-lines', count > 0);
-  if (panel) panel.classList.toggle('has-lines', count > 0);
+  if (openBtn) openBtn.classList.toggle('has-lines', count > 0);
 }
 
 function clearInvoiceDraft({ resetNotes = true } = {}) {
@@ -391,12 +442,13 @@ function clearInvoiceDraft({ resetNotes = true } = {}) {
     const notesEl = document.getElementById('invoiceNotes');
     if (notesEl) notesEl.value = '';
   }
-  document.querySelectorAll('.showcase-row').forEach((row) => {
-    row.classList.remove('showcase-row-active');
+  document.querySelectorAll('.showcase-card').forEach((row) => {
+    row.classList.remove('showcase-card-active');
     const qEl = row.querySelector('[data-draft-q]');
     const bEl = row.querySelector('[data-draft-b]');
     if (qEl) qEl.textContent = '0';
     if (bEl) bEl.textContent = '0';
+    row.querySelector('.showcase-card-badge')?.remove();
   });
   clearInvoiceStorage();
   updateInvoiceUI();
@@ -531,11 +583,13 @@ async function openCustomerPicker() {
   document.getElementById('customerPickerTitle').textContent = 'اختر الشجرة';
   document.getElementById('customerPickerCrumb').textContent = 'الفروع من كشوف الحساب — نفس الزبائن في الكشوفات';
   document.getElementById('customerOverlay')?.classList.remove('hidden');
+  document.body.classList.add('inv-sheet-open');
   await renderCustomerTrees();
 }
 
 function closeCustomerPicker() {
   document.getElementById('customerOverlay')?.classList.add('hidden');
+  if (!isInvoiceModalOpen()) document.body.classList.remove('inv-sheet-open');
 }
 
 async function renderCustomerTrees() {
@@ -712,6 +766,10 @@ window.commerceNav = {
   },
 
   handleBack() {
+    if (isInvoiceModalOpen()) {
+      closeInvoiceModal();
+      return true;
+    }
     if (document.getElementById('customerOverlay') && !document.getElementById('customerOverlay').classList.contains('hidden')) {
       if (commerce.pickerTree) {
         commerce.pickerTree = null;
@@ -770,10 +828,17 @@ function initCommerceMobile() {
     adjustDraft(btn.dataset.productId, btn.dataset.field, Number(btn.dataset.delta));
   });
 
-  document.getElementById('liveInvoicePanel')?.addEventListener('click', (e) => {
+  document.getElementById('invoiceModalPanel')?.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-invoice-action]');
     if (!btn) return;
     adjustDraft(btn.dataset.productId, btn.dataset.field, Number(btn.dataset.delta));
+  });
+
+  document.getElementById('btnOpenInvoice')?.addEventListener('click', () => openInvoiceModal());
+  document.getElementById('btnCloseInvoice')?.addEventListener('click', closeInvoiceModal);
+  document.getElementById('btnCloseInvoiceFoot')?.addEventListener('click', closeInvoiceModal);
+  document.getElementById('invoiceOverlay')?.addEventListener('click', (e) => {
+    if (e.target.id === 'invoiceOverlay') closeInvoiceModal();
   });
 
   document.getElementById('shopProductSearch')?.addEventListener('input', (e) => {
