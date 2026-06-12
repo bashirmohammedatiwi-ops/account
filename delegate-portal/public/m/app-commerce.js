@@ -165,15 +165,7 @@ function syncProductRow(productId) {
   const bEl = row.querySelector('[data-draft-b]');
   if (qEl) qEl.textContent = String(d.quant || 0);
   if (bEl) bEl.textContent = String(d.bonus || 0);
-  const active = (d.quant || 0) > 0 || (d.bonus || 0) > 0;
-  row.classList.toggle('showcase-card-active', active);
-  const visual = row.querySelector('.showcase-card-visual');
-  let badge = row.querySelector('.showcase-card-badge');
-  if (active && visual && !badge) {
-    visual.insertAdjacentHTML('beforeend', '<span class="showcase-card-badge">في الفاتورة</span>');
-  } else if (!active && badge) {
-    badge.remove();
-  }
+  row.classList.toggle('showcase-row-active', (d.quant || 0) > 0 || (d.bonus || 0) > 0);
 }
 
 function renderStepper(productId, field, value) {
@@ -201,23 +193,22 @@ function renderProductCard(p) {
   const stock = Number(p.minOrderQty ?? 0);
   const img = productImageSrc(p);
   return `
-    <article class="showcase-card${active ? ' showcase-card-active' : ''}" data-product-id="${p.id}">
-      <div class="showcase-card-visual">
+    <article class="showcase-row${active ? ' showcase-row-active' : ''}" data-product-id="${p.id}">
+      <div class="showcase-row-media">
         ${img
-    ? `<img src="${img}" alt="" class="showcase-card-img">`
-    : '<div class="showcase-card-img showcase-card-img-empty"><span>📦</span></div>'}
-        ${active ? '<span class="showcase-card-badge">في الفاتورة</span>' : ''}
+    ? `<img src="${img}" alt="" class="showcase-row-img" loading="lazy">`
+    : '<div class="showcase-row-img showcase-row-img-empty">📦</div>'}
       </div>
-      <div class="showcase-card-body">
-        <h3 class="showcase-card-name">${esc(p.name)}</h3>
-        <p class="showcase-card-barcode" dir="ltr">${esc(p.barcode || p.skuNum || '—')}</p>
-        <div class="showcase-card-pricing">
-          <span class="showcase-card-price" dir="ltr">${fmtInvInt(p.price)}</span>
-          <span class="showcase-card-price-label">سعر نصف الجملة</span>
+      <div class="showcase-row-info">
+        <h3 class="showcase-row-name">${esc(p.name)}</h3>
+        <p class="showcase-row-barcode" dir="ltr">${esc(p.barcode || p.skuNum || '—')}</p>
+        <div class="showcase-row-meta">
+          <span class="showcase-row-price" dir="ltr">${fmtInvInt(p.price)}</span>
+          <span class="showcase-row-price-label">نصف جملة</span>
+          ${stock > 0 ? `<span class="showcase-stock">رصيد ${fmtInvInt(stock)}</span>` : ''}
         </div>
-        ${stock > 0 ? `<span class="showcase-stock">متوفر ${fmtInvInt(stock)}</span>` : ''}
       </div>
-      <div class="showcase-card-controls">
+      <div class="showcase-row-actions">
         ${renderStepper(p.id, 'quant', d.quant || 0)}
         ${renderStepper(p.id, 'bonus', d.bonus || 0)}
       </div>
@@ -259,12 +250,9 @@ function renderEdariInvoiceDocument(lines, meta = {}) {
 
   if (!lines.length) {
     return `
-      <div class="doc-panel invoice-doc inv-order-doc inv-order-doc-empty">
-        <div class="inv-empty-doc">
-          <span class="inv-empty-doc-icon">🧾</span>
-          <strong>فاتورة الطلب</strong>
-          <p class="muted">استخدم + بجانب المنتجات — ستظهر الفاتورة هنا مباشرة للزبون</p>
-        </div>
+      <div class="inv-order-doc-empty-compact">
+        <span>🧾</span>
+        <p>أضف منتجات بالضغط على <strong>+</strong> — تظهر هنا كفاتورة Edari</p>
       </div>`;
   }
 
@@ -373,9 +361,11 @@ function renderActionBarCustomer() {
   if (!el) return;
   const c = commerce.invoiceCustomer;
   if (c?.seq) {
-    el.innerHTML = `<strong>${esc(c.name1)}</strong><span class="muted" dir="ltr">${esc(c.num || '')}</span>`;
+    el.innerHTML = `<strong>${esc(c.name1)}</strong><span dir="ltr">${esc(c.num || '')}</span>`;
+    el.classList.add('has-customer');
   } else {
     el.innerHTML = '<span class="muted">لم يُختر زبون — اختر من الكشوفات</span>';
+    el.classList.remove('has-customer');
   }
 }
 
@@ -383,10 +373,15 @@ function updateInvoiceUI() {
   renderLiveInvoicePanel();
   renderActionBarCustomer();
   const total = invoiceTotalAmount();
+  const count = invoiceLineCount();
   const totalEl = document.getElementById('invoiceActionTotal');
+  const countEl = document.getElementById('invoiceActionCount');
   if (totalEl) totalEl.textContent = fmtInvInt(total);
+  if (countEl) countEl.textContent = `${count} ${count === 1 ? 'بند' : 'بنود'}`;
   const bar = document.getElementById('invoiceActionBar');
-  if (bar) bar.classList.toggle('has-lines', invoiceLineCount() > 0);
+  const panel = document.getElementById('showcaseInvoicePanel');
+  if (bar) bar.classList.toggle('has-lines', count > 0);
+  if (panel) panel.classList.toggle('has-lines', count > 0);
 }
 
 function clearInvoiceDraft({ resetNotes = true } = {}) {
@@ -396,13 +391,12 @@ function clearInvoiceDraft({ resetNotes = true } = {}) {
     const notesEl = document.getElementById('invoiceNotes');
     if (notesEl) notesEl.value = '';
   }
-  document.querySelectorAll('.showcase-card').forEach((row) => {
-    row.classList.remove('showcase-card-active');
+  document.querySelectorAll('.showcase-row').forEach((row) => {
+    row.classList.remove('showcase-row-active');
     const qEl = row.querySelector('[data-draft-q]');
     const bEl = row.querySelector('[data-draft-b]');
     if (qEl) qEl.textContent = '0';
     if (bEl) bEl.textContent = '0';
-    row.querySelector('.showcase-card-badge')?.remove();
   });
   clearInvoiceStorage();
   updateInvoiceUI();
@@ -826,6 +820,7 @@ function initCommerceMobile() {
 
   const notesEl = document.getElementById('invoiceNotes');
   if (notesEl && commerce.invoiceNotes) notesEl.value = commerce.invoiceNotes;
+  updateInvoiceUI();
   updateResumeBanner();
 }
 
