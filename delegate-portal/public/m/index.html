@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260613showcase5">
+  <link rel="stylesheet" href="styles.css?v=20260613shop6">
   <link rel="stylesheet" href="portal-pro.css?v=20260611home2">
 </head>
 <body class="ed-body">
@@ -307,29 +307,25 @@
         <div class="inv-shop-grid" id="shopSectionsList"></div>
       </section>
 
-      <!-- Shop: products showcase (iPad / customer display) -->
+      <!-- Shop: products showcase -->
       <section class="screen screen-showcase" id="screen-shop-products">
-        <header class="showcase-topbar">
-          <div class="showcase-topbar-brand">
-            <span class="showcase-topbar-kicker">عرض وطلب</span>
-            <h3 class="showcase-topbar-title" id="shopProductsMeta">—</h3>
+        <div class="shop-bar">
+          <div class="inv-search-wrap shop-bar-search">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <input type="search" id="shopProductSearch" placeholder="بحث..." autocomplete="off">
           </div>
-          <div class="showcase-topbar-search inv-search-wrap">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-            <input type="search" id="shopProductSearch" placeholder="بحث بالاسم أو الباركود..." autocomplete="off">
-          </div>
-          <div class="inv-resume-banner hidden" id="invoiceResumeBanner">
-            <span id="invoiceResumeText">لديك فاتورة محفوظة</span>
-          </div>
-        </header>
+          <p class="shop-bar-meta" id="shopProductsMeta">—</p>
+          <span class="shop-saved-chip hidden" id="invoiceResumeBanner">
+            <span id="invoiceResumeText">فاتورة محفوظة</span>
+          </span>
+        </div>
 
-        <div class="showcase-catalog" id="shopProductsList"></div>
+        <div class="shop-list" id="shopProductsList"></div>
 
-        <footer class="showcase-dock" id="invoiceActionBar">
-          <button type="button" class="showcase-dock-btn" id="btnOpenInvoice">
-            <span class="showcase-dock-btn-icon" aria-hidden="true">🧾</span>
-            <span class="showcase-dock-btn-label">عرض الفاتورة</span>
-            <span class="showcase-dock-badge" id="invoiceOpenBadge">0</span>
+        <footer class="shop-dock" id="invoiceActionBar">
+          <button type="button" class="shop-dock-btn" id="btnOpenInvoice">
+            عرض الفاتورة
+            <span class="shop-dock-count" id="invoiceOpenBadge">0</span>
           </button>
         </footer>
       </section>
@@ -419,6 +415,6 @@
     </div>
   </div>
   <script src="app.js?v=20260613commerce"></script>
-  <script src="app-commerce.js?v=20260613showcase5"></script>
+  <script src="app-commerce.js?v=20260613shop6"></script>
 </body>
 </html>

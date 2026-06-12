@@ -142,9 +142,7 @@ function updateResumeBanner() {
   banner.classList.toggle('hidden', !active);
   if (active) {
     const where = [saved.branchName, saved.sectionName].filter(Boolean).join(' · ');
-    text.textContent = where
-      ? `فاتورة محفوظة — ${where} (تُستعاد تلقائياً)`
-      : 'فاتورة محفوظة — تُستعاد بعد تحديث الصفحة';
+    text.textContent = where ? `محفوظة · ${where}` : 'فاتورة محفوظة';
   }
 }
 
@@ -165,27 +163,19 @@ function syncProductRow(productId) {
   const bEl = row.querySelector('[data-draft-b]');
   if (qEl) qEl.textContent = String(d.quant || 0);
   if (bEl) bEl.textContent = String(d.bonus || 0);
-  const active = (d.quant || 0) > 0 || (d.bonus || 0) > 0;
-  row.classList.toggle('sc-card-active', active);
-  const visual = row.querySelector('.sc-card-visual');
-  let badge = row.querySelector('.sc-card-badge');
-  if (active && visual && !badge) {
-    visual.insertAdjacentHTML('beforeend', '<span class="sc-card-badge">✓ في الفاتورة</span>');
-  } else if (!active && badge) {
-    badge.remove();
-  }
+  row.classList.toggle('prod-row-active', (d.quant || 0) > 0 || (d.bonus || 0) > 0);
 }
 
 function renderQtyBlock(productId, field, value) {
   const isGift = field === 'bonus';
   const attr = isGift ? 'b' : 'q';
   return `
-    <div class="sc-qty-block${isGift ? ' sc-qty-block-gift' : ''}">
-      <span class="sc-qty-label">${isGift ? '🎁 هدايا' : 'الكمية'}</span>
-      <div class="sc-qty-stepper" role="group" aria-label="${isGift ? 'هدايا' : 'الكمية'}">
-        <button type="button" class="sc-qty-btn sc-qty-btn-minus" data-draft-action data-product-id="${productId}" data-field="${field}" data-delta="-1" aria-label="نقص">−</button>
-        <span class="sc-qty-val" dir="ltr" data-draft-${attr}>${value}</span>
-        <button type="button" class="sc-qty-btn sc-qty-btn-plus" data-draft-action data-product-id="${productId}" data-field="${field}" data-delta="1" aria-label="زيادة">+</button>
+    <div class="prod-step${isGift ? ' prod-step-gift' : ''}">
+      <span class="prod-step-label">${isGift ? 'هدية' : 'كمية'}</span>
+      <div class="prod-step-btns">
+        <button type="button" class="prod-btn prod-btn-minus" data-draft-action data-product-id="${productId}" data-field="${field}" data-delta="-1" aria-label="نقص">−</button>
+        <span class="prod-step-val" dir="ltr" data-draft-${attr}>${value}</span>
+        <button type="button" class="prod-btn prod-btn-plus" data-draft-action data-product-id="${productId}" data-field="${field}" data-delta="1" aria-label="زيادة">+</button>
       </div>
     </div>`;
 }
@@ -202,26 +192,24 @@ function renderProductCard(p) {
   const stock = Number(p.minOrderQty ?? 0);
   const img = productImageSrc(p);
   return `
-    <article class="sc-card${active ? ' sc-card-active' : ''}" data-product-id="${p.id}">
-      <div class="sc-card-visual">
+    <article class="prod-row${active ? ' prod-row-active' : ''}" data-product-id="${p.id}">
+      <div class="prod-thumb">
         ${img
-    ? `<img src="${img}" alt="${esc(p.name)}" class="sc-card-img" loading="lazy">`
-    : '<div class="sc-card-img sc-card-img-empty" aria-hidden="true">📦</div>'}
+    ? `<img src="${img}" alt="" class="prod-thumb-img" loading="lazy">`
+    : '<span class="prod-thumb-empty" aria-hidden="true">📦</span>'}
       </div>
-      <div class="sc-card-body">
-        <div class="sc-card-info">
-          <h3 class="sc-card-title">${esc(p.name)}</h3>
-          <p class="sc-card-code" dir="ltr">${esc(p.barcode || p.skuNum || '—')}</p>
-          <div class="sc-card-price-row">
-            <strong class="sc-card-price" dir="ltr">${fmtInvInt(p.price)}</strong>
-            <span class="sc-card-price-tag">نصف جملة</span>
-            ${stock > 0 ? `<span class="sc-card-stock">رصيد ${fmtInvInt(stock)}</span>` : ''}
-          </div>
-        </div>
-        <div class="sc-card-actions">
-          ${renderQtyBlock(p.id, 'quant', d.quant || 0)}
-          ${renderQtyBlock(p.id, 'bonus', d.bonus || 0)}
-        </div>
+      <div class="prod-main">
+        <h3 class="prod-name">${esc(p.name)}</h3>
+        <p class="prod-barcode" dir="ltr">${esc(p.barcode || p.skuNum || '—')}</p>
+        <p class="prod-price-line">
+          <strong dir="ltr">${fmtInvInt(p.price)}</strong>
+          <span>نصف جملة</span>
+          ${stock > 0 ? `<em>رصيد ${fmtInvInt(stock)}</em>` : ''}
+        </p>
+      </div>
+      <div class="prod-controls">
+        ${renderQtyBlock(p.id, 'quant', d.quant || 0)}
+        ${renderQtyBlock(p.id, 'bonus', d.bonus || 0)}
       </div>
     </article>`;
 }
@@ -240,11 +228,7 @@ function renderProductsList() {
   if (!list) return;
   const items = filteredProducts();
   list.innerHTML = items.map(renderProductCard).join('')
-    || '<div class="empty-state"><p>لا توجد منتجات مطابقة</p></div>';
-  items.forEach((p) => {
-    const d = getDraft(p.id);
-    if ((d.quant || 0) > 0 || (d.bonus || 0) > 0) syncProductRow(p.id);
-  });
+    || '<div class="empty-state"><p>لا توجد منتجات</p></div>';
   updateInvoiceUI();
 }
 
@@ -456,13 +440,12 @@ function clearInvoiceDraft({ resetNotes = true } = {}) {
     const notesEl = document.getElementById('invoiceNotes');
     if (notesEl) notesEl.value = '';
   }
-  document.querySelectorAll('.sc-card').forEach((row) => {
-    row.classList.remove('sc-card-active');
+  document.querySelectorAll('.prod-row').forEach((row) => {
+    row.classList.remove('prod-row-active');
     const qEl = row.querySelector('[data-draft-q]');
     const bEl = row.querySelector('[data-draft-b]');
     if (qEl) qEl.textContent = '0';
     if (bEl) bEl.textContent = '0';
-    row.querySelector('.sc-card-badge')?.remove();
   });
   clearInvoiceStorage();
   updateInvoiceUI();
