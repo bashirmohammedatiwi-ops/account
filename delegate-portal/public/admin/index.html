@@ -4,10 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Edari Admin — لوحة التحكم</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="admin.css?v=20260607redesign">
+  <link rel="stylesheet" href="admin.css?v=20260607v2">
 </head>
 <body>
   <div id="app" class="app">
@@ -15,11 +12,12 @@
       <div class="sidebar-brand">
         <div class="brand-mark">E</div>
         <div>
-          <strong>Edari Admin</strong>
-          <span>إدارة المندوبين والمزامنة</span>
+          <strong>Edari</strong>
+          <span>لوحة الإدارة</span>
         </div>
       </div>
 
+      <p class="nav-label">القائمة</p>
       <nav class="sidebar-nav">
         <button type="button" class="nav-item active" data-page="dashboard">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/><path d="M9 20v-6h6v6"/></svg></span>
@@ -36,6 +34,10 @@
         <button type="button" class="nav-item" data-page="sync">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg></span>
           <span>رفع البيانات</span>
+        </button>
+        <button type="button" class="nav-item" data-page="database">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg></span>
+          <span>قاعدة البيانات</span>
         </button>
         <button type="button" class="nav-item" data-page="agents">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
@@ -76,37 +78,37 @@
         <section class="page active" id="page-dashboard">
           <div class="stats-grid" id="dashStats"></div>
 
-          <div class="quick-grid">
-            <button type="button" class="quick-card" data-goto="catalog">
-              <span class="quick-icon products"><svg viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/></svg></span>
-              <strong>المنتجات</strong>
-              <span>فروع، أقسام، باركود، صور</span>
+          <nav class="shortcut-strip" aria-label="اختصارات سريعة">
+            <button type="button" class="shortcut" data-goto="catalog">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/></svg>
+              المنتجات
             </button>
-            <button type="button" class="quick-card" data-goto="orders">
-              <span class="quick-icon orders"><svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></span>
-              <strong>طلبات الشراء</strong>
-              <span>طلبات المندوبين الواردة</span>
+            <button type="button" class="shortcut" data-goto="orders">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/></svg>
+              الطلبات
             </button>
-            <button type="button" class="quick-card" data-goto="sync">
-              <span class="quick-icon sync"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg></span>
-              <strong>رفع البيانات</strong>
-              <span>مزامنة EdariNX مع السيرفر</span>
+            <button type="button" class="shortcut" data-goto="sync">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+              رفع البيانات
             </button>
-            <button type="button" class="quick-card" data-goto="agents">
-              <span class="quick-icon agents"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
-              <strong>المندوبون</strong>
-              <span>إضافة وصلاحيات الشجرات</span>
+            <button type="button" class="shortcut" data-goto="database">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+              قاعدة البيانات
             </button>
-          </div>
+            <button type="button" class="shortcut" data-goto="agents">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+              المندوبون
+            </button>
+          </nav>
 
-          <div class="panel-row">
-            <section class="panel">
+          <div class="panel-row dash-panels">
+            <section class="panel panel-flat">
               <h2 class="panel-title">آخر مزامنة</h2>
               <div id="lastSyncInfo" class="panel-body muted">—</div>
             </section>
-            <section class="panel panel-accent">
+            <section class="panel panel-flat panel-highlight">
               <h2 class="panel-title">تطبيق المندوب</h2>
-              <p class="panel-desc">رابط الويب للهاتف — يحتاج حساب مندوب</p>
+              <p class="panel-desc">رابط الويب للهاتف</p>
               <div class="btn-row">
                 <a class="btn btn-primary" id="mobileAppLink" href="/m" target="_blank">فتح التطبيق</a>
                 <button type="button" class="btn btn-soft" id="btnCopyMobileUrl">نسخ الرابط</button>
@@ -289,49 +291,6 @@
                 </label>
               </section>
 
-              <details class="panel panel-details" open>
-                <summary>إعدادات قاعدة Edari (الإداري)</summary>
-                <div class="form-stack">
-                  <p class="field-hint">حدّث هذه الإعدادات عند تغيير سنة القاعدة أو مسار EdariNX — تُستخدم في المزامنة وتحديث المنتجات.</p>
-                  <label class="field">
-                    <span>نوع الاتصال</span>
-                    <select id="edariMode">
-                      <option value="tcp">TCP — عبر nxServer (الافتراضي)</option>
-                      <option value="internal">Internal — مجلد مباشر</option>
-                    </select>
-                  </label>
-                  <label class="field">
-                    <span>اسم القاعدة (Alias)</span>
-                    <input type="text" id="edariAlias" dir="ltr" placeholder="2025">
-                  </label>
-                  <label class="field">
-                    <span>مجلد Data الجذر</span>
-                    <input type="text" id="edariDataRoot" dir="ltr" placeholder="D:\...\EdariNX\Data">
-                  </label>
-                  <label class="field">
-                    <span>مسار مجلد القاعدة</span>
-                    <input type="text" id="edariDatabasePath" dir="ltr" placeholder="D:\...\EdariNX\Data\2025">
-                  </label>
-                  <label class="field">
-                    <span>سيرفر nxServer</span>
-                    <input type="text" id="edariServer" dir="ltr" value="127.0.0.1">
-                  </label>
-                  <label class="field">
-                    <span>منفذ nxServer</span>
-                    <input type="number" id="edariPort" dir="ltr" value="16000" min="1" max="65535">
-                  </label>
-                  <div class="btn-row">
-                    <button type="button" class="btn btn-soft btn-sm" id="btnEdariDiscover">اكتشاف القواعد</button>
-                    <button type="button" class="btn btn-soft btn-sm" id="btnEdariTest">اختبار الاتصال</button>
-                    <button type="button" class="btn btn-primary btn-sm" id="btnEdariSave">حفظ</button>
-                  </div>
-                  <select id="edariDatabasePick" class="search hidden" aria-label="اختر قاعدة مكتشفة">
-                    <option value="">— اختر قاعدة مكتشفة —</option>
-                  </select>
-                  <p class="field-hint" id="edariConnStatus">—</p>
-                </div>
-              </details>
-
               <details class="panel panel-details">
                 <summary>إعدادات الاتصال</summary>
                 <div class="form-stack">
@@ -377,6 +336,84 @@
               </section>
             </div>
           </div>
+        </section>
+
+        <!-- Database settings -->
+        <section class="page" id="page-database">
+          <div class="panel panel-accent db-settings-hero">
+            <h2 class="panel-title">إعدادات قاعدة البيانات</h2>
+            <p class="panel-desc">ربط لوحة الإدارة بقاعدة <strong>EdariNX</strong> على هذا الجهاز. تُستخدم هذه الإعدادات في رفع الحسابات، قراءة الشجرات، وتحديث المنتجات من الإداري.</p>
+            <ul class="simple-list db-settings-notes">
+              <li>تأكد أن <strong>nxServer</strong> يعمل قبل اختبار الاتصال (وضع TCP).</li>
+              <li>عند تغيير سنة القاعدة، عدّل <strong>Alias</strong> و<strong>مسار مجلد القاعدة</strong> ثم احفظ.</li>
+              <li>زر «اكتشاف القواعد» يبحث تلقائياً داخل مجلد Data عن السنوات المتاحة.</li>
+            </ul>
+          </div>
+
+          <section class="panel db-settings-form">
+            <div class="panel-head">
+              <div>
+                <h2 class="panel-title">اتصال EdariNX</h2>
+                <p class="panel-desc muted">جميع المسارات بالصيغة الكاملة — مثال: <code dir="ltr">D:\Future of Technology\EdariNX\Data\2025</code></p>
+              </div>
+              <div class="btn-row">
+                <button type="button" class="btn btn-soft btn-sm" id="btnEdariDiscover">اكتشاف القواعد</button>
+                <button type="button" class="btn btn-soft btn-sm" id="btnEdariTest">اختبار الاتصال</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btnEdariSave">حفظ الإعدادات</button>
+              </div>
+            </div>
+
+            <div class="form-stack db-form-grid">
+              <label class="field">
+                <span>نوع الاتصال</span>
+                <select id="edariMode">
+                  <option value="tcp">TCP — عبر nxServer (الافتراضي، يُفضّل)</option>
+                  <option value="internal">Internal — قراءة مباشرة من مجلد القاعدة</option>
+                </select>
+                <p class="field-hint">TCP: الاتصال عبر برنامج nxServer على المنفذ أدناه. Internal: قراءة الملفات مباشرة بدون nxServer.</p>
+              </label>
+
+              <label class="field">
+                <span>اسم القاعدة (Alias)</span>
+                <input type="text" id="edariAlias" dir="ltr" value="2025" autocomplete="off">
+                <p class="field-hint">اسم السنة أو Alias كما في EdariNX — عادةً رقم السنة مثل <code dir="ltr">2025</code>.</p>
+              </label>
+
+              <label class="field field-wide">
+                <span>مجلد Data الجذر</span>
+                <input type="text" id="edariDataRoot" dir="ltr" value="D:\Future of Technology\EdariNX\Data" autocomplete="off">
+                <p class="field-hint">المسار الكامل لمجلد <code dir="ltr">Data</code> داخل EdariNX — يحتوي مجلدات السنوات (2024، 2025، …).</p>
+              </label>
+
+              <label class="field field-wide">
+                <span>مسار مجلد القاعدة</span>
+                <input type="text" id="edariDatabasePath" dir="ltr" value="D:\Future of Technology\EdariNX\Data\2025" autocomplete="off">
+                <p class="field-hint">المسار الكامل لمجلد سنة القاعدة — يجب أن ينتهي باسم Alias (مثال: <code dir="ltr">...\Data\2025</code>).</p>
+              </label>
+
+              <label class="field">
+                <span>سيرفر nxServer</span>
+                <input type="text" id="edariServer" dir="ltr" value="127.0.0.1" autocomplete="off">
+                <p class="field-hint">عنوان IP لجهاز nxServer — على نفس الجهاز استخدم <code dir="ltr">127.0.0.1</code>.</p>
+              </label>
+
+              <label class="field">
+                <span>منفذ nxServer</span>
+                <input type="number" id="edariPort" dir="ltr" value="16000" min="1" max="65535" autocomplete="off">
+                <p class="field-hint">المنفذ الافتراضي لـ nxServer هو <code dir="ltr">16000</code> — غيّره فقط إذا عدّلته في EdariNX.</p>
+              </label>
+
+              <label class="field field-wide">
+                <span>قواعد مكتشفة</span>
+                <select id="edariDatabasePick" class="search hidden" aria-label="اختر قاعدة مكتشفة">
+                  <option value="">— اختر قاعدة مكتشفة —</option>
+                </select>
+                <p class="field-hint" id="edariPickHint">اضغط «اكتشاف القواعد» لعرض القواعد المتاحة في مجلد Data.</p>
+              </label>
+
+              <p class="field-hint db-conn-status" id="edariConnStatus">—</p>
+            </div>
+          </section>
         </section>
 
         <!-- Agents -->
@@ -576,7 +613,7 @@
   </div>
 
   <script src="config.js"></script>
-  <script src="admin.js?v=20260607redesign"></script>
-  <script src="admin-commerce.js?v=20260607redesign"></script>
+  <script src="admin.js?v=20260607v2"></script>
+  <script src="admin-commerce.js?v=20260607v2"></script>
 </body>
 </html>

@@ -153,6 +153,7 @@ const PAGE_META = {
   catalog: { title: 'المنتجات', sub: 'إضافة بالباركود من Edari' },
   orders: { title: 'طلبات الشراء', sub: 'طلبات المندوبين — موافقة ومتابعة' },
   sync: { title: 'رفع البيانات', sub: 'مزامنة EdariNX مع سيرفر المندوبين' },
+  database: { title: 'إعدادات قاعدة البيانات', sub: 'اتصال EdariNX — Alias، المسارات، و nxServer' },
   agents: { title: 'المندوبون', sub: 'حسابات الدخول وصلاحيات الشجرات' }
 };
 
@@ -166,9 +167,11 @@ function showPage(name) {
   if (subEl) subEl.textContent = meta.sub;
   if (name === 'sync') {
     void loadSyncLogs();
-    void loadEdariConnectionSettings();
     startSyncLogPolling();
-  } else if (name !== 'sync') {
+  } else if (name === 'database') {
+    void loadEdariConnectionSettings();
+    stopSyncLogPolling();
+  } else {
     stopSyncLogPolling();
   }
   if (window.commercePages?.[name]) void window.commercePages[name]();
@@ -668,7 +671,7 @@ function setEdariConnStatus(msg, type = '') {
   const el = document.getElementById('edariConnStatus');
   if (!el) return;
   el.textContent = msg;
-  el.className = `field-hint edari-conn-status${type ? ` is-${type}` : ''}`;
+  el.className = `field-hint edari-conn-status db-conn-status${type ? ` is-${type}` : ''}`;
 }
 
 async function loadEdariConnectionSettings() {
@@ -696,7 +699,7 @@ async function saveEdariConnectionSettings() {
   } else {
     await persistBackgroundSyncSettings({ edari });
   }
-  setEdariConnStatus('تم حفظ إعدادات Edari');
+  setEdariConnStatus('تم حفظ إعدادات قاعدة البيانات', 'ok');
 }
 
 async function testEdariConnectionSettings() {
@@ -741,6 +744,7 @@ async function discoverEdariDatabases() {
     }
     if (!items.length) {
       pick?.classList.add('hidden');
+      document.getElementById('edariPickHint')?.classList.remove('hidden');
       setEdariConnStatus('لم تُعثر على قواعد في هذا المجلد', 'warn');
       return;
     }
@@ -748,7 +752,8 @@ async function discoverEdariDatabases() {
       `<option value="${i}">${esc(it.label)}</option>`).join('')}`;
     pick.classList.remove('hidden');
     pick._items = items;
-    setEdariConnStatus(`وُجد ${items.length} قاعدة — اختر من القائمة`, 'ok');
+    document.getElementById('edariPickHint')?.classList.add('hidden');
+    setEdariConnStatus(`وُجد ${items.length} قاعدة — اختر من القائمة أعلاه`, 'ok');
   } catch (e) {
     setEdariConnStatus(e.message, 'err');
   }
@@ -1146,7 +1151,7 @@ document.querySelectorAll('.nav-item').forEach((btn) => {
   btn.addEventListener('click', () => showPage(btn.dataset.page));
 });
 
-document.querySelectorAll('.quick-card[data-goto]').forEach((btn) => {
+document.querySelectorAll('.quick-card[data-goto], .shortcut[data-goto]').forEach((btn) => {
   btn.addEventListener('click', () => showPage(btn.dataset.goto));
 });
 
