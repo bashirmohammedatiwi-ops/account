@@ -174,7 +174,7 @@
             <div class="panel-head">
               <div>
                 <h2 class="panel-title">منتجات القسم</h2>
-                <p class="panel-desc muted">التفاصيل من Edari (File13n) فقط — أضف بالباركود ويُرفع للسيرفر عند الحفظ</p>
+                <p class="panel-desc muted">أضف بالباركود — الاسم والسعر والعدد فقط</p>
               </div>
               <div class="btn-row">
                 <button type="button" class="btn btn-primary btn-sm" id="btnAddProduct">+ إضافة منتج</button>
@@ -226,10 +226,8 @@
                     <th>صورة</th>
                     <th>باركود</th>
                     <th>اسم</th>
-                    <th>وحدة</th>
+                    <th>عدد</th>
                     <th>سعر</th>
-                    <th>بونص</th>
-                    <th>ترتيب</th>
                     <th>حالة</th>
                     <th></th>
                   </tr>
@@ -442,99 +440,92 @@
   </div>
 
   <div class="modal hidden" id="productModal">
-    <div class="modal-sheet modal-sheet-lg">
+    <div class="modal-sheet modal-sheet-md">
       <header class="modal-head">
         <h3 id="productModalTitle">منتج جديد</h3>
         <button type="button" class="btn btn-icon" id="productModalClose" aria-label="إغلاق">×</button>
       </header>
       <form id="productForm" class="modal-form">
         <input type="hidden" id="productId">
-        <div class="product-modal-layout">
-          <div class="product-modal-media">
-            <div class="product-image-preview" id="productImagePreview">
-              <span class="product-image-placeholder">📦</span>
-            </div>
-            <div class="btn-row product-image-actions">
-              <button type="button" class="btn btn-soft btn-sm" id="btnProductUploadImage">رفع صورة</button>
-              <button type="button" class="btn btn-soft btn-sm hidden" id="btnProductRemoveImage">حذف الصورة</button>
-            </div>
-            <input type="file" id="productImageInput" accept="image/*" class="hidden">
-            <p class="field-hint" id="productMetaInfo"></p>
+        <input type="hidden" id="productSectionId">
+        <input type="hidden" id="productSkuNum">
+        <input type="hidden" id="productEdariSeq">
+        <input type="hidden" id="productUnit">
+        <input type="hidden" id="productBonus" value="0">
+        <input type="hidden" id="productSortOrder" value="0">
+        <input type="hidden" id="productIsActive" value="1">
+        <input type="hidden" id="productPriceOverride" value="0">
+        <input type="hidden" id="productDescription">
+
+        <p class="field-hint" id="productAddSectionHint"></p>
+
+        <div class="product-modal-simple">
+          <label class="field field-barcode">
+            <span>الباركود</span>
+            <input type="text" id="productBarcode" dir="ltr" autocomplete="off" placeholder="امسح أو اكتب الباركود..." required>
+          </label>
+          <div class="edari-live-preview hidden" id="edariLivePreview"></div>
+          <label class="field">
+            <span>الاسم</span>
+            <input type="text" id="productName" required>
+          </label>
+          <div class="field-row">
+            <label class="field">
+              <span>العدد</span>
+              <input type="number" id="productQty" min="0" step="1" dir="ltr" value="1">
+            </label>
+            <label class="field">
+              <span>السعر</span>
+              <input type="number" id="productPrice" min="0" step="1" dir="ltr" required>
+            </label>
           </div>
-          <div class="product-modal-fields">
-            <label class="field">
-              <span>القسم</span>
-              <select id="productSectionId" required></select>
-            </label>
-            <label class="field field-barcode">
-              <span>الباركود أو رقم المادة</span>
-              <input type="text" id="productBarcode" dir="ltr" autocomplete="off" placeholder="امسح أو اكتب الباركود...">
-            </label>
-            <div class="edari-live-preview hidden" id="edariLivePreview"></div>
-            <label class="field">
-              <span>الاسم</span>
-              <input type="text" id="productName" required>
-            </label>
-            <div class="field-row">
-              <label class="field">
-                <span>رقم المادة</span>
-                <input type="text" id="productSkuNum" dir="ltr">
-              </label>
-              <label class="field">
-                <span>Edari Seq</span>
-                <input type="text" id="productEdariSeq" dir="ltr" readonly class="readonly">
-              </label>
+        </div>
+
+        <div class="product-modal-advanced hidden">
+          <div class="product-modal-layout">
+            <div class="product-modal-media">
+              <div class="product-image-preview" id="productImagePreview">
+                <span class="product-image-placeholder">📦</span>
+              </div>
+              <div class="btn-row product-image-actions">
+                <button type="button" class="btn btn-soft btn-sm" id="btnProductUploadImage">رفع صورة</button>
+                <button type="button" class="btn btn-soft btn-sm hidden" id="btnProductRemoveImage">حذف الصورة</button>
+              </div>
+              <input type="file" id="productImageInput" accept="image/*" class="hidden">
+              <p class="field-hint" id="productMetaInfo"></p>
             </div>
-            <div class="field-row">
+            <div class="product-modal-fields">
               <label class="field">
                 <span>الوحدة</span>
-                <input type="text" id="productUnit">
-              </label>
-              <label class="field">
-                <span>السعر</span>
-                <input type="number" id="productPrice" min="0" step="1" dir="ltr">
-              </label>
-            </div>
-            <div class="field-row">
-              <label class="field">
-                <span>بونص افتراضي</span>
-                <input type="number" id="productBonus" min="0" step="1" dir="ltr" value="0">
+                <input type="text" id="productUnitEdit" dir="ltr">
               </label>
               <label class="field">
                 <span>حد أدنى للطلب</span>
                 <input type="number" id="productMinQty" min="0" step="1" dir="ltr" value="0">
               </label>
-            </div>
-            <div class="field-row">
               <label class="field">
                 <span>ترتيب العرض</span>
-                <input type="number" id="productSortOrder" min="0" step="1" dir="ltr" value="0">
+                <input type="number" id="productSortOrderEdit" min="0" step="1" dir="ltr" value="0">
               </label>
-              <label class="check-row check-inline field-check">
-                <input type="checkbox" id="productIsActive" checked>
+              <label class="check-row">
+                <input type="checkbox" id="productIsActiveEdit" checked>
                 <span>نشط</span>
               </label>
-            </div>
-            <label class="check-row">
-              <input type="checkbox" id="productPriceOverride">
-              <span>سعر يدوي — لا يُستبدل عند مزامنة Edari</span>
-            </label>
-            <label class="field">
-              <span>وصف (اختياري)</span>
-              <textarea id="productDescription" rows="2"></textarea>
-            </label>
-            <div class="edari-search-box hidden" id="edariSearchBox">
-              <label class="field">
-                <span>بحث في Edari</span>
-                <input type="search" id="edariSearchInput" placeholder="اسم أو باركود...">
+              <label class="check-row">
+                <input type="checkbox" id="productPriceOverrideEdit">
+                <span>سعر يدوي — لا يُستبدل عند مزامنة Edari</span>
               </label>
-              <div class="edari-search-results" id="edariSearchResults"></div>
+              <label class="field">
+                <span>وصف (اختياري)</span>
+                <textarea id="productDescriptionEdit" rows="2"></textarea>
+              </label>
             </div>
           </div>
         </div>
+
         <footer class="modal-foot product-modal-foot">
           <button type="button" class="btn btn-soft hidden" id="btnProductSyncEdari">مزامنة من Edari</button>
-          <button type="submit" class="btn btn-primary" id="productSaveBtn">إضافة للكتalog</button>
+          <button type="submit" class="btn btn-primary" id="productSaveBtn">إضافة</button>
         </footer>
       </form>
     </div>
@@ -658,6 +649,6 @@
 
   <script src="config.js"></script>
   <script src="admin.js?v=20260607catalog"></script>
-  <script src="admin-commerce.js?v=20260607catalog"></script>
+  <script src="admin-commerce.js?v=20260607simple"></script>
 </body>
 </html>

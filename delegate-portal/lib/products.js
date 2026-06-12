@@ -542,8 +542,32 @@ function addProductByBarcode(sectionId, code, options = {}) {
   if (!section) throw new Error('القسم غير موجود');
 
   const material = findEdariMaterialByCode(raw);
+  const manualName = String(options.name || '').trim();
+  const formPrice = options.price != null ? Number(options.price) : null;
+
   if (!material?.seq) {
-    throw new Error('المادة غير موجودة في Edari — نفّذ مزامنة كاملة أولاً');
+    if (!manualName || formPrice == null) {
+      throw new Error('أدخل الاسم والسعر — أو باركود موجود في Edari');
+    }
+    const duplicate = db.prepare(`
+      SELECT id FROM products
+      WHERE section_id = ? AND (barcode = ? OR sku_num = ?)
+    `).get(sectionId, raw, raw);
+    if (duplicate) throw new Error('هذا المنتج مُسجَّل مسبقاً في هذا القسم');
+
+    return createProduct({
+      sectionId,
+      barcode: raw,
+      skuNum: raw,
+      name: manualName,
+      unit: options.unit || '',
+      price: formPrice,
+      minOrderQty: Number(options.minOrderQty ?? 1),
+      priceOverride: true,
+      isActive: options.isActive !== false,
+      sortOrder: Number(options.sortOrder || 0),
+      description: options.description || ''
+    });
   }
 
   const duplicate = db.prepare(`
@@ -555,23 +579,21 @@ function addProductByBarcode(sectionId, code, options = {}) {
 
   if (duplicate) throw new Error('هذا المنتج مُسجَّل مسبقاً في هذا القسم');
 
-  const priceOverride = !!options.priceOverride;
-  const price = priceOverride && options.price != null
-    ? Number(options.price)
-    : material.price;
+  const price = formPrice != null ? formPrice : material.price;
+  const priceOverride = formPrice != null && formPrice !== Number(material.price);
 
   return createProduct({
     sectionId,
     edariSeq: material.seq,
     skuNum: material.num,
     barcode: material.barcode || material.num,
-    name: material.name,
+    name: manualName || material.name,
     unit: material.unit,
     price,
     bonusDefault: options.bonusDefault != null ? Number(options.bonusDefault) : material.bonus,
-    priceOverride,
+    priceOverride: options.priceOverride != null ? !!options.priceOverride : priceOverride,
     description: options.description || material.remarks || '',
-    minOrderQty: Number(options.minOrderQty || 0),
+    minOrderQty: Number(options.minOrderQty ?? 1),
     sortOrder: Number(options.sortOrder || 0),
     isActive: options.isActive !== false,
     syncedAt: material.syncedAt || new Date().toISOString()

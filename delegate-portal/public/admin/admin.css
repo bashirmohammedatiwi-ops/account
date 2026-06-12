@@ -1250,6 +1250,22 @@ tfoot .final { background: var(--primary-light); font-weight: 700; }
   max-width: 720px;
 }
 
+.modal-sheet-md {
+  max-width: 480px;
+}
+
+.product-modal-simple .field-row {
+  grid-template-columns: 1fr 1fr;
+}
+
+.field-hint.warn {
+  color: var(--danger, #dc2626);
+}
+
+#productAddSectionHint {
+  margin-bottom: 12px;
+}
+
 .product-modal-layout {
   display: grid;
   grid-template-columns: 160px 1fr;

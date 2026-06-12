@@ -213,6 +213,7 @@ router.post('/products/by-barcode', (req, res) => {
       return res.status(400).json({ ok: false, error: 'القسم والباركود مطلوبان' });
     }
     const product = addProductByBarcode(sectionId, barcode, {
+      name: body.name,
       bonusDefault: body.bonusDefault,
       minOrderQty: body.minOrderQty,
       sortOrder: body.sortOrder,

@@ -318,16 +318,14 @@ async function loadCatalogProducts() {
         ${commerce.productFilters.showAllSections && p.sectionName ? `<div class="muted product-sub">${esc(p.sectionName)}</div>` : ''}
         <div class="product-badges">${renderProductBadges(p)}</div>
       </td>
-      <td>${esc(p.unit || '—')}</td>
+      <td dir="ltr">${p.minOrderQty || 0}</td>
       <td dir="ltr">${fmtMoney(p.price)}</td>
-      <td dir="ltr">${p.bonusDefault || 0}</td>
-      <td dir="ltr">${p.sortOrder ?? 0}</td>
       <td>${p.isActive ? '<span class="badge ok">نشط</span>' : '<span class="badge err">موقوف</span>'}</td>
       <td class="product-actions">
         <button type="button" class="btn btn-soft btn-sm" data-prod-edit="${p.id}">تعديل</button>
         <button type="button" class="btn btn-danger btn-sm" data-prod-del="${p.id}">حذف</button>
       </td>
-    </tr>`).join('') || '<tr><td colspan="11">لا توجد منتجات — أضف منتجاً أو نفّذ مزامنة Edari</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="9">لا توجد منتجات — أضف منتجاً</td></tr>';
 
   const countEl = document.getElementById('productCountLine');
   if (countEl) {
@@ -407,12 +405,22 @@ function initProductDragDrop() {
   });
 }
 
-function fillProductSectionSelect(selectedId) {
-  const sel = document.getElementById('productSectionId');
-  if (!sel) return;
-  sel.innerHTML = commerce.allSections.map((s) =>
-    `<option value="${s.id}" ${s.id === selectedId ? 'selected' : ''}>${esc(s.branchName)} — ${esc(s.name)}</option>`
-  ).join('');
+function setProductSectionContext(sectionId) {
+  const id = sectionId || commerce.selectedSectionId;
+  const el = document.getElementById('productSectionId');
+  if (el) el.value = id || '';
+  const section = commerce.allSections.find((s) => s.id === id)
+    || commerce.sections.find((s) => s.id === id);
+  const branch = commerce.branches.find((b) => b.id === (section?.branchId || commerce.selectedBranchId));
+  const hint = document.getElementById('productAddSectionHint');
+  if (!hint) return;
+  if (!id) {
+    hint.textContent = 'اختر قسماً من القائمة أولاً';
+    hint.classList.add('warn');
+    return;
+  }
+  hint.textContent = `يُضاف إلى: ${branch?.name || '—'} — ${section?.name || '—'}`;
+  hint.classList.remove('warn');
 }
 
 function setProductImagePreview(p) {
@@ -428,22 +436,6 @@ function setProductImagePreview(p) {
   }
 }
 
-function setEdariCoreFieldsReadonly(readonly) {
-  ['productName', 'productSkuNum', 'productUnit'].forEach((id) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.readOnly = readonly;
-    el.classList.toggle('readonly', readonly);
-  });
-  const priceEl = document.getElementById('productPrice');
-  const priceOverride = document.getElementById('productPriceOverride')?.checked;
-  if (priceEl) {
-    const lockPrice = readonly && !priceOverride;
-    priceEl.readOnly = lockPrice;
-    priceEl.classList.toggle('readonly', lockPrice);
-  }
-}
-
 let lastEdariMaterial = null;
 let barcodeLookupTimer = null;
 
@@ -454,14 +446,10 @@ function fillProductFormFromEdari(m) {
   document.getElementById('productSkuNum').value = m.num || '';
   document.getElementById('productEdariSeq').value = m.seq || '';
   document.getElementById('productUnit').value = m.unit || '';
-  if (!document.getElementById('productPriceOverride')?.checked) {
-    document.getElementById('productPrice').value = m.price ?? 0;
-  }
-  if (m.bonus && !document.getElementById('productId').value) {
-    document.getElementById('productBonus').value = m.bonus;
-  }
-  if (m.remarks && !document.getElementById('productDescription').value) {
-    document.getElementById('productDescription').value = m.remarks;
+  document.getElementById('productPrice').value = m.price ?? 0;
+  const qtyEl = document.getElementById('productQty');
+  if (qtyEl && !document.getElementById('productId').value) {
+    qtyEl.value = m.bonus > 0 ? m.bonus : 1;
   }
 }
 
@@ -476,28 +464,11 @@ function renderEdariLivePreview(material, state, message = '') {
   }
   if (state === 'err') {
     box.classList.add('edari-live-err');
-    box.innerHTML = `
-      <p class="edari-live-title">غير موجود في Edari</p>
-      <p class="muted">${esc(message || 'نفّذ مزامنة كاملة أولاً')}</p>`;
+    box.innerHTML = `<p class="muted">${esc(message || 'أدخل الباركود — أو اكتب الاسم والسعر يدوياً')}</p>`;
     return;
   }
   box.classList.add('edari-live-ok');
-  box.innerHTML = `
-    <div class="edari-live-head">
-      <span class="badge ok">من Edari</span>
-      <span class="muted" dir="ltr">Seq ${esc(material.seq)}</span>
-    </div>
-    <h4 class="edari-live-name">${esc(material.name)}</h4>
-    ${material.name2 ? `<p class="muted">${esc(material.name2)}</p>` : ''}
-    <div class="edari-live-grid">
-      <div><span class="k">الباركود</span><strong dir="ltr">${esc(material.barcode || material.num)}</strong></div>
-      <div><span class="k">رقم المادة</span><strong dir="ltr">${esc(material.num)}</strong></div>
-      <div><span class="k">الوحدة</span><strong>${esc(material.unit || '—')}</strong></div>
-      <div><span class="k">السعر</span><strong dir="ltr">${fmtMoney(material.price)}</strong></div>
-      ${material.bonus ? `<div><span class="k">بونص Edari</span><strong dir="ltr">${material.bonus}</strong></div>` : ''}
-    </div>
-    ${material.remarks ? `<p class="edari-live-remarks">${esc(material.remarks)}</p>` : ''}
-    <p class="field-hint">يُرفع للسيرفر عند الضغط على «إضافة للكتalog» فقط</p>`;
+  box.innerHTML = `<p class="muted"><span class="badge ok">من Edari</span> تم تعبئة الاسم والسعر — عدّل العدد إن لزم</p>`;
 }
 
 async function lookupEdariByBarcodeInput(code, { isEdit = false } = {}) {
@@ -510,12 +481,9 @@ async function lookupEdariByBarcodeInput(code, { isEdit = false } = {}) {
       document.getElementById('productSkuNum').value = '';
       document.getElementById('productEdariSeq').value = '';
       document.getElementById('productUnit').value = '';
-      if (!document.getElementById('productPriceOverride')?.checked) {
-        document.getElementById('productPrice').value = '';
-      }
+      document.getElementById('productPrice').value = '';
     }
-    renderEdariLivePreview(null, 'err', 'أدخل الباركود أو رقم المادة');
-    setEdariCoreFieldsReadonly(false);
+    renderEdariLivePreview(null, 'err', 'أدخل الباركود');
     return;
   }
   renderEdariLivePreview(null, 'loading');
@@ -523,11 +491,9 @@ async function lookupEdariByBarcodeInput(code, { isEdit = false } = {}) {
     const data = await commerceApi(`/products/edari-lookup?code=${encodeURIComponent(raw)}`);
     lastEdariMaterial = data.material;
     fillProductFormFromEdari(data.material);
-    setEdariCoreFieldsReadonly(true);
     renderEdariLivePreview(data.material, 'ok');
   } catch (err) {
     lastEdariMaterial = null;
-    setEdariCoreFieldsReadonly(false);
     renderEdariLivePreview(null, 'err', err.message);
   }
 }
@@ -535,55 +501,47 @@ async function lookupEdariByBarcodeInput(code, { isEdit = false } = {}) {
 function openProductModal(id = null) {
   const modal = document.getElementById('productModal');
   const isEdit = !!id;
+  const advanced = document.querySelector('.product-modal-advanced');
   lastEdariMaterial = null;
-  document.getElementById('productModalTitle').textContent = isEdit ? 'تعديل منتج في الكتalog' : 'إضافة منتج من Edari';
-  document.getElementById('productId').value = id || '';
-  document.getElementById('productSaveBtn').textContent = isEdit ? 'حفظ التعديلات' : 'إضافة للكتalog';
-  document.getElementById('edariSearchBox')?.classList.add('hidden');
-  document.getElementById('btnProductSyncEdari').classList.toggle('hidden', !isEdit);
 
-  fillProductSectionSelect(commerce.selectedSectionId);
+  if (!isEdit && !commerce.selectedSectionId) {
+    return showToast('اختر قسماً أولاً', 'err');
+  }
+
+  document.getElementById('productModalTitle').textContent = isEdit ? 'تعديل منتج' : 'إضافة منتج';
+  document.getElementById('productId').value = id || '';
+  document.getElementById('productSaveBtn').textContent = isEdit ? 'حفظ' : 'إضافة';
+  document.getElementById('btnProductSyncEdari')?.classList.toggle('hidden', !isEdit);
+  advanced?.classList.toggle('hidden', !isEdit);
+  modal.classList.toggle('product-modal--edit', isEdit);
 
   if (isEdit) {
     const p = commerce.products.find((x) => x.id === id);
     if (!p) return;
-    fillProductSectionSelect(p.sectionId);
-    document.getElementById('productName').value = p.name || '';
+    setProductSectionContext(p.sectionId);
     document.getElementById('productBarcode').value = p.barcode || '';
+    document.getElementById('productName').value = p.name || '';
+    document.getElementById('productQty').value = p.minOrderQty ?? 1;
+    document.getElementById('productPrice').value = p.price ?? 0;
     document.getElementById('productSkuNum').value = p.skuNum || '';
     document.getElementById('productEdariSeq').value = p.edariSeq || '';
     document.getElementById('productUnit').value = p.unit || '';
-    document.getElementById('productPrice').value = p.price ?? 0;
-    document.getElementById('productBonus').value = p.bonusDefault ?? 0;
+    document.getElementById('productUnitEdit').value = p.unit || '';
     document.getElementById('productMinQty').value = p.minOrderQty ?? 0;
-    document.getElementById('productSortOrder').value = p.sortOrder ?? 0;
-    document.getElementById('productIsActive').checked = !!p.isActive;
-    document.getElementById('productPriceOverride').checked = !!p.priceOverride;
-    document.getElementById('productDescription').value = p.description || '';
+    document.getElementById('productSortOrderEdit').value = p.sortOrder ?? 0;
+    document.getElementById('productIsActiveEdit').checked = !!p.isActive;
+    document.getElementById('productPriceOverrideEdit').checked = !!p.priceOverride;
+    document.getElementById('productDescriptionEdit').value = p.description || '';
     document.getElementById('productMetaInfo').textContent =
-      `مصدر: Edari · آخر مزامنة: ${(p.syncedAt || '—').slice(0, 19).replace('T', ' ')}`;
-    setEdariCoreFieldsReadonly(false);
-    renderEdariLivePreview({
-      seq: p.edariSeq,
-      num: p.skuNum,
-      barcode: p.barcode,
-      name: p.name,
-      unit: p.unit,
-      price: p.price,
-      bonus: p.bonusDefault
-    }, 'ok');
+      `آخر مزامنة Edari: ${(p.syncedAt || '—').slice(0, 19).replace('T', ' ')}`;
+    document.getElementById('edariLivePreview')?.classList.add('hidden');
     setProductImagePreview(p);
   } else {
     document.getElementById('productForm').reset();
-    document.getElementById('productIsActive').checked = true;
-    document.getElementById('productBonus').value = 0;
-    document.getElementById('productMinQty').value = 0;
-    document.getElementById('productSortOrder').value = 0;
-    document.getElementById('productMetaInfo').textContent = 'اكتب الباركود — تظهر التفاصيل من Edari فوراً';
-    setEdariCoreFieldsReadonly(false);
-    renderEdariLivePreview(null, 'err', 'أدخل الباركود أو رقم المادة');
+    document.getElementById('productQty').value = 1;
+    setProductSectionContext(commerce.selectedSectionId);
+    document.getElementById('edariLivePreview')?.classList.add('hidden');
     setProductImagePreview(null);
-    fillProductSectionSelect(commerce.selectedSectionId);
     setTimeout(() => document.getElementById('productBarcode')?.focus(), 120);
   }
 
@@ -597,45 +555,45 @@ function closeProductModal() {
 async function saveProductForm(e) {
   e.preventDefault();
   const id = document.getElementById('productId').value;
+  const isEdit = !!id;
+  const qty = Number(document.getElementById('productQty').value || 0);
   const body = {
     sectionId: Number(document.getElementById('productSectionId').value),
     name: document.getElementById('productName').value.trim(),
     barcode: document.getElementById('productBarcode').value.trim(),
     skuNum: document.getElementById('productSkuNum').value.trim(),
     edariSeq: document.getElementById('productEdariSeq').value.trim(),
-    unit: document.getElementById('productUnit').value.trim(),
+    unit: (document.getElementById('productUnitEdit')?.value || document.getElementById('productUnit')?.value || '').trim(),
     price: Number(document.getElementById('productPrice').value || 0),
-    bonusDefault: Number(document.getElementById('productBonus').value || 0),
-    minOrderQty: Number(document.getElementById('productMinQty').value || 0),
-    sortOrder: Number(document.getElementById('productSortOrder').value || 0),
-    isActive: document.getElementById('productIsActive').checked,
-    priceOverride: document.getElementById('productPriceOverride').checked,
-    description: document.getElementById('productDescription').value.trim()
+    minOrderQty: qty,
+    sortOrder: Number(document.getElementById('productSortOrderEdit')?.value || 0),
+    isActive: isEdit ? document.getElementById('productIsActiveEdit').checked : true,
+    priceOverride: isEdit ? document.getElementById('productPriceOverrideEdit').checked : true,
+    description: (document.getElementById('productDescriptionEdit')?.value || '').trim()
   };
 
+  if (!body.sectionId) return showToast('اختر قسماً', 'err');
+  if (!body.barcode) return showToast('الباركود مطلوب', 'err');
+  if (!body.name) return showToast('الاسم مطلوب', 'err');
+  if (Number.isNaN(body.price) || body.price < 0) return showToast('السعر مطلوب', 'err');
+
   try {
-    if (id) {
+    if (isEdit) {
       await commerceApi(`/products/${id}`, { method: 'PUT', body: JSON.stringify(body) });
-      showToast('تم حفظ المنتج');
+      showToast('تم الحفظ');
     } else {
-      if (!lastEdariMaterial?.seq) {
-        return showToast('أدخل باركوداً موجوداً في Edari أولاً', 'err');
-      }
       await commerceApi('/products/by-barcode', {
         method: 'POST',
         body: JSON.stringify({
           sectionId: body.sectionId,
-          barcode: body.barcode || body.skuNum,
-          bonusDefault: body.bonusDefault,
+          barcode: body.barcode,
+          name: body.name,
+          price: body.price,
           minOrderQty: body.minOrderQty,
-          sortOrder: body.sortOrder,
-          isActive: body.isActive,
-          priceOverride: body.priceOverride,
-          price: body.priceOverride ? body.price : undefined,
-          description: body.description
+          priceOverride: true
         })
       });
-      showToast('تم إضافة المنتج إلى الكتalog');
+      showToast('تمت إضافة المنتج');
     }
     closeProductModal();
     await loadCatalogProducts();
@@ -1095,10 +1053,6 @@ function initCommerceAdmin() {
     barcodeLookupTimer = setTimeout(() => lookupEdariByBarcodeInput(e.target.value), 350);
   });
 
-  document.getElementById('productPriceOverride')?.addEventListener('change', () => {
-    setEdariCoreFieldsReadonly(!document.getElementById('productId').value);
-  });
-
   document.getElementById('btnProductSyncEdari')?.addEventListener('click', async () => {
     const id = document.getElementById('productId').value;
     if (!id) return;
@@ -1109,6 +1063,8 @@ function initCommerceAdmin() {
       document.getElementById('productSkuNum').value = data.product.skuNum || '';
       document.getElementById('productEdariSeq').value = data.product.edariSeq || '';
       document.getElementById('productUnit').value = data.product.unit || '';
+      document.getElementById('productUnitEdit').value = data.product.unit || '';
+      document.getElementById('productQty').value = data.product.minOrderQty ?? 1;
       if (!data.product.priceOverride) {
         document.getElementById('productPrice').value = data.product.price ?? 0;
       }
