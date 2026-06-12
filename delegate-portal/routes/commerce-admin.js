@@ -224,7 +224,7 @@ router.post('/products/sync-materials', (req, res) => {
     res.json({
       ok: true,
       ...result,
-      message: `تم تحديث ${result.productsUpdated} منتج · ${result.materials} مادة`
+      message: `تم تحديث ${result.productsUpdated} منتج (اسم · عدد · سعر) · ${result.materials} مادة`
     });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
@@ -239,7 +239,7 @@ router.post('/products/refresh-prices', (req, res) => {
     res.json({
       ok: true,
       ...result,
-      message: `تم تحديث ${result.updated} من ${result.total} منتج من الذاكرة المؤقتة`
+      message: `تم تحديث ${result.updated} من ${result.total} منتج (اسم · عدد · سعر)`
     });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
@@ -351,7 +351,7 @@ router.post('/catalog/sections/:id/sync-products', (req, res) => {
     res.json({
       ok: true,
       ...result,
-      message: `تم تحديث ${result.updated} من ${result.total} منتج من Edari`
+      message: `تم تحديث ${result.updated} من ${result.total} منتج (اسم · عدد · سعر) من Edari`
     });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });

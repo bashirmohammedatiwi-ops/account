@@ -364,7 +364,7 @@ async function refreshPricesFromCacheFallback() {
     updated += data.updated || 0;
     total += data.total || 0;
   }
-  return { updated, total, message: `تم تحديث ${updated} من ${total} منتج` };
+  return { updated, total, message: `تم تحديث ${updated} من ${total} منتج (اسم · عدد · سعر)` };
 }
 
 function buildCatalogRefreshScope() {
@@ -430,7 +430,7 @@ async function refreshCatalogPricesNow() {
       const result = await uploadEdariMaterialRows(rows, (done, total) => {
         if (btn) btn.textContent = `رفع ${done}/${total}...`;
       });
-      showToast(`تم — ${result.productsUpdated} منتج · ${result.materials} مادة`, 'ok');
+      showToast(`تم — ${result.productsUpdated} منتج (اسم · عدد · سعر)`, 'ok');
     } else {
       const { body } = buildCatalogRefreshScope();
       let data;
@@ -453,7 +453,7 @@ async function refreshCatalogPricesNow() {
     priceRefreshRunning = false;
     if (btn) {
       btn.disabled = false;
-      btn.textContent = 'تحديث الأسعار الآن';
+      btn.textContent = 'تحديث من Edari الآن';
     }
   }
 }
@@ -1247,7 +1247,7 @@ function initCommerceAdmin() {
 
   document.getElementById('btnSyncSectionProducts')?.addEventListener('click', async () => {
     if (!commerce.selectedSectionId) return showToast('اختر قسماً', 'err');
-    if (!confirm('مزامنة كل منتجات هذا القسم من Edari؟\nسيتم تحديث الأسعار والكميات من الإداري.')) return;
+    if (!confirm('مزامنة كل منتجات هذا القسم من Edari؟\nسيتم تحديث الاسم والعدد والسعر من الإداري.')) return;
     try {
       const data = await commerceApi(`/catalog/sections/${commerce.selectedSectionId}/sync-products`, { method: 'POST' });
       showToast(data.message || 'تمت المزامنة');

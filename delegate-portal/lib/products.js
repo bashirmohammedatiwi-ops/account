@@ -447,6 +447,7 @@ function findRegisteredProductIds(parsed) {
   return [...ids];
 }
 
+/** Refresh catalog products linked to this Edari material (name, stock qty, wholesale price). */
 function refreshRegisteredProductFromEdari(parsed) {
   const now = new Date().toISOString();
   let updated = 0;

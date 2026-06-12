@@ -174,14 +174,14 @@
             <div class="panel-head">
               <div>
                 <h2 class="panel-title">منتجات القسم</h2>
-                <p class="panel-desc muted">الباركود والاسم — العدد والسعر (نصف الجملة) من Edari. «تحديث الأسعار الآن» يحدّث المنتجات المضافة فقط</p>
+                <p class="panel-desc muted">الاسم والعدد (رصيد المخزون) والسعر (نصف الجملة) من Edari — زر «تحديث من Edari الآن» يحدّث المنتجات المضافة فقط</p>
               </div>
               <div class="btn-row">
                 <button type="button" class="btn btn-primary btn-sm" id="btnAddProduct">+ إضافة منتج</button>
                 <button type="button" class="btn btn-soft btn-sm" id="btnBulkAddProducts">إضافة جماعية</button>
                 <button type="button" class="btn btn-soft btn-sm" id="btnImportProducts">استيراد CSV</button>
                 <button type="button" class="btn btn-soft btn-sm" id="btnExportProducts">تصدير CSV</button>
-                <button type="button" class="btn btn-accent btn-sm" id="btnRefreshProductPrices" title="قراءة الأسعار مباشرة من Edari">تحديث الأسعار الآن</button>
+                <button type="button" class="btn btn-accent btn-sm" id="btnRefreshProductPrices" title="تحديث الاسم والعدد والسعر من Edari للمنتجات المضافة">تحديث من Edari الآن</button>
                 <button type="button" class="btn btn-soft btn-sm" id="btnSyncSectionProducts">مزامنة القسم</button>
                 <button type="button" class="btn btn-danger btn-sm" id="btnPurgeProducts">حذف الكل</button>
               </div>
@@ -480,7 +480,7 @@
               <input type="number" id="productPrice" min="0" step="1" dir="ltr" readonly class="readonly" required>
             </label>
           </div>
-          <p class="field-hint">العدد والسعر يُحدَّثان تلقائياً عند مزامنة Edari — لا يمكن تعديلهما يدوياً</p>
+          <p class="field-hint">الاسم والعدد والسعر يُحدَّثان تلقائياً من Edari — لا يمكن تعديلهما يدوياً</p>
 
           <div class="product-modal-media">
             <span class="field-label">صورة المنتج</span>
@@ -626,6 +626,6 @@
 
   <script src="config.js"></script>
   <script src="admin.js?v=20260607catalog"></script>
-  <script src="admin-commerce.js?v=20260613prices4"></script>
+  <script src="admin-commerce.js?v=20260613prices5"></script>
 </body>
 </html>
