@@ -213,6 +213,38 @@ router.get('/products/edari-search', (req, res) => {
   res.json({ ok: true, materials: searchEdariMaterials(q) });
 });
 
+router.post('/products/sync-materials', (req, res) => {
+  try {
+    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+    if (!rows.length) {
+      return res.status(400).json({ ok: false, error: 'صفوف المواد مطلوبة' });
+    }
+    const result = syncMaterialsFromEdari(rows);
+    res.json({
+      ok: true,
+      ...result,
+      message: `تم تحديث ${result.productsUpdated} منتج · ${result.materials} مادة`
+    });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/products/refresh-prices', (req, res) => {
+  try {
+    const sectionId = req.body?.sectionId != null ? Number(req.body.sectionId) : null;
+    const branchId = req.body?.branchId != null ? Number(req.body.branchId) : null;
+    const result = refreshCatalogPricesFromCache({ sectionId, branchId });
+    res.json({
+      ok: true,
+      ...result,
+      message: `تم تحديث ${result.updated} من ${result.total} منتج من الذاكرة المؤقتة`
+    });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
 router.get('/products/:id', (req, res) => {
   const product = getProduct(Number(req.params.id));
   if (!product) return res.status(404).json({ ok: false, error: 'المنتج غير موجود' });
@@ -312,38 +344,6 @@ router.post('/catalog/sections/:id/sync-products', (req, res) => {
       ok: true,
       ...result,
       message: `تم تحديث ${result.updated} من ${result.total} منتج من Edari`
-    });
-  } catch (err) {
-    res.status(400).json({ ok: false, error: err.message });
-  }
-});
-
-router.post('/products/sync-materials', (req, res) => {
-  try {
-    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
-    if (!rows.length) {
-      return res.status(400).json({ ok: false, error: 'صفوف المواد مطلوبة' });
-    }
-    const result = syncMaterialsFromEdari(rows);
-    res.json({
-      ok: true,
-      ...result,
-      message: `تم تحديث ${result.productsUpdated} منتج · ${result.materials} مادة`
-    });
-  } catch (err) {
-    res.status(400).json({ ok: false, error: err.message });
-  }
-});
-
-router.post('/products/refresh-prices', (req, res) => {
-  try {
-    const sectionId = req.body?.sectionId != null ? Number(req.body.sectionId) : null;
-    const branchId = req.body?.branchId != null ? Number(req.body.branchId) : null;
-    const result = refreshCatalogPricesFromCache({ sectionId, branchId });
-    res.json({
-      ok: true,
-      ...result,
-      message: `تم تحديث ${result.updated} من ${result.total} منتج من الذاكرة المؤقتة`
     });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
