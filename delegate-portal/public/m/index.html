@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260613commerce">
+  <link rel="stylesheet" href="styles.css?v=20260613showcase">
   <link rel="stylesheet" href="portal-pro.css?v=20260611home2">
 </head>
 <body class="ed-body">
@@ -307,33 +307,54 @@
         <div class="inv-shop-grid" id="shopSectionsList"></div>
       </section>
 
-      <!-- Shop: products + inline invoice draft -->
-      <section class="screen screen-has-dock" id="screen-shop-products">
-        <div class="inv-page-head inv-page-head-sticky">
-          <div>
-            <h3 class="inv-page-title">المنتجات</h3>
-            <p class="inv-page-meta" id="shopProductsMeta">—</p>
+      <!-- Shop: products + live invoice showcase -->
+      <section class="screen screen-showcase" id="screen-shop-products">
+        <div class="showcase-top">
+          <div class="inv-page-head">
+            <div>
+              <h3 class="inv-page-title">عرض وطلب</h3>
+              <p class="inv-page-meta" id="shopProductsMeta">—</p>
+            </div>
+          </div>
+          <p class="showcase-hint">الفاتورة والمنتجات ظاهرة معاً — مناسبة للعرض على الزبون</p>
+          <div class="inv-resume-banner hidden" id="invoiceResumeBanner">
+            <span id="invoiceResumeText">لديك فاتورة محفوظة</span>
           </div>
         </div>
-        <div class="inv-product-toolbar">
-          <div class="inv-search-wrap">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-            <input type="search" id="shopProductSearch" placeholder="بحث بالاسم أو الباركود..." autocomplete="off">
-          </div>
-        </div>
-        <div class="inv-product-list" id="shopProductsList"></div>
 
-        <div class="inv-dock hidden" id="invoiceDock">
-          <button type="button" class="inv-dock-main" id="btnOpenInvoice">
-            <div class="inv-dock-info">
-              <span class="inv-dock-label">فاتورة الطلب</span>
-              <strong class="inv-dock-total" id="invoiceDockTotal" dir="ltr">0</strong>
+        <div class="showcase-live-invoice" id="liveInvoicePanel"></div>
+
+        <div class="showcase-products-wrap">
+          <div class="inv-product-toolbar">
+            <div class="inv-search-wrap">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <input type="search" id="shopProductSearch" placeholder="بحث بالاسم أو الباركود..." autocomplete="off">
             </div>
-            <div class="inv-dock-meta">
-              <span class="inv-dock-count" id="invoiceDockCount">0 بند</span>
-              <span class="inv-dock-cta">عرض ←</span>
+          </div>
+          <div class="showcase-product-grid" id="shopProductsList"></div>
+        </div>
+
+        <div class="showcase-action-bar" id="invoiceActionBar">
+          <div class="showcase-action-customer">
+            <div class="showcase-action-customer-info" id="actionBarCustomer">
+              <span class="muted">لم يُختر زبون</span>
             </div>
-          </button>
+            <button type="button" class="btn soft btn-sm" id="btnPickCustomer">اختر زبون</button>
+          </div>
+          <label class="field showcase-notes">
+            <span class="field-label">ملاحظات</span>
+            <textarea id="invoiceNotes" rows="1" placeholder="ملاحظات للإدارة (اختياري)..."></textarea>
+          </label>
+          <div class="showcase-action-foot">
+            <div class="showcase-action-total">
+              <span>إجمالي الفاتورة</span>
+              <strong id="invoiceActionTotal" dir="ltr">0</strong>
+            </div>
+            <div class="showcase-action-btns">
+              <button type="button" class="btn soft" id="btnClearInvoice">تفريغ</button>
+              <button type="button" class="btn primary" id="btnSubmitInvoice">إرسال للوحة التحكم</button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -353,54 +374,6 @@
         <div class="inv-order-detail" id="orderDetailSheet"></div>
       </section>
     </main>
-
-    <!-- Invoice sheet (direct invoice, not cart) -->
-    <div class="inv-overlay hidden" id="invoiceOverlay" aria-hidden="true">
-      <div class="inv-sheet">
-        <header class="inv-sheet-head">
-          <div>
-            <p class="inv-sheet-kicker">فاتورة مباشرة</p>
-            <h3>مراجعة وإرسال الطلب</h3>
-          </div>
-          <button type="button" class="icon-btn" id="btnCloseInvoice" aria-label="إغلاق">×</button>
-        </header>
-
-        <div class="inv-sheet-body">
-          <section class="inv-sheet-section">
-            <div class="inv-sheet-section-head">
-              <h4>الزبون</h4>
-              <button type="button" class="btn soft btn-sm" id="btnPickCustomer">اختر من الكشوفات</button>
-            </div>
-            <div class="inv-customer-card hidden" id="invoiceCustomerCard"></div>
-            <p class="inv-customer-empty" id="invoiceCustomerEmpty">لم يُختر زبون — اختر فرعاً من شجرات الكشوفات</p>
-          </section>
-
-          <section class="inv-sheet-section">
-            <div class="inv-sheet-section-head">
-              <h4>بنود الفاتورة</h4>
-              <span class="inv-line-count" id="invoiceLineCount">0</span>
-            </div>
-            <div class="inv-invoice-lines" id="invoiceLines"></div>
-          </section>
-
-          <label class="field">
-            <span class="field-label">ملاحظات (اختياري)</span>
-            <textarea id="invoiceNotes" rows="2" placeholder="ملاحظات للإدارة..."></textarea>
-          </label>
-        </div>
-
-        <footer class="inv-sheet-foot">
-          <div class="inv-sheet-total">
-            <span>إجمالي الفاتورة</span>
-            <strong id="invoiceSheetTotal" dir="ltr">0</strong>
-          </div>
-          <div class="inv-sheet-actions">
-            <button type="button" class="btn soft" id="btnClearInvoice">تفريغ</button>
-            <button type="button" class="btn primary full" id="btnSubmitInvoice">إرسال للوحة التحكم</button>
-          </div>
-        </footer>
-      </div>
-    </div>
 
     <!-- Customer picker from account trees -->
     <div class="inv-overlay hidden" id="customerOverlay" aria-hidden="true">
@@ -427,6 +400,6 @@
     </div>
   </div>
   <script src="app.js?v=20260613commerce"></script>
-  <script src="app-commerce.js?v=20260613commerce"></script>
+  <script src="app-commerce.js?v=20260613showcase"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-/* Mobile commerce v2: inline invoice draft, no cart */
+/* Mobile commerce v3: showcase products + live Edari-style invoice + localStorage */
 const commerce = {
   branches: [],
   sections: [],
@@ -25,6 +25,10 @@ const STATUS_BADGE = {
   cancelled: 'muted'
 };
 
+function invoiceStorageKey() {
+  return `delegateInvoice:${state.agent?.id || 'guest'}`;
+}
+
 function commerceApi(path, opts = {}) {
   return api(path, opts);
 }
@@ -33,10 +37,6 @@ function getDraft(productId) {
   const id = Number(productId);
   if (!commerce.draft[id]) commerce.draft[id] = { quant: 0, bonus: 0 };
   return commerce.draft[id];
-}
-
-function findProduct(productId) {
-  return commerce.products.find((p) => p.id === Number(productId));
 }
 
 function invoiceLineCount() {
@@ -53,6 +53,10 @@ function invoiceTotalAmount() {
   return total;
 }
 
+function orderLineTotal(line) {
+  return Math.round(Number(line.quant || 0) * Number(line.unitPrice || line.price || 0));
+}
+
 function buildOrderLines() {
   const lines = [];
   for (const p of commerce.products) {
@@ -61,14 +65,87 @@ function buildOrderLines() {
     lines.push({
       productId: p.id,
       barcode: p.barcode || p.skuNum || '',
+      matNum: p.barcode || p.skuNum || '',
       matName: p.name,
       quant: d.quant || 0,
       bonus: d.bonus || 0,
       unitPrice: Number(p.price || 0),
+      price: Number(p.price || 0),
       lineTotal: (d.quant || 0) * Number(p.price || 0)
     });
   }
   return lines;
+}
+
+function persistInvoiceDraft() {
+  if (!state.agent?.id) return;
+  const payload = {
+    branchId: commerce.selectedBranch?.id || null,
+    branchName: commerce.selectedBranch?.name || '',
+    sectionId: commerce.selectedSection?.id || null,
+    sectionName: commerce.selectedSection?.name || '',
+    draft: commerce.draft,
+    customer: commerce.invoiceCustomer,
+    notes: commerce.invoiceNotes,
+    savedAt: new Date().toISOString()
+  };
+  try {
+    localStorage.setItem(invoiceStorageKey(), JSON.stringify(payload));
+  } catch { /* quota */ }
+  updateResumeBanner();
+}
+
+function loadInvoiceDraft() {
+  try {
+    const raw = localStorage.getItem(invoiceStorageKey());
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function clearInvoiceStorage() {
+  localStorage.removeItem(invoiceStorageKey());
+  updateResumeBanner();
+}
+
+function hasSavedInvoiceLines(saved) {
+  if (!saved?.draft) return false;
+  return Object.values(saved.draft).some((d) => Number(d.quant) > 0 || Number(d.bonus) > 0);
+}
+
+function applyPersistedDraft() {
+  const saved = loadInvoiceDraft();
+  if (!saved) return;
+  commerce.draft = saved.draft || {};
+  commerce.invoiceCustomer = saved.customer || commerce.invoiceCustomer;
+  commerce.invoiceNotes = saved.notes || '';
+  const notesEl = document.getElementById('invoiceNotes');
+  if (notesEl && notesEl.value !== commerce.invoiceNotes) notesEl.value = commerce.invoiceNotes;
+}
+
+function restoreDraftIntoMemory() {
+  const saved = loadInvoiceDraft();
+  if (!saved) return;
+  commerce.draft = saved.draft || {};
+  commerce.invoiceCustomer = saved.customer || null;
+  commerce.invoiceNotes = saved.notes || '';
+}
+
+function updateResumeBanner() {
+  const banner = document.getElementById('invoiceResumeBanner');
+  const text = document.getElementById('invoiceResumeText');
+  if (!banner || !text) return;
+  const saved = loadInvoiceDraft();
+  const active = hasSavedInvoiceLines(saved);
+  banner.classList.toggle('hidden', !active);
+  if (active) {
+    const where = [saved.branchName, saved.sectionName].filter(Boolean).join(' · ');
+    text.textContent = where
+      ? `فاتورة محفوظة — ${where} (تُستعاد تلقائياً)`
+      : 'فاتورة محفوظة — تُستعاد بعد تحديث الصفحة';
+  }
 }
 
 function adjustDraft(productId, field, delta) {
@@ -76,10 +153,8 @@ function adjustDraft(productId, field, delta) {
   const key = field === 'bonus' ? 'bonus' : 'quant';
   d[key] = Math.max(0, Number(d[key] || 0) + Number(delta || 0));
   syncProductRow(productId);
-  updateInvoiceDock();
-  if (!document.getElementById('invoiceOverlay')?.classList.contains('hidden')) {
-    renderInvoiceSheet();
-  }
+  updateInvoiceUI();
+  persistInvoiceDraft();
 }
 
 function syncProductRow(productId) {
@@ -90,48 +165,26 @@ function syncProductRow(productId) {
   const bEl = row.querySelector('[data-draft-b]');
   if (qEl) qEl.textContent = String(d.quant || 0);
   if (bEl) bEl.textContent = String(d.bonus || 0);
-  row.classList.toggle('inv-product-active', (d.quant || 0) > 0 || (d.bonus || 0) > 0);
-}
-
-function updateInvoiceDock() {
-  const dock = document.getElementById('invoiceDock');
-  const count = invoiceLineCount();
-  const total = invoiceTotalAmount();
-  if (dock) dock.classList.toggle('hidden', count === 0);
-  const countEl = document.getElementById('invoiceDockCount');
-  const totalEl = document.getElementById('invoiceDockTotal');
-  if (countEl) countEl.textContent = `${count} ${count === 1 ? 'بند' : 'بنود'}`;
-  if (totalEl) totalEl.textContent = fmtMoney(total);
-}
-
-function clearInvoiceDraft({ resetNotes = true } = {}) {
-  commerce.draft = {};
-  if (resetNotes) {
-    commerce.invoiceNotes = '';
-    const notesEl = document.getElementById('invoiceNotes');
-    if (notesEl) notesEl.value = '';
+  const active = (d.quant || 0) > 0 || (d.bonus || 0) > 0;
+  row.classList.toggle('showcase-card-active', active);
+  const visual = row.querySelector('.showcase-card-visual');
+  let badge = row.querySelector('.showcase-card-badge');
+  if (active && visual && !badge) {
+    visual.insertAdjacentHTML('beforeend', '<span class="showcase-card-badge">في الفاتورة</span>');
+  } else if (!active && badge) {
+    badge.remove();
   }
-  document.querySelectorAll('.inv-product-card').forEach((row) => {
-    row.classList.remove('inv-product-active');
-    const qEl = row.querySelector('[data-draft-q]');
-    const bEl = row.querySelector('[data-draft-b]');
-    if (qEl) qEl.textContent = '0';
-    if (bEl) bEl.textContent = '0';
-  });
-  updateInvoiceDock();
-  renderInvoiceSheet();
 }
 
 function renderStepper(productId, field, value) {
-  const label = field === 'bonus' ? 'هدايا مجانية' : 'الكمية';
-  const giftClass = field === 'bonus' ? ' inv-stepper-gift' : '';
+  const isGift = field === 'bonus';
   return `
-    <div class="inv-stepper-block${giftClass}">
-      <span class="inv-stepper-label">${field === 'bonus' ? '🎁 ' : ''}${label}</span>
+    <div class="showcase-stepper${isGift ? ' showcase-stepper-gift' : ''}">
+      <span class="showcase-stepper-label">${isGift ? '🎁 هدايا' : 'الكمية'}</span>
       <div class="inv-stepper">
-        <button type="button" class="inv-step-btn" data-draft-action data-product-id="${productId}" data-field="${field}" data-delta="-1" aria-label="تقليل">−</button>
-        <span class="inv-step-val" dir="ltr" data-draft-${field === 'bonus' ? 'b' : 'q'}>${value}</span>
-        <button type="button" class="inv-step-btn" data-draft-action data-product-id="${productId}" data-field="${field}" data-delta="1" aria-label="زيادة">+</button>
+        <button type="button" class="inv-step-btn" data-draft-action data-product-id="${productId}" data-field="${field}" data-delta="-1">−</button>
+        <span class="inv-step-val" dir="ltr" data-draft-${isGift ? 'b' : 'q'}>${value}</span>
+        <button type="button" class="inv-step-btn" data-draft-action data-product-id="${productId}" data-field="${field}" data-delta="1">+</button>
       </div>
     </div>`;
 }
@@ -148,23 +201,23 @@ function renderProductCard(p) {
   const stock = Number(p.minOrderQty ?? 0);
   const img = productImageSrc(p);
   return `
-    <article class="inv-product-card${active ? ' inv-product-active' : ''}" data-product-id="${p.id}">
-      <div class="inv-product-top">
-        <div class="inv-product-media">
-          ${img
-    ? `<img src="${img}" alt="" class="inv-product-img">`
-    : '<span class="inv-product-img inv-product-img-empty">📦</span>'}
-        </div>
-        <div class="inv-product-copy">
-          <h4 class="inv-product-name">${esc(p.name)}</h4>
-          <p class="inv-product-barcode" dir="ltr">${esc(p.barcode || p.skuNum || '—')}</p>
-          <div class="inv-product-meta-row">
-            <span class="inv-product-price" dir="ltr">${fmtMoney(p.price)}</span>
-            ${stock > 0 ? `<span class="inv-stock-badge">رصيد ${fmtNumAlways(stock)}</span>` : ''}
-          </div>
-        </div>
+    <article class="showcase-card${active ? ' showcase-card-active' : ''}" data-product-id="${p.id}">
+      <div class="showcase-card-visual">
+        ${img
+    ? `<img src="${img}" alt="" class="showcase-card-img">`
+    : '<div class="showcase-card-img showcase-card-img-empty"><span>📦</span></div>'}
+        ${active ? '<span class="showcase-card-badge">في الفاتورة</span>' : ''}
       </div>
-      <div class="inv-product-controls">
+      <div class="showcase-card-body">
+        <h3 class="showcase-card-name">${esc(p.name)}</h3>
+        <p class="showcase-card-barcode" dir="ltr">${esc(p.barcode || p.skuNum || '—')}</p>
+        <div class="showcase-card-pricing">
+          <span class="showcase-card-price" dir="ltr">${fmtInvInt(p.price)}</span>
+          <span class="showcase-card-price-label">سعر نصف الجملة</span>
+        </div>
+        ${stock > 0 ? `<span class="showcase-stock">متوفر ${fmtInvInt(stock)}</span>` : ''}
+      </div>
+      <div class="showcase-card-controls">
         ${renderStepper(p.id, 'quant', d.quant || 0)}
         ${renderStepper(p.id, 'bonus', d.bonus || 0)}
       </div>
@@ -186,7 +239,173 @@ function renderProductsList() {
   const items = filteredProducts();
   list.innerHTML = items.map(renderProductCard).join('')
     || '<div class="empty-state"><p>لا توجد منتجات مطابقة</p></div>';
-  updateInvoiceDock();
+  updateInvoiceUI();
+}
+
+function todayInvoiceDate() {
+  const d = new Date();
+  return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+}
+
+function renderEdariInvoiceDocument(lines, meta = {}) {
+  const {
+    title = 'فاتورة طلب مندوب',
+    clientName = '—',
+    clientNum = '',
+    docNum = 'مسودة',
+    remarks = '',
+    readonly = false
+  } = meta;
+
+  if (!lines.length) {
+    return `
+      <div class="doc-panel invoice-doc inv-order-doc inv-order-doc-empty">
+        <div class="inv-empty-doc">
+          <span class="inv-empty-doc-icon">🧾</span>
+          <strong>فاتورة الطلب</strong>
+          <p class="muted">استخدم + بجانب المنتجات — ستظهر الفاتورة هنا مباشرة للزبون</p>
+        </div>
+      </div>`;
+  }
+
+  const total = lines.reduce((s, l) => s + orderLineTotal(l), 0);
+  const qtySum = lines.reduce((s, l) => s + Number(l.quant || 0), 0);
+  const bonusSum = lines.reduce((s, l) => s + Number(l.bonus || 0), 0);
+
+  return `
+    <div class="doc-panel invoice-doc inv-order-doc">
+      <div class="doc-head-row">
+        <img class="doc-logo" src="assets/logo.png" alt="" width="40" height="40">
+        <div class="doc-head-main">
+          <span class="doc-label">شركة ديما الحياة</span>
+          <strong class="doc-title">${esc(title)}</strong>
+          <span class="doc-meta-line">رقم ${esc(docNum)} · ${todayInvoiceDate()}</span>
+          ${remarks ? `<span class="doc-meta-line doc-meta-note">${esc(remarks)}</span>` : ''}
+        </div>
+        <div class="doc-head-side">
+          <strong class="doc-client">${esc(clientName)}</strong>
+          ${clientNum ? `<span class="doc-client-num" dir="ltr">${esc(clientNum)}</span>` : ''}
+        </div>
+      </div>
+      <table class="doc-meta-table invoice-meta">
+        <tbody>
+          <tr>
+            <th>عدد البنود</th><td dir="ltr">${lines.length}</td>
+            <th>إجمالي الكمية</th><td dir="ltr">${fmtInvInt(qtySum)}</td>
+            <th>إجمالي الهدايا</th><td dir="ltr">${fmtInvInt(bonusSum)}</td>
+            <th>إجمالي الفاتورة</th><td class="net" dir="ltr">${fmtInvInt(total)}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="table-scroll">
+        <table class="data-table inv-table" dir="rtl">
+          <thead>
+            <tr>
+              <th class="col-n">م</th>
+              <th class="col-barcode">الباركود</th>
+              <th class="col-name">اسم المادة</th>
+              <th class="col-amt">الكمية</th>
+              <th class="col-amt">هدية</th>
+              <th class="col-amt">سعر الوحدة</th>
+              <th class="col-amt">المبلغ</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${lines.map((line, i) => {
+    const qtyCells = readonly
+      ? `${qtyTd(line.quant)}${qtyTd(line.bonus)}`
+      : `<td class="col-amt inv-editable-qty">
+                  <div class="inv-table-stepper">
+                    <button type="button" class="inv-step-btn inv-step-btn-xs" data-invoice-action data-product-id="${line.productId}" data-field="quant" data-delta="-1">−</button>
+                    <span dir="ltr">${line.quant || 0}</span>
+                    <button type="button" class="inv-step-btn inv-step-btn-xs" data-invoice-action data-product-id="${line.productId}" data-field="quant" data-delta="1">+</button>
+                  </div>
+                </td>
+                <td class="col-amt inv-editable-qty">
+                  <div class="inv-table-stepper inv-table-stepper-gift">
+                    <button type="button" class="inv-step-btn inv-step-btn-xs" data-invoice-action data-product-id="${line.productId}" data-field="bonus" data-delta="-1">−</button>
+                    <span dir="ltr">${line.bonus || 0}</span>
+                    <button type="button" class="inv-step-btn inv-step-btn-xs" data-invoice-action data-product-id="${line.productId}" data-field="bonus" data-delta="1">+</button>
+                  </div>
+                </td>`;
+    return `
+            <tr>
+              <td class="col-n">${i + 1}</td>
+              <td class="col-barcode" dir="ltr">${esc(invBarcodeCell(line))}</td>
+              <td class="col-name">${esc(line.matName || '—')}</td>
+              ${qtyCells}
+              ${invMoneyTd(line.unitPrice ?? line.price)}
+              ${invMoneyTd(orderLineTotal(line), 'net')}
+            </tr>`;
+  }).join('')}
+          </tbody>
+          <tfoot>
+            <tr class="row-sum">
+              <td colspan="6" class="total-label">إجمالي الفاتورة</td>
+              <td class="num" dir="ltr">${fmtInvInt(total)}</td>
+            </tr>
+            <tr class="row-total">
+              <td colspan="6" class="total-label">الصافي للدفع</td>
+              <td class="num net" dir="ltr">${fmtInvInt(total)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>`;
+}
+
+function renderLiveInvoicePanel() {
+  const panel = document.getElementById('liveInvoicePanel');
+  if (!panel) return;
+  const lines = buildOrderLines();
+  const c = commerce.invoiceCustomer;
+  panel.innerHTML = renderEdariInvoiceDocument(lines, {
+    clientName: c?.name1 || '—',
+    clientNum: c?.num || '',
+    docNum: 'مسودة',
+    remarks: commerce.invoiceNotes || '',
+    readonly: false
+  });
+}
+
+function renderActionBarCustomer() {
+  const el = document.getElementById('actionBarCustomer');
+  if (!el) return;
+  const c = commerce.invoiceCustomer;
+  if (c?.seq) {
+    el.innerHTML = `<strong>${esc(c.name1)}</strong><span class="muted" dir="ltr">${esc(c.num || '')}</span>`;
+  } else {
+    el.innerHTML = '<span class="muted">لم يُختر زبون — اختر من الكشوفات</span>';
+  }
+}
+
+function updateInvoiceUI() {
+  renderLiveInvoicePanel();
+  renderActionBarCustomer();
+  const total = invoiceTotalAmount();
+  const totalEl = document.getElementById('invoiceActionTotal');
+  if (totalEl) totalEl.textContent = fmtInvInt(total);
+  const bar = document.getElementById('invoiceActionBar');
+  if (bar) bar.classList.toggle('has-lines', invoiceLineCount() > 0);
+}
+
+function clearInvoiceDraft({ resetNotes = true } = {}) {
+  commerce.draft = {};
+  if (resetNotes) {
+    commerce.invoiceNotes = '';
+    const notesEl = document.getElementById('invoiceNotes');
+    if (notesEl) notesEl.value = '';
+  }
+  document.querySelectorAll('.showcase-card').forEach((row) => {
+    row.classList.remove('showcase-card-active');
+    const qEl = row.querySelector('[data-draft-q]');
+    const bEl = row.querySelector('[data-draft-b]');
+    if (qEl) qEl.textContent = '0';
+    if (bEl) bEl.textContent = '0';
+    row.querySelector('.showcase-card-badge')?.remove();
+  });
+  clearInvoiceStorage();
+  updateInvoiceUI();
 }
 
 async function loadShopBranches() {
@@ -202,7 +421,7 @@ async function loadShopBranches() {
         <span class="inv-shop-icon">🏪</span>
         <span class="inv-shop-copy">
           <strong>${esc(b.name)}</strong>
-          <span class="inv-shop-hint">اضغط لعرض الأقسام</span>
+          <span class="inv-shop-hint">عرض المنتجات والفاتورة</span>
         </span>
         ${ICONS.chevron}
       </button>`).join('') || '<div class="empty-state"><p>لا توجد فروع منتجات</p></div>';
@@ -213,6 +432,7 @@ async function loadShopBranches() {
         openShopSections();
       });
     });
+    updateResumeBanner();
   } catch (e) {
     alert(e.message);
   } finally {
@@ -232,7 +452,7 @@ async function openShopSections() {
         <span class="inv-shop-icon">📁</span>
         <span class="inv-shop-copy">
           <strong>${esc(s.name)}</strong>
-          <span class="inv-shop-hint">عرض المنتجات والفاتورة</span>
+          <span class="inv-shop-hint">عرض وطلب مع فاتورة حية</span>
         </span>
         ${ICONS.chevron}
       </button>`).join('') || '<div class="empty-state"><p>لا توجد أقسام</p></div>';
@@ -260,96 +480,19 @@ async function openShopProducts() {
     commerce.productFilter = '';
     const searchEl = document.getElementById('shopProductSearch');
     if (searchEl) searchEl.value = '';
+    applyPersistedDraft();
     const branchName = commerce.selectedBranch?.name || '';
     const sectionName = commerce.selectedSection?.name || '';
     document.getElementById('shopProductsMeta').textContent =
       `${branchName} · ${sectionName} · ${commerce.products.length} منتج`;
     renderProductsList();
+    persistInvoiceDraft();
     goToScreen('shop-products');
   } catch (e) {
     alert(e.message);
   } finally {
     setOverlay(false);
   }
-}
-
-function renderInvoiceCustomer() {
-  const card = document.getElementById('invoiceCustomerCard');
-  const empty = document.getElementById('invoiceCustomerEmpty');
-  const c = commerce.invoiceCustomer;
-  if (!card || !empty) return;
-  if (c?.seq) {
-    card.classList.remove('hidden');
-    empty.classList.add('hidden');
-    card.innerHTML = `
-      <div class="inv-customer-main">
-        <strong>${esc(c.name1)}</strong>
-        <span dir="ltr">${esc(c.num || '')}</span>
-      </div>
-      ${c.treeName ? `<p class="muted">${esc(c.treeName)}</p>` : ''}`;
-  } else {
-    card.classList.add('hidden');
-    empty.classList.remove('hidden');
-  }
-}
-
-function renderInvoiceLines() {
-  const el = document.getElementById('invoiceLines');
-  if (!el) return;
-  const lines = buildOrderLines();
-  if (!lines.length) {
-    el.innerHTML = '<div class="empty-state inv-empty-lines"><p>لا توجد بنود — استخدم + بجانب المنتجات</p></div>';
-    return;
-  }
-  el.innerHTML = lines.map((l) => `
-      <div class="inv-invoice-line" data-line-product="${l.productId}">
-        <div class="inv-invoice-line-info">
-          <strong>${esc(l.matName)}</strong>
-          <span class="muted" dir="ltr">${esc(l.barcode)}</span>
-          <div class="inv-invoice-line-tags">
-            ${l.quant ? `<span class="inv-tag">كمية ${l.quant}</span>` : ''}
-            ${l.bonus ? `<span class="inv-tag inv-tag-gift">🎁 ${l.bonus}</span>` : ''}
-          </div>
-        </div>
-        <div class="inv-invoice-line-side">
-          <div class="inv-mini-steppers">
-            <div class="inv-mini-stepper">
-              <button type="button" class="inv-step-btn inv-step-btn-sm" data-invoice-action data-product-id="${l.productId}" data-field="quant" data-delta="-1">−</button>
-              <span dir="ltr">${l.quant}</span>
-              <button type="button" class="inv-step-btn inv-step-btn-sm" data-invoice-action data-product-id="${l.productId}" data-field="quant" data-delta="1">+</button>
-            </div>
-            <div class="inv-mini-stepper inv-mini-gift">
-              <span class="inv-mini-label">🎁</span>
-              <button type="button" class="inv-step-btn inv-step-btn-sm" data-invoice-action data-product-id="${l.productId}" data-field="bonus" data-delta="-1">−</button>
-              <span dir="ltr">${l.bonus}</span>
-              <button type="button" class="inv-step-btn inv-step-btn-sm" data-invoice-action data-product-id="${l.productId}" data-field="bonus" data-delta="1">+</button>
-            </div>
-          </div>
-          <div class="inv-invoice-line-price" dir="ltr">${fmtMoney(l.lineTotal)}</div>
-        </div>
-      </div>`).join('');
-}
-
-function renderInvoiceSheet() {
-  renderInvoiceCustomer();
-  renderInvoiceLines();
-  const count = invoiceLineCount();
-  const total = invoiceTotalAmount();
-  document.getElementById('invoiceLineCount')?.replaceChildren(document.createTextNode(String(count)));
-  document.getElementById('invoiceSheetTotal')?.replaceChildren(document.createTextNode(fmtMoney(total)));
-  updateInvoiceDock();
-}
-
-function openInvoiceSheet() {
-  if (!invoiceLineCount()) return alert('أضف منتجات للفاتورة أولاً');
-  renderInvoiceSheet();
-  document.getElementById('invoiceOverlay')?.classList.remove('hidden');
-  document.body.classList.add('inv-sheet-open');
-}
-
-function closeInvoiceSheet() {
-  document.getElementById('invoiceOverlay')?.classList.add('hidden');
-  document.body.classList.remove('inv-sheet-open');
 }
 
 async function submitInvoice() {
@@ -372,7 +515,6 @@ async function submitInvoice() {
       })
     });
     clearInvoiceDraft({ resetNotes: true });
-    closeInvoiceSheet();
     alert(`تم إرسال الطلب ${data.order?.orderNo || ''} إلى لوحة التحكم`);
     goToScreen('my-orders');
     await loadMyOrders();
@@ -465,7 +607,8 @@ function selectInvoiceCustomer(branch) {
     treeName: commerce.pickerTree?.name1 || ''
   };
   closeCustomerPicker();
-  renderInvoiceCustomer();
+  updateInvoiceUI();
+  persistInvoiceDraft();
 }
 
 async function loadMyOrders() {
@@ -486,7 +629,7 @@ async function loadMyOrders() {
           <span class="badge ${STATUS_BADGE[o.status] || 'pending'}">${esc(o.statusLabel)}</span>
         </div>
         <div class="inv-order-card-foot">
-          <span dir="ltr">${fmtMoney(o.totalAmount)}</span>
+          <span dir="ltr">${fmtInvInt(o.totalAmount)}</span>
           <span>${o.lines?.length || 0} بند · ${esc((o.submittedAt || o.createdAt || '').slice(0, 16).replace('T', ' '))}</span>
         </div>
       </button>`).join('') || '<div class="empty-state"><p>لا توجد طلبات</p></div>';
@@ -506,31 +649,23 @@ async function openOrderDetail(id) {
   try {
     const data = await commerceApi(`/orders/${id}`);
     const o = data.order;
+    const lines = (o.lines || []).map((l) => ({
+      ...l,
+      price: l.unitPrice,
+      matNum: l.barcode
+    }));
     document.getElementById('orderDetailSheet').innerHTML = `
-      <div class="inv-order-detail-head">
-        <p class="inv-order-no" dir="ltr">${esc(o.orderNo)}</p>
+      ${renderEdariInvoiceDocument(lines, {
+    title: `طلب ${o.orderNo}`,
+    clientName: o.customerName || '—',
+    clientNum: o.customerNum || '',
+    docNum: o.orderNo,
+    remarks: o.notes || '',
+    readonly: true
+  })}
+      <div class="inv-order-status-row">
         <span class="badge ${STATUS_BADGE[o.status] || 'pending'}">${esc(o.statusLabel)}</span>
-        <h3>${esc(o.customerName || '—')}</h3>
-        <p class="muted">${esc(o.catalogBranchName || '')} · ${esc((o.submittedAt || o.createdAt || '').slice(0, 16).replace('T', ' '))}</p>
-      </div>
-      <div class="inv-order-detail-lines">
-        ${(o.lines || []).map((l) => `
-          <div class="inv-invoice-line inv-invoice-line-readonly">
-            <div class="inv-invoice-line-info">
-              <strong>${esc(l.matName)}</strong>
-              <span class="muted" dir="ltr">${esc(l.barcode)}</span>
-              <div class="inv-invoice-line-tags">
-                ${l.quant ? `<span class="inv-tag">كمية ${l.quant}</span>` : ''}
-                ${l.bonus ? `<span class="inv-tag inv-tag-gift">🎁 ${l.bonus}</span>` : ''}
-              </div>
-            </div>
-            <div class="inv-invoice-line-price" dir="ltr">${fmtMoney(l.lineTotal)}</div>
-          </div>`).join('')}
-      </div>
-      ${o.notes ? `<div class="inv-order-notes"><strong>ملاحظات:</strong> ${esc(o.notes)}</div>` : ''}
-      <div class="inv-sheet-total inv-order-detail-total">
-        <span>الإجمالي</span>
-        <strong dir="ltr">${fmtMoney(o.totalAmount)}</strong>
+        <span class="muted">${esc(o.catalogBranchName || '')}</span>
       </div>`;
     goToScreen('order-detail');
   } catch (e) {
@@ -552,16 +687,16 @@ window.commerceNav = {
 
     if (name === 'shop') {
       title.textContent = 'المنتجات';
-      crumb.textContent = 'فاتورة مباشرة · اختر فرعاً';
+      crumb.textContent = 'عرض وطلب · اختر فرعاً';
       if (kicker) kicker.textContent = 'Edari · الطلبات';
     } else if (name === 'shop-sections') {
       title.textContent = commerce.selectedBranch?.name || 'الأقسام';
       crumb.textContent = 'اختر قسماً';
       if (kicker) kicker.textContent = 'Edari · الأقسام';
     } else if (name === 'shop-products') {
-      title.textContent = commerce.selectedSection?.name || 'المنتجات';
-      crumb.textContent = `${commerce.selectedBranch?.name || ''} · فاتورة مباشرة`;
-      if (kicker) kicker.textContent = 'Edari · المنتجات';
+      title.textContent = commerce.selectedSection?.name || 'عرض وطلب';
+      crumb.textContent = `${commerce.selectedBranch?.name || ''} · فاتورة حية`;
+      if (kicker) kicker.textContent = 'Edari · عرض للزبون';
     } else if (name === 'my-orders') {
       title.textContent = 'طلباتي';
       crumb.textContent = 'طلبات مرسلة للوحة التحكم';
@@ -569,14 +704,17 @@ window.commerceNav = {
     } else if (name === 'order-detail') {
       title.textContent = 'تفاصيل الطلب';
       crumb.textContent = '';
-      if (kicker) kicker.textContent = 'Edari · الطلب';
+      if (kicker) kicker.textContent = 'Edari · الفاتورة';
     }
   },
 
   onScreen(name) {
     if (name === 'shop') void loadShopBranches();
     if (name === 'my-orders') void loadMyOrders();
-    if (name === 'shop-products') updateInvoiceDock();
+    if (name === 'shop-products') {
+      applyPersistedDraft();
+      updateInvoiceUI();
+    }
   },
 
   handleBack() {
@@ -587,10 +725,6 @@ window.commerceNav = {
         return true;
       }
       closeCustomerPicker();
-      return true;
-    }
-    if (document.getElementById('invoiceOverlay') && !document.getElementById('invoiceOverlay').classList.contains('hidden')) {
-      closeInvoiceSheet();
       return true;
     }
     if (state.screen === 'order-detail') {
@@ -634,13 +768,15 @@ window.commerceNav = {
 };
 
 function initCommerceMobile() {
+  restoreDraftIntoMemory();
+
   document.getElementById('shopProductsList')?.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-draft-action]');
     if (!btn) return;
     adjustDraft(btn.dataset.productId, btn.dataset.field, Number(btn.dataset.delta));
   });
 
-  document.getElementById('invoiceLines')?.addEventListener('click', (e) => {
+  document.getElementById('liveInvoicePanel')?.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-invoice-action]');
     if (!btn) return;
     adjustDraft(btn.dataset.productId, btn.dataset.field, Number(btn.dataset.delta));
@@ -651,12 +787,16 @@ function initCommerceMobile() {
     renderProductsList();
   });
 
-  document.getElementById('btnOpenInvoice')?.addEventListener('click', openInvoiceSheet);
-  document.getElementById('btnCloseInvoice')?.addEventListener('click', closeInvoiceSheet);
   document.getElementById('btnSubmitInvoice')?.addEventListener('click', () => submitInvoice());
   document.getElementById('btnClearInvoice')?.addEventListener('click', confirmClearInvoice);
   document.getElementById('btnPickCustomer')?.addEventListener('click', () => openCustomerPicker());
   document.getElementById('btnCloseCustomer')?.addEventListener('click', closeCustomerPicker);
+
+  document.getElementById('invoiceNotes')?.addEventListener('input', (e) => {
+    commerce.invoiceNotes = e.target.value || '';
+    persistInvoiceDraft();
+    renderLiveInvoicePanel();
+  });
 
   document.getElementById('customerPickerList')?.addEventListener('click', (e) => {
     const treeBtn = e.target.closest('[data-pick-tree]');
@@ -671,10 +811,6 @@ function initCommerceMobile() {
     }
   });
 
-  document.getElementById('invoiceOverlay')?.addEventListener('click', (e) => {
-    if (e.target.id === 'invoiceOverlay') closeInvoiceSheet();
-  });
-
   document.getElementById('customerOverlay')?.addEventListener('click', (e) => {
     if (e.target.id === 'customerOverlay') closeCustomerPicker();
   });
@@ -687,6 +823,10 @@ function initCommerceMobile() {
       treeName: state.selectedTree?.name1 || ''
     };
   }
+
+  const notesEl = document.getElementById('invoiceNotes');
+  if (notesEl && commerce.invoiceNotes) notesEl.value = commerce.invoiceNotes;
+  updateResumeBanner();
 }
 
 initCommerceMobile();
