@@ -3236,7 +3236,7 @@ body.inv-sheet-open { overflow: hidden; }
 
 /* ── Showcase: products + live invoice ── */
 
-.screen-showcase {
+.screen.screen-showcase.active {
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -3569,7 +3569,7 @@ body.inv-sheet-open { overflow: hidden; }
 }
 
 @media (min-width: 768px) {
-  .screen-showcase {
+  .screen.screen-showcase.active {
     display: grid;
     grid-template-columns: minmax(300px, 42%) 1fr;
     grid-template-rows: auto 1fr auto;
@@ -3581,8 +3581,8 @@ body.inv-sheet-open { overflow: hidden; }
     padding-bottom: calc(120px + var(--safe-bottom, 0px));
   }
 
-  .showcase-top { grid-area: head; }
-  .showcase-live-invoice {
+  .screen.screen-showcase.active .showcase-top { grid-area: head; }
+  .screen.screen-showcase.active .showcase-live-invoice {
     grid-area: invoice;
     position: sticky;
     top: 8px;
@@ -3590,8 +3590,8 @@ body.inv-sheet-open { overflow: hidden; }
     max-height: calc(100dvh - 220px);
     overflow-y: auto;
   }
-  .showcase-products-wrap { grid-area: products; }
-  .showcase-action-bar {
+  .screen.screen-showcase.active .showcase-products-wrap { grid-area: products; }
+  .screen.screen-showcase.active .showcase-action-bar {
     grid-area: bar;
     position: sticky;
     max-width: none;
