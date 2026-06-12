@@ -302,7 +302,8 @@ async function syncApiPost(path, body) {
 }
 
 async function uploadEdariMaterialRows(rows, onProgress) {
-  const ADMIN_BATCH = 500;
+  if (!rows.length) return { materials: 0, productsUpdated: 0 };
+  const ADMIN_BATCH = Math.min(500, rows.length);
   try {
     let materials = 0;
     let productsUpdated = 0;
@@ -366,6 +367,43 @@ async function refreshPricesFromCacheFallback() {
   return { updated, total, message: `تم تحديث ${updated} من ${total} منتج` };
 }
 
+function buildCatalogRefreshScope() {
+  const body = {};
+  const params = new URLSearchParams();
+  const showAll = document.getElementById('productShowAllSections')?.checked;
+  if (commerce.selectedSectionId && !showAll) {
+    body.sectionId = commerce.selectedSectionId;
+    params.set('sectionId', commerce.selectedSectionId);
+  } else if (commerce.selectedBranchId) {
+    body.branchId = commerce.selectedBranchId;
+    params.set('branchId', commerce.selectedBranchId);
+  }
+  return { body, params };
+}
+
+async function fetchCatalogRefreshCodes() {
+  const { params } = buildCatalogRefreshScope();
+  try {
+    return await commerceApi(`/products/refresh-codes?${params}`);
+  } catch (err) {
+    if (!isNotFoundError(err)) throw err;
+    const qs = buildProductQuery();
+    qs.set('limit', '5000');
+    qs.set('offset', '0');
+    const data = await commerceApi(`/products?${qs}`);
+    const products = data.products || [];
+    if (!products.length) throw new Error('لا توجد منتجات في الكتalog');
+    const codes = new Set();
+    for (const p of products) {
+      for (const code of [p.edariSeq, p.barcode, p.skuNum]) {
+        const value = String(code || '').trim();
+        if (value) codes.add(value);
+      }
+    }
+    return { codes: [...codes], productCount: products.length };
+  }
+}
+
 async function refreshCatalogPricesNow() {
   if (priceRefreshRunning) return;
   const btn = document.getElementById('btnRefreshProductPrices');
@@ -375,24 +413,26 @@ async function refreshCatalogPricesNow() {
     btn.textContent = 'جاري التحديث...';
   }
   try {
-    if (window.edariDesktop?.fetchEdariMaterials) {
-      showToast('جاري قراءة الأسعار من Edari...', 'ok');
-      const live = await window.edariDesktop.fetchEdariMaterials();
+    const { codes, productCount } = await fetchCatalogRefreshCodes();
+
+    if (window.edariDesktop?.fetchEdariCatalogMaterials || window.edariDesktop?.fetchEdariMaterials) {
+      showToast(`جاري تحديث ${productCount} منتج من Edari...`, 'ok');
+      if (btn) btn.textContent = `Edari 0/${codes.length}...`;
+      let live;
+      if (window.edariDesktop.fetchEdariCatalogMaterials) {
+        live = await window.edariDesktop.fetchEdariCatalogMaterials({ codes });
+      } else {
+        live = await window.edariDesktop.fetchEdariMaterials();
+      }
       if (!live.ok) throw new Error(live.error || 'فشل قراءة Edari');
       const rows = live.rows || [];
-      if (!rows.length) throw new Error('لا توجد مواد في Edari');
+      if (!rows.length) throw new Error('لم تُعثر على مواد Edari للمنتجات المضافة');
       const result = await uploadEdariMaterialRows(rows, (done, total) => {
         if (btn) btn.textContent = `رفع ${done}/${total}...`;
       });
-      showToast(`تم — ${result.productsUpdated} منتج · ${result.materials} مادة من Edari`, 'ok');
+      showToast(`تم — ${result.productsUpdated} منتج · ${result.materials} مادة`, 'ok');
     } else {
-      const body = {};
-      const showAll = document.getElementById('productShowAllSections')?.checked;
-      if (commerce.selectedSectionId && !showAll) {
-        body.sectionId = commerce.selectedSectionId;
-      } else if (commerce.selectedBranchId) {
-        body.branchId = commerce.selectedBranchId;
-      }
+      const { body } = buildCatalogRefreshScope();
       let data;
       try {
         data = await commerceApi('/products/refresh-prices', {

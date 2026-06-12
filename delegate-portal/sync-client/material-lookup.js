@@ -82,7 +82,57 @@ async function lookupEdariMaterial(code) {
   return mapMaterialRow(result.rows[0]);
 }
 
-module.exports = { lookupEdariMaterial, mapMaterialRow, wholesalePrice, stockQty };
+function sqlQuote(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+/** Batch lookup for catalog price refresh — only requested barcodes/nums/seqs. */
+async function lookupEdariMaterialsByCodes(codes = []) {
+  const unique = [...new Set(codes.map((c) => String(c ?? '').trim()).filter(Boolean))];
+  if (!unique.length) return [];
+
+  const bySeq = new Map();
+  const BATCH = 60;
+
+  for (let i = 0; i < unique.length; i += BATCH) {
+    const batch = unique.slice(i, i + BATCH);
+    const seqs = new Set();
+    const nums = new Set();
+    const barcodes = new Set();
+
+    for (const code of batch) {
+      if (/^\d+$/.test(code)) {
+        const n = Number(code);
+        if (Number.isFinite(n) && n > 0 && n <= 9999999999) seqs.add(String(n));
+        nums.add(sqlQuote(code));
+      } else {
+        barcodes.add(sqlQuote(code));
+        nums.add(sqlQuote(code));
+      }
+    }
+
+    const cond = [];
+    if (seqs.size) cond.push(`Seq IN (${[...seqs].join(',')})`);
+    if (nums.size) cond.push(`Num IN (${[...nums].join(',')})`);
+    if (barcodes.size) cond.push(`Barcode IN (${[...barcodes].join(',')})`);
+    if (!cond.length) continue;
+
+    const sql = `
+      SELECT ${MATERIAL_SELECT}
+      FROM File13n
+      WHERE SubCount = 0 AND (${cond.join(' OR ')})
+    `;
+    const result = await odbcBridge.runQuery({ ...CONN, sql });
+    if (!result.ok) throw new Error(result.error || 'فشل الاتصال بـ Edari');
+    for (const row of result.rows || []) {
+      bySeq.set(String(row.Seq), row);
+    }
+  }
+
+  return [...bySeq.values()];
+}
+
+module.exports = { lookupEdariMaterial, lookupEdariMaterialsByCodes, mapMaterialRow, wholesalePrice, stockQty };
 
 if (require.main === module) {
   const code = process.argv[2];

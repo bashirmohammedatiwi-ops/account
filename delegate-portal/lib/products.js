@@ -525,6 +525,27 @@ function refreshCatalogPricesFromCache({ sectionId, branchId } = {}) {
   return { updated, total: rows.length, errors };
 }
 
+function listCatalogRefreshCodes({ sectionId, branchId } = {}) {
+  let sql = 'SELECT edari_seq, barcode, sku_num FROM products WHERE 1=1';
+  const params = [];
+  if (sectionId) {
+    sql += ' AND section_id = ?';
+    params.push(sectionId);
+  } else if (branchId) {
+    sql += ' AND section_id IN (SELECT id FROM catalog_sections WHERE branch_id = ?)';
+    params.push(branchId);
+  }
+  const rows = db.prepare(sql).all(...params);
+  const codes = new Set();
+  for (const row of rows) {
+    for (const value of [row.edari_seq, row.barcode, row.sku_num]) {
+      const code = String(value || '').trim();
+      if (code) codes.add(code);
+    }
+  }
+  return { codes: [...codes], productCount: rows.length };
+}
+
 function bulkAddByBarcode(sectionId, codes = []) {
   const added = [];
   const skipped = [];
@@ -858,6 +879,7 @@ module.exports = {
   syncSectionFromEdari,
   syncMaterialsFromEdari,
   refreshCatalogPricesFromCache,
+  listCatalogRefreshCodes,
   purgeAllCatalogProducts,
   reorderProducts,
   importProductsRows,

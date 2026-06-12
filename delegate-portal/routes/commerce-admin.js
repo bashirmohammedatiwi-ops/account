@@ -38,6 +38,7 @@ const {
   syncSectionFromEdari,
   syncMaterialsFromEdari,
   refreshCatalogPricesFromCache,
+  listCatalogRefreshCodes,
   purgeAllCatalogProducts,
   reorderProducts,
   importProductsRows,
@@ -243,6 +244,13 @@ router.post('/products/refresh-prices', (req, res) => {
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
+});
+
+router.get('/products/refresh-codes', (req, res) => {
+  const sectionId = req.query.sectionId ? Number(req.query.sectionId) : null;
+  const branchId = req.query.branchId ? Number(req.query.branchId) : null;
+  const result = listCatalogRefreshCodes({ sectionId, branchId });
+  res.json({ ok: true, ...result });
 });
 
 router.get('/products/:id', (req, res) => {

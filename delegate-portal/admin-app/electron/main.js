@@ -532,6 +532,17 @@ ipcMain.handle('list-edari-trees', () => {
   return runListEdariTreesScript();
 });
 
+ipcMain.handle('fetch-edari-catalog-materials', async (_e, { codes }) => {
+  try {
+    const lookupPath = path.join(getPortalDir(), 'sync-client', 'material-lookup.js');
+    const { lookupEdariMaterialsByCodes } = require(lookupPath);
+    const rows = await lookupEdariMaterialsByCodes(Array.isArray(codes) ? codes : []);
+    return { ok: true, rows, count: rows.length };
+  } catch (err) {
+    return { ok: false, error: err.message || 'فشل الاتصال بـ Edari' };
+  }
+});
+
 ipcMain.handle('fetch-edari-materials', () => {
   return runFetchEdariMaterialsScript();
 });
