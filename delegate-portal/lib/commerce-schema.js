@@ -56,6 +56,8 @@ function migrateCommerceSchema(db) {
       sell_pr1 REAL DEFAULT 0,
       sell_pr2 REAL DEFAULT 0,
       bonus REAL DEFAULT 0,
+      in_tot REAL DEFAULT 0,
+      out_tot REAL DEFAULT 0,
       remarks TEXT,
       synced_at TEXT DEFAULT (datetime('now'))
     );
@@ -140,7 +142,9 @@ function migrateCommerceSchema(db) {
     ['name2', 'TEXT'],
     ['sell_pr2', 'REAL DEFAULT 0'],
     ['bonus', 'REAL DEFAULT 0'],
-    ['remarks', 'TEXT']
+    ['remarks', 'TEXT'],
+    ['in_tot', 'REAL DEFAULT 0'],
+    ['out_tot', 'REAL DEFAULT 0']
   ];
   for (const [col, type] of edariCols) {
     try {

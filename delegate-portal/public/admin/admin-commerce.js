@@ -447,7 +447,7 @@ function fillProductFormFromEdari(m) {
   document.getElementById('productEdariSeq').value = m.seq || '';
   document.getElementById('productUnit').value = m.unit || '';
   document.getElementById('productPrice').value = m.wholesalePrice ?? m.price ?? 0;
-  document.getElementById('productQty').value = m.qty ?? m.bonus ?? 0;
+  document.getElementById('productQty').value = m.stockQty ?? m.qty ?? 0;
 }
 
 function renderEdariLivePreview(material, state, message = '') {
@@ -467,7 +467,7 @@ function renderEdariLivePreview(material, state, message = '') {
   box.classList.add('edari-live-ok');
   box.innerHTML = `
     <p class="muted"><span class="badge ok">من Edari</span>
-    عدد: <strong dir="ltr">${material.qty ?? material.bonus ?? 0}</strong>
+    عدد (رصيد): <strong dir="ltr">${material.stockQty ?? material.qty ?? 0}</strong>
     · سعر نصف الجملة: <strong dir="ltr">${fmtMoney(material.wholesalePrice ?? material.price)}</strong></p>`;
 }
 

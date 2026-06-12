@@ -45,11 +45,18 @@ function edariWholesalePrice(sellPr1, sellPr2) {
   return Number(sellPr1) || 0;
 }
 
+/** رصيد المخزون في Edari = وارد − صادر */
+function edariStockQty(inTot, outTot) {
+  return Number(inTot || 0) - Number(outTot || 0);
+}
+
 function mapEdariMaterial(row) {
   if (!row) return null;
   const sellPr1 = Number(row.sell_pr1 ?? row.SellPr1 ?? 0);
   const sellPr2 = Number(row.sell_pr2 ?? row.SellPr2 ?? 0);
-  const bonus = Number(row.bonus ?? row.Bonus ?? 0);
+  const inTot = Number(row.in_tot ?? row.InTot ?? 0);
+  const outTot = Number(row.out_tot ?? row.OutTot ?? 0);
+  const stockQty = edariStockQty(inTot, outTot);
   return {
     seq: String(row.seq || row.Seq || ''),
     num: String(row.num || row.Num || ''),
@@ -60,8 +67,11 @@ function mapEdariMaterial(row) {
     priceRetail: sellPr1,
     wholesalePrice: edariWholesalePrice(sellPr1, sellPr2),
     price: edariWholesalePrice(sellPr1, sellPr2),
-    bonus,
-    qty: bonus,
+    bonus: Number(row.bonus ?? row.Bonus ?? 0),
+    inTot,
+    outTot,
+    stockQty,
+    qty: stockQty,
     remarks: String(row.remarks || row.Remarks || ''),
     syncedAt: row.synced_at || ''
   };
@@ -86,6 +96,9 @@ function parseEdariSyncRow(row) {
     sellPr1: Number(row.SellPr1 ?? row.price ?? 0),
     sellPr2: Number(row.SellPr2 ?? row.sell_pr2 ?? 0),
     bonus: Number(row.Bonus ?? row.bonus ?? 0),
+    inTot: Number(row.InTot ?? row.in_tot ?? 0),
+    outTot: Number(row.OutTot ?? row.out_tot ?? 0),
+    stockQty: edariStockQty(row.InTot ?? row.in_tot, row.OutTot ?? row.out_tot),
     remarks: String(row.Remarks ?? row.remarks ?? '').trim()
   };
 }
@@ -385,8 +398,8 @@ function upsertEdariMaterial(row) {
   const now = new Date().toISOString();
   db.prepare(`
     INSERT INTO edari_materials
-      (seq, num, barcode, name1, name2, unit, sell_pr1, sell_pr2, bonus, remarks, synced_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (seq, num, barcode, name1, name2, unit, sell_pr1, sell_pr2, bonus, in_tot, out_tot, remarks, synced_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(seq) DO UPDATE SET
       num = excluded.num,
       barcode = excluded.barcode,
@@ -396,6 +409,8 @@ function upsertEdariMaterial(row) {
       sell_pr1 = excluded.sell_pr1,
       sell_pr2 = excluded.sell_pr2,
       bonus = excluded.bonus,
+      in_tot = excluded.in_tot,
+      out_tot = excluded.out_tot,
       remarks = excluded.remarks,
       synced_at = excluded.synced_at
   `).run(
@@ -408,6 +423,8 @@ function upsertEdariMaterial(row) {
     parsed.sellPr1,
     parsed.sellPr2,
     parsed.bonus,
+    parsed.inTot,
+    parsed.outTot,
     parsed.remarks,
     now
   );
@@ -442,7 +459,7 @@ function refreshRegisteredProductFromEdari(parsed) {
       name: parsed.name1,
       unit: parsed.unit,
       price: wholesale,
-      minOrderQty: Number(parsed.bonus) || 0,
+      minOrderQty: Number(parsed.stockQty) || 0,
       priceOverride: false,
       syncedAt: now
     });
@@ -463,7 +480,7 @@ function syncProductFromEdari(id) {
     name: material.name,
     unit: material.unit,
     price: material.wholesalePrice ?? material.price,
-    minOrderQty: Number(material.bonus) || 0,
+    minOrderQty: Number(material.stockQty ?? material.qty) || 0,
     priceOverride: false,
     syncedAt: new Date().toISOString()
   });
@@ -577,7 +594,7 @@ function addProductByBarcode(sectionId, code, options = {}) {
     bonusDefault: Number(material.bonus) || 0,
     priceOverride: false,
     description: material.remarks || '',
-    minOrderQty: Number(material.bonus) || 0,
+    minOrderQty: Number(material.stockQty ?? material.qty) || 0,
     sortOrder: Number(options.sortOrder || 0),
     isActive: options.isActive !== false,
     syncedAt: material.syncedAt || new Date().toISOString()
