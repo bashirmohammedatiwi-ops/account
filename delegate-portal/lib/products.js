@@ -349,11 +349,16 @@ function updateProduct(id, patch) {
 
 function deleteProduct(id) {
   const row = db.prepare('SELECT image_path FROM products WHERE id = ?').get(id);
-  if (row?.image_path) {
+  if (!row) return false;
+  if (row.image_path) {
     const full = path.join(UPLOAD_ROOT, row.image_path);
     if (fs.existsSync(full)) fs.unlinkSync(full);
   }
-  return db.prepare('DELETE FROM products WHERE id = ?').run(id).changes > 0;
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE order_lines SET product_id = NULL WHERE product_id = ?').run(id);
+    return db.prepare('DELETE FROM products WHERE id = ?').run(id).changes > 0;
+  });
+  return tx();
 }
 
 function saveProductImage(id, dataUrl) {

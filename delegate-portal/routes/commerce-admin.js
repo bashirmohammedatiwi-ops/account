@@ -103,10 +103,14 @@ router.put('/catalog/branches/:id', (req, res) => {
 });
 
 router.delete('/catalog/branches/:id', (req, res) => {
-  if (!deleteBranch(Number(req.params.id))) {
-    return res.status(404).json({ ok: false, error: 'الفرع غير موجود' });
+  try {
+    if (!deleteBranch(Number(req.params.id))) {
+      return res.status(404).json({ ok: false, error: 'الفرع غير موجود' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message || 'تعذّر حذف الفرع' });
   }
-  res.json({ ok: true });
 });
 
 router.get('/catalog/branches/:id/sections', (req, res) => {
@@ -126,10 +130,14 @@ router.put('/catalog/sections/:id', (req, res) => {
 });
 
 router.delete('/catalog/sections/:id', (req, res) => {
-  if (!deleteSection(Number(req.params.id))) {
-    return res.status(404).json({ ok: false, error: 'القسم غير موجود' });
+  try {
+    if (!deleteSection(Number(req.params.id))) {
+      return res.status(404).json({ ok: false, error: 'القسم غير موجود' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message || 'تعذّر حذف القسم' });
   }
-  res.json({ ok: true });
 });
 
 router.get('/catalog/sections/:id/products', (req, res) => {

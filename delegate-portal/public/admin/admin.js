@@ -171,6 +171,9 @@ function showPage(name) {
   } else if (name === 'database') {
     void loadEdariConnectionSettings();
     stopSyncLogPolling();
+  } else if (name === 'agents') {
+    void loadAgents();
+    stopSyncLogPolling();
   } else {
     stopSyncLogPolling();
   }
@@ -204,10 +207,24 @@ async function loadDashboard() {
 }
 
 async function loadTrees() {
-  const data = await api('/api/admin/trees');
-  treesCache = data.trees || [];
-  explorer.trees = treesCache;
-  if (explorer.loaded) renderExplorerTrees();
+  try {
+    let trees = [];
+    if (window.edariDesktop?.listEdariTrees) {
+      const data = await window.edariDesktop.listEdariTrees();
+      if (data?.ok !== false) trees = data.trees || [];
+    }
+    if (!trees.length) {
+      const data = await api('/api/admin/edari/trees').catch(() => api('/api/admin/trees'));
+      trees = data.trees || [];
+    }
+    treesCache = trees;
+    explorer.trees = treesCache;
+    if (explorer.loaded) renderExplorerTrees();
+  } catch (e) {
+    console.error('loadTrees', e);
+    treesCache = [];
+    explorer.trees = [];
+  }
 }
 
 function filterBranches(list) {
@@ -401,15 +418,19 @@ async function initExplorer() {
 }
 
 async function loadAgents() {
-  const data = await api('/api/admin/agents');
   const grid = document.getElementById('agentsGrid');
-  if (!data.agents?.length) {
-    grid.innerHTML = '<p class="muted">لا يوجد مندوبون — اضغط «مندوب جديد»</p>';
-    return;
-  }
-  grid.innerHTML = data.agents.map((a) => {
-    const treeCount = a.treeSeqs?.length || 0;
-    return `
+  if (!grid) return;
+  grid.innerHTML = '<p class="muted loading">جاري تحميل المندوبين...</p>';
+  try {
+    const data = await api('/api/admin/agents');
+    const agents = data.agents || [];
+    if (!agents.length) {
+      grid.innerHTML = '<p class="muted">لا يوجد مندوبون — اضغط «مندوب جديد»</p>';
+      return;
+    }
+    grid.innerHTML = agents.map((a) => {
+      const treeCount = a.treeSeqs?.length || 0;
+      return `
     <article class="agent-card">
       <div class="agent-card-head">
         <strong>${esc(a.name)}</strong>
@@ -425,18 +446,21 @@ async function loadAgents() {
         <button type="button" class="btn btn-danger btn-sm" data-del="${a.id}">حذف</button>
       </div>
     </article>`;
-  }).join('');
+    }).join('');
 
-  grid.querySelectorAll('[data-edit]').forEach((btn) => {
-    btn.addEventListener('click', () => openAgentModal(Number(btn.dataset.edit)));
-  });
-  grid.querySelectorAll('[data-del]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      if (!confirm('حذف هذا المندوب؟')) return;
-      await api(`/api/admin/agents/${btn.dataset.del}`, { method: 'DELETE' });
-      loadAgents();
+    grid.querySelectorAll('[data-edit]').forEach((btn) => {
+      btn.addEventListener('click', () => openAgentModal(Number(btn.dataset.edit)));
     });
-  });
+    grid.querySelectorAll('[data-del]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('حذف هذا المندوب؟')) return;
+        await api(`/api/admin/agents/${btn.dataset.del}`, { method: 'DELETE' });
+        loadAgents();
+      });
+    });
+  } catch (e) {
+    grid.innerHTML = `<p class="muted">تعذّر تحميل المندوبين: ${esc(e.message)}</p>`;
+  }
 }
 
 async function loadSyncLogs() {
@@ -795,6 +819,8 @@ async function loadSyncTrees() {
       trees = data.trees || [];
     }
     renderSyncTreeChecks(trees, saved.map(String));
+    treesCache = trees;
+    explorer.trees = treesCache;
     await persistBackgroundSyncSettings({ treeSeqs: getEffectiveSyncTreeSeqs() });
   } catch (e) {
     if (el) el.innerHTML = `<p class="muted">تعذّر تحميل الشجرات: ${esc(e.message)}</p>`;
@@ -803,28 +829,38 @@ async function loadSyncTrees() {
 
 function renderTreeChecks(selected = []) {
   const el = document.getElementById('agentTreeChecks');
+  if (!el) return;
   if (!treesCache.length) {
-    el.innerHTML = '<p class="muted">ارفع البيانات أولاً لعرض الشجرات</p>';
+    el.innerHTML = '<p class="muted">لا توجد شجرات — تأكد أن EdariNX يعمل أو ارفع البيانات إلى السيرفر</p>';
     return;
   }
+  const selectedSet = new Set((selected || []).map(String));
   el.innerHTML = treesCache.map((t) => `
     <label class="tree-pick">
-      <input type="checkbox" name="treeSeq" value="${t.seq}" ${selected.includes(t.seq) ? 'checked' : ''}>
+      <input type="checkbox" name="treeSeq" value="${esc(t.seq)}" ${selectedSet.has(String(t.seq)) ? 'checked' : ''}>
       <div class="tree-pick-body">
-        <div class="tree-pick-name">${esc(t.name1 || '—')}</div>
-        <div class="tree-pick-meta">${esc(t.num)} · ${t.sub_count || 0} فرع</div>
+        <div class="tree-pick-name">${esc(t.name1 || t.num || '—')}</div>
+        <div class="tree-pick-meta">${esc(t.num || '—')} · ${t.sub_count || 0} فرع</div>
       </div>
     </label>`).join('');
 }
 
-function openAgentModal(id = null) {
+async function openAgentModal(id = null) {
   document.getElementById('agentModal').classList.remove('hidden');
   document.getElementById('agentModalTitle').textContent = id ? 'تعديل مندوب' : 'إضافة مندوب';
   document.getElementById('agentId').value = id || '';
   document.getElementById('agentPassword').required = !id;
 
+  const treeEl = document.getElementById('agentTreeChecks');
+  if (treeEl) treeEl.innerHTML = '<p class="muted loading">جاري تحميل الشجرات...</p>';
+  await loadTrees();
+  if (treeEl && !treesCache.length) {
+    treeEl.innerHTML = '<p class="muted">لا توجد شجرات — تأكد أن EdariNX يعمل أو ارفع البيانات إلى السيرفر</p>';
+  }
+
   if (id) {
-    api('/api/admin/agents').then((data) => {
+    try {
+      const data = await api('/api/admin/agents');
       const a = data.agents.find((x) => x.id === id);
       if (!a) return;
       document.getElementById('agentName').value = a.name;
@@ -832,7 +868,9 @@ function openAgentModal(id = null) {
       document.getElementById('agentUsername').value = a.username;
       document.getElementById('agentActive').checked = a.active;
       renderTreeChecks(a.treeSeqs || []);
-    });
+    } catch (e) {
+      if (treeEl) treeEl.innerHTML = `<p class="muted">تعذّر تحميل بيانات المندوب: ${esc(e.message)}</p>`;
+    }
   } else {
     document.getElementById('agentForm').reset();
     document.getElementById('agentActive').checked = true;
@@ -1126,7 +1164,7 @@ document.getElementById('btnRefreshSyncLogs')?.addEventListener('click', () => {
 document.getElementById('agentForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const id = document.getElementById('agentId').value;
-  const treeSeqs = [...document.querySelectorAll('input[name=treeSeq]:checked')].map((c) => c.value);
+  const treeSeqs = [...document.querySelectorAll('#agentTreeChecks input[name=treeSeq]:checked')].map((c) => c.value);
   const body = {
     name: document.getElementById('agentName').value,
     phone: document.getElementById('agentPhone').value,
@@ -1185,14 +1223,23 @@ function saveBackendUrl() {
 
 async function refreshAll() {
   await checkBackendHealth();
-  await loadConfig();
-  await loadTrees();
-  await loadSyncTrees();
-  await loadEdariConnectionSettings();
-  await loadDashboard();
-  await loadAgents();
-  await loadSyncLogs();
-  await initAutoSync();
+  const tasks = [
+    loadConfig,
+    loadTrees,
+    loadSyncTrees,
+    loadEdariConnectionSettings,
+    loadDashboard,
+    loadAgents,
+    loadSyncLogs,
+    initAutoSync
+  ];
+  for (const task of tasks) {
+    try {
+      await task();
+    } catch (e) {
+      console.error(e);
+    }
+  }
   initSyncLiveFeed();
 }
 
