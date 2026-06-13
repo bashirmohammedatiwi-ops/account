@@ -1777,13 +1777,68 @@ tfoot .final { background: var(--primary-light); font-weight: 700; }
 
 .product-draggable.dragging { opacity: 0.45; }
 
+.product-draggable.dragging-group {
+  opacity: 0.55;
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.product-draggable.product-row-selected td {
+  background: color-mix(in srgb, var(--primary) 6%, var(--surface));
+}
+
+.product-draggable.product-row-selected td:first-child {
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
 .product-draggable.drag-over td {
   background: var(--primary-light);
+}
+
+.product-draggable.drag-over-before td {
+  box-shadow: inset 0 3px 0 var(--primary);
+}
+
+.product-draggable.drag-over:not(.drag-over-before) td {
+  box-shadow: inset 0 -3px 0 var(--primary);
 }
 
 .product-drag-hint {
   margin: 0 0 10px;
   font-size: 0.8rem;
+}
+
+.product-table-scroll {
+  position: relative;
+  scroll-behavior: auto;
+}
+
+.product-table-scroll.product-scroll-up {
+  box-shadow: inset 0 14px 18px -12px color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+.product-table-scroll.product-scroll-down {
+  box-shadow: inset 0 -14px 18px -12px color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+.product-table-scroll.product-scroll-up::before,
+.product-table-scroll.product-scroll-down::after {
+  content: '';
+  position: sticky;
+  left: 0;
+  right: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.product-table-scroll.product-scroll-up::before {
+  top: 0;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--primary) 25%, transparent);
+}
+
+.product-table-scroll.product-scroll-down::after {
+  bottom: 0;
+  box-shadow: 0 -6px 16px color-mix(in srgb, var(--primary) 25%, transparent);
 }
 
 .product-pagination {

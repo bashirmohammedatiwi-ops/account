@@ -232,7 +232,7 @@ router.post('/products/sync-materials', (req, res) => {
     res.json({
       ok: true,
       ...result,
-      message: `تم تحديث ${result.productsUpdated} منتج (اسم · عدد · سعر) · ${result.materials} مادة`
+      message: `تم تحديث ${result.productsUpdated} منتج · ${result.pricesApplied ?? 0} سعر جملة (SellPr1) · ${result.materials} مادة`
     });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });

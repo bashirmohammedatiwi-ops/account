@@ -11,6 +11,7 @@ const commerce = {
   selectedBranchId: null,
   selectedSectionId: null,
   selectedProductIds: new Set(),
+  lastProductCheckId: null,
   selectedOrder: null,
   productFilters: {
     q: '',
@@ -237,17 +238,41 @@ async function syncApiPost(path, body) {
   return data;
 }
 
+function wholesaleFromEdariRow(row) {
+  if (!row || typeof row !== 'object') return 0;
+  const sellPr1 = Number(row.SellPr1 ?? row.sell_pr1 ?? row.priceRetail ?? 0);
+  const sellPr5 = Number(row.SellPr5 ?? row.sell_pr5 ?? 0);
+  if (sellPr1 > 0) return sellPr1;
+  if (sellPr5 > 0) return sellPr5;
+  return 0;
+}
+
+/** Legacy servers used SellPr2 (half wholesale) — send SellPr1 only for catalog price. */
+function prepareEdariRowsForUpload(rows = []) {
+  return rows.map((row) => {
+    const wholesale = wholesaleFromEdariRow(row);
+    return {
+      ...row,
+      SellPr1: wholesale,
+      sell_pr1: wholesale,
+      SellPr2: 0,
+      sell_pr2: 0
+    };
+  });
+}
+
 async function uploadEdariMaterialRows(rows, onProgress) {
   if (!rows.length) return { materials: 0, productsUpdated: 0 };
-  const ADMIN_BATCH = Math.min(500, rows.length);
+  const prepared = prepareEdariRowsForUpload(rows);
+  const ADMIN_BATCH = Math.min(500, prepared.length);
   try {
     let materials = 0;
     let productsUpdated = 0;
-    for (let i = 0; i < rows.length; i += ADMIN_BATCH) {
-      if (onProgress) onProgress(Math.min(i + ADMIN_BATCH, rows.length), rows.length);
+    for (let i = 0; i < prepared.length; i += ADMIN_BATCH) {
+      if (onProgress) onProgress(Math.min(i + ADMIN_BATCH, prepared.length), prepared.length);
       const data = await commerceApi('/products/sync-materials', {
         method: 'POST',
-        body: JSON.stringify({ rows: rows.slice(i, i + ADMIN_BATCH) })
+        body: JSON.stringify({ rows: prepared.slice(i, i + ADMIN_BATCH) })
       });
       materials += data.materials || 0;
       productsUpdated += data.productsUpdated || 0;
@@ -261,14 +286,14 @@ async function uploadEdariMaterialRows(rows, onProgress) {
   const start = await syncApiPost('/start', { accountSeqs: [] });
   let materials = 0;
   let productsUpdated = 0;
-  const totalBatches = Math.ceil(rows.length / SYNC_BATCH) || 1;
-  for (let i = 0; i < rows.length; i += SYNC_BATCH) {
+  const totalBatches = Math.ceil(prepared.length / SYNC_BATCH) || 1;
+  for (let i = 0; i < prepared.length; i += SYNC_BATCH) {
     const batch = Math.floor(i / SYNC_BATCH) + 1;
-    if (onProgress) onProgress(Math.min(i + SYNC_BATCH, rows.length), rows.length);
+    if (onProgress) onProgress(Math.min(i + SYNC_BATCH, prepared.length), prepared.length);
     const data = await syncApiPost('/chunk', {
       syncId: start.syncId,
       kind: 'products',
-      rows: rows.slice(i, i + SYNC_BATCH),
+      rows: prepared.slice(i, i + SYNC_BATCH),
       batch,
       totalBatches
     });
@@ -366,7 +391,7 @@ async function refreshCatalogPricesNow() {
       const result = await uploadEdariMaterialRows(rows, (done, total) => {
         if (btn) btn.textContent = `رفع ${done}/${total}...`;
       });
-      showToast(`تم — ${result.productsUpdated} منتج (اسم · عدد · سعر)`, 'ok');
+      showToast(`تم — ${result.productsUpdated} منتج · سعر الجملة (SellPr1)`, 'ok');
     } else {
       const { body } = buildCatalogRefreshScope();
       let data;
@@ -408,7 +433,195 @@ function updateBulkBar() {
   if (!bar) return;
   bar.classList.toggle('hidden', count === 0);
   const countEl = document.getElementById('productBulkCount');
-  if (countEl) countEl.textContent = `${count} محدد`;
+  if (countEl) {
+    const dragMode = canDragReorderProducts();
+    let suffix = '';
+    if (dragMode && count > 1) suffix = ' — اسحب للأعلى/الأسفل أو ▲▼';
+    else if (dragMode) suffix = ' — اسحب أو ▲▼ للترتيب';
+    countEl.textContent = `${count} محدد${suffix}`;
+  }
+  const dragMode = canDragReorderProducts();
+  document.querySelectorAll('.product-reorder-btn').forEach((btn) => {
+    btn.classList.toggle('hidden', !dragMode || count === 0);
+  });
+  syncProductRowSelectionStyles();
+}
+
+function syncProductRowSelectionStyles() {
+  document.querySelectorAll('#catalogProductsBody tr[data-product-id]').forEach((row) => {
+    const id = Number(row.dataset.productId);
+    row.classList.toggle('product-row-selected', commerce.selectedProductIds.has(id));
+  });
+}
+
+function getDragProductGroup(dragId) {
+  const selected = [...commerce.selectedProductIds];
+  if (selected.length > 1 && selected.includes(dragId)) {
+    const order = commerce.products.map((p) => p.id);
+    return order.filter((id) => selected.includes(id));
+  }
+  return [dragId];
+}
+
+function reorderProductIdBlock(ids, movingIds, targetId) {
+  const moving = ids.filter((id) => movingIds.includes(id));
+  if (!moving.length || moving.includes(targetId)) return ids;
+  const rest = ids.filter((id) => !movingIds.includes(id));
+  let insertIdx = rest.indexOf(targetId);
+  if (insertIdx < 0) insertIdx = rest.length;
+  rest.splice(insertIdx, 0, ...moving);
+  return rest;
+}
+
+function moveProductBlockUp(ids, movingIds) {
+  const moving = ids.filter((id) => movingIds.includes(id));
+  if (!moving.length) return ids;
+  const firstIdx = ids.indexOf(moving[0]);
+  if (firstIdx <= 0) return ids;
+  return reorderProductIdBlock(ids, movingIds, ids[firstIdx - 1]);
+}
+
+function moveProductBlockDown(ids, movingIds) {
+  const moving = ids.filter((id) => movingIds.includes(id));
+  if (!moving.length) return ids;
+  const lastIdx = ids.indexOf(moving[moving.length - 1]);
+  if (lastIdx >= ids.length - 1) return ids;
+  const afterId = ids[lastIdx + 1];
+  const rest = ids.filter((id) => !movingIds.includes(id));
+  const insertIdx = rest.indexOf(afterId) + 1;
+  rest.splice(insertIdx, 0, ...moving);
+  return rest;
+}
+
+function computeDropOrder(ids, movingIds, targetId, before) {
+  if (movingIds.includes(targetId)) return ids;
+  let anchorId = targetId;
+  if (!before) {
+    const targetIdx = ids.indexOf(targetId);
+    anchorId = targetIdx >= 0 && targetIdx < ids.length - 1 ? ids[targetIdx + 1] : null;
+  }
+  if (anchorId == null) {
+    const moving = ids.filter((id) => movingIds.includes(id));
+    const rest = ids.filter((id) => !movingIds.includes(id));
+    return [...rest, ...moving];
+  }
+  return reorderProductIdBlock(ids, movingIds, anchorId);
+}
+
+function applyProductTableDomOrder(orderIds) {
+  const tbody = document.getElementById('catalogProductsBody');
+  if (!tbody) return;
+  const map = new Map();
+  tbody.querySelectorAll('tr[data-product-id]').forEach((tr) => {
+    map.set(Number(tr.dataset.productId), tr);
+  });
+  orderIds.forEach((id) => {
+    const tr = map.get(id);
+    if (tr) tbody.appendChild(tr);
+  });
+}
+
+function scrollProductRowIntoView(productId, scroller) {
+  const row = document.querySelector(`#catalogProductsBody tr[data-product-id="${productId}"]`);
+  if (!row || !scroller) return;
+  const rowRect = row.getBoundingClientRect();
+  const boxRect = scroller.getBoundingClientRect();
+  if (rowRect.top < boxRect.top + 8) {
+    scroller.scrollTop -= boxRect.top + 8 - rowRect.top;
+  } else if (rowRect.bottom > boxRect.bottom - 8) {
+    scroller.scrollTop += rowRect.bottom - boxRect.bottom + 8;
+  }
+}
+
+const productDragScroll = {
+  active: false,
+  pointerY: 0,
+  raf: null,
+  scroller: null
+};
+
+function productDragAutoScrollStep() {
+  if (!productDragScroll.active || !productDragScroll.scroller) return;
+  const scroller = productDragScroll.scroller;
+  const rect = scroller.getBoundingClientRect();
+  const edge = 88;
+  const maxStep = 26;
+  let delta = 0;
+  if (productDragScroll.pointerY < rect.top + edge) {
+    const t = Math.min(1, (rect.top + edge - productDragScroll.pointerY) / edge);
+    delta = -Math.ceil(maxStep * (0.35 + t * 0.65));
+  } else if (productDragScroll.pointerY > rect.bottom - edge) {
+    const t = Math.min(1, (productDragScroll.pointerY - (rect.bottom - edge)) / edge);
+    delta = Math.ceil(maxStep * (0.35 + t * 0.65));
+  }
+  scroller.classList.toggle('product-scroll-up', delta < 0);
+  scroller.classList.toggle('product-scroll-down', delta > 0);
+  if (delta) scroller.scrollTop += delta;
+  productDragScroll.raf = requestAnimationFrame(productDragAutoScrollStep);
+}
+
+function startProductDragAutoScroll(clientY, scroller) {
+  productDragScroll.active = true;
+  productDragScroll.pointerY = clientY;
+  productDragScroll.scroller = scroller;
+  if (productDragScroll.raf) cancelAnimationFrame(productDragScroll.raf);
+  productDragScroll.raf = requestAnimationFrame(productDragAutoScrollStep);
+}
+
+function updateProductDragPointerY(clientY) {
+  productDragScroll.pointerY = clientY;
+}
+
+function stopProductDragAutoScroll() {
+  productDragScroll.active = false;
+  if (productDragScroll.raf) {
+    cancelAnimationFrame(productDragScroll.raf);
+    productDragScroll.raf = null;
+  }
+  productDragScroll.scroller?.classList.remove('product-scroll-up', 'product-scroll-down');
+  productDragScroll.scroller = null;
+}
+
+async function persistProductOrder(orderIds, movingCount = 1) {
+  await commerceApi('/products/reorder', {
+    method: 'POST',
+    body: JSON.stringify({ sectionId: commerce.selectedSectionId, orderedIds: orderIds })
+  });
+  commerce.products.sort((a, b) => orderIds.indexOf(a.id) - orderIds.indexOf(b.id));
+  const msg = movingCount > 1 ? `تم نقل ${movingCount} منتجات` : 'تم تحديث الترتيب';
+  showToast(msg);
+}
+
+async function moveSelectedProducts(direction) {
+  if (!canDragReorderProducts()) return;
+  const movingIds = commerce.products
+    .map((p) => p.id)
+    .filter((id) => commerce.selectedProductIds.has(id));
+  if (!movingIds.length) return;
+  const ids = commerce.products.map((p) => p.id);
+  const nextIds = direction === 'up'
+    ? moveProductBlockUp(ids, movingIds)
+    : moveProductBlockDown(ids, movingIds);
+  if (nextIds.join(',') === ids.join(',')) return;
+  try {
+    await persistProductOrder(nextIds, movingIds.length);
+    applyProductTableDomOrder(nextIds);
+    syncProductRowSelectionStyles();
+    scrollProductRowIntoView(movingIds[0], document.getElementById('productTableScroll'));
+  } catch (err) {
+    showToast(err.message, 'err');
+  }
+}
+
+function selectProductRange(fromId, toId) {
+  const ids = commerce.products.map((p) => p.id);
+  const fromIdx = ids.indexOf(fromId);
+  const toIdx = ids.indexOf(toId);
+  if (fromIdx < 0 || toIdx < 0) return;
+  const [start, end] = fromIdx <= toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
+  for (let i = start; i <= end; i += 1) {
+    commerce.selectedProductIds.add(ids[i]);
+  }
 }
 
 async function loadCatalogProducts() {
@@ -424,11 +637,17 @@ async function loadCatalogProducts() {
 
   const dragEnabled = canDragReorderProducts();
   document.getElementById('productDragHint')?.classList.toggle('hidden', !dragEnabled);
+  if (dragEnabled) {
+    const hint = document.getElementById('productDragHint');
+    if (hint) {
+      hint.textContent = '↕ حدّد منتجات (Shift+نقر) — اسحب للأعلى/الأسفل مع تمرير تلقائي أو ▲▼';
+    }
+  }
 
   document.getElementById('catalogProductsBody').innerHTML = commerce.products.map((p) => `
-    <tr data-product-id="${p.id}" ${dragEnabled ? 'draggable="true"' : ''} class="${dragEnabled ? 'product-draggable' : ''}">
+    <tr data-product-id="${p.id}" ${dragEnabled ? 'draggable="true"' : ''} class="${dragEnabled ? 'product-draggable' : ''}${commerce.selectedProductIds.has(p.id) ? ' product-row-selected' : ''}">
       <td class="col-check"><input type="checkbox" class="product-check" data-id="${p.id}"></td>
-      <td class="col-drag">${dragEnabled ? '<span class="drag-handle" title="اسحب">⠿</span>' : ''}</td>
+      <td class="col-drag">${dragEnabled ? `<span class="drag-handle" title="اسحب${commerce.selectedProductIds.has(p.id) && commerce.selectedProductIds.size > 1 ? ' المجموعة' : ''}">⠿</span>` : ''}</td>
       <td>${p.imageUrl ? `<img src="${getApiBase()}${p.imageUrl}" alt="" class="product-thumb">` : '<span class="product-thumb-empty">—</span>'}</td>
       <td dir="ltr">${esc(p.barcode || p.skuNum || '—')}</td>
       <td>
@@ -453,11 +672,30 @@ async function loadCatalogProducts() {
   }
   renderProductPagination();
 
+  let shiftRangeSelecting = false;
   document.querySelectorAll('.product-check').forEach((cb) => {
+    cb.addEventListener('click', (e) => {
+      const id = Number(cb.dataset.id);
+      if (e.shiftKey && commerce.lastProductCheckId != null && commerce.lastProductCheckId !== id) {
+        shiftRangeSelecting = true;
+        selectProductRange(commerce.lastProductCheckId, id);
+        document.querySelectorAll('.product-check').forEach((other) => {
+          other.checked = commerce.selectedProductIds.has(Number(other.dataset.id));
+        });
+        updateBulkBar();
+        return;
+      }
+      commerce.lastProductCheckId = id;
+    });
     cb.addEventListener('change', () => {
+      if (shiftRangeSelecting) {
+        shiftRangeSelecting = false;
+        return;
+      }
       const id = Number(cb.dataset.id);
       if (cb.checked) commerce.selectedProductIds.add(id);
       else commerce.selectedProductIds.delete(id);
+      commerce.lastProductCheckId = id;
       updateBulkBar();
     });
   });
@@ -476,50 +714,147 @@ async function loadCatalogProducts() {
 
 function initProductDragDrop() {
   const tbody = document.getElementById('catalogProductsBody');
-  if (!tbody) return;
-  let dragId = null;
+  const scroller = document.getElementById('productTableScroll') || tbody?.closest('.table-scroll');
+  const table = document.getElementById('catalogProductsTable');
+  if (!tbody || !scroller || !table) return;
+
+  if (!table.dataset.productDragBound) {
+    table.dataset.productDragBound = '1';
+    bindProductDragTableEvents(table, scroller);
+  }
 
   tbody.querySelectorAll('tr[draggable="true"]').forEach((row) => {
-    row.addEventListener('dragstart', (e) => {
-      dragId = Number(row.dataset.productId);
-      row.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-    });
-    row.addEventListener('dragend', () => {
-      row.classList.remove('dragging');
-      tbody.querySelectorAll('tr').forEach((r) => r.classList.remove('drag-over'));
-    });
-    row.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      row.classList.add('drag-over');
-    });
-    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
-    row.addEventListener('drop', async (e) => {
-      e.preventDefault();
-      row.classList.remove('drag-over');
-      const targetId = Number(row.dataset.productId);
-      if (!dragId || dragId === targetId) return;
+    row.addEventListener('dragstart', (e) => onProductRowDragStart(e, row, tbody, scroller));
+    row.addEventListener('dragend', () => onProductRowDragEnd(tbody));
+  });
+}
 
-      const ids = commerce.products.map((p) => p.id);
-      const fromIdx = ids.indexOf(dragId);
-      const toIdx = ids.indexOf(targetId);
-      if (fromIdx < 0 || toIdx < 0) return;
+const productDragSession = {
+  groupIds: [],
+  savedOrderIds: null,
+  dropped: false,
+  previewKey: ''
+};
 
-      ids.splice(fromIdx, 1);
-      ids.splice(toIdx, 0, dragId);
+function onProductRowDragStart(e, row, tbody, scroller) {
+  if (e.target.closest('.product-check') || e.target.closest('button') || e.target.closest('a')) {
+    e.preventDefault();
+    return;
+  }
+  const dragId = Number(row.dataset.productId);
+  productDragSession.groupIds = getDragProductGroup(dragId);
+  productDragSession.savedOrderIds = commerce.products.map((p) => p.id);
+  productDragSession.dropped = false;
+  productDragSession.previewKey = '';
+  row.classList.add('dragging');
+  tbody.querySelectorAll('tr[data-product-id]').forEach((r) => {
+    const id = Number(r.dataset.productId);
+    if (productDragSession.groupIds.includes(id)) r.classList.add('dragging-group');
+  });
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', productDragSession.groupIds.join(','));
+  if (productDragSession.groupIds.length > 1) {
+    const badge = document.createElement('div');
+    badge.textContent = `${productDragSession.groupIds.length} منتج`;
+    badge.style.cssText = 'position:fixed;top:-100px;padding:6px 10px;background:#2563eb;color:#fff;border-radius:8px;font-size:13px;';
+    document.body.appendChild(badge);
+    e.dataTransfer.setDragImage(badge, 20, 16);
+    setTimeout(() => badge.remove(), 0);
+  }
+  startProductDragAutoScroll(e.clientY, scroller);
+}
 
-      try {
-        await commerceApi('/products/reorder', {
-          method: 'POST',
-          body: JSON.stringify({ sectionId: commerce.selectedSectionId, orderedIds: ids })
-        });
-        showToast('تم تحديث الترتيب');
-        await loadCatalogProducts();
-      } catch (err) {
-        showToast(err.message, 'err');
+function onProductRowDragEnd(tbody) {
+  stopProductDragAutoScroll();
+  if (!productDragSession.dropped && productDragSession.savedOrderIds) {
+    applyProductTableDomOrder(productDragSession.savedOrderIds);
+    commerce.products.sort((a, b) =>
+      productDragSession.savedOrderIds.indexOf(a.id) - productDragSession.savedOrderIds.indexOf(b.id));
+  }
+  productDragSession.groupIds = [];
+  productDragSession.savedOrderIds = null;
+  productDragSession.previewKey = '';
+  tbody.querySelectorAll('tr').forEach((r) => {
+    r.classList.remove('dragging', 'drag-over', 'drag-over-before', 'dragging-group');
+  });
+}
+
+function bindProductDragTableEvents(table, scroller) {
+  table.addEventListener('dragover', (e) => {
+    if (!productDragSession.groupIds.length) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    updateProductDragPointerY(e.clientY);
+    if (!productDragScroll.active) startProductDragAutoScroll(e.clientY, scroller);
+
+    const row = e.target.closest('tr[data-product-id]');
+    const tbody = document.getElementById('catalogProductsBody');
+    if (!row || !tbody) return;
+
+    const targetId = Number(row.dataset.productId);
+    tbody.querySelectorAll('tr').forEach((r) => r.classList.remove('drag-over', 'drag-over-before'));
+    if (productDragSession.groupIds.includes(targetId)) return;
+
+    const rect = row.getBoundingClientRect();
+    const before = e.clientY < rect.top + rect.height / 2;
+    row.classList.toggle('drag-over-before', before);
+    row.classList.toggle('drag-over', !before);
+
+    const previewKey = `${targetId}:${before ? 'b' : 'a'}`;
+    if (previewKey === productDragSession.previewKey) return;
+    productDragSession.previewKey = previewKey;
+
+    const ids = commerce.products.map((p) => p.id);
+    const nextIds = computeDropOrder(ids, productDragSession.groupIds, targetId, before);
+    if (nextIds.join(',') !== ids.join(',')) {
+      applyProductTableDomOrder(nextIds);
+      commerce.products.sort((a, b) => nextIds.indexOf(a.id) - nextIds.indexOf(b.id));
+    }
+  });
+
+  scroller.addEventListener('dragover', (e) => {
+    if (!productDragSession.groupIds.length) return;
+    e.preventDefault();
+    updateProductDragPointerY(e.clientY);
+  });
+
+  table.addEventListener('dragleave', (e) => {
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      document.getElementById('catalogProductsBody')?.querySelectorAll('tr').forEach((r) => {
+        r.classList.remove('drag-over', 'drag-over-before');
+      });
+    }
+  });
+
+  table.addEventListener('drop', async (e) => {
+    if (!productDragSession.groupIds.length) return;
+    e.preventDefault();
+    const row = e.target.closest('tr[data-product-id]');
+    if (!row) return;
+
+    const targetId = Number(row.dataset.productId);
+    if (productDragSession.groupIds.includes(targetId)) return;
+
+    const ids = commerce.products.map((p) => p.id);
+    const rect = row.getBoundingClientRect();
+    const before = e.clientY < rect.top + rect.height / 2;
+    const nextIds = computeDropOrder(ids, productDragSession.groupIds, targetId, before);
+
+    try {
+      productDragSession.dropped = true;
+      await persistProductOrder(nextIds, productDragSession.groupIds.length);
+      applyProductTableDomOrder(nextIds);
+      syncProductRowSelectionStyles();
+      scrollProductRowIntoView(productDragSession.groupIds[0], scroller);
+    } catch (err) {
+      productDragSession.dropped = false;
+      if (productDragSession.savedOrderIds) {
+        applyProductTableDomOrder(productDragSession.savedOrderIds);
+        commerce.products.sort((a, b) =>
+          productDragSession.savedOrderIds.indexOf(a.id) - productDragSession.savedOrderIds.indexOf(b.id));
       }
-    });
+      showToast(err.message, 'err');
+    }
   });
 }
 
@@ -624,7 +959,7 @@ function renderEdariLivePreview(material, state, message = '') {
   box.innerHTML = `
     <p class="muted"><span class="badge ok">من Edari</span>
     عدد (رصيد): <strong dir="ltr">${material.stockQty ?? material.qty ?? 0}</strong>
-    · سعر نصف الجملة: <strong dir="ltr">${fmtMoney(material.wholesalePrice ?? material.price)}</strong></p>`;
+    · سعر الجملة: <strong dir="ltr">${fmtMoney(material.wholesalePrice ?? material.price)}</strong></p>`;
 }
 
 async function lookupEdariByBarcodeInput(code, { isEdit = false } = {}) {
@@ -662,14 +997,17 @@ async function lookupEdariByBarcodeInput(code, { isEdit = false } = {}) {
       const data = await commerceApi(`/products/edari-lookup?code=${encodeURIComponent(raw)}`);
       material = data.material;
     } else {
-      material = await pushEdariMaterialToCache(material);
-      const cachedQty = material.stockQty ?? material.qty ?? 0;
-      const liveQty = liveMaterial?.stockQty ?? liveMaterial?.qty ?? 0;
-      if (cachedQty === 0 && liveQty > 0) material = liveMaterial;
-      const cachedPrice = material.wholesalePrice ?? material.price ?? 0;
-      const livePrice = liveMaterial?.wholesalePrice ?? liveMaterial?.price ?? 0;
-      if (cachedPrice === 0 && livePrice > 0) {
-        material = { ...material, ...liveMaterial };
+      material = await pushEdariMaterialToCache(liveMaterial);
+      if (material && liveMaterial) {
+        const livePrice = liveMaterial.wholesalePrice ?? liveMaterial.price ?? 0;
+        if (livePrice > 0) {
+          material = {
+            ...material,
+            ...liveMaterial,
+            wholesalePrice: livePrice,
+            price: livePrice
+          };
+        }
       }
     }
     lastEdariMaterial = material;
@@ -832,6 +1170,14 @@ async function runBulkAction(action) {
   const ids = [...commerce.selectedProductIds];
   if (!ids.length) return;
 
+  if (action === 'move_up') {
+    await moveSelectedProducts('up');
+    return;
+  }
+  if (action === 'move_down') {
+    await moveSelectedProducts('down');
+    return;
+  }
   if (action === 'move') {
     openBulkMoveModal(ids);
     return;

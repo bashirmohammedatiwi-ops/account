@@ -55,6 +55,7 @@ function migrateCommerceSchema(db) {
       unit TEXT DEFAULT '',
       sell_pr1 REAL DEFAULT 0,
       sell_pr2 REAL DEFAULT 0,
+      sell_pr3 REAL DEFAULT 0,
       bonus REAL DEFAULT 0,
       in_tot REAL DEFAULT 0,
       out_tot REAL DEFAULT 0,
@@ -149,6 +150,11 @@ function migrateCommerceSchema(db) {
   for (const [col, type] of edariCols) {
     try {
       db.exec(`ALTER TABLE edari_materials ADD COLUMN ${col} ${type}`);
+    } catch { /* exists */ }
+  }
+  if (!columnExists(db, 'edari_materials', 'sell_pr3')) {
+    try {
+      db.exec('ALTER TABLE edari_materials ADD COLUMN sell_pr3 REAL DEFAULT 0');
     } catch { /* exists */ }
   }
 }

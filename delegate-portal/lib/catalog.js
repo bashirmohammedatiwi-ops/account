@@ -64,15 +64,10 @@ function updateBranch(id, patch) {
 }
 
 function deleteBranch(id) {
+  if (!db.prepare('SELECT id FROM catalog_branches WHERE id = ?').get(id)) return false;
+  const { deleteProductsByBranchId } = require('./products');
   const tx = db.transaction(() => {
-    db.prepare(`
-      UPDATE order_lines SET product_id = NULL
-      WHERE product_id IN (
-        SELECT p.id FROM products p
-        INNER JOIN catalog_sections s ON s.id = p.section_id
-        WHERE s.branch_id = ?
-      )
-    `).run(id);
+    deleteProductsByBranchId(id);
     return db.prepare('DELETE FROM catalog_branches WHERE id = ?').run(id).changes > 0;
   });
   return tx();
@@ -117,11 +112,10 @@ function updateSection(id, patch) {
 }
 
 function deleteSection(id) {
+  if (!db.prepare('SELECT id FROM catalog_sections WHERE id = ?').get(id)) return false;
+  const { deleteProductsBySectionId } = require('./products');
   const tx = db.transaction(() => {
-    db.prepare(`
-      UPDATE order_lines SET product_id = NULL
-      WHERE product_id IN (SELECT id FROM products WHERE section_id = ?)
-    `).run(id);
+    deleteProductsBySectionId(id);
     return db.prepare('DELETE FROM catalog_sections WHERE id = ?').run(id).changes > 0;
   });
   return tx();

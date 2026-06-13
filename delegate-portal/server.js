@@ -51,6 +51,11 @@ app.get('/m/*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'm', 'index.html'));
 });
 
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  res.status(500).json({ ok: false, error: err.message || 'خطأ في السيرفر' });
+});
+
 app.listen(PORT, HOST, () => {
   console.log(`Edari Delegate Portal: http://${HOST}:${PORT}/admin`);
   console.log(`Delegate mobile: http://${HOST}:${PORT}/m`);

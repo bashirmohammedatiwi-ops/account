@@ -9,14 +9,16 @@ const odbcBridge = require(path.join(edariRoot, 'lib', 'odbc-bridge'));
 const { getEdariConnection } = require('./edari-connection');
 
 const MATERIAL_SELECT = `
-  Seq, Num, Name1, Name2, Barcode, SellPr1, SellPr2, SellPr3, SellPr4,
+  Seq, Num, Name1, Name2, Barcode, SellPr1, SellPr2, SellPr3, SellPr4, SellPr5,
   DefUnit, Unt1, Bonus, Remarks, InTot, OutTot
 `.replace(/\s+/g, ' ').trim();
 
-function wholesalePrice(sellPr1, sellPr2) {
-  const w = Number(sellPr2);
+function wholesalePrice(sellPr1, _sellPr2, _sellPr3, sellPr5) {
+  const w = Number(sellPr1);
   if (w > 0) return w;
-  return Number(sellPr1) || 0;
+  const alt = Number(sellPr5);
+  if (alt > 0) return alt;
+  return 0;
 }
 
 function stockQty(inTot, outTot) {
@@ -27,6 +29,8 @@ function mapMaterialRow(row) {
   if (!row) return null;
   const sellPr1 = Number(row.SellPr1 ?? 0);
   const sellPr2 = Number(row.SellPr2 ?? 0);
+  const sellPr3 = Number(row.SellPr3 ?? 0);
+  const sellPr5 = Number(row.SellPr5 ?? 0);
   const inTot = Number(row.InTot ?? 0);
   const outTot = Number(row.OutTot ?? 0);
   const qty = stockQty(inTot, outTot);
@@ -39,9 +43,13 @@ function mapMaterialRow(row) {
     name: String(row.Name1 ?? ''),
     name2: String(row.Name2 ?? ''),
     unit,
+    sellPr1,
+    sellPr2,
+    sellPr3,
+    sellPr5,
     priceRetail: sellPr1,
-    wholesalePrice: wholesalePrice(sellPr1, sellPr2),
-    price: wholesalePrice(sellPr1, sellPr2),
+    wholesalePrice: wholesalePrice(sellPr1, sellPr2, sellPr3, sellPr5),
+    price: wholesalePrice(sellPr1, sellPr2, sellPr3, sellPr5),
     bonus: Number(row.Bonus ?? 0),
     inTot,
     outTot,

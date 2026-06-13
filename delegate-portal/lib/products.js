@@ -39,10 +39,71 @@ function mapProduct(row, extras = {}) {
   };
 }
 
-function edariWholesalePrice(sellPr1, sellPr2) {
-  const wholesale = Number(sellPr2);
+/** سعر الجملة في Edari = SellPr1 (وليس SellPr2 نصف الجملة ولا SellPr3). */
+function edariWholesalePrice(sellPr1, _sellPr2, _sellPr3, sellPr5) {
+  const wholesale = Number(sellPr1);
   if (wholesale > 0) return wholesale;
-  return Number(sellPr1) || 0;
+  const alt = Number(sellPr5);
+  if (alt > 0) return alt;
+  return 0;
+}
+
+function wholesaleFromEdariRow(row) {
+  if (!row || typeof row !== 'object') return 0;
+  const sellPr1 = Number(row.SellPr1 ?? row.sell_pr1 ?? row.priceRetail ?? 0);
+  const sellPr5 = Number(row.SellPr5 ?? row.sell_pr5 ?? 0);
+  return edariWholesalePrice(sellPr1, 0, 0, sellPr5);
+}
+
+/**
+ * Normalize File13n rows before catalog sync.
+ * Clears SellPr2 in the payload so legacy servers (that used half-wholesale) pick SellPr1.
+ */
+function prepareEdariRowsForCatalogSync(rows = []) {
+  return rows.map((row) => {
+    const wholesale = wholesaleFromEdariRow(row);
+    const sellPr3 = Number(row.SellPr3 ?? row.sell_pr3 ?? 0);
+    const sellPr5 = Number(row.SellPr5 ?? row.sell_pr5 ?? 0);
+    return {
+      ...row,
+      SellPr1: wholesale,
+      sell_pr1: wholesale,
+      SellPr2: 0,
+      sell_pr2: 0,
+      SellPr3: sellPr3,
+      sell_pr3: sellPr3,
+      SellPr5: sellPr5,
+      sell_pr5: sellPr5
+    };
+  });
+}
+
+/** Force products.price from edari_materials.sell_pr1 (wholesale). */
+function applyWholesalePricesFromMaterials() {
+  const rows = db.prepare(`
+    SELECT p.id, m.sell_pr1, m.sell_pr3
+    FROM products p
+    INNER JOIN edari_materials m ON (
+      (p.edari_seq != '' AND p.edari_seq = m.seq)
+      OR (p.barcode != '' AND (p.barcode = m.barcode OR p.barcode = m.num))
+      OR (p.sku_num != '' AND (p.sku_num = m.num OR p.sku_num = m.barcode))
+    )
+  `).all();
+  let updated = 0;
+  const tx = db.transaction(() => {
+    for (const row of rows) {
+      const wholesale = edariWholesalePrice(row.sell_pr1, 0, row.sell_pr3, 0);
+      if (wholesale <= 0) continue;
+      const result = db.prepare(`
+        UPDATE products
+        SET price = ?, price_override = 0, updated_at = datetime('now')
+        WHERE id = ?
+      `).run(wholesale, row.id);
+      updated += result.changes || 0;
+    }
+  });
+  tx();
+  return updated;
 }
 
 /** رصيد المخزون في Edari = وارد − صادر */
@@ -54,6 +115,8 @@ function mapEdariMaterial(row) {
   if (!row) return null;
   const sellPr1 = Number(row.sell_pr1 ?? row.SellPr1 ?? 0);
   const sellPr2 = Number(row.sell_pr2 ?? row.SellPr2 ?? 0);
+  const sellPr3 = Number(row.sell_pr3 ?? row.SellPr3 ?? 0);
+  const sellPr5 = Number(row.sell_pr5 ?? row.SellPr5 ?? 0);
   const inTot = Number(row.in_tot ?? row.InTot ?? 0);
   const outTot = Number(row.out_tot ?? row.OutTot ?? 0);
   const stockQty = edariStockQty(inTot, outTot);
@@ -65,8 +128,8 @@ function mapEdariMaterial(row) {
     name2: String(row.name2 || row.Name2 || ''),
     unit: String(row.unit || row.DefUnit || ''),
     priceRetail: sellPr1,
-    wholesalePrice: edariWholesalePrice(sellPr1, sellPr2),
-    price: edariWholesalePrice(sellPr1, sellPr2),
+    wholesalePrice: edariWholesalePrice(sellPr1, sellPr2, sellPr3, sellPr5),
+    price: edariWholesalePrice(sellPr1, sellPr2, sellPr3, sellPr5),
     bonus: Number(row.bonus ?? row.Bonus ?? 0),
     inTot,
     outTot,
@@ -95,6 +158,8 @@ function parseEdariSyncRow(row) {
     unit: String(row.Unt1 ?? row.DefUnit ?? row.unit ?? '').trim().replace(/^0$/, ''),
     sellPr1: Number(row.SellPr1 ?? row.price ?? 0),
     sellPr2: Number(row.SellPr2 ?? row.sell_pr2 ?? 0),
+    sellPr3: Number(row.SellPr3 ?? row.sell_pr3 ?? 0),
+    sellPr5: Number(row.SellPr5 ?? row.sell_pr5 ?? 0),
     bonus: Number(row.Bonus ?? row.bonus ?? 0),
     inTot: Number(row.InTot ?? row.in_tot ?? 0),
     outTot: Number(row.OutTot ?? row.out_tot ?? 0),
@@ -347,18 +412,60 @@ function updateProduct(id, patch) {
   return getProduct(id);
 }
 
-function deleteProduct(id) {
-  const row = db.prepare('SELECT image_path FROM products WHERE id = ?').get(id);
-  if (!row) return false;
-  if (row.image_path) {
-    const full = path.join(UPLOAD_ROOT, row.image_path);
-    if (fs.existsSync(full)) fs.unlinkSync(full);
+function detachProductFromOrders(productId) {
+  try {
+    db.prepare('UPDATE order_lines SET product_id = NULL WHERE product_id = ?').run(productId);
+  } catch {
+    /* order_lines table may be absent on very old databases */
   }
+}
+
+function removeProductFiles(imagePath) {
+  if (!imagePath) return;
+  const full = path.join(UPLOAD_ROOT, imagePath);
+  if (fs.existsSync(full)) fs.unlinkSync(full);
+}
+
+function removeProductRecord(id, imagePath = null) {
+  const row = imagePath != null
+    ? { image_path: imagePath }
+    : db.prepare('SELECT image_path FROM products WHERE id = ?').get(id);
+  if (!row) return false;
+  removeProductFiles(row.image_path);
+  detachProductFromOrders(id);
+  return db.prepare('DELETE FROM products WHERE id = ?').run(id).changes > 0;
+}
+
+function deleteProduct(id) {
+  return removeProductRecord(id);
+}
+
+function deleteProductsBySectionId(sectionId) {
+  const rows = db.prepare('SELECT id, image_path FROM products WHERE section_id = ?').all(sectionId);
+  if (!rows.length) return 0;
   const tx = db.transaction(() => {
-    db.prepare('UPDATE order_lines SET product_id = NULL WHERE product_id = ?').run(id);
-    return db.prepare('DELETE FROM products WHERE id = ?').run(id).changes > 0;
+    for (const row of rows) {
+      removeProductRecord(row.id, row.image_path);
+    }
   });
-  return tx();
+  tx();
+  return rows.length;
+}
+
+function deleteProductsByBranchId(branchId) {
+  const rows = db.prepare(`
+    SELECT p.id, p.image_path FROM products p
+    INNER JOIN catalog_sections s ON s.id = p.section_id
+    WHERE s.branch_id = ?
+  `).all(branchId);
+  if (!rows.length) return 0;
+  const tx = db.transaction(() => {
+    for (const row of rows) {
+      removeProductRecord(row.id, row.image_path);
+    }
+  });
+  tx();
+  return rows.length;
 }
 
 function saveProductImage(id, dataUrl) {
@@ -403,8 +510,8 @@ function upsertEdariMaterial(row) {
   const now = new Date().toISOString();
   db.prepare(`
     INSERT INTO edari_materials
-      (seq, num, barcode, name1, name2, unit, sell_pr1, sell_pr2, bonus, in_tot, out_tot, remarks, synced_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (seq, num, barcode, name1, name2, unit, sell_pr1, sell_pr2, sell_pr3, bonus, in_tot, out_tot, remarks, synced_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(seq) DO UPDATE SET
       num = excluded.num,
       barcode = excluded.barcode,
@@ -413,6 +520,7 @@ function upsertEdariMaterial(row) {
       unit = excluded.unit,
       sell_pr1 = excluded.sell_pr1,
       sell_pr2 = excluded.sell_pr2,
+      sell_pr3 = excluded.sell_pr3,
       bonus = excluded.bonus,
       in_tot = excluded.in_tot,
       out_tot = excluded.out_tot,
@@ -427,6 +535,7 @@ function upsertEdariMaterial(row) {
     parsed.unit,
     parsed.sellPr1,
     parsed.sellPr2,
+    parsed.sellPr3,
     parsed.bonus,
     parsed.inTot,
     parsed.outTot,
@@ -456,7 +565,7 @@ function findRegisteredProductIds(parsed) {
 function refreshRegisteredProductFromEdari(parsed) {
   const now = new Date().toISOString();
   let updated = 0;
-  const wholesale = edariWholesalePrice(parsed.sellPr1, parsed.sellPr2);
+  const wholesale = edariWholesalePrice(parsed.sellPr1, parsed.sellPr2, parsed.sellPr3, parsed.sellPr5);
   for (const id of findRegisteredProductIds(parsed)) {
     updateProduct(id, {
       edariSeq: parsed.seq,
@@ -507,7 +616,45 @@ function syncSectionFromEdari(sectionId) {
   return { updated, total: rows.length, errors };
 }
 
+function materialRowToParsed(row) {
+  return {
+    seq: row.seq,
+    num: row.num,
+    barcode: row.barcode,
+    name1: row.name1,
+    name2: row.name2 || '',
+    unit: row.unit || '',
+    sellPr1: Number(row.sell_pr1 ?? 0),
+    sellPr2: Number(row.sell_pr2 ?? 0),
+    sellPr3: Number(row.sell_pr3 ?? 0),
+    sellPr5: Number(row.sell_pr5 ?? 0),
+    bonus: Number(row.bonus ?? 0),
+    inTot: Number(row.in_tot ?? 0),
+    outTot: Number(row.out_tot ?? 0),
+    stockQty: edariStockQty(row.in_tot, row.out_tot),
+    remarks: row.remarks || ''
+  };
+}
+
+/** Re-apply SellPr1 wholesale + stock to every catalog product linked in edari_materials. */
+function refreshAllProductsFromEdariCache() {
+  const materials = db.prepare('SELECT * FROM edari_materials').all();
+  let productsUpdated = 0;
+  const tx = db.transaction(() => {
+    for (const row of materials) {
+      productsUpdated += refreshRegisteredProductFromEdari(materialRowToParsed(row));
+    }
+  });
+  tx();
+  const pricesApplied = applyWholesalePricesFromMaterials();
+  const total = db.prepare('SELECT COUNT(*) AS c FROM products').get()?.c || 0;
+  return { updated: productsUpdated, pricesApplied, total, materials: materials.length, errors: [] };
+}
+
 function refreshCatalogPricesFromCache({ sectionId, branchId } = {}) {
+  if (!sectionId && !branchId) {
+    return refreshAllProductsFromEdariCache();
+  }
   let sql = 'SELECT id FROM products WHERE 1=1';
   const params = [];
   if (sectionId) {
@@ -618,9 +765,11 @@ function normalizeClientMaterial(material, code = '') {
   const inTot = Number(material.inTot ?? 0);
   const outTot = Number(material.outTot ?? 0);
   const sellPr1 = Number(material.priceRetail ?? material.sellPr1 ?? 0);
-  const sellPr2 = Number(material.wholesalePrice ?? material.sellPr2 ?? 0);
+  const sellPr2 = Number(material.sellPr2 ?? 0);
+  const sellPr3 = Number(material.sellPr3 ?? 0);
+  const sellPr5 = Number(material.sellPr5 ?? 0);
   const stockQty = Number(material.stockQty ?? material.qty ?? edariStockQty(inTot, outTot));
-  const wholesale = edariWholesalePrice(sellPr1, sellPr2 || material.price);
+  const wholesale = edariWholesalePrice(sellPr1, sellPr2, sellPr3, sellPr5);
   return {
     seq: String(material.seq),
     num: String(material.num || ''),
@@ -692,6 +841,8 @@ function addProductByBarcode(sectionId, code, options = {}) {
 /** Upsert one Edari material into local cache (from live ODBC lookup or API). */
 function cacheEdariMaterial(material) {
   if (!material?.seq) return null;
+  const wholesale = wholesaleFromEdariRow(material)
+    || Number(material.wholesalePrice ?? material.price ?? 0);
   upsertEdariMaterial({
     Seq: material.seq,
     Num: material.num,
@@ -700,8 +851,10 @@ function cacheEdariMaterial(material) {
     Name2: material.name2,
     Unt1: material.unit,
     DefUnit: material.unit,
-    SellPr1: material.priceRetail ?? material.sellPr1 ?? material.price,
-    SellPr2: material.wholesalePrice ?? material.sellPr2 ?? material.price,
+    SellPr1: wholesale,
+    SellPr2: 0,
+    SellPr3: material.sellPr3 ?? 0,
+    SellPr5: material.sellPr5 ?? 0,
     Bonus: material.bonus,
     InTot: material.inTot,
     OutTot: material.outTot,
@@ -712,12 +865,13 @@ function cacheEdariMaterial(material) {
 
 /** Sync File13n cache + refresh catalog products registered by barcode (no auto-import). */
 function syncMaterialsFromEdari(rows = []) {
-  if (!rows.length) return { materials: 0, productsUpdated: 0, scanned: 0 };
+  if (!rows.length) return { materials: 0, productsUpdated: 0, scanned: 0, pricesApplied: 0 };
 
+  const prepared = prepareEdariRowsForCatalogSync(rows);
   let materials = 0;
   let productsUpdated = 0;
   const tx = db.transaction(() => {
-    for (const row of rows) {
+    for (const row of prepared) {
       const parsed = upsertEdariMaterial(row);
       if (!parsed) continue;
       materials += 1;
@@ -725,7 +879,8 @@ function syncMaterialsFromEdari(rows = []) {
     }
   });
   tx();
-  return { materials, productsUpdated, scanned: rows.length };
+  const pricesApplied = applyWholesalePricesFromMaterials();
+  return { materials, productsUpdated, pricesApplied, scanned: rows.length };
 }
 
 function purgeAllCatalogProducts() {
@@ -879,12 +1034,15 @@ module.exports = {
   createProduct,
   updateProduct,
   deleteProduct,
+  deleteProductsBySectionId,
+  deleteProductsByBranchId,
   deleteProductImage,
   saveProductImage,
   syncProductFromEdari,
   syncSectionFromEdari,
   syncMaterialsFromEdari,
   refreshCatalogPricesFromCache,
+  refreshAllProductsFromEdariCache,
   listCatalogRefreshCodes,
   purgeAllCatalogProducts,
   reorderProducts,

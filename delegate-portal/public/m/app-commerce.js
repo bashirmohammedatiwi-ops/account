@@ -203,7 +203,7 @@ function renderProductCard(p) {
         <p class="prod-barcode" dir="ltr">${esc(p.barcode || p.skuNum || '—')}</p>
         <p class="prod-price-line">
           <strong dir="ltr">${fmtInvInt(p.price)}</strong>
-          <span>نصف جملة</span>
+          <span>جملة</span>
           ${stock > 0 ? `<em>رصيد ${fmtInvInt(stock)}</em>` : ''}
         </p>
       </div>

@@ -182,14 +182,16 @@
             </div>
             <div class="product-bulk-bar hidden" id="productBulkBar">
               <span id="productBulkCount">0 محدد</span>
+              <button type="button" class="btn btn-soft btn-sm product-reorder-btn hidden" data-bulk="move_up" title="تحريك للأعلى">▲ أعلى</button>
+              <button type="button" class="btn btn-soft btn-sm product-reorder-btn hidden" data-bulk="move_down" title="تحريك للأسفل">▼ أسفل</button>
               <button type="button" class="btn btn-soft btn-sm" data-bulk="activate">تفعيل</button>
               <button type="button" class="btn btn-soft btn-sm" data-bulk="deactivate">إيقاف</button>
               <button type="button" class="btn btn-soft btn-sm" data-bulk="sync_edari">مزامنة Edari</button>
               <button type="button" class="btn btn-soft btn-sm" data-bulk="move">نقل لقسم</button>
               <button type="button" class="btn btn-danger btn-sm" data-bulk="delete">حذف</button>
             </div>
-            <p class="muted product-drag-hint hidden" id="productDragHint">↕ اسحب الصفوف لترتيب المنتجات في القسم</p>
-            <div class="table-scroll">
+            <p class="muted product-drag-hint hidden" id="productDragHint">↕ حدّد منتجات — اسحب للأعلى/الأسفل (تمرير تلقائي) أو استخدم ▲▼</p>
+            <div class="table-scroll product-table-scroll" id="productTableScroll">
               <table class="data-table compact" id="catalogProductsTable">
                 <thead>
                   <tr>
@@ -464,7 +466,7 @@
               <input type="number" id="productQty" min="0" step="1" dir="ltr" value="0" readonly class="readonly">
             </label>
             <label class="field">
-              <span>سعر نصف الجملة</span>
+              <span>سعر الجملة</span>
               <input type="number" id="productPrice" min="0" step="1" dir="ltr" readonly class="readonly" required>
             </label>
           </div>
@@ -614,6 +616,6 @@
 
   <script src="config.js"></script>
   <script src="admin.js?v=20260613trees"></script>
-  <script src="admin-commerce.js?v=20260607v2"></script>
+  <script src="admin-commerce.js?v=20260613reorder2"></script>
 </body>
 </html>

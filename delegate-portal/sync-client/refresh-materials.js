@@ -19,7 +19,7 @@ async function query(sql) {
 
 async function main() {
   const rows = await query(`
-    SELECT Seq, Num, Name1, Name2, Barcode, SellPr1, SellPr2, SellPr3, SellPr4,
+    SELECT Seq, Num, Name1, Name2, Barcode, SellPr1, SellPr2, SellPr3, SellPr4, SellPr5,
            Unt1, DefUnit, Bonus, Remarks, InTot, OutTot
     FROM File13n
     WHERE SubCount = 0
