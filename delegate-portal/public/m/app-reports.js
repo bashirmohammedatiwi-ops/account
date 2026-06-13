@@ -9,11 +9,96 @@ const reports = {
   loading: false
 };
 
+const AR_MONTHS = [
+  'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+  'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+];
+
 function isoDate(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+function parseIsoDate(iso) {
+  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  return { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]) };
+}
+
+function daysInMonth(year, month) {
+  return new Date(year, month, 0).getDate();
+}
+
+function yearRange() {
+  const now = new Date().getFullYear();
+  const years = [];
+  for (let y = now; y >= now - 12; y -= 1) years.push(y);
+  return years;
+}
+
+function getDatePickerParts(rootId) {
+  const root = document.getElementById(rootId);
+  if (!root) return null;
+  return {
+    root,
+    day: root.querySelector('[data-part="day"]'),
+    month: root.querySelector('[data-part="month"]'),
+    year: root.querySelector('[data-part="year"]')
+  };
+}
+
+function fillDayOptions(daySel, year, month, selectedDay) {
+  if (!daySel) return;
+  const max = daysInMonth(year, month);
+  const keep = Math.min(Math.max(selectedDay || 1, 1), max);
+  daySel.innerHTML = Array.from({ length: max }, (_, i) => {
+    const d = i + 1;
+    return `<option value="${d}">${d}</option>`;
+  }).join('');
+  daySel.value = String(keep);
+}
+
+function setupDatePicker(rootId, initialIso) {
+  const parts = getDatePickerParts(rootId);
+  if (!parts?.day || !parts.month || !parts.year) return;
+
+  const parsed = parseIsoDate(initialIso) || parseIsoDate(isoDate(new Date()));
+  const years = yearRange();
+
+  parts.year.innerHTML = years.map((y) => `<option value="${y}">${y}</option>`).join('');
+  parts.month.innerHTML = AR_MONTHS.map((name, i) =>
+    `<option value="${i + 1}">${name}</option>`
+  ).join('');
+
+  parts.year.value = String(parsed.year);
+  parts.month.value = String(parsed.month);
+  fillDayOptions(parts.day, parsed.year, parsed.month, parsed.day);
+
+  const refreshDays = () => {
+    fillDayOptions(
+      parts.day,
+      Number(parts.year.value),
+      Number(parts.month.value),
+      Number(parts.day.value)
+    );
+  };
+
+  if (parts.root.dataset.ready === '1') return;
+  parts.root.dataset.ready = '1';
+  parts.year.addEventListener('change', refreshDays);
+  parts.month.addEventListener('change', refreshDays);
+}
+
+function readDatePicker(rootId) {
+  const parts = getDatePickerParts(rootId);
+  if (!parts?.day || !parts.month || !parts.year) return '';
+  const y = parts.year.value;
+  const m = String(parts.month.value).padStart(2, '0');
+  const d = String(parts.day.value).padStart(2, '0');
+  if (!y || !parts.month.value || !parts.day.value) return '';
+  return `${y}-${m}-${d}`;
 }
 
 function defaultReportDates() {
@@ -38,11 +123,9 @@ function populateReportsTreeSelect() {
 
 function readReportFilters() {
   const sel = document.getElementById('reportsTreeSelect');
-  const fromEl = document.getElementById('reportsDateFrom');
-  const toEl = document.getElementById('reportsDateTo');
   reports.treeSeq = sel?.value || '';
-  reports.dateFrom = fromEl?.value || '';
-  reports.dateTo = toEl?.value || '';
+  reports.dateFrom = readDatePicker('reportsDateFromPicker');
+  reports.dateTo = readDatePicker('reportsDateToPicker');
 }
 
 function renderReportsSummary(summary) {
@@ -149,10 +232,8 @@ async function loadSalesReport({ append = false } = {}) {
 
 function initReportsScreen() {
   const defaults = defaultReportDates();
-  const fromEl = document.getElementById('reportsDateFrom');
-  const toEl = document.getElementById('reportsDateTo');
-  if (fromEl && !fromEl.value) fromEl.value = defaults.from;
-  if (toEl && !toEl.value) toEl.value = defaults.to;
+  setupDatePicker('reportsDateFromPicker', defaults.from);
+  setupDatePicker('reportsDateToPicker', defaults.to);
   populateReportsTreeSelect();
 
   const empty = document.getElementById('reportsEmpty');

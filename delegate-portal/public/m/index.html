@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css?v=20260613shop6">
-  <link rel="stylesheet" href="portal-pro.css?v=20260607reports">
+  <link rel="stylesheet" href="portal-pro.css?v=20260607datepick">
 </head>
 <body class="ed-body">
   <!-- Login -->
@@ -308,15 +308,45 @@
                 <option value="">— اختر شجرة —</option>
               </select>
             </label>
-            <div class="reports-date-row">
-              <label class="field">
+            <div class="reports-date-stack">
+              <div class="reports-date-block">
                 <span class="field-label">من تاريخ</span>
-                <input type="date" id="reportsDateFrom" class="reports-date-input">
-              </label>
-              <label class="field">
+                <div class="date-picker" id="reportsDateFromPicker">
+                  <div class="date-picker-row">
+                    <label class="date-picker-part">
+                      <span class="date-picker-lbl">يوم</span>
+                      <select class="date-picker-select" data-part="day" aria-label="يوم البداية"></select>
+                    </label>
+                    <label class="date-picker-part">
+                      <span class="date-picker-lbl">شهر</span>
+                      <select class="date-picker-select" data-part="month" aria-label="شهر البداية"></select>
+                    </label>
+                    <label class="date-picker-part">
+                      <span class="date-picker-lbl">سنة</span>
+                      <select class="date-picker-select" data-part="year" aria-label="سنة البداية"></select>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div class="reports-date-block">
                 <span class="field-label">إلى تاريخ</span>
-                <input type="date" id="reportsDateTo" class="reports-date-input">
-              </label>
+                <div class="date-picker" id="reportsDateToPicker">
+                  <div class="date-picker-row">
+                    <label class="date-picker-part">
+                      <span class="date-picker-lbl">يوم</span>
+                      <select class="date-picker-select" data-part="day" aria-label="يوم النهاية"></select>
+                    </label>
+                    <label class="date-picker-part">
+                      <span class="date-picker-lbl">شهر</span>
+                      <select class="date-picker-select" data-part="month" aria-label="شهر النهاية"></select>
+                    </label>
+                    <label class="date-picker-part">
+                      <span class="date-picker-lbl">سنة</span>
+                      <select class="date-picker-select" data-part="year" aria-label="سنة النهاية"></select>
+                    </label>
+                  </div>
+                </div>
+              </div>
             </div>
             <button type="button" class="btn primary full" id="btnRunReport">عرض المبيعات</button>
           </div>
@@ -487,7 +517,7 @@
     </div>
   </div>
   <script src="app.js?v=20260613commerce"></script>
-  <script src="app-reports.js?v=20260607reports"></script>
+  <script src="app-reports.js?v=20260607datepick"></script>
   <script src="app-commerce.js?v=20260613shop6"></script>
 </body>
 </html>

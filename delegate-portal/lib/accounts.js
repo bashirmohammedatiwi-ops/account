@@ -5,6 +5,7 @@ const {
   resolveLineTotal
 } = require('./invoice-line-sync');
 const { syncMaterialsFromEdari, refreshAllProductsFromEdariCache } = require('./products');
+const { normalizeEdariDateIso } = require('./date-utils');
 
 const usedBillNosStmt = db.prepare('SELECT bill_no FROM invoice_lines WHERE bill_seq = ?');
 
@@ -249,7 +250,8 @@ function mapInvoiceRow(inv, now) {
     seq: String(inv.Seq ?? inv.seq),
     num: String(inv.Num ?? inv.num ?? ''),
     kind: String(inv.Kind ?? inv.kind ?? ''),
-    inv_date: inv.Date ?? inv.inv_date ?? '',
+    inv_date: normalizeEdariDateIso(inv.Date ?? inv.inv_date ?? '')
+      || String(inv.Date ?? inv.inv_date ?? '').trim(),
     total: Number(inv.Total ?? inv.total ?? 0),
     payment: Number(inv.Payment ?? inv.payment ?? 0),
     discount: Number(inv.DisCnt ?? inv.discount ?? 0),

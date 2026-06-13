@@ -89,7 +89,25 @@ function migrateSchema() {
     }
   }
   migrateInvoiceLinesUniqueKey();
+  migrateInvoiceDatesToIso();
   require('./commerce-schema').migrateCommerceSchema(db);
+}
+
+function migrateInvoiceDatesToIso() {
+  const { normalizeEdariDateIso } = require('./date-utils');
+  const rows = db.prepare(`
+    SELECT seq, inv_date FROM invoices
+    WHERE inv_date LIKE '%/%' OR inv_date LIKE '%-%-% %:%'
+  `).all();
+  if (!rows.length) return;
+  const upd = db.prepare('UPDATE invoices SET inv_date = ? WHERE seq = ?');
+  const tx = db.transaction(() => {
+    for (const r of rows) {
+      const norm = normalizeEdariDateIso(r.inv_date);
+      if (norm && norm !== String(r.inv_date).slice(0, 10)) upd.run(norm, r.seq);
+    }
+  });
+  tx();
 }
 
 function migrateInvoiceLinesUniqueKey() {

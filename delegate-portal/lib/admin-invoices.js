@@ -1,5 +1,8 @@
 const db = require('./db');
 const { getInvoiceByBillSeq, getInvoiceByNum, invoiceKindLabel } = require('./invoices');
+const { sqlNormalizedEdariDate } = require('./date-utils');
+
+const INV_DATE_SQL = sqlNormalizedEdariDate('i.inv_date');
 
 function listInvoices({
   q = '',
@@ -12,11 +15,11 @@ function listInvoices({
   const params = [];
 
   if (dateFrom) {
-    where.push('i.inv_date >= ?');
+    where.push(`${INV_DATE_SQL} >= ?`);
     params.push(dateFrom);
   }
   if (dateTo) {
-    where.push('i.inv_date <= ?');
+    where.push(`${INV_DATE_SQL} <= ?`);
     params.push(dateTo);
   }
   if (q) {
@@ -37,7 +40,7 @@ function listInvoices({
     FROM invoices i
     LEFT JOIN accounts a ON a.seq = i.acc_seq
     WHERE ${where.join(' AND ')}
-    ORDER BY i.inv_date DESC, i.num DESC
+    ORDER BY ${INV_DATE_SQL} DESC, i.num DESC
     LIMIT ? OFFSET ?
   `;
   params.push(limit, offset);

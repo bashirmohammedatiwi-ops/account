@@ -1,6 +1,9 @@
 const db = require('./db');
 const { canAgentAccess, getDescendantSeqs } = require('./accounts');
 const { invoiceKindLabel, isReturnInvoiceKind } = require('./invoices');
+const { sqlNormalizedEdariDate } = require('./date-utils');
+
+const INV_DATE_SQL = sqlNormalizedEdariDate('i.inv_date');
 
 function mapInvoiceRow(r) {
   const netPay = Number(r.total || 0) - Number(r.discount || 0);
@@ -71,11 +74,11 @@ function queryAgentSalesReport(agentId, {
   const params = [...seqs];
 
   if (dateFrom) {
-    where.push('i.inv_date >= ?');
+    where.push(`${INV_DATE_SQL} >= ?`);
     params.push(dateFrom);
   }
   if (dateTo) {
-    where.push('i.inv_date <= ?');
+    where.push(`${INV_DATE_SQL} <= ?`);
     params.push(dateTo);
   }
 
@@ -88,7 +91,7 @@ function queryAgentSalesReport(agentId, {
   const rows = db.prepare(`
     SELECT i.*, a.num AS account_num, a.name1 AS account_name
     ${baseSql}
-    ORDER BY i.inv_date DESC, CAST(i.num AS INTEGER) DESC, i.num DESC
+    ORDER BY ${INV_DATE_SQL} DESC, CAST(i.num AS INTEGER) DESC, i.num DESC
     LIMIT ? OFFSET ?
   `).all(...params, limit, offset);
 

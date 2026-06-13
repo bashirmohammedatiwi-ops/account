@@ -1559,20 +1559,99 @@
   color: #0f172a;
 }
 
-.reports-date-row {
+.reports-date-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.reports-date-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reports-date-block .field-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.date-picker {
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 14px;
+  padding: 10px;
+}
+
+.date-picker-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  grid-template-columns: 1.1fr 1.4fr 1fr;
+  gap: 8px;
+}
+
+.date-picker-part {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.date-picker-lbl {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #64748b;
+  text-align: center;
+}
+
+.date-picker-select {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: 12px;
+  padding: 10px 8px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+  background: #fff;
+  text-align: center;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' stroke='%2364748b' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 10px center;
+  padding-left: 28px;
+}
+
+.reports-select {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 16px;
+  background: #f8fafc;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .reports-select,
-.reports-date-input {
-  width: 100%;
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  border-radius: 10px;
-  padding: 10px 12px;
-  font: inherit;
-  background: #f8fafc;
+.date-picker-select {
+  touch-action: manipulation;
+}
+
+@media (min-width: 768px) {
+  .date-picker-select {
+    min-height: 52px;
+    font-size: 17px;
+  }
+
+  .reports-select {
+    min-height: 52px;
+    font-size: 17px;
+  }
 }
 
 .reports-summary-grid {
