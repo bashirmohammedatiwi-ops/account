@@ -554,7 +554,8 @@ async function handleSyncFinished(activity = {}) {
     const r = activity.result;
     const invPart = r.invoices ? `، ${r.invoices} فاتورة` : '';
     const linesPart = r.invoiceLines ? `، ${r.invoiceLines} بند` : '';
-    applySyncProgressLine(`تم! ${r.accounts} حساب، ${r.journal} حركة${invPart}${linesPart}`);
+    const catalogPart = r.catalogUpdated ? `، ${r.catalogUpdated} منتج كتalog` : '';
+    applySyncProgressLine(`تم! ${r.accounts} حساب، ${r.journal} حركة${invPart}${linesPart}${catalogPart}`);
     const bar = document.getElementById('syncProgressBar');
     const step = document.getElementById('syncProgressStep');
     if (bar) bar.style.width = '100%';
@@ -1098,7 +1099,8 @@ async function runSync(opts = {}) {
 
     const invPart = data.invoices ? `، ${data.invoices} فاتورة` : '';
     const linesPart = data.invoiceLines ? `، ${data.invoiceLines} بند` : '';
-    applySyncProgressLine(`تم! ${data.accounts} حساب، ${data.journal} حركة${invPart}${linesPart}`);
+    const catalogPart = data.catalogUpdated ? `، ${data.catalogUpdated} منتج كتalog` : '';
+    applySyncProgressLine(`تم! ${data.accounts} حساب، ${data.journal} حركة${invPart}${linesPart}${catalogPart}`);
     if (bar) bar.style.width = '100%';
     if (step) step.textContent = 'اكتملت المزامنة';
     await loadDashboard();

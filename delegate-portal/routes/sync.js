@@ -8,6 +8,7 @@ const {
   failSyncSession,
   getSyncStatus
 } = require('../lib/accounts');
+const { listCatalogRefreshCodes } = require('../lib/products');
 
 const router = express.Router();
 const VALID_KINDS = new Set(['accounts', 'journal', 'invoices', 'invoiceLines', 'products']);
@@ -56,6 +57,15 @@ router.post('/finish', authSync, (req, res) => {
   }
 });
 
+router.get('/catalog-product-codes', authSync, (_req, res) => {
+  try {
+    const result = listCatalogRefreshCodes();
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 router.post('/push', authSync, (req, res) => {
   try {
     const {
@@ -63,12 +73,20 @@ router.post('/push', authSync, (req, res) => {
       journal = [],
       invoices = [],
       invoiceLines = [],
+      products = [],
       accountSeqs = []
     } = req.body || {};
     if (!accounts.length) {
       return res.status(400).json({ ok: false, error: 'لا توجد حسابات للرفع' });
     }
-    const result = importSyncData({ accounts, journal, invoices, invoiceLines, accountSeqs });
+    const result = importSyncData({
+      accounts,
+      journal,
+      invoices,
+      invoiceLines,
+      products,
+      accountSeqs
+    });
     res.json({ ok: true, ...result, status: getSyncStatus() });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });

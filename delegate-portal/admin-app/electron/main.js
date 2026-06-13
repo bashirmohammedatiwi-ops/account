@@ -183,13 +183,21 @@ function pushAutoSyncState(state) {
 }
 
 function parseSyncResult(stdout) {
-  const match = stdout.match(/(\d+) حساب، (\d+) حركة(?:، (\d+) فاتورة(?:، (\d+) بند)?)?/);
+  const jsonLine = stdout.split(/\r?\n/).reverse().find((line) => line.startsWith('@SYNC_RESULT|'));
+  if (jsonLine) {
+    try {
+      return JSON.parse(jsonLine.slice('@SYNC_RESULT|'.length));
+    } catch { /* fall through */ }
+  }
+  const match = stdout.match(/(\d+) حساب، (\d+) حركة(?:، (\d+) فاتورة(?:، (\d+) بند)?)?(?:، (\d+) مادة Edari)?(?:، (\d+) منتج كتalog)?/);
   return {
     ok: true,
     accounts: match ? Number(match[1]) : 0,
     journal: match ? Number(match[2]) : 0,
     invoices: match && match[3] ? Number(match[3]) : 0,
-    invoiceLines: match && match[4] ? Number(match[4]) : 0
+    invoiceLines: match && match[4] ? Number(match[4]) : 0,
+    products: match && match[5] ? Number(match[5]) : 0,
+    catalogUpdated: match && match[6] ? Number(match[6]) : 0
   };
 }
 

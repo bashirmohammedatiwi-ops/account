@@ -156,6 +156,32 @@ function isSalesInvoiceMovement(row) {
   return isDebitRow(row) && hasInvoiceRef(row);
 }
 
+async function getJson(urlPath, timeoutMs = 120000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${SERVER}${urlPath}`, {
+      method: 'GET',
+      headers: { 'X-Sync-Key': SYNC_KEY },
+      signal: controller.signal
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(text || `HTTP ${res.status}`);
+    }
+    const data = JSON.parse(text);
+    if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('انتهت مهلة الاتصال بالسيرفر');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function postJson(urlPath, body, timeoutMs = 600000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -385,6 +411,32 @@ async function fetchAllProducts() {
   return rows;
 }
 
+function mergeMaterialRows(primary = [], overlay = []) {
+  const bySeq = new Map();
+  for (const row of primary) bySeq.set(String(row.Seq ?? row.seq ?? ''), row);
+  for (const row of overlay) {
+    const key = String(row.Seq ?? row.seq ?? '');
+    if (key) bySeq.set(key, row);
+  }
+  return [...bySeq.values()];
+}
+
+/** Live Edari lookup for catalog products already on the server (prices/qty for /m). */
+async function fetchCatalogMaterialsForSync() {
+  let codes = [];
+  try {
+    const data = await getJson('/api/sync/catalog-product-codes');
+    codes = data.codes || [];
+  } catch {
+    return [];
+  }
+  if (!codes.length) return [];
+
+  reportProgress(5, 7, 85, `تحديث ${codes.length} منتج كتalog من Edari...`);
+  const { lookupEdariMaterialsByCodes } = require('./material-lookup');
+  return lookupEdariMaterialsByCodes(codes);
+}
+
 async function uploadLegacy(payload, accountSeqs = []) {
   reportProgress(6, 7, 50, 'رفع دفعة واحدة (وضع قديم)...');
   const data = await postJson('/api/sync/push', { ...payload, accountSeqs }, 900000);
@@ -501,14 +553,34 @@ async function main() {
   const invoiceLines = await fetchInvoiceLines(billSeqs);
   reportProgress(4, 7, 100, `تم: ${invoiceLines.length} بند`);
 
-  const products = await fetchAllProducts();
+  const productsAll = await fetchAllProducts();
+  const catalogMaterials = await fetchCatalogMaterialsForSync();
+  const products = catalogMaterials.length
+    ? mergeMaterialRows(productsAll, catalogMaterials)
+    : productsAll;
+  if (catalogMaterials.length) {
+    reportProgress(5, 7, 100, `تم: ${products.length} صنف (${catalogMaterials.length} محدّث للكتalog)`);
+  }
 
   const allAccountSeqs = accounts.map((a) => accountSeq(a)).filter(Boolean);
   const result = await uploadChunked(
     { accounts: accountsForUpload, journal, invoices, invoiceLines, products },
     allAccountSeqs
   );
-  console.log('✓ تمت المزامنة:', result.accounts, 'حساب،', result.journal, 'حركة،', result.invoices, 'فاتورة،', result.invoiceLines, 'بند،', result.products ?? products.length, 'مادة Edari');
+  console.log(`@SYNC_RESULT|${JSON.stringify({
+    ok: true,
+    accounts: result.accounts,
+    journal: result.journal,
+    invoices: result.invoices,
+    invoiceLines: result.invoiceLines,
+    products: result.products ?? products.length,
+    catalogUpdated: result.catalogUpdated || 0,
+    catalogPrices: result.catalogPrices || 0
+  })}`);
+  const catalogPart = result.catalogUpdated
+    ? `، ${result.catalogUpdated} منتج كتalog`
+    : '';
+  console.log('✓ تمت المزامنة:', result.accounts, 'حساب،', result.journal, 'حركة،', result.invoices, 'فاتورة،', result.invoiceLines, 'بند،', result.products ?? products.length, 'مادة Edari', catalogPart);
 }
 
 if (process.argv.includes('--list-trees')) {

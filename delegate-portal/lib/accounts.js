@@ -4,7 +4,7 @@ const {
   assignBillNosForLines,
   resolveLineTotal
 } = require('./invoice-line-sync');
-const { syncMaterialsFromEdari } = require('./products');
+const { syncMaterialsFromEdari, refreshAllProductsFromEdariCache } = require('./products');
 
 const usedBillNosStmt = db.prepare('SELECT bill_no FROM invoice_lines WHERE bill_seq = ?');
 
@@ -406,8 +406,20 @@ function finishSyncSession(logId, stats = {}) {
     products = 0,
     source = ''
   } = stats;
+  let catalogUpdated = 0;
+  let catalogPrices = 0;
+  try {
+    const refreshed = refreshAllProductsFromEdariCache();
+    catalogUpdated = refreshed.updated || 0;
+    catalogPrices = refreshed.pricesApplied || 0;
+  } catch {
+    /* catalog refresh is best-effort */
+  }
   const finished = new Date().toISOString();
   const prefix = source === 'auto' ? '[تلقائي] ' : '';
+  const catalogPart = catalogUpdated
+    ? `، ${catalogUpdated} منتج كتalog`
+    : '';
   db.prepare(`
     UPDATE sync_logs SET finished_at=?, status=?, accounts_count=?, journal_count=?, message=?
     WHERE id=?
@@ -416,7 +428,7 @@ function finishSyncSession(logId, stats = {}) {
     'success',
     accounts,
     journal,
-    `${prefix}تمت المزامنة: ${accounts} حساب، ${journal} حركة، ${invoices} فاتورة، ${invoiceLines} بند${products ? `، ${products} مادة Edari` : ''}`,
+    `${prefix}تمت المزامنة: ${accounts} حساب، ${journal} حركة، ${invoices} فاتورة، ${invoiceLines} بند${products ? `، ${products} مادة Edari` : ''}${catalogPart}`,
     logId
   );
   return {
@@ -426,6 +438,8 @@ function finishSyncSession(logId, stats = {}) {
     invoices,
     invoiceLines,
     products,
+    catalogUpdated,
+    catalogPrices,
     logId
   };
 }
@@ -446,7 +460,14 @@ function collectAccountSeqs(accounts = [], accountSeqs = []) {
   )];
 }
 
-function importSyncData({ accounts = [], journal = [], invoices = [], invoiceLines = [], accountSeqs = [] }) {
+function importSyncData({
+  accounts = [],
+  journal = [],
+  invoices = [],
+  invoiceLines = [],
+  products = [],
+  accountSeqs = []
+}) {
   const purgeSeqs = collectAccountSeqs(accounts, accountSeqs);
   const logId = startSyncSession(purgeSeqs);
   try {
@@ -454,11 +475,13 @@ function importSyncData({ accounts = [], journal = [], invoices = [], invoiceLin
     importSyncChunk('journal', journal);
     importSyncChunk('invoices', invoices);
     importSyncChunk('invoiceLines', invoiceLines);
+    if (products.length) importSyncChunk('products', products);
     return finishSyncSession(logId, {
       accounts: accounts.length,
       journal: journal.length,
       invoices: invoices.length,
-      invoiceLines: invoiceLines.length
+      invoiceLines: invoiceLines.length,
+      products: products.length
     });
   } catch (err) {
     failSyncSession(logId, err.message);
