@@ -34,8 +34,39 @@ function daysInMonth(year, month) {
 function yearRange() {
   const now = new Date().getFullYear();
   const years = [];
-  for (let y = now; y >= now - 12; y -= 1) years.push(y);
+  for (let y = now; y >= now - 15; y -= 1) years.push(y);
   return years;
+}
+
+function buildYearOptionsHtml() {
+  return yearRange().map((y) => `<option value="${y}">${y}</option>`).join('');
+}
+
+function buildMonthOptionsHtml() {
+  return AR_MONTHS.map((name, i) => {
+    const n = i + 1;
+    const num = String(n).padStart(2, '0');
+    return `<option value="${n}">${num} — ${name}</option>`;
+  }).join('');
+}
+
+function applyDatePickerValues(parts, parsed) {
+  if (!parts?.day || !parts.month || !parts.year || !parsed) return;
+  parts.year.value = String(parsed.year);
+  parts.month.value = String(parsed.month);
+  fillDayOptions(parts.day, parsed.year, parsed.month, parsed.day);
+}
+
+function ensureDatePickerOptions(parts) {
+  if (!parts?.day || !parts.month || !parts.year) return;
+  if (parts.year.dataset.filled !== '1') {
+    parts.year.innerHTML = buildYearOptionsHtml();
+    parts.year.dataset.filled = '1';
+  }
+  if (parts.month.dataset.filled !== '1') {
+    parts.month.innerHTML = buildMonthOptionsHtml();
+    parts.month.dataset.filled = '1';
+  }
 }
 
 function getDatePickerParts(rootId) {
@@ -55,7 +86,8 @@ function fillDayOptions(daySel, year, month, selectedDay) {
   const keep = Math.min(Math.max(selectedDay || 1, 1), max);
   daySel.innerHTML = Array.from({ length: max }, (_, i) => {
     const d = i + 1;
-    return `<option value="${d}">${d}</option>`;
+    const label = String(d).padStart(2, '0');
+    return `<option value="${d}">${label}</option>`;
   }).join('');
   daySel.value = String(keep);
 }
@@ -65,16 +97,8 @@ function setupDatePicker(rootId, initialIso) {
   if (!parts?.day || !parts.month || !parts.year) return;
 
   const parsed = parseIsoDate(initialIso) || parseIsoDate(isoDate(new Date()));
-  const years = yearRange();
-
-  parts.year.innerHTML = years.map((y) => `<option value="${y}">${y}</option>`).join('');
-  parts.month.innerHTML = AR_MONTHS.map((name, i) =>
-    `<option value="${i + 1}">${name}</option>`
-  ).join('');
-
-  parts.year.value = String(parsed.year);
-  parts.month.value = String(parsed.month);
-  fillDayOptions(parts.day, parsed.year, parsed.month, parsed.day);
+  ensureDatePickerOptions(parts);
+  applyDatePickerValues(parts, parsed);
 
   const refreshDays = () => {
     fillDayOptions(
@@ -89,6 +113,12 @@ function setupDatePicker(rootId, initialIso) {
   parts.root.dataset.ready = '1';
   parts.year.addEventListener('change', refreshDays);
   parts.month.addEventListener('change', refreshDays);
+}
+
+function initAllDatePickers() {
+  const defaults = defaultReportDates();
+  setupDatePicker('reportsDateFromPicker', defaults.from);
+  setupDatePicker('reportsDateToPicker', defaults.to);
 }
 
 function readDatePicker(rootId) {
@@ -231,9 +261,7 @@ async function loadSalesReport({ append = false } = {}) {
 }
 
 function initReportsScreen() {
-  const defaults = defaultReportDates();
-  setupDatePicker('reportsDateFromPicker', defaults.from);
-  setupDatePicker('reportsDateToPicker', defaults.to);
+  initAllDatePickers();
   populateReportsTreeSelect();
 
   const empty = document.getElementById('reportsEmpty');
@@ -275,6 +303,8 @@ window.reportsNav = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+  initAllDatePickers();
+
   document.getElementById('btnRunReport')?.addEventListener('click', () => loadSalesReport());
   document.getElementById('btnLoadMoreReports')?.addEventListener('click', () => loadSalesReport({ append: true }));
 

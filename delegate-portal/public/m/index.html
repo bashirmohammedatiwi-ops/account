@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css?v=20260613shop6">
-  <link rel="stylesheet" href="portal-pro.css?v=20260607datepick">
+  <link rel="stylesheet" href="portal-pro.css?v=20260613dropdown">
 </head>
 <body class="ed-body">
   <!-- Login -->
@@ -304,7 +304,7 @@
             <h3 class="reports-filters-title">فلتر التقرير</h3>
             <label class="field">
               <span class="field-label">الشجرة</span>
-              <select id="reportsTreeSelect" class="reports-select">
+              <select id="reportsTreeSelect" class="reports-dropdown reports-select">
                 <option value="">— اختر شجرة —</option>
               </select>
             </label>
@@ -314,16 +314,16 @@
                 <div class="date-picker" id="reportsDateFromPicker">
                   <div class="date-picker-row">
                     <label class="date-picker-part">
-                      <span class="date-picker-lbl">يوم</span>
-                      <select class="date-picker-select" data-part="day" aria-label="يوم البداية"></select>
+                      <span class="date-picker-lbl">السنة</span>
+                      <select class="reports-dropdown date-picker-select" data-part="year" aria-label="سنة البداية"></select>
                     </label>
                     <label class="date-picker-part">
-                      <span class="date-picker-lbl">شهر</span>
-                      <select class="date-picker-select" data-part="month" aria-label="شهر البداية"></select>
+                      <span class="date-picker-lbl">الشهر</span>
+                      <select class="reports-dropdown date-picker-select" data-part="month" aria-label="شهر البداية"></select>
                     </label>
                     <label class="date-picker-part">
-                      <span class="date-picker-lbl">سنة</span>
-                      <select class="date-picker-select" data-part="year" aria-label="سنة البداية"></select>
+                      <span class="date-picker-lbl">اليوم</span>
+                      <select class="reports-dropdown date-picker-select" data-part="day" aria-label="يوم البداية"></select>
                     </label>
                   </div>
                 </div>
@@ -333,16 +333,16 @@
                 <div class="date-picker" id="reportsDateToPicker">
                   <div class="date-picker-row">
                     <label class="date-picker-part">
-                      <span class="date-picker-lbl">يوم</span>
-                      <select class="date-picker-select" data-part="day" aria-label="يوم النهاية"></select>
+                      <span class="date-picker-lbl">السنة</span>
+                      <select class="reports-dropdown date-picker-select" data-part="year" aria-label="سنة النهاية"></select>
                     </label>
                     <label class="date-picker-part">
-                      <span class="date-picker-lbl">شهر</span>
-                      <select class="date-picker-select" data-part="month" aria-label="شهر النهاية"></select>
+                      <span class="date-picker-lbl">الشهر</span>
+                      <select class="reports-dropdown date-picker-select" data-part="month" aria-label="شهر النهاية"></select>
                     </label>
                     <label class="date-picker-part">
-                      <span class="date-picker-lbl">سنة</span>
-                      <select class="date-picker-select" data-part="year" aria-label="سنة النهاية"></select>
+                      <span class="date-picker-lbl">اليوم</span>
+                      <select class="reports-dropdown date-picker-select" data-part="day" aria-label="يوم النهاية"></select>
                     </label>
                   </div>
                 </div>
@@ -517,7 +517,7 @@
     </div>
   </div>
   <script src="app.js?v=20260613commerce"></script>
-  <script src="app-reports.js?v=20260607datepick"></script>
+  <script src="app-reports.js?v=20260613dropdown"></script>
   <script src="app-commerce.js?v=20260613shop6"></script>
 </body>
 </html>
