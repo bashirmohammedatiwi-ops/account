@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css?v=20260613shop6">
-  <link rel="stylesheet" href="portal-pro.css?v=20260611home2">
+  <link rel="stylesheet" href="portal-pro.css?v=20260607reports">
 </head>
 <body class="ed-body">
   <!-- Login -->
@@ -183,6 +183,18 @@
                   <span class="home-app-hint">متابعة الطلبات</span>
                   <span class="home-app-badge hidden" id="homeBadgeOrders">0</span>
                 </button>
+
+                <button type="button" class="home-app-tile" data-app="reports">
+                  <div class="home-app-icon-wrap home-app-theme-violet">
+                    <div class="home-app-icon-circle">
+                      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M18 20V10M12 20V4M6 20v-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                      </svg>
+                    </div>
+                  </div>
+                  <span class="home-app-name">تقارير</span>
+                  <span class="home-app-hint">مبيعات حسب الفترة</span>
+                </button>
               </div>
             </section>
 
@@ -281,6 +293,66 @@
               <div id="invoiceLines"></div>
             </div>
             <div class="invoice-totals hidden" id="invoiceTotals"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Sales reports -->
+      <section class="screen" id="screen-reports">
+        <div class="reports-page">
+          <div class="reports-filters card-panel">
+            <h3 class="reports-filters-title">فلتر التقرير</h3>
+            <label class="field">
+              <span class="field-label">الشجرة</span>
+              <select id="reportsTreeSelect" class="reports-select">
+                <option value="">— اختر شجرة —</option>
+              </select>
+            </label>
+            <div class="reports-date-row">
+              <label class="field">
+                <span class="field-label">من تاريخ</span>
+                <input type="date" id="reportsDateFrom" class="reports-date-input">
+              </label>
+              <label class="field">
+                <span class="field-label">إلى تاريخ</span>
+                <input type="date" id="reportsDateTo" class="reports-date-input">
+              </label>
+            </div>
+            <button type="button" class="btn primary full" id="btnRunReport">عرض المبيعات</button>
+          </div>
+
+          <div class="reports-summary hidden" id="reportsSummary">
+            <div class="reports-summary-grid">
+              <div class="reports-sum-card">
+                <span class="reports-sum-lbl">مبيعات</span>
+                <span class="reports-sum-val" id="reportsSalesAmount" dir="ltr">—</span>
+                <span class="reports-sum-sub" id="reportsSalesCount">—</span>
+              </div>
+              <div class="reports-sum-card reports-sum-return">
+                <span class="reports-sum-lbl">مرتجعات</span>
+                <span class="reports-sum-val" id="reportsReturnsAmount" dir="ltr">—</span>
+                <span class="reports-sum-sub" id="reportsReturnsCount">—</span>
+              </div>
+              <div class="reports-sum-card reports-sum-net">
+                <span class="reports-sum-lbl">صافي المبيعات</span>
+                <span class="reports-sum-val" id="reportsNetSales" dir="ltr">—</span>
+                <span class="reports-sum-sub" id="reportsTotalCount">—</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="reports-results hidden" id="reportsResults">
+            <div class="reports-results-head">
+              <h3 class="reports-results-title">فواتير المبيعات</h3>
+              <span class="reports-results-meta" id="reportsResultsMeta">—</span>
+            </div>
+            <div class="reports-list" id="reportsList"></div>
+            <button type="button" class="btn ghost full hidden" id="btnLoadMoreReports">تحميل المزيد</button>
+          </div>
+
+          <div class="empty-state hidden" id="reportsEmpty">
+            <div class="icon">📊</div>
+            <p id="reportsEmptyMsg">اختر الشجرة والفترة ثم اضغط «عرض المبيعات»</p>
           </div>
         </div>
       </section>
@@ -415,6 +487,7 @@
     </div>
   </div>
   <script src="app.js?v=20260613commerce"></script>
+  <script src="app-reports.js?v=20260607reports"></script>
   <script src="app-commerce.js?v=20260613shop6"></script>
 </body>
 </html>

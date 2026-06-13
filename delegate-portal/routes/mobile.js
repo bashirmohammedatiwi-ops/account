@@ -11,6 +11,7 @@ const {
 const { debtStatusFromBalance, balanceSummaryLabel, resolveDebtFromAccount } = require('../lib/statement-utils');
 const { getInvoiceForExport, canAgentAccessInvoice } = require('../lib/invoices');
 const { buildStatementPdf, buildInvoicePdf } = require('../lib/pdf-export');
+const { queryAgentSalesReport } = require('../lib/sales-reports');
 
 const router = express.Router();
 
@@ -163,6 +164,22 @@ router.get('/invoices/:ref', authAgent, (req, res) => {
     return res.status(404).json({ ok: false, error: 'الفاتورة غير موجودة — قد تحتاج مزامنة جديدة' });
   }
   res.json({ ok: true, ...data });
+});
+
+router.get('/reports/sales', authAgent, (req, res) => {
+  try {
+    const treeSeq = String(req.query.treeSeq || '').trim();
+    const dateFrom = String(req.query.dateFrom || '').trim();
+    const dateTo = String(req.query.dateTo || '').trim();
+    const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+
+    const data = queryAgentSalesReport(req.agent.id, { treeSeq, dateFrom, dateTo, limit, offset });
+    res.json({ ok: true, ...data });
+  } catch (err) {
+    const status = /صلاحية|اختيار/.test(err.message || '') ? 400 : 500;
+    res.status(status).json({ ok: false, error: err.message || 'فشل تحميل التقرير' });
+  }
 });
 
 router.get('/search', authAgent, (req, res) => {

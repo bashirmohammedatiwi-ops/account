@@ -10,6 +10,7 @@ const state = {
   branches: [],
   selectedBranch: null,
   selectedInvoice: null,
+  invoiceFromScreen: null,
   lastStatement: null,
   branchFilter: 'all',
   branchSearch: ''
@@ -191,6 +192,7 @@ function bindStatementRowActions(root) {
   root.querySelectorAll('.tbl-btn-inv').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
+      state.invoiceFromScreen = 'statement';
       openInvoice(btn.dataset.invoiceRef, btn.dataset.invoiceBy || 'seq', btn.dataset.invoiceAcc || '');
     });
   });
@@ -471,6 +473,7 @@ function openHomeApp(app) {
   if (app === 'accounts') goToScreen('trees');
   else if (app === 'shop') goToScreen('shop');
   else if (app === 'orders') goToScreen('my-orders');
+  else if (app === 'reports') goToScreen('reports');
 }
 
 function setOverlay(open) {
@@ -644,6 +647,8 @@ function goToScreen(name) {
       : '';
     const kicker = document.getElementById('headerKicker');
     if (kicker) kicker.textContent = 'Edari · الفاتورة';
+  } else if (window.reportsNav?.applyScreen?.(name, { backBtn, toolbarWrap, title, crumb })) {
+    /* handled */
   } else if (window.commerceNav?.applyScreen) {
     window.commerceNav.applyScreen(name, { backBtn, toolbarWrap, title, crumb });
   }
@@ -653,6 +658,7 @@ function goToScreen(name) {
   }
 
   window.commerceNav?.onScreen?.(name);
+  window.reportsNav?.onScreen?.(name);
 }
 
 function renderTreeContext() {
@@ -1120,8 +1126,10 @@ async function openInvoice(ref, by = 'auto', acc = '') {
 
 function goBack() {
   if (window.commerceNav?.handleBack?.()) return;
+  if (window.reportsNav?.handleBack?.()) return;
   if (state.screen === 'invoice') {
-    goToScreen('statement');
+    goToScreen(state.invoiceFromScreen || 'statement');
+    state.invoiceFromScreen = null;
   } else if (state.screen === 'statement') {
     goToScreen('branches');
   } else if (state.screen === 'branches') {
@@ -1153,6 +1161,7 @@ async function loadTrees(goTo) {
 
 async function refresh() {
   if (window.commerceNav?.refresh?.()) return;
+  if (window.reportsNav?.refresh?.()) return;
   if (state.screen === 'home') {
     await loadTrees('home');
   } else if (state.screen === 'trees') {
