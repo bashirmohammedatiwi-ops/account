@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260613shop6">
-  <link rel="stylesheet" href="portal-pro.css?v=20260613rpt3">
+  <link rel="stylesheet" href="styles.css?v=20260613rptscroll">
+  <link rel="stylesheet" href="portal-pro.css?v=20260613rptscroll">
 </head>
 <body class="ed-body">
   <!-- Login -->
@@ -316,8 +316,9 @@
               </div>
 
               <div class="rpt-dates">
-                <p class="rpt-dates-label">من تاريخ</p>
-                <div class="rpt-dd-row" id="reportsDateFromPicker">
+                <div class="rpt-date-block">
+                  <p class="rpt-dates-label">من تاريخ</p>
+                  <div class="rpt-dd-row" id="reportsDateFromPicker">
                   <label class="rpt-dd-cell">
                     <span class="rpt-dd-lbl">اليوم</span>
                     <select class="rpt-dd rpt-dd-sm" data-part="day" aria-label="يوم البداية"></select>
@@ -330,10 +331,12 @@
                     <span class="rpt-dd-lbl">السنة</span>
                     <select class="rpt-dd rpt-dd-sm" data-part="year" aria-label="سنة البداية"></select>
                   </label>
+                  </div>
                 </div>
 
-                <p class="rpt-dates-label">إلى تاريخ</p>
-                <div class="rpt-dd-row" id="reportsDateToPicker">
+                <div class="rpt-date-block">
+                  <p class="rpt-dates-label">إلى تاريخ</p>
+                  <div class="rpt-dd-row" id="reportsDateToPicker">
                   <label class="rpt-dd-cell">
                     <span class="rpt-dd-lbl">اليوم</span>
                     <select class="rpt-dd rpt-dd-sm" data-part="day" aria-label="يوم النهاية"></select>
@@ -346,6 +349,7 @@
                     <span class="rpt-dd-lbl">السنة</span>
                     <select class="rpt-dd rpt-dd-sm" data-part="year" aria-label="سنة النهاية"></select>
                   </label>
+                  </div>
                 </div>
               </div>
 

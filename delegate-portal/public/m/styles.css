@@ -1130,6 +1130,13 @@ body,
   -webkit-overflow-scrolling: touch;
 }
 
+#screen-reports {
+  padding: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
 .stmt-debt-field {
   display: flex;
   flex-direction: column;
