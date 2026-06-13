@@ -89,12 +89,33 @@ function invoiceExportRefFor(line) {
 
 function fmtDate(v) {
   if (!v) return '—';
-  const d = new Date(String(v).replace(' 00:00:00', ''));
-  if (Number.isNaN(d.getTime())) {
-    const raw = String(v).slice(0, 10);
-    return esc(raw.replace(/\//g, '-'));
+  const raw = String(v).trim().replace(' 00:00:00', '');
+  if (!raw) return '—';
+
+  let d = null;
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    d = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+  } else {
+    const parts = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+    if (parts) {
+      const first = Number(parts[1]);
+      const second = Number(parts[2]);
+      const year = Number(parts[3]);
+      if (first > 12) d = new Date(year, second - 1, first);
+      else if (second > 12) d = new Date(year, first - 1, second);
+      else d = new Date(year, second - 1, first);
+    }
   }
-  return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+  if (!d || Number.isNaN(d.getTime())) {
+    d = new Date(raw);
+  }
+  if (Number.isNaN(d.getTime())) return esc(raw.slice(0, 10));
+
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
 }
 
 function fmtBalanceDisplay(bal) {

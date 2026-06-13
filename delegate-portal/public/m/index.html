@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css?v=20260613shop6">
-  <link rel="stylesheet" href="portal-pro.css?v=20260613dropdown">
+  <link rel="stylesheet" href="portal-pro.css?v=20260613rpt2">
 </head>
 <body class="ed-body">
   <!-- Login -->
@@ -299,90 +299,164 @@
 
       <!-- Sales reports -->
       <section class="screen" id="screen-reports">
-        <div class="reports-page">
-          <div class="reports-filters card-panel">
-            <h3 class="reports-filters-title">فلتر التقرير</h3>
-            <label class="field">
-              <span class="field-label">الشجرة</span>
-              <select id="reportsTreeSelect" class="reports-dropdown reports-select">
-                <option value="">— اختر شجرة —</option>
-              </select>
-            </label>
-            <div class="reports-date-stack">
-              <div class="reports-date-block">
-                <span class="field-label">من تاريخ</span>
-                <div class="date-picker" id="reportsDateFromPicker">
-                  <div class="date-picker-row">
-                    <label class="date-picker-part">
-                      <span class="date-picker-lbl">السنة</span>
-                      <select class="reports-dropdown date-picker-select" data-part="year" aria-label="سنة البداية"></select>
-                    </label>
-                    <label class="date-picker-part">
-                      <span class="date-picker-lbl">الشهر</span>
-                      <select class="reports-dropdown date-picker-select" data-part="month" aria-label="شهر البداية"></select>
-                    </label>
-                    <label class="date-picker-part">
-                      <span class="date-picker-lbl">اليوم</span>
-                      <select class="reports-dropdown date-picker-select" data-part="day" aria-label="يوم البداية"></select>
-                    </label>
+        <div class="rpt-page">
+          <header class="rpt-hero">
+            <div class="rpt-hero-bg" aria-hidden="true">
+              <span class="rpt-orb rpt-orb-1"></span>
+              <span class="rpt-orb rpt-orb-2"></span>
+            </div>
+            <div class="rpt-hero-body">
+              <div class="rpt-hero-icon" aria-hidden="true">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                  <path d="M18 20V10M12 20V4M6 20v-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <div>
+                <h2 class="rpt-hero-title">تقارير المبيعات</h2>
+                <p class="rpt-hero-sub">فواتير المبيعات والمرتجعات حسب الشجرة والفترة</p>
+              </div>
+            </div>
+          </header>
+
+          <div class="rpt-panel">
+            <div class="rpt-field">
+              <label class="rpt-label" for="reportsTreeSelect">الشجرة</label>
+              <div class="rpt-select-wrap">
+                <select id="reportsTreeSelect" class="rpt-select">
+                  <option value="">— اختر شجرة —</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="rpt-presets" role="group" aria-label="فترات سريعة">
+              <button type="button" class="rpt-preset" data-preset="month">هذا الشهر</button>
+              <button type="button" class="rpt-preset" data-preset="last-month">الشهر الماضي</button>
+              <button type="button" class="rpt-preset" data-preset="year">هذا العام</button>
+            </div>
+
+            <div class="rpt-range-card">
+              <div class="rpt-range-head">
+                <span class="rpt-range-title">الفترة الزمنية</span>
+                <span class="rpt-range-hint">يوم · شهر · سنة</span>
+              </div>
+              <div class="rpt-range-grid">
+                <div class="rpt-range-col">
+                  <span class="rpt-range-label">من</span>
+                  <div class="date-display-picker" id="reportsDateFromPicker">
+                    <div class="date-display-row">
+                      <div class="date-display-seg date-display-seg-day">
+                        <select class="date-display-select" data-part="day" aria-label="يوم البداية"></select>
+                        <span class="date-display-face" data-face="day">—</span>
+                        <span class="date-display-hint">يوم</span>
+                      </div>
+                      <span class="date-display-sep" aria-hidden="true">/</span>
+                      <div class="date-display-seg date-display-seg-month">
+                        <select class="date-display-select" data-part="month" aria-label="شهر البداية"></select>
+                        <span class="date-display-face" data-face="month">—</span>
+                        <span class="date-display-hint">شهر</span>
+                      </div>
+                      <span class="date-display-sep" aria-hidden="true">/</span>
+                      <div class="date-display-seg date-display-seg-year">
+                        <select class="date-display-select" data-part="year" aria-label="سنة البداية"></select>
+                        <span class="date-display-face" data-face="year">—</span>
+                        <span class="date-display-hint">سنة</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="rpt-range-divider" aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M8 5l8 7-8 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <div class="rpt-range-col">
+                  <span class="rpt-range-label">إلى</span>
+                  <div class="date-display-picker" id="reportsDateToPicker">
+                    <div class="date-display-row">
+                      <div class="date-display-seg date-display-seg-day">
+                        <select class="date-display-select" data-part="day" aria-label="يوم النهاية"></select>
+                        <span class="date-display-face" data-face="day">—</span>
+                        <span class="date-display-hint">يوم</span>
+                      </div>
+                      <span class="date-display-sep" aria-hidden="true">/</span>
+                      <div class="date-display-seg date-display-seg-month">
+                        <select class="date-display-select" data-part="month" aria-label="شهر النهاية"></select>
+                        <span class="date-display-face" data-face="month">—</span>
+                        <span class="date-display-hint">شهر</span>
+                      </div>
+                      <span class="date-display-sep" aria-hidden="true">/</span>
+                      <div class="date-display-seg date-display-seg-year">
+                        <select class="date-display-select" data-part="year" aria-label="سنة النهاية"></select>
+                        <span class="date-display-face" data-face="year">—</span>
+                        <span class="date-display-hint">سنة</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div class="reports-date-block">
-                <span class="field-label">إلى تاريخ</span>
-                <div class="date-picker" id="reportsDateToPicker">
-                  <div class="date-picker-row">
-                    <label class="date-picker-part">
-                      <span class="date-picker-lbl">السنة</span>
-                      <select class="reports-dropdown date-picker-select" data-part="year" aria-label="سنة النهاية"></select>
-                    </label>
-                    <label class="date-picker-part">
-                      <span class="date-picker-lbl">الشهر</span>
-                      <select class="reports-dropdown date-picker-select" data-part="month" aria-label="شهر النهاية"></select>
-                    </label>
-                    <label class="date-picker-part">
-                      <span class="date-picker-lbl">اليوم</span>
-                      <select class="reports-dropdown date-picker-select" data-part="day" aria-label="يوم النهاية"></select>
-                    </label>
-                  </div>
-                </div>
-              </div>
             </div>
-            <button type="button" class="btn primary full" id="btnRunReport">عرض المبيعات</button>
+
+            <button type="button" class="rpt-run-btn" id="btnRunReport">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+                <path d="M20 20l-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+              عرض المبيعات
+            </button>
           </div>
 
-          <div class="reports-summary hidden" id="reportsSummary">
-            <div class="reports-summary-grid">
-              <div class="reports-sum-card">
-                <span class="reports-sum-lbl">مبيعات</span>
-                <span class="reports-sum-val" id="reportsSalesAmount" dir="ltr">—</span>
-                <span class="reports-sum-sub" id="reportsSalesCount">—</span>
+          <div class="rpt-period hidden" id="reportsPeriodBanner">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/>
+              <path d="M16 2v4M8 2v4M3 10h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span id="reportsPeriodText">—</span>
+          </div>
+
+          <div class="rpt-stats hidden" id="reportsSummary">
+            <div class="rpt-stat rpt-stat-sales">
+              <span class="rpt-stat-icon" aria-hidden="true">↑</span>
+              <div class="rpt-stat-body">
+                <span class="rpt-stat-lbl">المبيعات</span>
+                <span class="rpt-stat-val" id="reportsSalesAmount" dir="ltr">—</span>
+                <span class="rpt-stat-sub" id="reportsSalesCount">—</span>
               </div>
-              <div class="reports-sum-card reports-sum-return">
-                <span class="reports-sum-lbl">مرتجعات</span>
-                <span class="reports-sum-val" id="reportsReturnsAmount" dir="ltr">—</span>
-                <span class="reports-sum-sub" id="reportsReturnsCount">—</span>
+            </div>
+            <div class="rpt-stat rpt-stat-returns">
+              <span class="rpt-stat-icon" aria-hidden="true">↓</span>
+              <div class="rpt-stat-body">
+                <span class="rpt-stat-lbl">المرتجعات</span>
+                <span class="rpt-stat-val" id="reportsReturnsAmount" dir="ltr">—</span>
+                <span class="rpt-stat-sub" id="reportsReturnsCount">—</span>
               </div>
-              <div class="reports-sum-card reports-sum-net">
-                <span class="reports-sum-lbl">صافي المبيعات</span>
-                <span class="reports-sum-val" id="reportsNetSales" dir="ltr">—</span>
-                <span class="reports-sum-sub" id="reportsTotalCount">—</span>
+            </div>
+            <div class="rpt-stat rpt-stat-net">
+              <span class="rpt-stat-icon" aria-hidden="true">∑</span>
+              <div class="rpt-stat-body">
+                <span class="rpt-stat-lbl">صافي المبيعات</span>
+                <span class="rpt-stat-val" id="reportsNetSales" dir="ltr">—</span>
+                <span class="rpt-stat-sub" id="reportsTotalCount">—</span>
               </div>
             </div>
           </div>
 
-          <div class="reports-results hidden" id="reportsResults">
-            <div class="reports-results-head">
-              <h3 class="reports-results-title">فواتير المبيعات</h3>
-              <span class="reports-results-meta" id="reportsResultsMeta">—</span>
-            </div>
-            <div class="reports-list" id="reportsList"></div>
-            <button type="button" class="btn ghost full hidden" id="btnLoadMoreReports">تحميل المزيد</button>
+          <div class="rpt-results hidden" id="reportsResults">
+            <header class="rpt-results-head">
+              <div>
+                <h3 class="rpt-results-title">فواتير المبيعات</h3>
+                <p class="rpt-results-meta" id="reportsResultsMeta">—</p>
+              </div>
+            </header>
+            <div class="rpt-list" id="reportsList"></div>
+            <button type="button" class="rpt-load-more hidden" id="btnLoadMoreReports">تحميل المزيد</button>
           </div>
 
-          <div class="empty-state hidden" id="reportsEmpty">
-            <div class="icon">📊</div>
-            <p id="reportsEmptyMsg">اختر الشجرة والفترة ثم اضغط «عرض المبيعات»</p>
+          <div class="rpt-empty" id="reportsEmpty">
+            <div class="rpt-empty-icon" aria-hidden="true">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+                <path d="M18 20V10M12 20V4M6 20v-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <h3 class="rpt-empty-title">ابدأ التقرير</h3>
+            <p class="rpt-empty-msg" id="reportsEmptyMsg">اختر الشجرة والفترة ثم اضغط «عرض المبيعات»</p>
           </div>
         </div>
       </section>
@@ -516,8 +590,8 @@
       <p>جاري التحميل...</p>
     </div>
   </div>
-  <script src="app.js?v=20260613commerce"></script>
-  <script src="app-reports.js?v=20260613dropdown"></script>
+  <script src="app.js?v=20260613dateview"></script>
+  <script src="app-reports.js?v=20260613rpt2"></script>
   <script src="app-commerce.js?v=20260613shop6"></script>
 </body>
 </html>

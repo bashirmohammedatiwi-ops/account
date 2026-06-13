@@ -6,7 +6,8 @@ const reports = {
   total: 0,
   offset: 0,
   limit: 100,
-  loading: false
+  loading: false,
+  hasRun: false
 };
 
 const AR_MONTHS = [
@@ -55,6 +56,7 @@ function applyDatePickerValues(parts, parsed) {
   parts.year.value = String(parsed.year);
   parts.month.value = String(parsed.month);
   fillDayOptions(parts.day, parsed.year, parsed.month, parsed.day);
+  updateDateDisplayFaces(parts);
 }
 
 function ensureDatePickerOptions(parts) {
@@ -76,8 +78,23 @@ function getDatePickerParts(rootId) {
     root,
     day: root.querySelector('[data-part="day"]'),
     month: root.querySelector('[data-part="month"]'),
-    year: root.querySelector('[data-part="year"]')
+    year: root.querySelector('[data-part="year"]'),
+    faces: {
+      day: root.querySelector('[data-face="day"]'),
+      month: root.querySelector('[data-face="month"]'),
+      year: root.querySelector('[data-face="year"]')
+    }
   };
+}
+
+function updateDateDisplayFaces(parts) {
+  if (!parts?.day || !parts.month || !parts.year) return;
+  const day = Number(parts.day.value || 1);
+  const month = Number(parts.month.value || 1);
+  const year = parts.year.value || '—';
+  if (parts.faces?.day) parts.faces.day.textContent = String(day).padStart(2, '0');
+  if (parts.faces?.month) parts.faces.month.textContent = AR_MONTHS[month - 1] || '—';
+  if (parts.faces?.year) parts.faces.year.textContent = year;
 }
 
 function fillDayOptions(daySel, year, month, selectedDay) {
@@ -86,8 +103,7 @@ function fillDayOptions(daySel, year, month, selectedDay) {
   const keep = Math.min(Math.max(selectedDay || 1, 1), max);
   daySel.innerHTML = Array.from({ length: max }, (_, i) => {
     const d = i + 1;
-    const label = String(d).padStart(2, '0');
-    return `<option value="${d}">${label}</option>`;
+    return `<option value="${d}">${String(d).padStart(2, '0')}</option>`;
   }).join('');
   daySel.value = String(keep);
 }
@@ -107,12 +123,14 @@ function setupDatePicker(rootId, initialIso) {
       Number(parts.month.value),
       Number(parts.day.value)
     );
+    updateDateDisplayFaces(parts);
   };
 
   if (parts.root.dataset.ready === '1') return;
   parts.root.dataset.ready = '1';
   parts.year.addEventListener('change', refreshDays);
   parts.month.addEventListener('change', refreshDays);
+  parts.day.addEventListener('change', () => updateDateDisplayFaces(parts));
 }
 
 function initAllDatePickers() {
@@ -137,6 +155,32 @@ function defaultReportDates() {
   return { from: isoDate(from), to: isoDate(now) };
 }
 
+function applyDatePreset(preset) {
+  const now = new Date();
+  let from;
+  let to;
+
+  if (preset === 'month') {
+    from = new Date(now.getFullYear(), now.getMonth(), 1);
+    to = now;
+  } else if (preset === 'last-month') {
+    from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    to = new Date(now.getFullYear(), now.getMonth(), 0);
+  } else if (preset === 'year') {
+    from = new Date(now.getFullYear(), 0, 1);
+    to = now;
+  } else {
+    return;
+  }
+
+  setupDatePicker('reportsDateFromPicker', isoDate(from));
+  setupDatePicker('reportsDateToPicker', isoDate(to));
+
+  document.querySelectorAll('.rpt-preset').forEach((btn) => {
+    btn.classList.toggle('is-active', btn.dataset.preset === preset);
+  });
+}
+
 function populateReportsTreeSelect() {
   const sel = document.getElementById('reportsTreeSelect');
   if (!sel) return;
@@ -158,6 +202,20 @@ function readReportFilters() {
   reports.dateTo = readDatePicker('reportsDateToPicker');
 }
 
+function renderPeriodBanner() {
+  const banner = document.getElementById('reportsPeriodBanner');
+  const text = document.getElementById('reportsPeriodText');
+  if (!banner || !text) return;
+  const from = readDatePicker('reportsDateFromPicker');
+  const to = readDatePicker('reportsDateToPicker');
+  if (!from || !to) {
+    banner.classList.add('hidden');
+    return;
+  }
+  text.textContent = `${fmtDate(from)}  ←  ${fmtDate(to)}`;
+  banner.classList.remove('hidden');
+}
+
 function renderReportsSummary(summary) {
   const box = document.getElementById('reportsSummary');
   if (!box) return;
@@ -170,10 +228,19 @@ function renderReportsSummary(summary) {
   document.getElementById('reportsTotalCount').textContent = `${fmtNumAlways(summary.invoiceCount)} إجمالي`;
 }
 
+function setReportsEmpty(show, message, title) {
+  const empty = document.getElementById('reportsEmpty');
+  const msg = document.getElementById('reportsEmptyMsg');
+  const titleEl = empty?.querySelector('.rpt-empty-title');
+  if (!empty) return;
+  empty.classList.toggle('hidden', !show);
+  if (msg && message) msg.textContent = message;
+  if (titleEl && title) titleEl.textContent = title;
+}
+
 function renderReportsList() {
   const list = document.getElementById('reportsList');
   const results = document.getElementById('reportsResults');
-  const empty = document.getElementById('reportsEmpty');
   const meta = document.getElementById('reportsResultsMeta');
   const loadMore = document.getElementById('btnLoadMoreReports');
 
@@ -181,36 +248,34 @@ function renderReportsList() {
 
   if (!reports.invoices.length) {
     results?.classList.add('hidden');
-    empty?.classList.remove('hidden');
-    const msg = document.getElementById('reportsEmptyMsg');
-    if (msg) msg.textContent = 'لا توجد فواتير مبيعات في هذه الفترة';
+    if (reports.hasRun) {
+      setReportsEmpty(true, 'لا توجد فواتير مبيعات في الفترة المحددة', 'لا توجد نتائج');
+    }
     loadMore?.classList.add('hidden');
     return;
   }
 
-  empty?.classList.add('hidden');
+  setReportsEmpty(false);
   results?.classList.remove('hidden');
-  if (meta) meta.textContent = `${fmtNumAlways(reports.invoices.length)} من ${fmtNumAlways(reports.total)}`;
+  if (meta) meta.textContent = `${fmtNumAlways(reports.invoices.length)} من ${fmtNumAlways(reports.total)} فاتورة`;
 
   list.innerHTML = reports.invoices.map((inv) => {
-    const amtClass = inv.isReturn ? 'is-return' : 'is-sale';
+    const cls = inv.isReturn ? 'is-return' : 'is-sale';
     return `
-      <button type="button" class="reports-row ${amtClass}" data-seq="${esc(inv.seq)}" data-acc="${esc(inv.accSeq)}">
-        <div class="reports-row-main">
-          <span class="reports-row-num">فاتورة ${esc(inv.num || '—')}</span>
-          <span class="reports-row-kind">${esc(inv.kindLabel)}</span>
+      <button type="button" class="rpt-inv ${cls}" data-seq="${esc(inv.seq)}" data-acc="${esc(inv.accSeq)}">
+        <div class="rpt-inv-top">
+          <span class="rpt-inv-num">فاتورة ${esc(inv.num || '—')}</span>
+          <span class="rpt-inv-badge">${esc(inv.kindLabel)}</span>
         </div>
-        <div class="reports-row-sub">
-          <span>${esc(inv.accountName || '—')}</span>
-          <span class="reports-row-date">${fmtDate(inv.date)}</span>
+        <p class="rpt-inv-customer">${esc(inv.accountName || '—')}</p>
+        <div class="rpt-inv-foot">
+          <time dir="ltr">${fmtDate(inv.date)}</time>
+          <strong dir="ltr">${fmtNumAlways(inv.netPay)}</strong>
         </div>
-        <div class="reports-row-amt" dir="ltr">${fmtNumAlways(inv.netPay)}</div>
       </button>`;
   }).join('');
 
-  if (loadMore) {
-    loadMore.classList.toggle('hidden', reports.invoices.length >= reports.total);
-  }
+  loadMore?.classList.toggle('hidden', reports.invoices.length >= reports.total);
 }
 
 async function loadSalesReport({ append = false } = {}) {
@@ -246,10 +311,12 @@ async function loadSalesReport({ append = false } = {}) {
     const data = await api(`/reports/sales?${qs.toString()}`);
     const batch = data.invoices || [];
     reports.total = Number(data.total || 0);
+    reports.hasRun = true;
     if (append) reports.invoices.push(...batch);
     else reports.invoices = batch;
     reports.offset = reports.invoices.length;
 
+    renderPeriodBanner();
     renderReportsSummary(data.summary || {});
     renderReportsList();
   } catch (e) {
@@ -263,11 +330,12 @@ async function loadSalesReport({ append = false } = {}) {
 function initReportsScreen() {
   initAllDatePickers();
   populateReportsTreeSelect();
-
-  const empty = document.getElementById('reportsEmpty');
-  empty?.classList.remove('hidden');
   document.getElementById('reportsSummary')?.classList.add('hidden');
   document.getElementById('reportsResults')?.classList.add('hidden');
+  document.getElementById('reportsPeriodBanner')?.classList.add('hidden');
+  if (!reports.hasRun) {
+    setReportsEmpty(true, 'اختر الشجرة والفترة ثم اضغط «عرض المبيعات»', 'ابدأ التقرير');
+  }
 }
 
 window.reportsNav = {
@@ -276,7 +344,7 @@ window.reportsNav = {
     backBtn.classList.remove('hidden');
     toolbarWrap.classList.add('hidden');
     title.textContent = 'تقارير المبيعات';
-    crumb.textContent = 'فلتر حسب الشجرة والفترة';
+    crumb.textContent = 'مبيعات · مرتجعات · صافي';
     const kicker = document.getElementById('headerKicker');
     if (kicker) kicker.textContent = 'Edari · التقارير';
     return true;
@@ -297,7 +365,7 @@ window.reportsNav = {
   refresh() {
     if (state.screen !== 'reports') return false;
     populateReportsTreeSelect();
-    if (reports.treeSeq) void loadSalesReport();
+    if (reports.treeSeq && reports.hasRun) void loadSalesReport();
     return true;
   }
 };
@@ -308,8 +376,12 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnRunReport')?.addEventListener('click', () => loadSalesReport());
   document.getElementById('btnLoadMoreReports')?.addEventListener('click', () => loadSalesReport({ append: true }));
 
+  document.querySelectorAll('.rpt-preset').forEach((btn) => {
+    btn.addEventListener('click', () => applyDatePreset(btn.dataset.preset));
+  });
+
   document.getElementById('reportsList')?.addEventListener('click', (e) => {
-    const row = e.target.closest('.reports-row');
+    const row = e.target.closest('.rpt-inv');
     if (!row) return;
     state.invoiceFromScreen = 'reports';
     openInvoice(row.dataset.seq, 'seq', row.dataset.acc || '');
