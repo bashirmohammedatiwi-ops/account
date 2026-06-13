@@ -44,11 +44,9 @@ function buildYearOptionsHtml() {
 }
 
 function buildMonthOptionsHtml() {
-  return AR_MONTHS.map((name, i) => {
-    const n = i + 1;
-    const num = String(n).padStart(2, '0');
-    return `<option value="${n}">${num} — ${name}</option>`;
-  }).join('');
+  return AR_MONTHS.map((name, i) =>
+    `<option value="${i + 1}">${name}</option>`
+  ).join('');
 }
 
 function applyDatePickerValues(parts, parsed) {
@@ -56,7 +54,6 @@ function applyDatePickerValues(parts, parsed) {
   parts.year.value = String(parsed.year);
   parts.month.value = String(parsed.month);
   fillDayOptions(parts.day, parsed.year, parsed.month, parsed.day);
-  updateDateDisplayFaces(parts);
 }
 
 function ensureDatePickerOptions(parts) {
@@ -78,23 +75,8 @@ function getDatePickerParts(rootId) {
     root,
     day: root.querySelector('[data-part="day"]'),
     month: root.querySelector('[data-part="month"]'),
-    year: root.querySelector('[data-part="year"]'),
-    faces: {
-      day: root.querySelector('[data-face="day"]'),
-      month: root.querySelector('[data-face="month"]'),
-      year: root.querySelector('[data-face="year"]')
-    }
+    year: root.querySelector('[data-part="year"]')
   };
-}
-
-function updateDateDisplayFaces(parts) {
-  if (!parts?.day || !parts.month || !parts.year) return;
-  const day = Number(parts.day.value || 1);
-  const month = Number(parts.month.value || 1);
-  const year = parts.year.value || '—';
-  if (parts.faces?.day) parts.faces.day.textContent = String(day).padStart(2, '0');
-  if (parts.faces?.month) parts.faces.month.textContent = AR_MONTHS[month - 1] || '—';
-  if (parts.faces?.year) parts.faces.year.textContent = year;
 }
 
 function fillDayOptions(daySel, year, month, selectedDay) {
@@ -123,14 +105,12 @@ function setupDatePicker(rootId, initialIso) {
       Number(parts.month.value),
       Number(parts.day.value)
     );
-    updateDateDisplayFaces(parts);
   };
 
   if (parts.root.dataset.ready === '1') return;
   parts.root.dataset.ready = '1';
   parts.year.addEventListener('change', refreshDays);
   parts.month.addEventListener('change', refreshDays);
-  parts.day.addEventListener('change', () => updateDateDisplayFaces(parts));
 }
 
 function initAllDatePickers() {
@@ -176,7 +156,7 @@ function applyDatePreset(preset) {
   setupDatePicker('reportsDateFromPicker', isoDate(from));
   setupDatePicker('reportsDateToPicker', isoDate(to));
 
-  document.querySelectorAll('.rpt-preset').forEach((btn) => {
+  document.querySelectorAll('.rpt-quick-btn').forEach((btn) => {
     btn.classList.toggle('is-active', btn.dataset.preset === preset);
   });
 }
@@ -212,7 +192,7 @@ function renderPeriodBanner() {
     banner.classList.add('hidden');
     return;
   }
-  text.textContent = `${fmtDate(from)}  ←  ${fmtDate(to)}`;
+  text.textContent = `من ${fmtDate(from)} إلى ${fmtDate(to)}`;
   banner.classList.remove('hidden');
 }
 
@@ -228,14 +208,12 @@ function renderReportsSummary(summary) {
   document.getElementById('reportsTotalCount').textContent = `${fmtNumAlways(summary.invoiceCount)} إجمالي`;
 }
 
-function setReportsEmpty(show, message, title) {
+function setReportsEmpty(show, message) {
   const empty = document.getElementById('reportsEmpty');
   const msg = document.getElementById('reportsEmptyMsg');
-  const titleEl = empty?.querySelector('.rpt-empty-title');
   if (!empty) return;
   empty.classList.toggle('hidden', !show);
   if (msg && message) msg.textContent = message;
-  if (titleEl && title) titleEl.textContent = title;
 }
 
 function renderReportsList() {
@@ -249,7 +227,7 @@ function renderReportsList() {
   if (!reports.invoices.length) {
     results?.classList.add('hidden');
     if (reports.hasRun) {
-      setReportsEmpty(true, 'لا توجد فواتير مبيعات في الفترة المحددة', 'لا توجد نتائج');
+      setReportsEmpty(true, 'لا توجد فواتير في هذه الفترة');
     }
     loadMore?.classList.add('hidden');
     return;
@@ -334,7 +312,7 @@ function initReportsScreen() {
   document.getElementById('reportsResults')?.classList.add('hidden');
   document.getElementById('reportsPeriodBanner')?.classList.add('hidden');
   if (!reports.hasRun) {
-    setReportsEmpty(true, 'اختر الشجرة والفترة ثم اضغط «عرض المبيعات»', 'ابدأ التقرير');
+    setReportsEmpty(true, 'اختر الشجرة والفترة ثم اضغط عرض المبيعات');
   }
 }
 
@@ -376,7 +354,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnRunReport')?.addEventListener('click', () => loadSalesReport());
   document.getElementById('btnLoadMoreReports')?.addEventListener('click', () => loadSalesReport({ append: true }));
 
-  document.querySelectorAll('.rpt-preset').forEach((btn) => {
+  document.querySelectorAll('.rpt-quick-btn').forEach((btn) => {
     btn.addEventListener('click', () => applyDatePreset(btn.dataset.preset));
   });
 
