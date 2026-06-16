@@ -2,6 +2,10 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./db');
 const { getSection } = require('./catalog');
+const {
+  resolveMaterialTree: resolveMaterialTreeInIndex,
+  getMaterialDescendantLeafSeqs: getMaterialDescendantLeafSeqsFromNodes
+} = require('./material-tree-utils');
 
 const UPLOAD_ROOT = path.resolve(process.env.UPLOAD_DIR || path.join(__dirname, '..', 'uploads'));
 
@@ -164,8 +168,82 @@ function parseEdariSyncRow(row) {
     inTot: Number(row.InTot ?? row.in_tot ?? 0),
     outTot: Number(row.OutTot ?? row.out_tot ?? 0),
     stockQty: edariStockQty(row.InTot ?? row.in_tot, row.OutTot ?? row.out_tot),
-    remarks: String(row.Remarks ?? row.remarks ?? '').trim()
+    remarks: String(row.Remarks ?? row.remarks ?? '').trim(),
+    fatherNum: String(row.Father ?? row.father ?? row.father_num ?? '0').trim() || '0',
+    subCount: Number(row.SubCount ?? row.sub_count ?? 0)
   };
+}
+
+function upsertMaterialNode(row) {
+  const parsed = parseEdariSyncRow(row);
+  if (!parsed.seq || !parsed.num) return null;
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO edari_material_nodes (seq, num, name1, name2, father_num, sub_count, synced_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(seq) DO UPDATE SET
+      num = excluded.num,
+      name1 = excluded.name1,
+      name2 = excluded.name2,
+      father_num = excluded.father_num,
+      sub_count = excluded.sub_count,
+      synced_at = excluded.synced_at
+  `).run(
+    parsed.seq,
+    parsed.num,
+    parsed.name1,
+    parsed.name2,
+    parsed.fatherNum,
+    parsed.subCount,
+    now
+  );
+  return parsed;
+}
+
+function listMaterialTreeRoots() {
+  return db.prepare(`
+    SELECT seq, num, name1, sub_count, father_num
+    FROM edari_material_nodes
+    WHERE CAST(sub_count AS INTEGER) > 0
+    ORDER BY CAST(num AS INTEGER), num
+  `).all().map((t) => ({
+    seq: t.seq,
+    num: t.num || '',
+    name1: t.name1 || '',
+    subCount: Number(t.sub_count || 0),
+    fatherNum: t.father_num || '0'
+  }));
+}
+
+function loadMaterialNodesFromDb() {
+  return db.prepare(`
+    SELECT seq, num, name1, father_num, sub_count
+    FROM edari_material_nodes
+  `).all().map((n) => ({
+    seq: n.seq,
+    num: n.num,
+    name1: n.name1,
+    father_num: n.father_num,
+    sub_count: n.sub_count
+  }));
+}
+
+function resolveMaterialTree(ref) {
+  const nodes = loadMaterialNodesFromDb();
+  const index = require('./material-tree-utils').buildMaterialIndex(nodes);
+  const hit = resolveMaterialTreeInIndex(ref, index);
+  if (!hit) return null;
+  return {
+    seq: hit.seq,
+    num: hit.num,
+    name1: hit.name1,
+    sub_count: hit.subCount,
+    father_num: hit.fatherNum
+  };
+}
+
+function getMaterialDescendantLeafSeqs(rootRef) {
+  return getMaterialDescendantLeafSeqsFromNodes(rootRef, loadMaterialNodesFromDb());
 }
 
 function edariMaterialStats() {
@@ -865,22 +943,29 @@ function cacheEdariMaterial(material) {
 
 /** Sync File13n cache + refresh catalog products registered by barcode (no auto-import). */
 function syncMaterialsFromEdari(rows = []) {
-  if (!rows.length) return { materials: 0, productsUpdated: 0, scanned: 0, pricesApplied: 0 };
+  if (!rows.length) return { materials: 0, nodes: 0, productsUpdated: 0, scanned: 0, pricesApplied: 0 };
 
   const prepared = prepareEdariRowsForCatalogSync(rows);
   let materials = 0;
+  let nodes = 0;
   let productsUpdated = 0;
   const tx = db.transaction(() => {
     for (const row of prepared) {
-      const parsed = upsertEdariMaterial(row);
-      if (!parsed) continue;
+      const parsed = parseEdariSyncRow(row);
+      if (!parsed?.seq) continue;
+      if (Number(parsed.subCount || 0) > 0) {
+        if (upsertMaterialNode(row)) nodes += 1;
+        continue;
+      }
+      const material = upsertEdariMaterial(row);
+      if (!material) continue;
       materials += 1;
-      productsUpdated += refreshRegisteredProductFromEdari(parsed);
+      productsUpdated += refreshRegisteredProductFromEdari(material);
     }
   });
   tx();
   const pricesApplied = applyWholesalePricesFromMaterials();
-  return { materials, productsUpdated, pricesApplied, scanned: rows.length };
+  return { materials, nodes, productsUpdated, pricesApplied, scanned: rows.length };
 }
 
 function purgeAllCatalogProducts() {
@@ -1041,6 +1126,9 @@ module.exports = {
   syncProductFromEdari,
   syncSectionFromEdari,
   syncMaterialsFromEdari,
+  listMaterialTreeRoots,
+  resolveMaterialTree,
+  getMaterialDescendantLeafSeqs,
   refreshCatalogPricesFromCache,
   refreshAllProductsFromEdariCache,
   listCatalogRefreshCodes,

@@ -51,10 +51,11 @@ function Resolve-OdbcDriver {
         [string]$Requested
     )
 
-    $installed = Get-InstalledOdbcDrivers -Candidates $Candidates
-    if ($Requested -and ($installed -contains $Requested)) {
+    # Trust an explicitly requested driver to skip the registry scan (perf).
+    if ($Requested) {
         return $Requested
     }
+    $installed = Get-InstalledOdbcDrivers -Candidates $Candidates
     if ($installed.Count -gt 0) {
         return $installed[0]
     }
@@ -89,44 +90,48 @@ function Build-ConnectionString {
     return "Driver={$Driver};Server=nexusdb@$Server;Transport=TCP;Port=$Port;Database=$Alias"
 }
 
-function Invoke-OdbcAction {
-    param(
-        [string]$ConnectionString,
-        [string]$Sql
-    )
-
+function Open-OdbcConnection {
+    param([string]$ConnectionString)
     Add-Type -AssemblyName System.Data
     $connection = New-Object System.Data.Odbc.OdbcConnection($ConnectionString)
     $connection.Open()
+    return $connection
+}
 
+# Streams rows via a forward-only DataReader into generic Lists.
+# Avoids DataTable double-buffering and PowerShell's O(n^2) array "+=".
+function Invoke-OdbcReader {
+    param(
+        [System.Data.Odbc.OdbcConnection]$Connection,
+        [string]$Sql
+    )
+
+    $command = $Connection.CreateCommand()
+    $command.CommandText = $Sql
+    $reader = $command.ExecuteReader()
     try {
-        $command = $connection.CreateCommand()
-        $command.CommandText = $Sql
-        $adapter = New-Object System.Data.Odbc.OdbcDataAdapter($command)
-        $table = New-Object System.Data.DataTable
-        [void]$adapter.Fill($table)
-
-        $columns = @()
-        foreach ($column in $table.Columns) {
-            $columns += $column.ColumnName
+        $fieldCount = $reader.FieldCount
+        $columns = [System.Collections.Generic.List[string]]::new()
+        for ($i = 0; $i -lt $fieldCount; $i++) {
+            $columns.Add($reader.GetName($i))
         }
 
-        $rows = @()
-        foreach ($row in $table.Rows) {
-            $item = @{}
-            foreach ($column in $columns) {
-                $value = $row[$column]
+        $rows = [System.Collections.Generic.List[object]]::new()
+        while ($reader.Read()) {
+            $item = [ordered]@{}
+            for ($i = 0; $i -lt $fieldCount; $i++) {
+                $value = $reader.GetValue($i)
                 if ($null -eq $value -or [DBNull]::Value.Equals($value)) {
-                    $item[$column] = $null
+                    $item[$columns[$i]] = $null
                 }
                 elseif ($value -is [byte[]]) {
-                    $item[$column] = [Convert]::ToBase64String($value)
+                    $item[$columns[$i]] = [Convert]::ToBase64String($value)
                 }
                 else {
-                    $item[$column] = [string]$value
+                    $item[$columns[$i]] = [string]$value
                 }
             }
-            $rows += $item
+            $rows.Add($item)
         }
 
         return @{
@@ -136,11 +141,40 @@ function Invoke-OdbcAction {
         }
     }
     finally {
+        $reader.Close()
+        $command.Dispose()
+    }
+}
+
+# Single-shot: open connection, run one query, close.
+function Invoke-OdbcAction {
+    param(
+        [string]$ConnectionString,
+        [string]$Sql
+    )
+
+    $connection = Open-OdbcConnection -ConnectionString $ConnectionString
+    try {
+        return Invoke-OdbcReader -Connection $connection -Sql $Sql
+    }
+    finally {
         $connection.Close()
     }
 }
 
 try {
+    if ($PayloadJson -like '@*') {
+        $filePath = $PayloadJson.Substring(1)
+        if (-not (Test-Path -LiteralPath $filePath)) {
+            Write-JsonResult @{
+                ok = $false
+                error = "Payload file not found: $filePath"
+            }
+            exit 0
+        }
+        $PayloadJson = Get-Content -LiteralPath $filePath -Raw -Encoding UTF8
+    }
+
     $payload = $PayloadJson | ConvertFrom-Json
     $candidates = @($payload.candidates)
     if ($candidates.Count -eq 0) {
@@ -259,6 +293,50 @@ try {
                 columns = $result.columns
                 rows = $result.rows
                 rowCount = $result.rowCount
+            }
+        }
+
+        'batchQuery' {
+            $driver = Resolve-OdbcDriver -Candidates $candidates -Requested $payload.driver
+            if (-not $driver) {
+                Write-JsonResult @{
+                    ok = $false
+                    error = 'NexusDB ODBC driver is not installed on this machine.'
+                    needsDriver = $true
+                }
+                exit 0
+            }
+
+            $connectionString = Build-ConnectionString `
+                -Driver $driver `
+                -Mode $payload.mode `
+                -Server $payload.server `
+                -Port ([int]$payload.port) `
+                -Alias $payload.alias `
+                -DatabasePath $payload.databasePath
+
+            $batch = @{}
+            $connection = Open-OdbcConnection -ConnectionString $connectionString
+            try {
+                foreach ($item in @($payload.queries)) {
+                    $id = [string]$item.id
+                    if (-not $id) { continue }
+                    $result = Invoke-OdbcReader -Connection $connection -Sql $item.sql
+                    $batch[$id] = @{
+                        columns = $result.columns
+                        rows = $result.rows
+                        rowCount = $result.rowCount
+                    }
+                }
+            }
+            finally {
+                $connection.Close()
+            }
+
+            Write-JsonResult @{
+                ok = $true
+                driver = $driver
+                results = $batch
             }
         }
 

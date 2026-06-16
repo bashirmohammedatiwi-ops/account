@@ -66,6 +66,19 @@ function migrateCommerceSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_edari_materials_barcode ON edari_materials(barcode);
     CREATE INDEX IF NOT EXISTS idx_edari_materials_num ON edari_materials(num);
 
+    CREATE TABLE IF NOT EXISTS edari_material_nodes (
+      seq TEXT PRIMARY KEY,
+      num TEXT NOT NULL,
+      name1 TEXT NOT NULL DEFAULT '',
+      name2 TEXT DEFAULT '',
+      father_num TEXT DEFAULT '0',
+      sub_count INTEGER DEFAULT 0,
+      synced_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_edari_mat_nodes_num ON edari_material_nodes(num);
+    CREATE INDEX IF NOT EXISTS idx_edari_mat_nodes_father ON edari_material_nodes(father_num);
+
     CREATE TABLE IF NOT EXISTS agent_catalog_branches (
       agent_id INTEGER NOT NULL,
       branch_id INTEGER NOT NULL,

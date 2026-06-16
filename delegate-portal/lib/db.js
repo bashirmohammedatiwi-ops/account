@@ -4,8 +4,26 @@ const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
 
-const dbPath = path.resolve(process.env.DATABASE_PATH || './data/portal.db');
-fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+const os = require('os');
+
+function resolveWritableDbPath(preferred) {
+  const dbPath = path.resolve(preferred);
+  const dir = path.dirname(dbPath);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    return dbPath;
+  } catch (err) {
+    if (err.code !== 'EPERM' && err.code !== 'EACCES') throw err;
+    const base = process.env.LOCALAPPDATA
+      || process.env.APPDATA
+      || path.join(os.homedir(), 'AppData', 'Local');
+    const fallbackDir = path.join(base, 'Edari Admin');
+    fs.mkdirSync(fallbackDir, { recursive: true });
+    return path.join(fallbackDir, 'portal.db');
+  }
+}
+
+const dbPath = resolveWritableDbPath(process.env.DATABASE_PATH || './data/portal.db');
 
 const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');

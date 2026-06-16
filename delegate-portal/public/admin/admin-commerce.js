@@ -42,6 +42,185 @@ function fmtMoney(v) {
   return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
+function fmtInvInt(v) {
+  const n = Number(v);
+  if (Number.isNaN(n)) return '—';
+  return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
+function orderLineTotal(line) {
+  return Math.round(Number(line.quant || 0) * Number(line.unitPrice || line.price || 0));
+}
+
+function fmtOrderDocDate(v) {
+  if (!v) {
+    const d = new Date();
+    return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+  }
+  const raw = String(v).replace('T', ' ').trim();
+  const iso = raw.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const [y, m, d] = iso.split('-');
+    return `${d}-${m}-${y}`;
+  }
+  return raw.slice(0, 10) || '—';
+}
+
+function invBarcodeCell(line) {
+  return String(line.barcode || line.matNum || '').replace(/\s+/g, '') || '—';
+}
+
+function qtyTd(val) {
+  const n = Number(val);
+  return `<td class="col-amt" dir="ltr">${!n ? '—' : fmtInvInt(n)}</td>`;
+}
+
+function invMoneyTd(val, cls) {
+  const n = Number(val);
+  if (Number.isNaN(n)) return `<td class="col-amt num ${cls || ''}" dir="ltr">—</td>`;
+  return `<td class="col-amt num ${cls || ''}" dir="ltr">${fmtInvInt(n)}</td>`;
+}
+
+function renderOrderInvoiceHero(lines, meta = {}) {
+  const {
+    title = 'فاتورة طلب مندوب',
+    clientName = '—',
+    clientNum = '',
+    docNum = '—',
+    docDate = '',
+    remarks = ''
+  } = meta;
+  const total = lines.reduce((s, l) => s + orderLineTotal(l), 0);
+  const qtySum = lines.reduce((s, l) => s + Number(l.quant || 0), 0);
+  const bonusSum = lines.reduce((s, l) => s + Number(l.bonus || 0), 0);
+
+  return `
+    <div class="doc-panel invoice-doc inv-order-doc">
+      <div class="doc-head-row">
+        <img class="doc-logo" src="/m/assets/logo.png" alt="" width="36" height="36">
+        <div class="doc-head-main">
+          <span class="doc-label">شركة ديما الحياة</span>
+          <strong class="doc-title">${esc(title)}</strong>
+          <span class="doc-meta-line">رقم ${esc(docNum)} · ${esc(docDate || fmtOrderDocDate())}</span>
+          ${remarks ? `<span class="doc-meta-line doc-meta-note">${esc(remarks)}</span>` : ''}
+        </div>
+        <div class="doc-head-side">
+          <strong class="doc-client">${esc(clientName)}</strong>
+          ${clientNum ? `<span class="doc-client-num" dir="ltr">${esc(clientNum)}</span>` : ''}
+        </div>
+      </div>
+      <table class="doc-meta-table invoice-meta">
+        <tbody>
+          <tr>
+            <th>عدد البنود</th><td dir="ltr">${lines.length}</td>
+            <th>إجمالي الكمية</th><td dir="ltr">${fmtInvInt(qtySum)}</td>
+            <th>إجمالي الهدايا</th><td dir="ltr">${fmtInvInt(bonusSum)}</td>
+            <th>إجمالي الفاتورة</th><td class="net" dir="ltr">${fmtInvInt(total)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function renderOrderInvoiceLines(lines) {
+  if (!lines.length) {
+    return '<div class="empty-state order-invoice-empty"><p>لا توجد بنود في هذا الطلب</p></div>';
+  }
+  const total = lines.reduce((s, l) => s + orderLineTotal(l), 0);
+  return `
+    <div class="table-scroll order-invoice-table-wrap">
+      <table class="data-table inv-table" dir="rtl">
+        <thead>
+          <tr>
+            <th class="col-n">م</th>
+            <th class="col-barcode">الباركود</th>
+            <th class="col-name">اسم المادة</th>
+            <th class="col-amt">الكمية</th>
+            <th class="col-amt">هدية</th>
+            <th class="col-amt">سعر الوحدة</th>
+            <th class="col-amt">المبلغ</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${lines.map((line, i) => `
+            <tr>
+              <td class="col-n">${i + 1}</td>
+              <td class="col-barcode" dir="ltr">${esc(invBarcodeCell(line))}</td>
+              <td class="col-name">${esc(line.matName || '—')}</td>
+              ${qtyTd(line.quant)}
+              ${qtyTd(line.bonus)}
+              ${invMoneyTd(line.unitPrice ?? line.price)}
+              ${invMoneyTd(orderLineTotal(line), 'net')}
+            </tr>`).join('')}
+        </tbody>
+        <tfoot>
+          <tr class="row-sum">
+            <td colspan="6" class="total-label">إجمالي الفاتورة</td>
+            <td class="num" dir="ltr">${fmtInvInt(total)}</td>
+          </tr>
+          <tr class="row-total">
+            <td colspan="6" class="total-label">الصافي للدفع</td>
+            <td class="num net" dir="ltr">${fmtInvInt(total)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>`;
+}
+
+function renderOrderInvoiceDocument(order) {
+  const lines = (order.lines || []).map((l) => ({
+    ...l,
+    price: l.unitPrice
+  }));
+  const remarks = [
+    order.agentName ? `المندوب: ${order.agentName}` : '',
+    order.catalogBranchName ? `الفرع: ${order.catalogBranchName}` : '',
+    order.notes || ''
+  ].filter(Boolean).join(' · ');
+
+  return renderOrderInvoiceHero(lines, {
+    title: `طلب ${order.orderNo}`,
+    clientName: order.customerName || '—',
+    clientNum: order.customerNum || '',
+    docNum: order.orderNo,
+    docDate: fmtOrderDocDate(order.submittedAt || order.createdAt),
+    remarks
+  }) + renderOrderInvoiceLines(lines);
+}
+
+async function downloadOrderPdf(order) {
+  const res = await fetch(`${getApiBase()}/api/admin/orders/${order.id}.pdf`);
+  const contentType = String(res.headers.get('content-type') || '').toLowerCase();
+  if (!res.ok) {
+    let message = `فشل تصدير PDF (${res.status})`;
+    if (contentType.includes('application/json')) {
+      const data = await res.json().catch(() => ({}));
+      message = data.error || message;
+    }
+    throw new Error(message);
+  }
+  const blob = await res.blob();
+  if (!blob.size) throw new Error('ملف PDF فارغ');
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `order-${order.orderNo || order.id}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function printOrderInvoice() {
+  document.body.classList.add('printing-order');
+  const cleanup = () => {
+    document.body.classList.remove('printing-order');
+    window.removeEventListener('afterprint', cleanup);
+  };
+  window.addEventListener('afterprint', cleanup);
+  window.print();
+}
+
 async function loadCatalogPage() {
   const data = await commerceApi('/catalog/branches');
   commerce.branches = data.branches || [];
@@ -1442,20 +1621,29 @@ async function loadOrdersPage() {
 async function openOrderDetail(id) {
   const data = await commerceApi(`/orders/${id}`);
   const o = data.order;
+  commerce.selectedOrder = o;
   const panel = document.getElementById('orderDetailPanel');
   panel.classList.remove('hidden');
   panel.innerHTML = `
-    <div class="panel-head">
-      <h3>طلب ${esc(o.orderNo)} · ${esc(o.statusLabel)}</h3>
-      <button type="button" class="btn btn-soft btn-sm" id="btnCloseOrderDetail">إغلاق</button>
+    <div class="panel-head order-detail-head">
+      <div>
+        <h3>طلب ${esc(o.orderNo)} · ${esc(o.statusLabel)}</h3>
+        <p class="muted order-detail-sub">${esc(o.agentName)}${o.catalogBranchName ? ` · ${esc(o.catalogBranchName)}` : ''}</p>
+      </div>
+      <div class="btn-row order-detail-actions no-print">
+        <button type="button" class="btn btn-soft btn-sm" id="btnPrintOrder">طباعة</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btnExportOrderPdf">تصدير PDF</button>
+        <button type="button" class="btn btn-soft btn-sm" id="btnCloseOrderDetail">إغلاق</button>
+      </div>
     </div>
-    <p><strong>${esc(o.agentName)}</strong> → ${esc(o.customerName || '—')} · ${esc(o.catalogBranchName || '')}</p>
-    <div class="table-scroll"><table class="data-table compact"><thead><tr><th>مادة</th><th>باركود</th><th>كمية</th><th>سعر</th><th>مبلغ</th></tr></thead>
-    <tbody>${(o.lines || []).map((l) => `
-      <tr><td>${esc(l.matName)}</td><td dir="ltr">${esc(l.barcode)}</td><td dir="ltr">${l.quant}</td>
-      <td dir="ltr">${fmtMoney(l.unitPrice)}</td><td dir="ltr">${fmtMoney(l.lineTotal)}</td></tr>`).join('')}
-    </tbody></table></div>
-    <div class="btn-row" style="margin-top:12px">
+    <div id="orderInvoicePrint" class="order-invoice-wrap">
+      ${renderOrderInvoiceDocument(o)}
+    </div>
+    <div class="order-meta-bar no-print">
+      <span class="badge pending">${esc(o.statusLabel)}</span>
+      <span class="muted">${esc(o.submittedAt || o.createdAt || '—')}</span>
+    </div>
+    <div class="btn-row order-status-actions no-print" style="margin-top:12px">
       <button type="button" class="btn btn-primary btn-sm" data-status="approved">موافقة</button>
       <button type="button" class="btn btn-soft btn-sm" data-status="under_review">مراجعة</button>
       <button type="button" class="btn btn-danger btn-sm" data-status="rejected">رفض</button>
@@ -1463,7 +1651,19 @@ async function openOrderDetail(id) {
       <button type="button" class="btn btn-soft btn-sm" data-status="delivered">تم التسليم</button>
     </div>`;
 
-  document.getElementById('btnCloseOrderDetail')?.addEventListener('click', () => panel.classList.add('hidden'));
+  document.getElementById('btnCloseOrderDetail')?.addEventListener('click', () => {
+    commerce.selectedOrder = null;
+    panel.classList.add('hidden');
+  });
+  document.getElementById('btnPrintOrder')?.addEventListener('click', () => printOrderInvoice());
+  document.getElementById('btnExportOrderPdf')?.addEventListener('click', async () => {
+    try {
+      await downloadOrderPdf(o);
+      showToast('تم تنزيل PDF');
+    } catch (err) {
+      showToast(err.message, 'err');
+    }
+  });
   panel.querySelectorAll('[data-status]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const note = btn.dataset.status === 'rejected' ? prompt('سبب الرفض:') : '';
@@ -1476,6 +1676,7 @@ async function openOrderDetail(id) {
       await openOrderDetail(id);
     });
   });
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function initCommerceAdmin() {

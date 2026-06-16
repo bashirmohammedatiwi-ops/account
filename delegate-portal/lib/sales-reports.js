@@ -1,6 +1,6 @@
 const db = require('./db');
 const { canAgentAccess, getDescendantSeqs } = require('./accounts');
-const { invoiceKindLabel, isReturnInvoiceKind } = require('./invoices');
+const { invoiceKindLabel, isReturnInvoiceKind } = require('./invoice-kinds');
 const { sqlNormalizedEdariDate } = require('./date-utils');
 
 const INV_DATE_SQL = sqlNormalizedEdariDate('i.inv_date');

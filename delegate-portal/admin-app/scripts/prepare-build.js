@@ -116,6 +116,39 @@ function preparePortal() {
     console.log('تثبيت dependencies للبوابة...');
     execSync('npm ci --omit=dev', { cwd: PORTAL_OUT, stdio: 'inherit' });
   }
+  rebuildPortalNativeModules();
+}
+
+function rebuildPortalNativeModules() {
+  const nodeExe = path.join(NODE_OUT, 'node.exe');
+  if (!fs.existsSync(nodeExe)) {
+    console.log('تخطّي rebuild — Node portable غير موجود');
+    return;
+  }
+
+  let target = '20.18.0';
+  try {
+    target = execSync(`"${nodeExe}" -p process.versions.node`, { encoding: 'utf8' }).trim();
+  } catch { /* use default */ }
+
+  console.log(`إعادة بناء better-sqlite3 لـ Node ${target}...`);
+  try {
+    execSync('npm rebuild better-sqlite3 --build-from-source', {
+      cwd: PORTAL_OUT,
+      env: {
+        ...process.env,
+        npm_config_target: target,
+        npm_config_runtime: 'node',
+        npm_config_arch: 'x64',
+        npm_config_disturl: 'https://nodejs.org/dist'
+      },
+      stdio: 'inherit',
+      shell: true
+    });
+    console.log('better-sqlite3: جاهز لـ Node المضمّن');
+  } catch (err) {
+    console.warn('تحذير: فشل rebuild better-sqlite3 —', err.message);
+  }
 }
 
 function prepareEdariReader() {

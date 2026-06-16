@@ -11,9 +11,25 @@ const {
 } = require('../lib/accounts');
 const { debtStatusFromBalance, balanceSummaryLabel } = require('../lib/statement-utils');
 const { getPublicBaseUrl } = require('../lib/public-url');
-const { runLocalSync, listEdariTrees } = require('../lib/sync-runner');
+const { runLocalSync, listEdariTrees, listEdariMaterialTrees, queryEdariSalesReport } = require('../lib/sync-runner');
+const { queryAdminSalesReport, listReportTrees, listSalesBranches, parseTreeSeqList } = require('../lib/admin-sales-report');
+const { buildTreeSalesReportPdf } = require('../lib/pdf-export');
 
 const router = express.Router();
+
+function readSalesReportQuery(req) {
+  const treeSeqs = parseTreeSeqList(req.query.treeSeqs || req.query.trees || '');
+  const dateFrom = String(req.query.dateFrom || req.query.from || '').trim();
+  const dateTo = String(req.query.dateTo || req.query.to || '').trim();
+  const includeSales = req.query.includeSales !== '0';
+  const includeReturns = req.query.includeReturns !== '0';
+  const onlyGifts = req.query.onlyGifts === '1';
+  const branches = String(req.query.branches || '')
+    .split(/[,،\s]+/)
+    .map((s) => s.replace(/[^0-9]/g, '').trim())
+    .filter(Boolean);
+  return { treeSeqs, dateFrom, dateTo, includeSales, includeReturns, onlyGifts, branches };
+}
 
 router.post('/login', (req, res) => {
   const { username, password } = req.body || {};
@@ -166,6 +182,15 @@ router.get('/edari/trees', async (_req, res) => {
   }
 });
 
+router.get('/edari/material-trees', async (_req, res) => {
+  try {
+    const result = await listEdariMaterialTrees();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 router.post('/trigger-sync', async (req, res) => {
   const serverUrl = req.body?.serverUrl || getPublicBaseUrl(req);
   const syncKey = req.body?.syncKey || process.env.SYNC_API_KEY;
@@ -175,6 +200,82 @@ router.post('/trigger-sync', async (req, res) => {
     res.json({ ok: true, ...result, status: getSyncStatus() });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message, stderr: err.stderr });
+  }
+});
+
+router.get('/reports/sales/trees', async (_req, res) => {
+  const dbTrees = listReportTrees();
+  if (dbTrees.length) {
+    return res.json({ ok: true, trees: dbTrees, source: 'db' });
+  }
+  try {
+    const result = await listEdariMaterialTrees();
+    res.json({ ...result, source: 'edari' });
+  } catch (err) {
+    res.json({ ok: true, trees: [], source: 'none', error: err.message });
+  }
+});
+
+router.get('/reports/sales/branches', async (req, res) => {
+  const dateFrom = String(req.query.dateFrom || req.query.from || '').trim();
+  const dateTo = String(req.query.dateTo || req.query.to || '').trim();
+  try {
+    const branches = listSalesBranches({ dateFrom, dateTo });
+    res.json({ ok: true, branches });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message || 'فشل قراءة الفروع' });
+  }
+});
+
+router.get('/reports/sales', async (req, res) => {
+  const params = readSalesReportQuery(req);
+  try {
+    const nodeCount = db.prepare('SELECT COUNT(*) AS c FROM edari_material_nodes').get()?.c || 0;
+    let report;
+    if (nodeCount) {
+      report = queryAdminSalesReport(params);
+    } else {
+      report = await queryEdariSalesReport(params);
+    }
+    res.json({ ok: true, report });
+  } catch (err) {
+    try {
+      const report = await queryEdariSalesReport(params);
+      return res.json({ ok: true, report });
+    } catch (edariErr) {
+      res.status(400).json({ ok: false, error: edariErr.message || err.message || 'فشل إنشاء التقرير' });
+    }
+  }
+});
+
+router.get('/reports/sales.pdf', async (req, res) => {
+  const params = readSalesReportQuery(req);
+  try {
+    const nodeCount = db.prepare('SELECT COUNT(*) AS c FROM edari_material_nodes').get()?.c || 0;
+    let report;
+    if (nodeCount) {
+      report = queryAdminSalesReport(params);
+    } else {
+      report = await queryEdariSalesReport(params);
+    }
+    const buffer = await buildTreeSalesReportPdf(report);
+    const from = report.period?.dateFrom || 'from';
+    const to = report.period?.dateTo || 'to';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="sales-trees-${from}_${to}.pdf"`);
+    res.send(buffer);
+  } catch (err) {
+    try {
+      const report = await queryEdariSalesReport(params);
+      const buffer = await buildTreeSalesReportPdf(report);
+      const from = report.period?.dateFrom || 'from';
+      const to = report.period?.dateTo || 'to';
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="sales-trees-${from}_${to}.pdf"`);
+      return res.send(buffer);
+    } catch (edariErr) {
+      res.status(400).json({ ok: false, error: edariErr.message || err.message || 'فشل تصدير PDF' });
+    }
   }
 });
 

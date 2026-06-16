@@ -402,12 +402,12 @@ async function fetchInvoiceLines(billSeqs) {
 }
 
 async function fetchAllProducts() {
-  reportProgress(5, 7, 0, 'جاري قراءة الأصناف من EdariNX...');
+  reportProgress(5, 7, 0, 'جاري قراءة شجرة المواد من EdariNX...');
   const rows = await query(`
-    SELECT Seq, Num, Name1, Name2, Barcode, SellPr1, SellPr2, SellPr3, SellPr4, SellPr5, Unt1, DefUnit, Bonus, Remarks, InTot, OutTot
-    FROM File13n WHERE SubCount = 0 ORDER BY Num
+    SELECT Seq, Num, Name1, Name2, Barcode, SellPr1, SellPr2, SellPr3, SellPr4, SellPr5, Unt1, DefUnit, Bonus, Remarks, InTot, OutTot, Father, SubCount
+    FROM File13n ORDER BY Num
   `);
-  reportProgress(5, 7, 100, `تم: ${rows.length} صنف`);
+  reportProgress(5, 7, 100, `تم: ${rows.length} عقدة مواد`);
   return rows;
 }
 
@@ -521,6 +521,21 @@ async function listEdariTrees() {
   }));
 }
 
+async function listEdariMaterialTrees() {
+  const rows = await query(`
+    SELECT Seq, Num, Name1, SubCount, Father
+    FROM File13n WHERE SubCount > 0 ORDER BY Num
+  `);
+  return rows.map((r) => ({
+    seq: String(r.Seq ?? ''),
+    num: String(r.Num || ''),
+    name1: r.Name1 || '',
+    sub_count: Number(r.SubCount || 0),
+    subCount: Number(r.SubCount || 0),
+    father_num: String(r.Father || '0')
+  }));
+}
+
 async function main() {
   const treeSeqs = parseTreeSeqs();
   if (!treeSeqs.length) {
@@ -587,6 +602,35 @@ if (process.argv.includes('--list-trees')) {
   listEdariTrees()
     .then((trees) => {
       console.log(`@TREES|${JSON.stringify({ ok: true, trees })}`);
+    })
+    .catch((e) => {
+      console.error('✗', e.message);
+      process.exit(1);
+    });
+} else if (process.argv.includes('--list-material-trees')) {
+  listEdariMaterialTrees()
+    .then((trees) => {
+      console.log(`@MATERIAL_TREES|${JSON.stringify({ ok: true, trees })}`);
+    })
+    .catch((e) => {
+      console.error('✗', e.message);
+      process.exit(1);
+    });
+} else if (process.argv.includes('--sales-report')) {
+  const { queryEdariSalesReport } = require('./edari-sales-report');
+  const arg = process.argv.find((row) => row.startsWith('--params='));
+  let params = {};
+  if (arg) {
+    try {
+      params = JSON.parse(decodeURIComponent(arg.slice('--params='.length)));
+    } catch (e) {
+      console.error('✗', 'معاملات التقرير غير صالحة');
+      process.exit(1);
+    }
+  }
+  queryEdariSalesReport(params)
+    .then((report) => {
+      console.log(`@SALES_REPORT|${JSON.stringify({ ok: true, report })}`);
     })
     .catch((e) => {
       console.error('✗', e.message);

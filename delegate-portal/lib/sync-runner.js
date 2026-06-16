@@ -67,9 +67,34 @@ function spawnScript(args, { onProgress } = {}) {
   });
 }
 
+function parseMaterialTreesResult(stdout) {
+  const line = stdout.split(/\r?\n/).reverse().find((row) => row.startsWith('@MATERIAL_TREES|'));
+  if (!line) throw new Error('تعذّر قراءة شجرات المواد من EdariNX');
+  return JSON.parse(line.slice('@MATERIAL_TREES|'.length));
+}
+
+function parseSalesReportResult(stdout) {
+  const line = stdout.split(/\r?\n/).reverse().find((row) => row.startsWith('@SALES_REPORT|'));
+  if (!line) throw new Error('تعذّر إنشاء تقرير المبيعات من EdariNX');
+  const payload = JSON.parse(line.slice('@SALES_REPORT|'.length));
+  if (!payload.ok) throw new Error(payload.error || 'فشل إنشاء التقرير');
+  return payload.report;
+}
+
 async function listEdariTrees() {
   const stdout = await spawnScript(['--list-trees']);
   return parseTreesResult(stdout);
+}
+
+async function listEdariMaterialTrees() {
+  const stdout = await spawnScript(['--list-material-trees']);
+  return parseMaterialTreesResult(stdout);
+}
+
+async function queryEdariSalesReport(params = {}) {
+  const encoded = encodeURIComponent(JSON.stringify(params || {}));
+  const stdout = await spawnScript(['--sales-report', `--params=${encoded}`]);
+  return parseSalesReportResult(stdout);
 }
 
 async function runLocalSync(serverUrl, syncKey, treeSeqs = [], onProgress) {
@@ -82,4 +107,10 @@ async function runLocalSync(serverUrl, syncKey, treeSeqs = [], onProgress) {
   return parseSyncResult(stdout);
 }
 
-module.exports = { runLocalSync, listEdariTrees, parseSyncResult };
+module.exports = {
+  runLocalSync,
+  listEdariTrees,
+  listEdariMaterialTrees,
+  queryEdariSalesReport,
+  parseSyncResult
+};

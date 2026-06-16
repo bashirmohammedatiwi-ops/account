@@ -83,11 +83,20 @@ function edariEnvExtra(settings = null) {
   return connectionToEnv(settings || getEdariSettings());
 }
 
+function getDatabasePath() {
+  if (process.env.DATABASE_PATH) return process.env.DATABASE_PATH;
+  if (app.isPackaged) {
+    return path.join(app.getPath('userData'), 'portal.db');
+  }
+  return path.join(getPortalDir(), 'data', 'portal.db');
+}
+
 function portalChildEnv(extra = {}) {
   return {
     ...process.env,
     EDARI_READER_ROOT: getEdariReaderRoot(),
     NODE_BIN: getNodeBin(),
+    DATABASE_PATH: getDatabasePath(),
     ...edariEnvExtra(),
     ...extra
   };
@@ -99,7 +108,7 @@ function serverEnv() {
     ...process.env,
     PORT: String(PORT),
     HOST: '127.0.0.1',
-    DATABASE_PATH: path.join(portalDir, 'data', 'portal.db'),
+    DATABASE_PATH: getDatabasePath(),
     EDARI_READER_ROOT: getEdariReaderRoot(),
     NODE_BIN: getNodeBin()
   };
@@ -493,6 +502,120 @@ function runListEdariTreesScript() {
   });
 }
 
+function runListEdariMaterialTreesScript() {
+  return new Promise((resolve, reject) => {
+    const portalDir = getPortalDir();
+    const script = path.join(portalDir, 'sync-client', 'sync.js');
+    const nodeBin = getNodeBin();
+    let stdout = '';
+
+    const child = spawn(nodeBin, [script, '--list-material-trees'], {
+      cwd: portalDir,
+      env: portalChildEnv(),
+      windowsHide: true
+    });
+
+    child.stdout.on('data', (d) => { stdout += d.toString(); });
+    child.stderr.on('data', (d) => { stdout += d.toString(); });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code !== 0) return reject(new Error(stdout.trim() || `List material trees exit ${code}`));
+      const line = stdout.split(/\r?\n/).reverse().find((row) => row.startsWith('@MATERIAL_TREES|'));
+      if (!line) return reject(new Error('تعذّر قراءة شجرات المواد من EdariNX'));
+      try {
+        resolve(JSON.parse(line.slice('@MATERIAL_TREES|'.length)));
+      } catch (err) {
+        reject(err);
+      }
+    });
+  });
+}
+
+let edariSalesReportModule = null;
+
+function loadEdariSalesReportModule(forceReload = false) {
+  Object.assign(process.env, edariEnvExtra());
+  const reportPath = path.join(getPortalDir(), 'sync-client', 'edari-sales-report.js');
+  if (forceReload || !edariSalesReportModule) {
+    delete require.cache[require.resolve(reportPath)];
+    edariSalesReportModule = require(reportPath);
+  }
+  return edariSalesReportModule;
+}
+
+async function queryEdariSalesReportInProcess(params = {}) {
+  const { queryEdariSalesReport } = loadEdariSalesReportModule();
+  return queryEdariSalesReport(params);
+}
+
+let salesReportWorker = null;
+let salesReportLatestParams = null;
+let salesReportLatestResult = null;
+let salesReportLatestError = null;
+
+async function queryEdariSalesReportSerialized(params = {}) {
+  salesReportLatestParams = params || {};
+  salesReportLatestResult = null;
+  salesReportLatestError = null;
+
+  if (!salesReportWorker) {
+    salesReportWorker = (async () => {
+      try {
+        while (salesReportLatestParams) {
+          const nextParams = salesReportLatestParams;
+          salesReportLatestParams = null;
+          salesReportLatestResult = null;
+          salesReportLatestError = null;
+          try {
+            salesReportLatestResult = await queryEdariSalesReportInProcess(nextParams);
+          } catch (err) {
+            salesReportLatestError = err;
+            if (!salesReportLatestParams) throw err;
+          }
+        }
+        if (salesReportLatestError) throw salesReportLatestError;
+        return salesReportLatestResult;
+      } finally {
+        salesReportWorker = null;
+      }
+    })();
+  }
+
+  return salesReportWorker;
+}
+
+async function listEdariSalesBranchesInProcess(params = {}) {
+  const { listSalesBranches } = loadEdariSalesReportModule();
+  return listSalesBranches(params);
+}
+
+async function listEdariMaterialTreesInProcess() {
+  const { listMaterialTreeRoots } = loadEdariSalesReportModule(true);
+  const trees = await listMaterialTreeRoots();
+  return { ok: true, trees, count: trees.length };
+}
+
+function runEdariSalesReportScript(params = {}) {
+  return queryEdariSalesReportSerialized(params);
+}
+
+let edariStatementModule = null;
+
+function loadEdariStatementModule(forceReload = false) {
+  Object.assign(process.env, edariEnvExtra());
+  const modPath = path.join(getPortalDir(), 'sync-client', 'edari-account-statement.js');
+  if (forceReload || !edariStatementModule) {
+    delete require.cache[require.resolve(modPath)];
+    edariStatementModule = require(modPath);
+  }
+  return edariStatementModule;
+}
+
+async function queryEdariAccountStatementsInProcess(params = {}) {
+  const { queryEdariAccountStatements } = loadEdariStatementModule();
+  return queryEdariAccountStatements(params);
+}
+
 async function pullSyncSettingsFromRenderer() {
   if (!mainWindow || mainWindow.isDestroyed()) return null;
   try {
@@ -552,6 +675,86 @@ ipcMain.handle('run-local-sync', (_e, { serverUrl, syncKey, treeSeqs }) => {
 
 ipcMain.handle('list-edari-trees', () => {
   return runListEdariTreesScript();
+});
+
+ipcMain.handle('list-edari-material-trees', async () => {
+  try {
+    return await listEdariMaterialTreesInProcess();
+  } catch (err) {
+    return { ok: false, error: err.message || 'فشل قراءة شجرات المواد' };
+  }
+});
+
+ipcMain.handle('query-edari-sales-report', async (_e, params) => {
+  try {
+    const report = await runEdariSalesReportScript(params || {});
+    return { ok: true, report };
+  } catch (err) {
+    return { ok: false, error: err.message || 'فشل إنشاء التقرير من Edari' };
+  }
+});
+
+ipcMain.handle('list-edari-sales-branches', async (_e, params) => {
+  try {
+    const branches = await listEdariSalesBranchesInProcess(params || {});
+    return { ok: true, branches };
+  } catch (err) {
+    return { ok: false, error: err.message || 'فشل قراءة الفروع من Edari' };
+  }
+});
+
+ipcMain.handle('export-edari-sales-report-pdf', async (_e, params = {}) => {
+  try {
+    process.env.DATABASE_PATH = getDatabasePath();
+    const report = params.report || await queryEdariSalesReportSerialized(params);
+    const pdfPath = path.join(getPortalDir(), 'lib', 'pdf-export.js');
+    delete require.cache[require.resolve(pdfPath)];
+    const { buildTreeSalesReportPdf } = require(pdfPath);
+    const buffer = await buildTreeSalesReportPdf(report);
+    const from = report.period?.dateFrom || 'from';
+    const to = report.period?.dateTo || 'to';
+    return {
+      ok: true,
+      data: buffer.toString('base64'),
+      filename: `sales-trees-${from}_${to}.pdf`
+    };
+  } catch (err) {
+    return { ok: false, error: err.message || 'فشل تصدير PDF من Edari' };
+  }
+});
+
+ipcMain.handle('query-edari-account-statements', async (_e, params) => {
+  try {
+    process.env.DATABASE_PATH = getDatabasePath();
+    const result = await queryEdariAccountStatementsInProcess(params || {});
+    return { ok: true, ...result };
+  } catch (err) {
+    return { ok: false, error: err.message || 'فشل إنشاء كشف الحساب من Edari' };
+  }
+});
+
+ipcMain.handle('export-edari-account-statements-pdf', async (_e, params = {}) => {
+  try {
+    process.env.DATABASE_PATH = getDatabasePath();
+    const result = params.statements
+      ? { statements: params.statements }
+      : await queryEdariAccountStatementsInProcess(params);
+    const pdfPath = path.join(getPortalDir(), 'lib', 'pdf-export.js');
+    delete require.cache[require.resolve(pdfPath)];
+    const { buildAccountStatementsPdf } = require(pdfPath);
+    const buffer = await buildAccountStatementsPdf(result.statements || []);
+    const from = params.dateFrom || result.period?.dateFrom || result.meta?.dateFrom;
+    const to = params.dateTo || result.period?.dateTo || result.meta?.dateTo;
+    const stamp = from && to ? `${from}_${to}` : new Date().toISOString().slice(0, 10);
+    return {
+      ok: true,
+      data: buffer.toString('base64'),
+      filename: `account-statements-${stamp}.pdf`,
+      missing: result.missing || []
+    };
+  } catch (err) {
+    return { ok: false, error: err.message || 'فشل تصدير كشف الحساب من Edari' };
+  }
 });
 
 ipcMain.handle('fetch-edari-catalog-materials', async (_e, { codes }) => {
@@ -663,6 +866,7 @@ function showStartupError(err) {
 
 app.whenReady().then(async () => {
   try {
+    process.env.DATABASE_PATH = getDatabasePath();
     if (USE_LOCAL_SERVER || USE_BUNDLED_UI) {
       await startBackend();
     } else {

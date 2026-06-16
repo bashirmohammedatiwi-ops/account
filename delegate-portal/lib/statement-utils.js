@@ -157,35 +157,39 @@ function sumMovementAmount(rows, field) {
 function deriveOpeningBalance(account, movementRows = []) {
   const fixBal = parseAmount(account?.fix_bal ?? account?.fixBal);
   if (fixBal !== 0) {
-    return normalizeCarriedBalance(fixBal, account);
+    return normalizeCarriedBalance(fixBal, account, { fromFixBal: true });
   }
+  return resolveAccountNetBalance(account) - netMovementAmount(movementRows);
+}
 
-  const edariDebit = parseAmount(account?.tot1);
-  const edariCredit = parseAmount(account?.tot2);
-  if (edariDebit > 0) {
-    const moveDebit = sumMovementAmount(movementRows, 'debit');
-    const openingDebit = edariDebit - moveDebit;
-    if (openingDebit > 0) {
-      return normalizeCarriedBalance(openingDebit, account);
-    }
+function netMovementAmount(rows) {
+  let net = 0;
+  for (const row of rows || []) {
+    const am = parseAmount(row.am ?? row.Am);
+    net += isDebitRow(row) ? -am : am;
   }
-  if (edariCredit > 0) {
-    const moveCredit = sumMovementAmount(movementRows, 'credit');
-    const openingCredit = edariCredit - moveCredit;
-    if (openingCredit > 0) {
-      return normalizeCarriedBalance(openingCredit, account);
-    }
-  }
+  return net;
+}
+
+/** الرصيد الحالي من Edari — موجب = دائن، سالب = مدين */
+function resolveAccountNetBalance(account = {}) {
+  const accountBal = parseAmount(account.bal ?? account.Bal);
+  if (accountBal !== 0) return accountBal;
+  const tot1 = parseAmount(account.tot1 ?? account.Tot1);
+  const tot2 = parseAmount(account.tot2 ?? account.Tot2);
+  if (tot1 > 0 || tot2 > 0) return tot2 - tot1;
   return 0;
 }
 
-function normalizeCarriedBalance(balance, account = {}) {
+function normalizeCarriedBalance(balance, account = {}, { fromFixBal = false } = {}) {
   const b = parseAmount(balance);
   if (b === 0) return 0;
-  const accountBal = parseAmount(account?.bal ?? account?.Bal);
-  // FixBal في Edari غالباً موجب لكنه يُعرض في عمود المدين
-  if (b > 0 && accountBal <= 0) return -Math.abs(b);
-  if (b < 0 && accountBal > 0) return Math.abs(b);
+  // FixBal في Edari قد يكون موجباً ويُعرض في عمود المدين — نعكس حسب Bal
+  if (fromFixBal) {
+    const accountBal = parseAmount(account?.bal ?? account?.Bal);
+    if (b > 0 && accountBal <= 0) return -Math.abs(b);
+    if (b < 0 && accountBal > 0) return Math.abs(b);
+  }
   return b;
 }
 
@@ -193,26 +197,24 @@ function computeOpeningBalance(rows, cutoff, account) {
   if (!cutoff) return 0;
   const fixBal = parseAmount(account?.fix_bal ?? account?.fixBal);
   if (cutoff.source === 'fix_date' && isValidFixDate(cutoff.date) && fixBal !== 0) {
-    return normalizeCarriedBalance(fixBal, account);
+    return normalizeCarriedBalance(fixBal, account, { fromFixBal: true });
   }
   if (cutoff.seq || isValidFixDate(cutoff.date)) {
-    return normalizeCarriedBalance(computeBalanceThroughCutoff(rows, cutoff), account);
+    return computeBalanceThroughCutoff(rows, cutoff);
   }
-  return normalizeCarriedBalance(fixBal, account);
+  return normalizeCarriedBalance(fixBal, account, { fromFixBal: true });
 }
 
 /** رصيد افتتاحي — FixBal أو مجموع الحركات قبل FixDate فقط (مثل Edari) */
 function resolveOpeningBalance(account, allRows, movementRows, cutoff) {
   const fixBal = parseAmount(account?.fix_bal ?? account?.fixBal);
   if (fixBal !== 0) {
-    return normalizeCarriedBalance(fixBal, account);
+    return normalizeCarriedBalance(fixBal, account, { fromFixBal: true });
   }
 
   if (cutoff && (cutoff.seq || isValidFixDate(cutoff.date))) {
     const throughCutoff = computeBalanceThroughCutoff(allRows, cutoff);
-    if (throughCutoff !== 0) {
-      return normalizeCarriedBalance(throughCutoff, account);
-    }
+    if (throughCutoff !== 0) return throughCutoff;
   }
 
   return 0;
@@ -397,6 +399,34 @@ function resolveDebtFromAccount(account = {}) {
   });
 }
 
+/**
+ * Opening balance at the start of dateFrom (رصيد مدور).
+ * When FixDate is before the period, anchor on FixBal then apply movements
+ * strictly after the fix day and before the period start — matching Edari.
+ */
+function resolvePeriodOpeningBalance(account, allRows, dateFrom) {
+  const periodStart = startOfCalendarDay(dateFrom);
+  if (periodStart == null) return 0;
+
+  const fixRaw = account?.fix_date ?? account?.fixDate;
+  const fixBal = parseAmount(account?.fix_bal ?? account?.fixBal);
+  if (isValidFixDate(fixRaw)) {
+    const fixDay = startOfCalendarDay(fixRaw);
+    if (fixDay != null && fixDay < periodStart && fixBal !== 0) {
+      let balance = normalizeCarriedBalance(fixBal, account, { fromFixBal: true });
+      const tailRows = (allRows || []).filter((row) => {
+        const t = startOfCalendarDay(row.tx_date || row.Date || row.date);
+        return t != null && t > fixDay && t < periodStart;
+      });
+      return balance + netMovementAmount(tailRows);
+    }
+  }
+
+  const balanceNow = resolveAccountNetBalance(account);
+  const rowsFromPeriodStart = (allRows || []).filter((row) => journalSortKey(row).t >= periodStart);
+  return balanceNow - netMovementAmount(rowsFromPeriodStart);
+}
+
 module.exports = {
   parseAmount,
   isDebitRow,
@@ -415,6 +445,7 @@ module.exports = {
   computeBalanceThroughCutoff,
   computeOpeningBalance,
   resolveOpeningBalance,
+  resolvePeriodOpeningBalance,
   buildJournalDescription,
   resolveStatementPeriod,
   isBeforePeriodStart,
@@ -423,6 +454,8 @@ module.exports = {
   buildOpeningLine,
   normalizeCarriedBalance,
   deriveOpeningBalance,
+  resolveAccountNetBalance,
+  netMovementAmount,
   parseEdariDate,
   isValidFixDate,
   sortJournalRowsAsc,

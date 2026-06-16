@@ -1,3 +1,19 @@
+let topLoaderCount = 0;
+function startTopLoading(msg) {
+  topLoaderCount += 1;
+  const el = document.getElementById('topLoader');
+  const m = document.getElementById('topLoaderMsg');
+  if (m && msg) m.textContent = msg;
+  if (el) el.hidden = false;
+}
+function stopTopLoading() {
+  topLoaderCount = Math.max(0, topLoaderCount - 1);
+  if (topLoaderCount === 0) {
+    const el = document.getElementById('topLoader');
+    if (el) el.hidden = true;
+  }
+}
+
 function resolveApiBase() {
   const remote = (
     window.edariDesktop?.backendUrl
@@ -152,6 +168,7 @@ const PAGE_META = {
   dashboard: { title: 'الرئيسية', sub: 'نظرة عامة واختصارات سريعة' },
   catalog: { title: 'المنتجات', sub: 'إضافة بالباركود من Edari' },
   orders: { title: 'طلبات الشراء', sub: 'طلبات المندوبين — موافقة ومتابعة' },
+  salesReport: { title: 'تقرير المبيعات', sub: 'كشف مواد حسب شجرة المواد (086، 087…) — PDF' },
   sync: { title: 'رفع البيانات', sub: 'مزامنة EdariNX مع سيرفر المندوبين' },
   database: { title: 'إعدادات قاعدة البيانات', sub: 'اتصال EdariNX — Alias، المسارات، و nxServer' },
   agents: { title: 'المندوبون', sub: 'حسابات الدخول وصلاحيات الشجرات' }
@@ -178,6 +195,7 @@ function showPage(name) {
     stopSyncLogPolling();
   }
   if (window.commercePages?.[name]) void window.commercePages[name]();
+  if (window.adminPages?.[name]) void window.adminPages[name]();
 }
 
 async function loadDashboard() {

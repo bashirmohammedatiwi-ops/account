@@ -50,7 +50,7 @@ const {
   setOrderStatus,
   orderStats
 } = require('../lib/orders');
-const { buildInvoicePdf } = require('../lib/pdf-export');
+const { buildInvoicePdf, buildOrderPdf } = require('../lib/pdf-export');
 
 const router = express.Router();
 
@@ -440,6 +440,19 @@ router.get('/orders', (req, res) => {
     ok: true,
     orders: listOrders({ status: status || undefined, limit, offset })
   });
+});
+
+router.get('/orders/:id.pdf', async (req, res) => {
+  const order = loadOrder(Number(req.params.id));
+  if (!order) return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
+  try {
+    const buffer = await buildOrderPdf(order);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="order-${order.orderNo || req.params.id}.pdf"`);
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'فشل إنشاء PDF' });
+  }
 });
 
 router.get('/orders/:id', (req, res) => {

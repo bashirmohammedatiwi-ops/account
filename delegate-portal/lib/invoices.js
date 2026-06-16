@@ -1,18 +1,6 @@
 const db = require('./db');
 const { canAgentAccess } = require('./accounts');
-
-function invoiceKindLabel(kind) {
-  const map = {
-    0: 'فاتورة',
-    1: 'فاتورة مبيعات',
-    2: 'مرتجع مبيعات',
-    3: 'فاتورة مشتريات',
-    4: 'فاتورة مبيعات',
-    5: 'مرتجع'
-  };
-  const k = Number(kind);
-  return map[k] ?? (kind != null && kind !== '' ? `فاتورة (${kind})` : 'فاتورة مبيعات');
-}
+const { invoiceKindLabel, isReturnInvoiceKind } = require('./invoice-kinds');
 
 function normalizeBillSeq(value) {
   const seq = String(value ?? '').replace(/[^0-9]/g, '');
@@ -102,11 +90,6 @@ function isDebitJournalRow(row) {
 
 function movementText(row) {
   return String(row?.exp1 ?? row?.Exp1 ?? row?.description ?? row?.remarks ?? row?.Remarks ?? '').trim();
-}
-
-function isReturnInvoiceKind(kind) {
-  const k = Number(kind);
-  return k === 2 || k === 5;
 }
 
 function isSalesReturnText(text) {
