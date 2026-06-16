@@ -39,7 +39,6 @@ class ApiClient {
       return data;
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
-        await _read.read(authProvider.notifier).logout();
         throw ApiException('انتهت الجلسة — سجّل الدخول مجدداً', statusCode: 401);
       }
       final msg = _friendlyError(e);
@@ -52,9 +51,9 @@ class ApiClient {
       return '${(e.response!.data as Map)['error'] ?? e.message}';
     }
     if (e.type == DioExceptionType.connectionError || e.type == DioExceptionType.connectionTimeout) {
-      return 'فشل الاتصال بالخادم — تأكد أن Edari Portal يعمل على $serverUrl (ليس منفذ الإدارة 4100)';
+      return 'فشل الاتصال — تحقق من الشبكة وحاول مجدداً';
     }
-    return e.message ?? 'فشل الاتصال بالخادم';
+    return e.message ?? 'فشل الاتصال — تحقق من الشبكة وحاول مجدداً';
   }
 
   Future<Uint8List> _bytes(String path, {Map<String, dynamic>? query}) async {
@@ -67,8 +66,7 @@ class ApiClient {
       return Uint8List.fromList(res.data ?? []);
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
-        await _read.read(authProvider.notifier).logout();
-        throw ApiException('انتهت الجلسة', statusCode: 401);
+        throw ApiException('انتهت الجلسة — سجّل الدخول مجدداً', statusCode: 401);
       }
       throw ApiException(e.message ?? 'فشل تحميل الملف', statusCode: e.response?.statusCode);
     }
@@ -205,6 +203,7 @@ class ApiClient {
 }
 
 final dioProvider = Provider<Dio>((ref) {
+  ref.watch(authProvider.select((s) => s.token));
   final dio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 30),
     receiveTimeout: const Duration(seconds: 120),
@@ -219,9 +218,19 @@ final dioProvider = Provider<Dio>((ref) {
       }
       handler.next(options);
     },
+    onError: (error, handler) async {
+      if (error.response?.statusCode == 401) {
+        final sent = error.requestOptions.headers['Authorization']?.toString();
+        final token = ref.read(authProvider).token;
+        final expected = token != null && token.isNotEmpty ? 'Bearer $token' : null;
+        if (sent != null && sent == expected) {
+          await ref.read(authProvider.notifier).logout();
+        }
+      }
+      handler.next(error);
+    },
   ));
 
-  ref.listen<String?>(authProvider.select((s) => s.token), (_, __) {});
   return dio;
 });
 

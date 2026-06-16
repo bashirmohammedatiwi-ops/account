@@ -7,3 +7,7 @@ class ApiException implements Exception {
   @override
   String toString() => message;
 }
+
+extension ApiErrorDisplay on Object {
+  String get displayMessage => this is ApiException ? (this as ApiException).message : toString();
+}

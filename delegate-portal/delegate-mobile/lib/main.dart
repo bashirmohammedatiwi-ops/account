@@ -1,21 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app.dart';
 import 'config/app_config.dart';
 import 'core/api/api_client.dart';
 import 'core/theme/app_theme.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  final prefs = await SharedPreferences.getInstance();
 
   runApp(
     ProviderScope(
       overrides: [
-        appConfigProvider.overrideWithValue(AppConfig(prefs)),
+        appConfigProvider.overrideWithValue(const AppConfig()),
       ],
       child: const EdariDelegateApp(),
     ),

@@ -1,9 +1,8 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../config/app_config.dart';
-import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_provider.dart';
 
@@ -17,22 +16,13 @@ class LoginScreen extends ConsumerStatefulWidget {
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _userCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
-  final _serverCtrl = TextEditingController();
   bool _loading = false;
   String? _error;
-  bool _showServer = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _serverCtrl.text = ref.read(appConfigProvider).serverUrl;
-  }
 
   @override
   void dispose() {
     _userCtrl.dispose();
     _passCtrl.dispose();
-    _serverCtrl.dispose();
     super.dispose();
   }
 
@@ -42,16 +32,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _error = null;
     });
     try {
-      await ref.read(appConfigProvider).setServerUrl(_serverCtrl.text.trim());
       await ref.read(authProvider.notifier).login(_userCtrl.text.trim(), _passCtrl.text);
       if (mounted) context.go('/home');
     } on ApiException catch (e) {
       setState(() => _error = e.message);
+    } on DioException catch (e) {
+      setState(() => _error = _connectionMessage(e));
     } catch (e) {
-      setState(() => _error = 'فشل الاتصال — استخدم http://187.124.23.65:5005 وليس منفذ 4100');
+      setState(() => _error = _connectionMessage(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  String _connectionMessage(Object e) {
+    if (e is DioException) {
+      if (e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.receiveTimeout) {
+        return 'فشل الاتصال بالخادم — تحقق من الإنترنت وحاول مجدداً';
+      }
+    }
+    return 'فشل تسجيل الدخول — حاول مجدداً';
   }
 
   @override
@@ -84,7 +87,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            'كشوف حساب · طلبات · تقارير — مصمّم للآيباد والعمل الميداني',
+                            'كشوف حساب · طلبات · تقارير',
                             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                                   color: Colors.white.withValues(alpha: 0.9),
                                 ),
@@ -130,35 +133,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 obscureText: true,
                 onSubmitted: (_) => _submit(),
               ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () => setState(() => _showServer = !_showServer),
-                child: Text(_showServer ? 'إخفاء إعدادات الخادم' : 'إعدادات الخادم (ليس 4100)'),
-              ),
-              if (_showServer) ...[
-                TextField(
-                  controller: _serverCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'عنوان الخادم',
-                    hintText: 'http://187.124.23.65:5005',
-                    prefixIcon: Icon(Icons.dns_outlined),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () async {
-                    _serverCtrl.text = defaultServerUrl;
-                    await ref.read(appConfigProvider).setServerUrl(defaultServerUrl);
-                    if (mounted) setState(() {});
-                  },
-                  child: const Text('استخدام الخادم الافتراضي'),
-                ),
-                const SizedBox(height: 12),
-              ],
               if (_error != null) ...[
-                Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
                 const SizedBox(height: 12),
+                Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
               ],
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
               FilledButton(
                 onPressed: _loading ? null : _submit,
                 child: _loading

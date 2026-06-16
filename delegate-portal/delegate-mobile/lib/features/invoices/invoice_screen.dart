@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/auth/auth_session.dart';
 import '../../core/api/api_client.dart';
+import '../../core/api/api_exception.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/pdf_utils.dart';
 import '../../core/widgets/adaptive_shell.dart';
 import '../../models/models.dart';
 
 final invoiceProvider = FutureProvider.family<InvoiceDetail, ({String ref, String by, String? accSeq})>((ref, p) {
-  return ref.watch(apiClientProvider).getInvoice(p.ref, by: p.by, accSeq: p.accSeq);
+  return withAuth(ref, () => ref.read(apiClientProvider).getInvoice(p.ref, by: p.by, accSeq: p.accSeq));
 });
 
 class InvoiceScreen extends ConsumerWidget {
@@ -50,7 +52,7 @@ class InvoiceScreen extends ConsumerWidget {
       ],
       child: invoiceAsync.when(
         loading: () => const LoadingView(),
-        error: (e, _) => ErrorView(message: '$e', onRetry: () => refWatch.invalidate(invoiceProvider(params))),
+        error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => refWatch.invalidate(invoiceProvider(params))),
         data: (detail) {
           final inv = detail.invoice;
           return ListView(

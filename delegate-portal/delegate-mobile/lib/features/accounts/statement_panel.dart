@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/api/api_exception.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/pdf_utils.dart';
 import '../../core/utils/statement_helpers.dart';
@@ -24,7 +25,7 @@ class StatementPanel extends ConsumerWidget {
 
     return stmtAsync.when(
       loading: () => const LoadingView(),
-      error: (e, _) => ErrorView(message: '$e', onRetry: () => ref.invalidate(statementProvider(accSeq))),
+      error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(statementProvider(accSeq))),
       data: (stmt) => RefreshIndicator(
         onRefresh: () async => ref.invalidate(statementProvider(accSeq)),
         child: ListView(

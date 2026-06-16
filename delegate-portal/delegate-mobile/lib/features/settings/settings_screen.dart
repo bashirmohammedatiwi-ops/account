@@ -2,56 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/api/api_client.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/widgets/adaptive_shell.dart';
 
-class SettingsScreen extends ConsumerStatefulWidget {
+class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   @override
-  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final agent = ref.watch(authProvider).agent;
 
-class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  late TextEditingController _serverCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _serverCtrl = TextEditingController(text: ref.read(appConfigProvider).serverUrl);
-  }
-
-  @override
-  void dispose() {
-    _serverCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return AppPage(
-      title: 'الإعدادات',
+      title: 'الحساب',
+      showBack: true,
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          TextField(
-            controller: _serverCtrl,
-            decoration: const InputDecoration(
-              labelText: 'عنوان الخادم',
-              hintText: 'http://127.0.0.1:5005',
-              prefixIcon: Icon(Icons.dns_outlined),
+          Card(
+            child: ListTile(
+              leading: CircleAvatar(
+                child: Text((agent?.name ?? 'م').characters.first),
+              ),
+              title: Text(agent?.name ?? '—'),
+              subtitle: Text(agent?.username ?? ''),
             ),
-          ),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: () async {
-              await ref.read(appConfigProvider).setServerUrl(_serverCtrl.text.trim());
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حفظ العنوان')));
-              }
-            },
-            child: const Text('حفظ'),
           ),
           const SizedBox(height: 24),
           OutlinedButton.icon(

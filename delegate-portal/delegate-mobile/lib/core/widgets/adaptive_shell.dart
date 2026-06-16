@@ -51,7 +51,7 @@ class AdaptiveShell extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.only(bottom: 16),
                       child: IconButton(
-                        tooltip: 'الإعدادات',
+                        tooltip: 'الحساب',
                         onPressed: () => context.push('/settings'),
                         icon: const Icon(Icons.settings_outlined),
                       ),

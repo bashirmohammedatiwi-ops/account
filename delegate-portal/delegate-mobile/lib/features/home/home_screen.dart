@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/api/api_client.dart';
 import '../../core/auth/auth_provider.dart';
+import '../../core/auth/auth_session.dart';
+import '../../core/api/api_client.dart';
 import '../../core/widgets/adaptive_shell.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -171,5 +172,5 @@ class _ModuleCard extends StatelessWidget {
   }
 }
 
-final treesProvider = FutureProvider((ref) => ref.watch(apiClientProvider).getTrees());
-final ordersProvider = FutureProvider((ref) => ref.watch(apiClientProvider).getOrders());
+final treesProvider = FutureProvider((ref) => withAuth(ref, () => ref.read(apiClientProvider).getTrees()));
+final ordersProvider = FutureProvider((ref) => withAuth(ref, () => ref.read(apiClientProvider).getOrders()));

@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/auth/auth_session.dart';
 import '../../core/api/api_client.dart';
+import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
@@ -13,14 +15,14 @@ import '../../core/widgets/adaptive_shell.dart';
 import '../../models/models.dart';
 import '../home/home_screen.dart';
 
-final catalogBranchesProvider = FutureProvider((ref) => ref.watch(apiClientProvider).getCatalogBranches());
+final catalogBranchesProvider = FutureProvider((ref) => withAuth(ref, () => ref.read(apiClientProvider).getCatalogBranches()));
 
 final catalogSectionsProvider = FutureProvider.family<List<CatalogSection>, int>((ref, branchId) {
-  return ref.watch(apiClientProvider).getCatalogSections(branchId);
+  return withAuth(ref, () => ref.read(apiClientProvider).getCatalogSections(branchId));
 });
 
 final catalogProductsProvider = FutureProvider.family<List<Product>, int>((ref, sectionId) {
-  return ref.watch(apiClientProvider).getProducts(sectionId);
+  return withAuth(ref, () => ref.read(apiClientProvider).getProducts(sectionId));
 });
 
 class InvoiceDraftNotifier extends Notifier<Map<int, ({num quant, num bonus})>> {
@@ -141,7 +143,7 @@ class _ShopBranchesScreenState extends ConsumerState<ShopBranchesScreen> {
           Expanded(
             child: branchesAsync.when(
         loading: () => const LoadingView(),
-        error: (e, _) => ErrorView(message: '$e', onRetry: () => ref.invalidate(catalogBranchesProvider)),
+        error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(catalogBranchesProvider)),
         data: (branches) {
           if (branches.isEmpty) return const EmptyState(message: 'لا توجد فروع منتجات');
           return ListView.separated(
@@ -182,7 +184,7 @@ class ShopSectionsScreen extends ConsumerWidget {
       subtitle: 'اختر قسم المنتجات',
       child: sectionsAsync.when(
         loading: () => const LoadingView(),
-        error: (e, _) => ErrorView(message: '$e', onRetry: () => ref.invalidate(catalogSectionsProvider(branchId))),
+        error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(catalogSectionsProvider(branchId))),
         data: (sections) {
           if (sections.isEmpty) return const EmptyState(message: 'لا توجد أقسام');
           return ListView.separated(
@@ -300,7 +302,7 @@ class _ShopProductsScreenState extends ConsumerState<ShopProductsScreen> {
       showBack: true,
       child: productsAsync.when(
         loading: () => const LoadingView(),
-        error: (e, _) => ErrorView(message: '$e', onRetry: () => ref.invalidate(catalogProductsProvider(widget.sectionId))),
+        error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(catalogProductsProvider(widget.sectionId))),
         data: (products) {
           final filtered = products.where((p) {
             if (_filter.isEmpty) return true;
@@ -637,7 +639,7 @@ class _InvoiceSheetState extends ConsumerState<_InvoiceSheet> {
   }
 }
 
-final orderDetailProvider = FutureProvider.family<Order, int>((ref, id) => ref.watch(apiClientProvider).getOrder(id));
+final orderDetailProvider = FutureProvider.family<Order, int>((ref, id) => withAuth(ref, () => ref.read(apiClientProvider).getOrder(id)));
 
 class OrdersScreen extends ConsumerWidget {
   const OrdersScreen({super.key});
@@ -651,7 +653,7 @@ class OrdersScreen extends ConsumerWidget {
       actions: [IconButton(onPressed: () => ref.invalidate(ordersProvider), icon: const Icon(Icons.refresh_rounded))],
       child: ordersAsync.when(
         loading: () => const LoadingView(),
-        error: (e, _) => ErrorView(message: '$e', onRetry: () => ref.invalidate(ordersProvider)),
+        error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(ordersProvider)),
         data: (orders) {
           if (orders.isEmpty) return const EmptyState(message: 'لا توجد طلبات');
           return ListView.separated(
@@ -696,7 +698,7 @@ class OrderDetailScreen extends ConsumerWidget {
       showBack: true,
       child: orderAsync.when(
         loading: () => const LoadingView(),
-        error: (e, _) => ErrorView(message: '$e', onRetry: () => ref.invalidate(orderDetailProvider(id))),
+        error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(orderDetailProvider(id))),
         data: (order) {
           return ListView(
             padding: const EdgeInsets.all(16),

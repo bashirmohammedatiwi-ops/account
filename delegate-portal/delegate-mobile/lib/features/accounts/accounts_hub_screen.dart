@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/auth/auth_session.dart';
 import '../../core/api/api_client.dart';
+import '../../core/api/api_exception.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/adaptive_shell.dart';
@@ -13,7 +15,7 @@ import 'statement_panel.dart';
 
 final searchProvider = FutureProvider.family<List<BranchAccount>, String>((ref, q) async {
   if (q.trim().length < 2) return [];
-  return ref.watch(apiClientProvider).searchAccounts(q);
+  return withAuth(ref, () => ref.read(apiClientProvider).searchAccounts(q));
 });
 
 /// تخطيط كشوف الحساب — ثلاثي على الآيباد، متسلسل على الهاتف
@@ -101,7 +103,7 @@ class _TreesPanel extends ConsumerWidget {
         Expanded(
           child: treesAsync.when(
             loading: () => const LoadingView(),
-            error: (e, _) => ErrorView(message: '$e', onRetry: () => ref.invalidate(treesProvider)),
+            error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(treesProvider)),
             data: (trees) => ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 8),
               itemCount: trees.length,
@@ -198,7 +200,7 @@ class _BranchesPanelState extends ConsumerState<_BranchesPanel> {
                 )
               : branchesAsync.when(
                   loading: () => const LoadingView(),
-                  error: (e, _) => ErrorView(message: '$e', onRetry: () => ref.invalidate(childrenProvider(widget.treeSeq))),
+                  error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(childrenProvider(widget.treeSeq))),
                   data: (branches) {
                     final filtered = branches.where((b) {
                       if (_filter != 'all' && b.debtStatus != _filter) return false;
