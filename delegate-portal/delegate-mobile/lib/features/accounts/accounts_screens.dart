@@ -4,15 +4,18 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/api/api_client.dart';
+import '../../core/auth/auth_provider.dart';
 import '../../core/auth/auth_session.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/utils/debounce.dart';
-import '../../core/utils/formatters.dart';
 import '../../core/widgets/adaptive_shell.dart';
 import '../../core/widgets/ed_components.dart';
 import '../../models/models.dart';
 import '../home/home_screen.dart';
 import 'account_ui.dart';
+import 'accounts_theme.dart';
 import 'branches_ui.dart';
+import 'trees_ui.dart';
 
 final childrenProvider = FutureProvider.family<List<BranchAccount>, String>((ref, seq) {
   ref.keepAlive();
@@ -25,6 +28,7 @@ class TreesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final treesAsync = ref.watch(treesProvider);
+    final agentName = ref.watch(authProvider).agent?.name ?? 'مندوب';
 
     return AppPage(
       title: 'كشوف الحساب',
@@ -35,34 +39,21 @@ class TreesScreen extends ConsumerWidget {
       actions: [
         EdHeaderIconButton(icon: Icons.refresh_rounded, tooltip: 'تحديث', onPressed: () => ref.invalidate(treesProvider)),
       ],
-      child: treesAsync.when(
-        loading: () => const LoadingView(message: 'جاري تحميل الأشجار...'),
-        error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(treesProvider)),
-        data: (trees) {
-          if (trees.isEmpty) {
-            return const EmptyState(message: 'لا توجد شجرات معيّنة — تواصل مع الإدارة', icon: Icons.account_tree_outlined);
-          }
-          final customers = trees.fold<int>(0, (s, t) => s + t.directChildren);
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              EdFlowSteps(current: 0),
-              EdSectionMeta(text: '${trees.length} شجرة · ${fmtNumAlways(customers)} زبون'),
-              Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                  itemCount: trees.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (_, i) => EdTreeRowCard(
-                    index: i + 1,
-                    tree: trees[i],
-                    onTap: () => context.go('/accounts/${trees[i].seq}/branches'),
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
+      child: ColoredBox(
+      color: EdAccountsTheme.pageBg,
+        child: treesAsync.when(
+          loading: () => const LoadingView(message: 'جاري تحميل الأشجار...'),
+          error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(treesProvider)),
+          data: (trees) => RefreshIndicator(
+            color: AppColors.navy,
+            onRefresh: () async => ref.invalidate(treesProvider),
+            child: EdTreesPage(
+              trees: trees,
+              agentName: agentName,
+              onTreeTap: (t) => context.go('/accounts/${t.seq}/branches'),
+            ),
+          ),
+        ),
       ),
     );
   }

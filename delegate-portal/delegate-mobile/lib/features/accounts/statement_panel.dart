@@ -6,7 +6,9 @@ import '../../core/api/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/pdf_utils.dart';
 import '../../core/widgets/adaptive_shell.dart';
+import '../../core/layout/ed_table_wrap.dart';
 import 'accounts_screens.dart';
+import 'accounts_theme.dart';
 import 'statement_ui.dart';
 
 class StatementPanel extends ConsumerStatefulWidget {
@@ -61,29 +63,34 @@ class _StatementPanelState extends ConsumerState<StatementPanel> {
     final stmtAsync = ref.watch(statementProvider(widget.accSeq));
 
     return ColoredBox(
-      color: const Color(0xFFE4E9F0),
+      color: EdAccountsTheme.pageBg,
       child: stmtAsync.when(
         loading: () => const LoadingView(message: 'جاري تحميل الكشف...'),
         error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(statementProvider(widget.accSeq))),
-        data: (stmt) => RefreshIndicator(
+          data: (stmt) => RefreshIndicator(
           color: AppColors.navy,
           onRefresh: () async => ref.invalidate(statementProvider(widget.accSeq)),
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                sliver: SliverToBoxAdapter(
-                  child: EdStatementDocPanel(stmt: stmt, onExport: _exportStatementPdf, exporting: _exporting),
-                ),
-              ),
-              ...edStatementMoveSlivers(
-                context,
-                stmt: stmt,
-                accSeq: widget.accSeq,
-                onInvoicePdf: _exportInvoicePdf,
-              ),
-            ],
+          child: Builder(
+            builder: (context) {
+              final pad = edPageHorizontalPadding(context);
+              return CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(pad, 12, pad, 0),
+                    sliver: SliverToBoxAdapter(
+                      child: EdStatementDocPanel(stmt: stmt, onExport: _exportStatementPdf, exporting: _exporting),
+                    ),
+                  ),
+                  ...edStatementMoveSlivers(
+                    context,
+                    stmt: stmt,
+                    accSeq: widget.accSeq,
+                    onInvoicePdf: _exportInvoicePdf,
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),

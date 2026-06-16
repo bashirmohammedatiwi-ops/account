@@ -15,13 +15,13 @@ String txTypeLabel(StatementLine line) {
 }
 
 Color txTypeColor(StatementLine line) {
-  if (line.isOpening) return const Color(0xFF2563EB);
-  if (line.isReconciliation) return const Color(0xFF7C3AED);
-  if (line.isReturnInvoice) return const Color(0xFFEA580C);
+  if (line.isOpening) return AppColors.accentTeal;
+  if (line.isReconciliation) return AppColors.muted;
+  if (line.isReturnInvoice) return const Color(0xFF9A3412);
   if (line.debit > 0 && line.hasInvoice) return const Color(0xFF0F766E);
-  if (line.debit > 0) return const Color(0xFFDC2626);
-  if (line.credit > 0) return const Color(0xFF059669);
-  return const Color(0xFF64748B);
+  if (line.debit > 0) return const Color(0xFF9A3412);
+  if (line.credit > 0) return const Color(0xFF0F766E);
+  return AppColors.muted;
 }
 
 /// عرض الرصيد: 1,234 مدين / 1,234 دائن
@@ -43,7 +43,7 @@ String fmtEdariRunningBalance(num? bal, {bool isOpening = false}) {
 
 Color balanceColor(num? v) {
   if (v == null || v == 0) return AppColors.muted;
-  return v < 0 ? AppColors.danger : AppColors.success;
+  return v < 0 ? const Color(0xFF9A3412) : const Color(0xFF0F766E);
 }
 
 String fmtAmtCell(num? v) {

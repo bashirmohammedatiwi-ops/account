@@ -8,51 +8,7 @@ import '../../core/widgets/adaptive_shell.dart';
 import '../../core/widgets/ed_components.dart';
 import '../../models/models.dart';
 import 'account_ui.dart';
-
-/// ألوان حية — Jewel Edari
-abstract final class _Soft {
-  static const bg = Color(0xFFE4E9F0);
-  static const text = AppColors.navy;
-  static const textSoft = AppColors.muted;
-  static const line = AppColors.borderStrong;
-
-  static const heroStart = Color(0xFF0F172A);
-  static const heroMid = Color(0xFF1A365D);
-  static const heroEnd = Color(0xFF0F766E);
-  static const heroOnDark = Colors.white;
-  static const heroOnDarkSoft = Color(0xFFCBD5E1);
-  static const heroIconBg = Color(0x28FFFFFF);
-  static const heroIcon = Color(0xFFFCD34D);
-
-  static const debtTotal = Color(0xFFFDE68A);
-
-  static const chipBg = Color(0xFF2563EB);
-  static const chipText = Colors.white;
-
-  static const debitChip = Color(0xFFEA580C);
-  static const debitAccent = Colors.white;
-
-  static const creditChip = Color(0xFF059669);
-  static const creditAccent = Colors.white;
-
-  static const clearChip = Color(0xFF6366F1);
-  static const clearAccent = Colors.white;
-
-  static const debitBg = Color(0xFFFFF7ED);
-  static const debitMain = Color(0xFFC2410C);
-  static const debitChipLight = Color(0xFFFFEDD5);
-  static const debitBorder = Color(0xFFFDBA74);
-
-  static const creditBg = Color(0xFFECFDF5);
-  static const creditMain = Color(0xFF047857);
-  static const creditChipLight = Color(0xFFD1FAE5);
-  static const creditBorder = Color(0xFF6EE7B7);
-
-  static const clearBg = Color(0xFFEEF2FF);
-  static const clearMain = Color(0xFF4338CA);
-  static const clearChipLight = Color(0xFFE0E7FF);
-  static const clearBorder = Color(0xFFA5B4FC);
-}
+import 'accounts_theme.dart';
 
 class EdBranchesContent extends StatelessWidget {
   const EdBranchesContent({
@@ -82,7 +38,7 @@ class EdBranchesContent extends StatelessWidget {
     final cols = layout.gridColumns(phone: 1, tablet: 2, wide: 2, desktop: 3);
 
     return Container(
-      color: _Soft.bg,
+      color: EdAccountsTheme.pageBg,
       child: CustomScrollView(
         slivers: [
           SliverPadding(
@@ -153,89 +109,91 @@ class _SoftTreeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: [_Soft.heroStart, _Soft.heroMid, _Soft.heroEnd],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-        boxShadow: [
-          BoxShadow(color: _Soft.heroEnd.withValues(alpha: 0.35), blurRadius: 24, offset: const Offset(0, 10)),
-          BoxShadow(color: AppColors.navy.withValues(alpha: 0.2), blurRadius: 16, offset: const Offset(0, 6)),
-        ],
+        color: EdAccountsTheme.card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: EdAccountsTheme.line),
+        boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 3))],
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: _Soft.heroIconBg,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-                ),
-                child: const Icon(Icons.account_tree_rounded, color: _Soft.heroIcon, size: 24),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      tree.name1,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: _Soft.heroOnDark, height: 1.3),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'شجرة ${tree.accountNum}',
-                      textDirection: TextDirection.ltr,
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _Soft.heroOnDarkSoft.withValues(alpha: 0.95)),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: _Soft.debtTotal.withValues(alpha: 0.45)),
-            ),
+          Container(height: 3, color: EdAccountsTheme.accent),
+          Padding(
+            padding: const EdgeInsets.all(18),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('إجمالي ديون الشجرة', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _Soft.debtTotal.withValues(alpha: 0.85))),
-                const SizedBox(height: 6),
-                Text(
-                  fmtNumAlways(summary.totalDebt),
-                  textDirection: TextDirection.ltr,
-                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: _Soft.debtTotal, letterSpacing: -0.5),
+                Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: EdAccountsTheme.accentSoft,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: EdAccountsTheme.line),
+                      ),
+                      child: const Icon(Icons.account_tree_rounded, color: EdAccountsTheme.accent, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            tree.name1,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.3),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'شجرة ${tree.accountNum}',
+                            textDirection: TextDirection.ltr,
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: EdAccountsTheme.cardTint,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: EdAccountsTheme.line),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('إجمالي ديون الشجرة', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted)),
+                      const SizedBox(height: 4),
+                      Text(
+                        fmtNumAlways(summary.totalDebt),
+                        textDirection: TextDirection.ltr,
+                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.navy),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _SoftPill(label: 'زبائن', value: '${summary.total}', fg: AppColors.navy),
+                    _SoftPill(label: 'مدين', value: '${summary.withDebt}', fg: EdAccountsTheme.debit),
+                    _SoftPill(label: 'دائن', value: '${summary.credit}', fg: EdAccountsTheme.credit),
+                    _SoftPill(label: 'متعادل', value: '${summary.clear}', fg: EdAccountsTheme.neutral),
+                  ],
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _SoftPill(label: 'زبائن', value: '${summary.total}', bg: _Soft.chipBg, fg: _Soft.chipText),
-              _SoftPill(label: 'مدين', value: '${summary.withDebt}', bg: _Soft.debitChip, fg: _Soft.debitAccent),
-              _SoftPill(label: 'دائن', value: '${summary.credit}', bg: _Soft.creditChip, fg: _Soft.creditAccent),
-              _SoftPill(label: 'متعادل', value: '${summary.clear}', bg: _Soft.clearChip, fg: _Soft.clearAccent),
-            ],
           ),
         ],
       ),
@@ -244,29 +202,27 @@ class _SoftTreeCard extends StatelessWidget {
 }
 
 class _SoftPill extends StatelessWidget {
-  const _SoftPill({required this.label, required this.value, required this.bg, required this.fg});
+  const _SoftPill({required this.label, required this.value, required this.fg});
 
   final String label;
   final String value;
-  final Color bg;
   final Color fg;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-        boxShadow: [BoxShadow(color: bg.withValues(alpha: 0.4), blurRadius: 8, offset: const Offset(0, 3))],
+        color: EdAccountsTheme.cardTint,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: EdAccountsTheme.line),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(value, textDirection: TextDirection.ltr, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: fg)),
+          Text(value, textDirection: TextDirection.ltr, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: fg)),
           const SizedBox(width: 6),
-          Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: fg.withValues(alpha: 0.9))),
+          Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted)),
         ],
       ),
     );
@@ -289,12 +245,11 @@ class _SoftSearchBar extends StatelessWidget {
   static const _filters = [('all', 'الكل'), ('debit', 'مدين'), ('credit', 'دائن')];
 
   Color _filterColor(String key, {required bool selected}) {
-    if (!selected) return AppColors.surface;
-    return switch (key) {
-      'debit' => _Soft.debitMain,
-      'credit' => _Soft.creditMain,
-      _ => AppColors.navy,
-    };
+    return EdAccountsTheme.filterStyle(key, selected: selected).fg;
+  }
+
+  Color _filterBg(String key, {required bool selected}) {
+    return EdAccountsTheme.filterStyle(key, selected: selected).bg;
   }
 
   @override
@@ -306,7 +261,7 @@ class _SoftSearchBar extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: _Soft.line),
+            border: Border.all(color: EdAccountsTheme.line),
             boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.03), blurRadius: 12, offset: const Offset(0, 4))],
           ),
           child: EdSearchField(hint: 'ابحث عن زبون...', onChanged: onSearchChanged),
@@ -320,7 +275,8 @@ class _SoftSearchBar extends StatelessWidget {
                 child: _SoftFilterChip(
                   label: _filters[i].$2,
                   selected: filter == _filters[i].$1,
-                  color: _filterColor(_filters[i].$1, selected: filter == _filters[i].$1),
+                  fg: _filterColor(_filters[i].$1, selected: filter == _filters[i].$1),
+                  bg: _filterBg(_filters[i].$1, selected: filter == _filters[i].$1),
                   onTap: () => onFilterChanged(_filters[i].$1),
                 ),
               ),
@@ -333,11 +289,12 @@ class _SoftSearchBar extends StatelessWidget {
 }
 
 class _SoftFilterChip extends StatelessWidget {
-  const _SoftFilterChip({required this.label, required this.selected, required this.color, required this.onTap});
+  const _SoftFilterChip({required this.label, required this.selected, required this.fg, required this.bg, required this.onTap});
 
   final String label;
   final bool selected;
-  final Color color;
+  final Color fg;
+  final Color bg;
   final VoidCallback onTap;
 
   @override
@@ -345,18 +302,17 @@ class _SoftFilterChip extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: selected ? color : _Soft.line),
-          boxShadow: selected ? [BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 10, offset: const Offset(0, 4))] : null,
+          color: bg,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: selected ? fg.withValues(alpha: 0.35) : EdAccountsTheme.line),
         ),
         alignment: Alignment.center,
         child: Text(
           label,
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: selected ? Colors.white : _Soft.textSoft),
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: fg),
         ),
       ),
     );
@@ -385,14 +341,14 @@ class _SoftBranchCard extends StatelessWidget {
   final BranchAccount branch;
   final VoidCallback onTap;
 
-  static const height = 156.0;
+  static const height = 148.0;
 
   @override
   Widget build(BuildContext context) {
     final variant = branchVariant(branch);
     final debt = resolveBranchDebt(branch);
     final status = branch.summaryLabel ?? branchStatusLabel(variant);
-    final palette = _palette(variant);
+    final style = EdAccountsTheme.variantStyle(variant);
     final address = branch.address?.trim();
     final hasAddress = address != null && address.isNotEmpty;
 
@@ -400,39 +356,31 @@ class _SoftBranchCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(16),
         child: Ink(
           height: height,
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [palette.bg, Colors.white],
-            ),
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: palette.border, width: 1.5),
-            boxShadow: [BoxShadow(color: palette.accent.withValues(alpha: 0.18), blurRadius: 18, offset: const Offset(0, 7))],
+            color: EdAccountsTheme.card,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: EdAccountsTheme.line),
+            boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 2))],
           ),
           child: Stack(
             children: [
               PositionedDirectional(
                 start: 0,
-                top: 12,
-                bottom: 12,
+                top: 10,
+                bottom: 10,
                 child: Container(
-                  width: 5,
+                  width: 3,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [palette.accent, palette.accent.withValues(alpha: 0.55)],
-                    ),
-                    borderRadius: const BorderRadiusDirectional.horizontal(start: Radius.circular(5)),
+                    color: style.fg.withValues(alpha: 0.65),
+                    borderRadius: const BorderRadiusDirectional.horizontal(start: Radius.circular(16)),
                   ),
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(18, 14, 14, 14),
+                padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -444,74 +392,49 @@ class _SoftBranchCard extends StatelessWidget {
                             branch.name1,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _Soft.text, height: 1.25),
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.25),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: palette.accent,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [BoxShadow(color: palette.accent.withValues(alpha: 0.35), blurRadius: 6, offset: const Offset(0, 2))],
+                            color: style.bg,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: style.border),
                           ),
-                          child: Text(status, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: palette.onAccent)),
+                          child: Text(status, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: style.fg)),
                         ),
                       ],
                     ),
                     if (hasAddress) ...[
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Icon(Icons.location_on_outlined, size: 13, color: palette.accent.withValues(alpha: 0.75)),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              address,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: palette.accent.withValues(alpha: 0.8), height: 1.2),
-                            ),
-                          ),
-                        ],
+                      const SizedBox(height: 6),
+                      Text(
+                        address,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: AppColors.textSecondary),
                       ),
                     ],
                     const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: palette.chip,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: palette.border),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('الديون', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: palette.accent.withValues(alpha: 0.75))),
-                                const SizedBox(height: 2),
-                                Text(
-                                  debt > 0 ? fmtNumAlways(debt) : '0',
-                                  textDirection: TextDirection.ltr,
-                                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: palette.accent, letterSpacing: -0.3),
-                                ),
-                              ],
-                            ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('الديون', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.muted)),
+                              const SizedBox(height: 2),
+                              Text(
+                                debt > 0 ? fmtNumAlways(debt) : '0',
+                                textDirection: TextDirection.ltr,
+                                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: style.fg),
+                              ),
+                            ],
                           ),
-                          Container(
-                            width: 34,
-                            height: 34,
-                            decoration: BoxDecoration(
-                              color: palette.accent,
-                              shape: BoxShape.circle,
-                              boxShadow: [BoxShadow(color: palette.accent.withValues(alpha: 0.35), blurRadius: 8, offset: const Offset(0, 3))],
-                            ),
-                            child: Icon(Icons.chevron_left_rounded, size: 22, color: palette.onAccent),
-                          ),
-                        ],
-                      ),
+                        ),
+                        Icon(Icons.chevron_left_rounded, size: 20, color: style.fg.withValues(alpha: 0.7)),
+                      ],
                     ),
                   ],
                 ),
@@ -522,28 +445,4 @@ class _SoftBranchCard extends StatelessWidget {
       ),
     );
   }
-
-  ({Color bg, Color accent, Color chip, Color border, Color onAccent}) _palette(BranchCardVariant v) => switch (v) {
-        BranchCardVariant.debit => (
-            bg: _Soft.debitBg,
-            accent: _Soft.debitMain,
-            chip: _Soft.debitChipLight,
-            border: _Soft.debitBorder,
-            onAccent: Colors.white,
-          ),
-        BranchCardVariant.credit => (
-            bg: _Soft.creditBg,
-            accent: _Soft.creditMain,
-            chip: _Soft.creditChipLight,
-            border: _Soft.creditBorder,
-            onAccent: Colors.white,
-          ),
-        BranchCardVariant.clear => (
-            bg: _Soft.clearBg,
-            accent: _Soft.clearMain,
-            chip: _Soft.clearChipLight,
-            border: _Soft.clearBorder,
-            onAccent: Colors.white,
-          ),
-      };
 }

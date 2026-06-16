@@ -4,10 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/layout/ed_table_wrap.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/pdf_utils.dart';
 import '../../core/widgets/adaptive_shell.dart';
 import '../../models/models.dart';
+import '../accounts/accounts_theme.dart';
 import 'invoice_ui.dart';
 
 final invoiceProvider = FutureProvider.family<InvoiceDetail, ({String ref, String by, String? accSeq})>((ref, p) {
@@ -54,7 +56,7 @@ class _InvoiceScreenState extends ConsumerState<InvoiceScreen> {
         orElse: () => widget.ref,
       ),
       child: ColoredBox(
-        color: InvTheme.pageBg,
+        color: EdAccountsTheme.pageBg,
         child: invoiceAsync.when(
           loading: () => const LoadingView(message: 'جاري تحميل الفاتورة...'),
           error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(invoiceProvider(params))),
@@ -63,28 +65,33 @@ class _InvoiceScreenState extends ConsumerState<InvoiceScreen> {
             return RefreshIndicator(
               color: AppColors.navy,
               onRefresh: () async => ref.invalidate(invoiceProvider(params)),
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                    sliver: SliverList(
-                      delegate: SliverChildListDelegate([
-                        EdInvoiceExportBar(
-                          label: 'تصدير فاتورة $num PDF',
-                          onExport: _exportPdf,
-                          loading: _exporting,
+              child: Builder(
+                builder: (context) {
+                  final pad = edPageHorizontalPadding(context);
+                  return CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(pad, 10, pad, 0),
+                        sliver: SliverList(
+                          delegate: SliverChildListDelegate([
+                            EdInvoiceExportBar(
+                              label: 'تصدير فاتورة $num PDF',
+                              onExport: _exportPdf,
+                              loading: _exporting,
+                            ),
+                            const SizedBox(height: 12),
+                            EdInvoiceDocPanel(detail: detail),
+                          ]),
                         ),
-                        const SizedBox(height: 12),
-                        EdInvoiceDocPanel(detail: detail),
-                      ]),
-                    ),
-                  ),
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                    sliver: SliverToBoxAdapter(child: EdInvoiceLinesSection(detail: detail)),
-                  ),
-                ],
+                      ),
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(pad, 16, pad, 32),
+                        sliver: SliverToBoxAdapter(child: EdInvoiceLinesSection(detail: detail)),
+                      ),
+                    ],
+                  );
+                },
               ),
             );
           },

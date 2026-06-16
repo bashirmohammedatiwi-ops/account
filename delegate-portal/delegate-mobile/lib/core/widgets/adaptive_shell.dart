@@ -31,7 +31,8 @@ class AppPage extends StatelessWidget {
     this.showBack = false,
     this.onBack,
     this.toolbar,
-    this.useHeader = true,
+    this.useHeader = false,
+    this.showNavBar = true,
   });
 
   final String title;
@@ -43,7 +44,10 @@ class AppPage extends StatelessWidget {
   final bool showBack;
   final VoidCallback? onBack;
   final Widget? toolbar;
+  /// إذا true يعرض EdAppHeader القديم (غير مستخدم افتراضياً)
   final bool useHeader;
+  /// شريط الرجوع الخفيف
+  final bool showNavBar;
 
   @override
   Widget build(BuildContext context) {
@@ -69,6 +73,8 @@ class AppPage extends StatelessWidget {
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (!useHeader && showNavBar)
+              EdPageNavBar(showBack: canPop, onBack: canPop ? back : null, actions: actions),
             if (toolbar != null) toolbar!,
             Expanded(child: child),
           ],

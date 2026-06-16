@@ -24,6 +24,9 @@ class EdLayoutData {
   bool get isWide => width >= EdLayout.wideMin;
   bool get isDesktop => width >= EdLayout.desktopMin;
 
+  /// جدول بيانات (كشف / فاتورة) — من iPad فما فوق، أو دائماً مثل الويب على الشاشات الأوسع.
+  bool get useDataTable => width >= EdLayout.tabletMin;
+
   int gridColumns({int phone = 2, int tablet = 3, int wide = 4, int desktop = 5}) {
     if (width >= EdLayout.desktopMin) return desktop;
     if (width >= EdLayout.wideMin) return wide;

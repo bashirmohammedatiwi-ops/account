@@ -3,7 +3,96 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 
-/// شريط علوي رسمي — مثل `.app-header` في الويب
+class EdBackButton extends StatelessWidget {
+  const EdBackButton({super.key, required this.onPressed, this.label});
+
+  final VoidCallback onPressed;
+  final String? label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'رجوع',
+      child: Material(
+      color: AppColors.surface,
+      elevation: 0,
+      shadowColor: Colors.transparent,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(10),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.border),
+            boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 1))],
+          ),
+          padding: EdgeInsets.symmetric(horizontal: label != null ? 12 : 0, vertical: 0),
+          child: SizedBox(
+            height: 40,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(width: 4),
+                const Icon(Icons.arrow_forward_rounded, size: 20, color: AppColors.navy),
+                if (label != null) ...[
+                  const SizedBox(width: 4),
+                  Text(label!, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                  const SizedBox(width: 4),
+                ] else
+                  const SizedBox(width: 4),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+    );
+  }
+}
+
+/// شريط علوي خفيف — زر رجوع + إجراءات فقط (بدون عنوان)
+class EdPageNavBar extends StatelessWidget {
+  const EdPageNavBar({super.key, this.showBack = false, this.onBack, this.actions});
+
+  final bool showBack;
+  final VoidCallback? onBack;
+  final List<Widget>? actions;
+
+  bool get _visible => showBack || (actions != null && actions!.isNotEmpty);
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_visible) {
+      return SafeArea(bottom: false, child: const SizedBox(height: 4));
+    }
+
+    return SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 6, 10, 4),
+        child: Row(
+          children: [
+            if (showBack && onBack != null) EdBackButton(onPressed: onBack!),
+            const Spacer(),
+            if (actions != null)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < actions!.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 6),
+                    actions![i],
+                  ],
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// @deprecated استخدم EdPageNavBar — محفوظ للتوافق
 class EdAppHeader extends StatelessWidget implements PreferredSizeWidget {
   const EdAppHeader({
     super.key,
@@ -91,10 +180,28 @@ class EdHeaderIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: tooltip,
-      onPressed: onPressed,
-      icon: Icon(icon, color: danger ? const Color(0xFFFCA5A5) : Colors.white),
+    final fg = danger ? AppColors.danger : AppColors.navy;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(10),
+          child: Ink(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: danger ? AppColors.danger.withValues(alpha: 0.25) : AppColors.border),
+            ),
+            child: SizedBox(
+              width: 40,
+              height: 40,
+              child: Icon(icon, color: fg, size: 20),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

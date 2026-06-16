@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -10,15 +9,17 @@ import '../../core/auth/auth_session.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_provider.dart';
-import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_theme.dart';
 import '../../core/layout/breakpoints.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/utils/debounce.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/adaptive_shell.dart';
 import '../../core/widgets/ed_components.dart';
 import '../../models/models.dart';
 import '../home/home_screen.dart';
+import 'commerce_theme.dart';
+import 'commerce_ui.dart';
+import 'order_invoice_ui.dart';
 
 final catalogBranchesProvider = FutureProvider((ref) {
   ref.keepAlive();
@@ -38,6 +39,8 @@ final catalogProductsProvider = FutureProvider.family<List<Product>, int>((ref, 
 class InvoiceDraftNotifier extends Notifier<Map<int, ({num quant, num bonus})>> {
   int? branchId;
   int? sectionId;
+  String? branchName;
+  String? sectionName;
   BranchAccount? customer;
   String notes = '';
 
@@ -51,7 +54,13 @@ class InvoiceDraftNotifier extends Notifier<Map<int, ({num quant, num bonus})>> 
     final data = jsonDecode(raw) as Map<String, dynamic>;
     branchId = data['branchId'] as int?;
     sectionId = data['sectionId'] as int?;
+    branchName = data['branchName'] as String?;
+    sectionName = data['sectionName'] as String?;
     notes = data['notes'] as String? ?? '';
+    final customerJson = data['customer'] as Map<String, dynamic>?;
+    if (customerJson != null) {
+      customer = BranchAccount.fromJson(customerJson);
+    }
     final draft = data['draft'] as Map<String, dynamic>? ?? {};
     state = draft.map((k, v) {
       final m = v as Map<String, dynamic>;
@@ -65,12 +74,30 @@ class InvoiceDraftNotifier extends Notifier<Map<int, ({num quant, num bonus})>> 
     await prefs.setString('delegateInvoice:$agentId', jsonEncode({
       'branchId': branchId,
       'sectionId': sectionId,
+      'branchName': branchName,
+      'sectionName': sectionName,
       'notes': notes,
+      'customer': customer == null
+          ? null
+          : {
+              'seq': customer!.seq,
+              'num': customer!.accountNum,
+              'name1': customer!.name1,
+              'name2': customer!.name2,
+              'address': customer!.address,
+              'bal': customer!.bal,
+            },
       'draft': draft,
     }));
   }
 
   void setQty(int productId, num quant, num bonus) {
+    if (quant <= 0 && bonus <= 0) {
+      final next = {...state};
+      next.remove(productId);
+      state = next;
+      return;
+    }
     state = {...state, productId: (quant: quant, bonus: bonus)};
   }
 
@@ -129,48 +156,47 @@ class _ShopBranchesScreenState extends ConsumerState<ShopBranchesScreen> {
       subtitle: 'اختر فرع المنتجات',
       showBack: true,
       onBack: () => context.go('/home'),
-      child: Column(
-        children: [
-          if (_resumeHint != null)
-            EdResumeBanner(
-              message: 'فاتورة محفوظة · $_resumeHint',
-              actionLabel: 'متابعة',
-              onAction: () async {
-                final agentId = ref.read(authProvider).agent?.id;
-                if (agentId != null) {
-                  await ref.read(invoiceDraftProvider.notifier).load(agentId);
-                  final n = ref.read(invoiceDraftProvider.notifier);
-                  if (n.branchId != null && n.sectionId != null && context.mounted) {
-                    context.go('/shop/${n.branchId}/sections/${n.sectionId}/products');
+      child: ColoredBox(
+        color: EdCommerceTheme.pageBg,
+        child: Column(
+          children: [
+            if (_resumeHint != null)
+              EdResumeBanner(
+                message: 'فاتورة محفوظة · $_resumeHint',
+                actionLabel: 'متابعة',
+                onAction: () async {
+                  final agentId = ref.read(authProvider).agent?.id;
+                  if (agentId != null) {
+                    await ref.read(invoiceDraftProvider.notifier).load(agentId);
+                    final n = ref.read(invoiceDraftProvider.notifier);
+                    if (n.branchId != null && n.sectionId != null && context.mounted) {
+                      context.go('/shop/${n.branchId}/sections/${n.sectionId}/products');
+                    }
                   }
-                }
-              },
+                },
+              ),
+            Expanded(
+              child: branchesAsync.when(
+                loading: () => const LoadingView(),
+                error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(catalogBranchesProvider)),
+                data: (branches) => EdShopPickerGrid(
+                  items: branches,
+                  emptyMessage: 'لا توجد فروع منتجات',
+                  emptyIcon: Icons.store_mall_directory_outlined,
+                  itemBuilder: (_, i) {
+                    final b = branches[i];
+                    return EdShopPickerCard(
+                      title: b.name,
+                      subtitle: b.description,
+                      icon: Icons.store_mall_directory_outlined,
+                      onTap: () => context.go('/shop/${b.id}/sections'),
+                    );
+                  },
+                ),
+              ),
             ),
-          Expanded(
-            child: branchesAsync.when(
-        loading: () => const LoadingView(),
-        error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(catalogBranchesProvider)),
-        data: (branches) {
-          if (branches.isEmpty) return const EmptyState(message: 'لا توجد فروع منتجات', icon: Icons.store_mall_directory_outlined);
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: branches.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (_, i) {
-              final b = branches[i];
-              return EdNavCard(
-                icon: Icons.store_mall_directory_outlined,
-                title: b.name,
-                subtitle: b.description,
-                accent: AppColors.moduleShop,
-                onTap: () => context.go('/shop/${b.id}/sections'),
-              );
-            },
-          );
-        },
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -183,35 +209,44 @@ class ShopSectionsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sectionsAsync = ref.watch(catalogSectionsProvider(branchId));
+    final branchesAsync = ref.watch(catalogBranchesProvider);
+    final branchName = branchesAsync.valueOrNull?.where((b) => b.id == branchId).map((b) => b.name).firstOrNull;
+
     return AppPage(
       title: 'الأقسام',
       kicker: 'المنتجات',
-      subtitle: 'اختر قسم المنتجات',
+      subtitle: branchName ?? 'اختر قسم المنتجات',
       showBack: true,
       onBack: () => context.pop(),
-      child: sectionsAsync.when(
-        loading: () => const LoadingView(),
-        error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(catalogSectionsProvider(branchId))),
-        data: (sections) {
-          if (sections.isEmpty) return const EmptyState(message: 'لا توجد أقسام', icon: Icons.category_outlined);
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: sections.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
+      child: ColoredBox(
+        color: EdCommerceTheme.pageBg,
+        child: sectionsAsync.when(
+          loading: () => const LoadingView(),
+          error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(catalogSectionsProvider(branchId))),
+          data: (sections) => EdShopPickerGrid(
+            items: sections,
+            emptyMessage: 'لا توجد أقسام',
+            emptyIcon: Icons.category_outlined,
             itemBuilder: (_, i) {
               final s = sections[i];
-              return EdNavCard(
-                icon: Icons.category_outlined,
+              return EdShopPickerCard(
                 title: s.name,
-                accent: AppColors.moduleShop,
-                onTap: () {
-                  ref.read(invoiceDraftProvider.notifier).branchId = branchId;
-                  context.go('/shop/$branchId/sections/${s.id}/products');
+                subtitle: s.description,
+                icon: Icons.category_outlined,
+                onTap: () async {
+                  final notifier = ref.read(invoiceDraftProvider.notifier);
+                  notifier.branchId = branchId;
+                  notifier.sectionId = s.id;
+                  notifier.branchName = branchName;
+                  notifier.sectionName = s.name;
+                  final agentId = ref.read(authProvider).agent?.id;
+                  if (agentId != null) await notifier.persist(agentId);
+                  if (context.mounted) context.go('/shop/$branchId/sections/${s.id}/products');
                 },
               );
             },
-          );
-        },
+          ),
+        ),
       ),
     );
   }
@@ -224,23 +259,40 @@ class ShopProductsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final branchesAsync = ref.watch(catalogBranchesProvider);
+    final sectionsAsync = ref.watch(catalogSectionsProvider(branchId));
+    final branchName = branchesAsync.valueOrNull?.where((b) => b.id == branchId).map((b) => b.name).firstOrNull ?? '';
+    final sectionName = sectionsAsync.valueOrNull?.where((s) => s.id == sectionId).map((s) => s.name).firstOrNull ?? '';
+
     return AppPage(
       title: 'عرض وطلب',
       kicker: 'المنتجات',
-      subtitle: 'أضف الكميات ثم اعرض الفاتورة',
+      subtitle: [branchName, sectionName].where((s) => s.isNotEmpty).join(' · '),
       showBack: true,
       onBack: () => context.pop(),
-      child: ShopProductsPanel(branchId: branchId, sectionId: sectionId),
+      child: ShopProductsPanel(
+        branchId: branchId,
+        sectionId: sectionId,
+        branchName: branchName,
+        sectionName: sectionName,
+      ),
     );
   }
 }
 
 class ShopProductsPanel extends ConsumerStatefulWidget {
-  const ShopProductsPanel({super.key, required this.branchId, required this.sectionId, this.embedded = false});
+  const ShopProductsPanel({
+    super.key,
+    required this.branchId,
+    required this.sectionId,
+    required this.branchName,
+    required this.sectionName,
+  });
 
   final int branchId;
   final int sectionId;
-  final bool embedded;
+  final String branchName;
+  final String sectionName;
 
   @override
   ConsumerState<ShopProductsPanel> createState() => _ShopProductsPanelState();
@@ -249,12 +301,16 @@ class ShopProductsPanel extends ConsumerStatefulWidget {
 class _ShopProductsPanelState extends ConsumerState<ShopProductsPanel> {
   String _filter = '';
   String _filterApplied = '';
+  int _page = 0;
+  int? _selectedId;
   final _barcodeCtrl = TextEditingController();
+  final _notesCtrl = TextEditingController();
   final _debouncer = Debouncer();
 
   @override
   void dispose() {
     _barcodeCtrl.dispose();
+    _notesCtrl.dispose();
     _debouncer.dispose();
     super.dispose();
   }
@@ -264,9 +320,22 @@ class _ShopProductsPanelState extends ConsumerState<ShopProductsPanel> {
     super.initState();
     final agentId = ref.read(authProvider).agent?.id;
     if (agentId != null) {
-      ref.read(invoiceDraftProvider.notifier).load(agentId);
+      ref.read(invoiceDraftProvider.notifier).load(agentId).then((_) {
+        if (mounted) {
+          _notesCtrl.text = ref.read(invoiceDraftProvider.notifier).notes;
+        }
+      });
     }
-    ref.read(invoiceDraftProvider.notifier).sectionId = widget.sectionId;
+    final notifier = ref.read(invoiceDraftProvider.notifier);
+    notifier.branchId = widget.branchId;
+    notifier.sectionId = widget.sectionId;
+    notifier.branchName = widget.branchName;
+    notifier.sectionName = widget.sectionName;
+  }
+
+  int _pageSize(BuildContext context) {
+    final cols = EdLayout.of(context).gridColumns(phone: 2, tablet: 3, wide: 3, desktop: 4);
+    return cols * 2;
   }
 
   num _total(List<Product> products, Map<int, ({num quant, num bonus})> draft) {
@@ -282,16 +351,50 @@ class _ShopProductsPanelState extends ConsumerState<ShopProductsPanel> {
     return draft.values.where((d) => d.quant > 0 || d.bonus > 0).length;
   }
 
+  Future<void> _persistDraft() async {
+    final agentId = ref.read(authProvider).agent?.id;
+    if (agentId != null) await ref.read(invoiceDraftProvider.notifier).persist(agentId);
+  }
+
+  Future<void> _pickCustomer() async {
+    final trees = await ref.read(apiClientProvider).getTrees();
+    if (!mounted || trees.isEmpty) return;
+    final tree = await showDialog<AccountTree>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('اختر الشجرة'),
+        children: trees.map((t) => SimpleDialogOption(onPressed: () => Navigator.pop(ctx, t), child: Text(t.name1))).toList(),
+      ),
+    );
+    if (tree == null) return;
+    final branches = await ref.read(apiClientProvider).getChildren(tree.seq);
+    if (!mounted) return;
+    final branch = await showDialog<BranchAccount>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('اختر الزبون'),
+        children: branches
+            .map((b) => SimpleDialogOption(onPressed: () => Navigator.pop(ctx, b), child: Text('${b.name1} (${b.accountNum})')))
+            .toList(),
+      ),
+    );
+    if (branch != null) {
+      ref.read(invoiceDraftProvider.notifier).customer = branch;
+      await _persistDraft();
+      if (mounted) setState(() {});
+    }
+  }
+
   Future<void> _lookupBarcode(List<Product> products) async {
     final code = _barcodeCtrl.text.trim();
     if (code.isEmpty) return;
     try {
       final product = await ref.read(apiClientProvider).lookupProduct(code, branchId: widget.branchId);
+      _selectProduct(product.id, products);
       final notifier = ref.read(invoiceDraftProvider.notifier);
       final current = ref.read(invoiceDraftProvider)[product.id];
       notifier.setQty(product.id, (current?.quant ?? 0) + 1, current?.bonus ?? 0);
-      final agentId = ref.read(authProvider).agent?.id;
-      if (agentId != null) await notifier.persist(agentId);
+      await _persistDraft();
       _barcodeCtrl.clear();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${product.name} +1')));
@@ -300,9 +403,11 @@ class _ShopProductsPanelState extends ConsumerState<ShopProductsPanel> {
       final local = products.where((p) => (p.barcode ?? '').contains(code) || (p.skuNum ?? '').contains(code)).toList();
       if (local.length == 1) {
         final p = local.first;
+        _selectProduct(p.id, products);
         final notifier = ref.read(invoiceDraftProvider.notifier);
         final current = ref.read(invoiceDraftProvider)[p.id];
         notifier.setQty(p.id, (current?.quant ?? 0) + 1, current?.bonus ?? 0);
+        await _persistDraft();
         _barcodeCtrl.clear();
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
@@ -310,12 +415,41 @@ class _ShopProductsPanelState extends ConsumerState<ShopProductsPanel> {
     }
   }
 
+  void _selectProduct(int id, List<Product> products) {
+    setState(() {
+      _selectedId = id;
+      _page = products.indexWhere((p) => p.id == id) ~/ _pageSize(context);
+    });
+  }
+
+  Product? _selectedProduct(List<Product> products) {
+    if (_selectedId == null) return null;
+    for (final p in products) {
+      if (p.id == _selectedId) return p;
+    }
+    return null;
+  }
+
+  void _adjustQty(Product product, {required bool quant, required int delta}) {
+    final notifier = ref.read(invoiceDraftProvider.notifier);
+    final current = ref.read(invoiceDraftProvider)[product.id];
+    final q = current?.quant ?? 0;
+    final b = current?.bonus ?? 0;
+    if (quant) {
+      notifier.setQty(product.id, (q + delta).clamp(0, 999999), b);
+    } else {
+      notifier.setQty(product.id, q, (b + delta).clamp(0, 999999));
+    }
+    _persistDraft();
+    setState(() {});
+  }
+
   Future<void> _openInvoiceSheet(List<Product> products) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (ctx) => _InvoiceSheet(branchId: widget.branchId, products: products),
+      builder: (ctx) => EdOrderInvoiceSheet(branchId: widget.branchId, products: products),
     );
   }
 
@@ -323,194 +457,159 @@ class _ShopProductsPanelState extends ConsumerState<ShopProductsPanel> {
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(catalogProductsProvider(widget.sectionId));
     final draft = ref.watch(invoiceDraftProvider);
-    final agentId = ref.watch(authProvider).agent?.id;
+    final customer = ref.read(invoiceDraftProvider.notifier).customer;
     final layout = EdLayout.of(context);
-    final cols = layout.gridColumns(phone: 2, tablet: 3, wide: 4, desktop: 5);
+    final sideWidth = layout.isTablet ? 320.0 : 280.0;
+    final cols = layout.gridColumns(phone: 2, tablet: 3, wide: 3, desktop: 4);
 
-    final toolbar = EdPageToolbar(
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: EdSearchField(
-              hint: 'بحث عن منتج...',
-              onChanged: (v) {
-                _filter = v.trim();
-                _debouncer.run(() {
-                  if (mounted) setState(() => _filterApplied = _filter);
-                });
-              },
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: TextField(
-              controller: _barcodeCtrl,
-              decoration: InputDecoration(
-                hintText: 'باركود',
-                isDense: true,
-                prefixIcon: const Icon(Icons.qr_code_scanner, color: AppColors.muted),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.add_circle_outline, color: AppColors.moduleShop),
-                  onPressed: () => _lookupBarcode(productsAsync.valueOrNull ?? []),
-                ),
+    return ColoredBox(
+      color: EdCommerceTheme.pageBg,
+      child: productsAsync.when(
+        loading: () => const LoadingView(message: 'جاري تحميل المنتجات...'),
+        error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(catalogProductsProvider(widget.sectionId))),
+        data: (products) {
+          final q = _filterApplied.toLowerCase();
+          final filtered = products.where((p) {
+            if (q.isEmpty) return true;
+            return p.name.toLowerCase().contains(q) || (p.barcode ?? '').contains(q) || (p.skuNum ?? '').contains(q);
+          }).toList();
+
+          if (_selectedId != null && !filtered.any((p) => p.id == _selectedId)) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) setState(() => _selectedId = null);
+            });
+          }
+
+          final pageSize = _pageSize(context);
+          final pageCount = filtered.isEmpty ? 1 : ((filtered.length + pageSize - 1) / pageSize).ceil();
+          final safePage = _page.clamp(0, pageCount - 1);
+          if (safePage != _page) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) setState(() => _page = safePage);
+            });
+          }
+          final pageItems = filtered.skip(safePage * pageSize).take(pageSize).toList();
+          final selected = _selectedProduct(filtered);
+          final showSide = layout.isTablet || selected != null;
+
+          Widget buildDetailPanel() {
+            if (selected != null) {
+              return EdShopProductDetailPanel(
+                product: selected,
+                sectionName: widget.sectionName,
+                quant: draft[selected.id]?.quant ?? 0,
+                bonus: draft[selected.id]?.bonus ?? 0,
+                onDecQuant: () => _adjustQty(selected, quant: true, delta: -1),
+                onIncQuant: () => _adjustQty(selected, quant: true, delta: 1),
+                onDecBonus: () => _adjustQty(selected, quant: false, delta: -1),
+                onIncBonus: () => _adjustQty(selected, quant: false, delta: 1),
+                notesController: _notesCtrl,
+                onNotesChanged: (v) {
+                  ref.read(invoiceDraftProvider.notifier).notes = v;
+                  _persistDraft();
+                },
+              );
+            }
+            return const EdShopProductDetailPlaceholder();
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              EdShopCustomerBar(
+                customer: customer,
+                branchLabel: [widget.branchName, widget.sectionName].where((s) => s.isNotEmpty).join(' / '),
+                onPick: _pickCustomer,
               ),
-              onSubmitted: (_) => _lookupBarcode(productsAsync.valueOrNull ?? []),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    final content = productsAsync.when(
-      loading: () => const LoadingView(message: 'جاري تحميل المنتجات...'),
-      error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(catalogProductsProvider(widget.sectionId))),
-      data: (products) {
-        final q = _filterApplied.toLowerCase();
-        final filtered = products.where((p) {
-          if (q.isEmpty) return true;
-          return p.name.toLowerCase().contains(q) || (p.barcode ?? '').contains(q);
-        }).toList();
-
-        return Column(
-          children: [
-            Expanded(
-              child: filtered.isEmpty
-                  ? const EmptyState(message: 'لا توجد منتجات', icon: Icons.inventory_2_outlined)
-                  : GridView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: cols,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                        childAspectRatio: layout.isWide ? 0.72 : 0.68,
+              EdShopToolbar(
+                searchHint: 'اسم المنتج...',
+                onSearchChanged: (v) {
+                  _filter = v.trim();
+                  _debouncer.run(() {
+                    if (mounted) {
+                      setState(() {
+                        _filterApplied = _filter;
+                        _page = 0;
+                      });
+                    }
+                  });
+                },
+                barcodeController: _barcodeCtrl,
+                onBarcodeSubmit: () => _lookupBarcode(products),
+                onBarcodeScan: () => _lookupBarcode(products),
+              ),
+              Expanded(
+                child: Row(
+                  textDirection: TextDirection.ltr,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (showSide)
+                      SizedBox(
+                        width: sideWidth,
+                        child: buildDetailPanel(),
                       ),
-                      itemCount: filtered.length,
-                      itemBuilder: (_, i) => _ProductCard(
-                        key: ValueKey(filtered[i].id),
-                        product: filtered[i],
-                        agentId: agentId,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          EdShopMetaBar(text: '${widget.branchName} · ${widget.sectionName} · ${filtered.length} منتج · صفحة ${safePage + 1} من $pageCount'),
+                          Expanded(
+                            child: filtered.isEmpty
+                                ? const EmptyState(message: 'لا توجد منتجات', icon: Icons.inventory_2_outlined)
+                                : GridView.builder(
+                                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+                                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: cols,
+                                      crossAxisSpacing: 10,
+                                      mainAxisSpacing: 10,
+                                      childAspectRatio: layout.isTablet ? 0.78 : 0.72,
+                                    ),
+                                    itemCount: pageItems.length,
+                                    itemBuilder: (_, i) {
+                                      final p = pageItems[i];
+                                      final d = draft[p.id];
+                                      return EdShopProductTile(
+                                        key: ValueKey(p.id),
+                                        product: p,
+                                        selected: _selectedId == p.id,
+                                        inDraft: (d?.quant ?? 0) > 0 || (d?.bonus ?? 0) > 0,
+                                        onTap: () => setState(() => _selectedId = p.id),
+                                      );
+                                    },
+                                  ),
+                          ),
+                          EdShopPagination(page: safePage, pageCount: pageCount, onPage: (p) => setState(() => _page = p)),
+                        ],
                       ),
                     ),
-            ),
-            if (_lineCount(draft) > 0)
-              EdBottomActionBar(
-                label: 'الفاتورة (${fmtMoney(_total(products, draft))})',
+                  ],
+                ),
+              ),
+              EdShopOrderDock(
+                lineCount: _lineCount(draft),
+                totalLabel: fmtMoney(_total(products, draft)),
                 onPressed: () => _openInvoiceSheet(products),
               ),
-          ],
-        );
-      },
-    );
-
-    if (widget.embedded) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [toolbar, Expanded(child: content)],
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [toolbar, Expanded(child: content)],
-    );
-  }
-}
-
-class _ProductCard extends ConsumerWidget {
-  const _ProductCard({super.key, required this.product, this.agentId});
-  final Product product;
-  final int? agentId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final draft = ref.watch(invoiceDraftProvider)[product.id];
-    final quant = draft?.quant ?? 0;
-    final bonus = draft?.bonus ?? 0;
-    final notifier = ref.read(invoiceDraftProvider.notifier);
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppColors.radius),
-        border: Border.all(color: quant > 0 || bonus > 0 ? AppColors.moduleShop : AppColors.border),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceMuted,
-                  borderRadius: BorderRadius.circular(AppColors.radiusSm),
-                ),
-                padding: const EdgeInsets.all(8),
-                child: product.imageUrl != null
-                    ? CachedNetworkImage(
-                        imageUrl: product.imageUrl!,
-                        fit: BoxFit.contain,
-                        memCacheWidth: 240,
-                        placeholder: (_, __) => const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))),
-                        errorWidget: (_, __, ___) => const Icon(Icons.inventory_2_outlined, size: 40, color: AppColors.muted),
-                      )
-                    : const Icon(Icons.inventory_2_outlined, size: 40, color: AppColors.muted),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(product.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
-            Text(fmtMoney(product.price), style: const TextStyle(color: AppColors.moduleShop, fontWeight: FontWeight.w800, fontSize: 13)),
-            const SizedBox(height: 8),
-            EdQtyStepper(
-              value: fmtQty(quant),
-              onDec: () {
-                notifier.setQty(product.id, (quant - 1).clamp(0, 999999), bonus);
-                if (agentId != null) notifier.persist(agentId!);
-              },
-              onInc: () {
-                notifier.setQty(product.id, quant + 1, bonus);
-                if (agentId != null) notifier.persist(agentId!);
-              },
-            ),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                const Text('هدية', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
-                const Spacer(),
-                EdQtyStepper(
-                  compact: true,
-                  value: '$bonus',
-                  onDec: () {
-                    notifier.setQty(product.id, quant, (bonus - 1).clamp(0, 999999));
-                    if (agentId != null) notifier.persist(agentId!);
-                  },
-                  onInc: () {
-                    notifier.setQty(product.id, quant, bonus + 1);
-                    if (agentId != null) notifier.persist(agentId!);
-                  },
-                ),
-              ],
-            ),
-          ],
-        ),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-class _InvoiceSheet extends ConsumerStatefulWidget {
-  const _InvoiceSheet({required this.branchId, required this.products});
+class EdOrderInvoiceSheet extends ConsumerStatefulWidget {
+  const EdOrderInvoiceSheet({super.key, required this.branchId, required this.products});
+
   final int branchId;
   final List<Product> products;
 
   @override
-  ConsumerState<_InvoiceSheet> createState() => _InvoiceSheetState();
+  ConsumerState<EdOrderInvoiceSheet> createState() => _EdOrderInvoiceSheetState();
 }
 
-class _InvoiceSheetState extends ConsumerState<_InvoiceSheet> {
+class _EdOrderInvoiceSheetState extends ConsumerState<EdOrderInvoiceSheet> {
   bool _submitting = false;
-  List<BranchAccount> _branches = [];
   late TextEditingController _notesCtrl;
 
   @override
@@ -525,6 +624,11 @@ class _InvoiceSheetState extends ConsumerState<_InvoiceSheet> {
     super.dispose();
   }
 
+  Future<void> _persist() async {
+    final agentId = ref.read(authProvider).agent?.id;
+    if (agentId != null) await ref.read(invoiceDraftProvider.notifier).persist(agentId);
+  }
+
   Future<void> _pickCustomer() async {
     final trees = await ref.read(apiClientProvider).getTrees();
     if (!mounted || trees.isEmpty) return;
@@ -536,21 +640,46 @@ class _InvoiceSheetState extends ConsumerState<_InvoiceSheet> {
       ),
     );
     if (tree == null) return;
-    _branches = await ref.read(apiClientProvider).getChildren(tree.seq);
+    final branches = await ref.read(apiClientProvider).getChildren(tree.seq);
     if (!mounted) return;
     final branch = await showDialog<BranchAccount>(
       context: context,
       builder: (ctx) => SimpleDialog(
         title: const Text('اختر الزبون'),
-        children: _branches
+        children: branches
             .map((b) => SimpleDialogOption(onPressed: () => Navigator.pop(ctx, b), child: Text('${b.name1} (${b.accountNum})')))
             .toList(),
       ),
     );
     if (branch != null) {
       ref.read(invoiceDraftProvider.notifier).customer = branch;
-      setState(() {});
+      await _persist();
+      if (mounted) setState(() {});
     }
+  }
+
+  void _adjustLine(int productId, {required bool quant, required int delta}) {
+    final notifier = ref.read(invoiceDraftProvider.notifier);
+    final current = ref.read(invoiceDraftProvider)[productId];
+    final q = current?.quant ?? 0;
+    final b = current?.bonus ?? 0;
+    if (quant) {
+      notifier.setQty(productId, (q + delta).clamp(0, 999999), b);
+    } else {
+      notifier.setQty(productId, q, (b + delta).clamp(0, 999999));
+    }
+    _persist();
+    setState(() {});
+  }
+
+  Future<void> _clearDraft() async {
+    ref.read(invoiceDraftProvider.notifier).clear();
+    final agentId = ref.read(authProvider).agent?.id;
+    if (agentId != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('delegateInvoice:$agentId');
+    }
+    if (mounted) Navigator.pop(context);
   }
 
   Future<void> _submit() async {
@@ -560,6 +689,7 @@ class _InvoiceSheetState extends ConsumerState<_InvoiceSheet> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('اختر الزبون أولاً')));
       return;
     }
+    draftNotifier.notes = _notesCtrl.text;
     final draft = ref.read(invoiceDraftProvider);
     final lines = <OrderLine>[];
     for (final p in widget.products) {
@@ -606,96 +736,72 @@ class _InvoiceSheetState extends ConsumerState<_InvoiceSheet> {
   @override
   Widget build(BuildContext context) {
     final draft = ref.watch(invoiceDraftProvider);
-    final customer = ref.read(invoiceDraftProvider.notifier).customer;
-    num total = 0;
-    final rows = <Widget>[];
-    for (final p in widget.products) {
-      final d = draft[p.id];
-      if (d == null || (d.quant <= 0 && d.bonus <= 0)) continue;
-      total += d.quant * p.price;
-      rows.add(EdLineRow(
-        title: p.name,
-        subtitle: '${fmtQty(d.quant)} + هدية ${fmtQty(d.bonus)}',
-        amount: fmtMoney(d.quant * p.price),
-      ));
-    }
+    final draftNotifier = ref.read(invoiceDraftProvider.notifier);
+    final customer = draftNotifier.customer;
+    final lines = buildOrderInvoiceLines(widget.products, draft);
+    final total = lines.fold<num>(0, (s, l) => s + l.lineTotal);
+    final qtySum = lines.fold<num>(0, (s, l) => s + l.quant);
+    final bonusSum = lines.fold<num>(0, (s, l) => s + l.bonus);
 
     return DraggableScrollableSheet(
       expand: false,
-      initialChildSize: 0.85,
-      builder: (_, controller) => Material(
-        color: AppColors.bg,
-        child: ListView(
-          controller: controller,
-          padding: const EdgeInsets.all(20),
+      initialChildSize: 0.92,
+      minChildSize: 0.55,
+      maxChildSize: 0.96,
+      builder: (_, scrollCtrl) => Material(
+        color: EdCommerceTheme.pageBg,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: AppColors.moduleShop.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
-                  child: const Icon(Icons.receipt_long_rounded, color: AppColors.moduleShop),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text('فاتورة الطلب', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.navy)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            EdNavCard(
-              icon: Icons.person_outline_rounded,
-              title: customer?.name1 ?? 'اختر الزبون',
-              subtitle: customer?.accountNum,
-              accent: AppColors.accentTeal,
-              trailing: 'اختيار',
-              onTap: _pickCustomer,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _notesCtrl,
-              decoration: const InputDecoration(labelText: 'ملاحظات', hintText: 'اختياري...'),
-              maxLines: 2,
-              onChanged: (v) => ref.read(invoiceDraftProvider.notifier).notes = v,
-            ),
-            const SizedBox(height: 16),
-            const EdSectionHeader(title: 'البنود'),
-            ...rows,
-            const SizedBox(height: 8),
-            EdDocPanel(
-              title: 'الإجمالي',
-              rows: [(label: 'المجموع', value: fmtMoney(total))],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () async {
-                      ref.read(invoiceDraftProvider.notifier).clear();
-                      final agentId = ref.read(authProvider).agent?.id;
-                      if (agentId != null) {
-                        final prefs = await SharedPreferences.getInstance();
-                        await prefs.remove('delegateInvoice:$agentId');
-                      }
-                      if (mounted) Navigator.pop(context);
+            EdOrderInvoiceSheetHeader(onClose: () => Navigator.pop(context)),
+            Expanded(
+              child: ListView(
+                controller: scrollCtrl,
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                children: [
+                  EdOrderInvoiceCustomerBar(customer: customer, onPick: _pickCustomer),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _notesCtrl,
+                    maxLines: 2,
+                    onChanged: (v) {
+                      draftNotifier.notes = v;
+                      _persist();
                     },
-                    child: const Text('مسح'),
+                    decoration: InputDecoration(
+                      labelText: 'ملاحظات',
+                      hintText: 'ملاحظات للإدارة (اختياري)...',
+                      filled: true,
+                      fillColor: EdCommerceTheme.card,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: EdCommerceTheme.line)),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: EdCommerceTheme.line)),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: EdPrimaryButton(
-                    label: 'إرسال للإدارة',
-                    loading: _submitting,
-                    onPressed: () {
-                      ref.read(invoiceDraftProvider.notifier).notes = _notesCtrl.text;
-                      _submit();
-                    },
+                  const SizedBox(height: 14),
+                  EdOrderInvoiceDocPanel(
+                    title: 'فاتورة طلب مندوب',
+                    docNum: 'مسودة',
+                    dateLabel: fmtDate(isoToday()),
+                    customerName: customer?.name1 ?? '—',
+                    customerNum: customer?.accountNum,
+                    branchName: draftNotifier.branchName,
+                    remarks: _notesCtrl.text.trim(),
+                    lineCount: lines.length,
+                    qtySum: qtySum,
+                    bonusSum: bonusSum,
+                    total: total,
                   ),
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  EdOrderInvoiceLinesSection(lines: lines, editable: true, onAdjust: _adjustLine),
+                ],
+              ),
+            ),
+            EdOrderInvoiceSheetFooter(
+              total: total,
+              lineCount: lines.length,
+              submitting: _submitting,
+              onClear: _clearDraft,
+              onSubmit: _submit,
             ),
           ],
         ),
@@ -724,29 +830,32 @@ class OrdersScreen extends ConsumerWidget {
       actions: [
         EdHeaderIconButton(icon: Icons.refresh_rounded, tooltip: 'تحديث', onPressed: () => ref.invalidate(ordersProvider)),
       ],
-      child: ordersAsync.when(
-        loading: () => const LoadingView(message: 'جاري تحميل الطلبات...'),
-        error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(ordersProvider)),
-        data: (orders) {
-          if (orders.isEmpty) return const EmptyState(message: 'لا توجد طلبات', icon: Icons.receipt_long_outlined);
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: orders.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (_, i) {
-              final o = orders[i];
-              return EdOrderCard(
-                id: o.id,
-                customer: o.customerName ?? '—',
-                date: fmtDate(o.createdAt),
-                amount: fmtMoney(o.totalAmount),
-                statusLabel: orderStatusLabel(o.status),
-                statusColor: AppTheme.orderStatusColor(o.status),
-                onTap: () => context.go('/orders/${o.id}'),
-              );
-            },
-          );
-        },
+      child: ColoredBox(
+        color: EdCommerceTheme.pageBg,
+        child: ordersAsync.when(
+          loading: () => const LoadingView(message: 'جاري تحميل الطلبات...'),
+          error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(ordersProvider)),
+          data: (orders) {
+            if (orders.isEmpty) return const EmptyState(message: 'لا توجد طلبات', icon: Icons.receipt_long_outlined);
+            return ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemCount: orders.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (_, i) {
+                final o = orders[i];
+                return EdOrderCard(
+                  id: o.id,
+                  customer: o.customerName ?? '—',
+                  date: fmtDate(o.createdAt),
+                  amount: fmtMoney(o.totalAmount),
+                  statusLabel: orderStatusLabel(o.status),
+                  statusColor: AppTheme.orderStatusColor(o.status),
+                  onTap: () => context.go('/orders/${o.id}'),
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
@@ -778,43 +887,19 @@ class OrderDetailBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final orderAsync = ref.watch(orderDetailProvider(id));
 
-    return orderAsync.when(
-      loading: () => const LoadingView(),
-      error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(orderDetailProvider(id))),
-      data: (order) {
-        final statusColor = AppTheme.orderStatusColor(order.status);
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            EdDocPanel(
-              title: 'معلومات الطلب',
-              rows: [
-                (label: 'الحالة', value: orderStatusLabel(order.status)),
-                (label: 'الزبون', value: order.customerName ?? '—'),
-                (label: 'الفرع', value: order.catalogBranchName ?? '—'),
-                (label: 'المجموع', value: fmtMoney(order.totalAmount)),
-                if (order.notes != null && order.notes!.isNotEmpty) (label: 'ملاحظات', value: order.notes!),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(orderStatusLabel(order.status), style: TextStyle(color: statusColor, fontWeight: FontWeight.w800)),
-            ),
-            const SizedBox(height: 16),
-            const EdSectionHeader(title: 'البنود'),
-            ...order.lines.map((line) => EdLineRow(
-                  title: line.matName,
-                  subtitle: '${fmtQty(line.quant)} + هدية ${fmtQty(line.bonus)}',
-                  amount: fmtMoney(line.lineTotal ?? line.quant * line.unitPrice),
-                )),
-          ],
-        );
-      },
+    return ColoredBox(
+      color: EdCommerceTheme.pageBg,
+      child: orderAsync.when(
+        loading: () => const LoadingView(),
+        error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(orderDetailProvider(id))),
+        data: (order) {
+          return EdOrderInvoiceDetailView(
+            order: order,
+            statusLabel: orderStatusLabel(order.status),
+            statusColor: AppTheme.orderStatusColor(order.status),
+          );
+        },
+      ),
     );
   }
 }

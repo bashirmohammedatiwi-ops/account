@@ -5,6 +5,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/statement_helpers.dart';
 import '../../models/models.dart';
+import 'accounts_theme.dart';
 
 // ── Helpers ──
 
@@ -82,7 +83,7 @@ class EdFlowSteps extends StatelessWidget {
       child: Row(
         children: [
           for (var i = 0; i < _steps.length; i++) ...[
-            if (i > 0) Expanded(child: Container(height: 2, color: i <= current ? AppColors.accentTeal : AppColors.border)),
+            if (i > 0) Expanded(child: Container(height: 2, color: i <= current ? EdAccountsTheme.accent : AppColors.border)),
             _dot(i, _steps[i]),
           ],
         ],
@@ -93,7 +94,7 @@ class EdFlowSteps extends StatelessWidget {
   Widget _dot(int i, String label) {
     final active = i == current;
     final done = i < current;
-    final color = active ? AppColors.accentTeal : (done ? AppColors.success : AppColors.border);
+    final color = active || done ? EdAccountsTheme.accent : AppColors.border;
     return Column(
       children: [
         Container(
@@ -104,7 +105,7 @@ class EdFlowSteps extends StatelessWidget {
           child: Text('${i + 1}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: active || done ? color : AppColors.muted)),
         ),
         const SizedBox(height: 4),
-        Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: active ? AppColors.accentTeal : AppColors.muted)),
+        Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: active ? EdAccountsTheme.accent : AppColors.muted)),
       ],
     );
   }
@@ -127,7 +128,7 @@ class EdFlowBreadcrumb extends StatelessWidget {
               borderRadius: BorderRadius.circular(6),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                child: Text(items[i].label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: items[i].onTap != null ? AppColors.accentTeal : AppColors.textSecondary)),
+                child: Text(items[i].label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: items[i].onTap != null ? EdAccountsTheme.accent : AppColors.textSecondary)),
               ),
             ),
           ],
@@ -215,33 +216,50 @@ class EdTreeContextBanner extends StatelessWidget {
     final s = summarizeBranches(branches);
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(gradient: AppColors.heroGradient, borderRadius: BorderRadius.circular(AppColors.radius)),
-      child: Row(
+      decoration: BoxDecoration(
+        color: EdAccountsTheme.card,
+        borderRadius: BorderRadius.circular(AppColors.radius),
+        border: Border.all(color: EdAccountsTheme.line),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
-            child: const Icon(Icons.account_tree_rounded, color: Colors.white),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          Container(height: 3, color: EdAccountsTheme.accent),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
               children: [
-                Text('شجرة ${tree.accountNum}', style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontWeight: FontWeight.w700, fontSize: 11)),
-                Text(tree.name1, maxLines: 2, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 17)),
-                Text('${fmtNumAlways(s.total)} زبون · ${fmtNumAlways(s.withDebt)} مدين', style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 12, fontWeight: FontWeight.w600)),
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: EdAccountsTheme.accentSoft,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: EdAccountsTheme.line),
+                  ),
+                  child: const Icon(Icons.account_tree_rounded, color: EdAccountsTheme.accent),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('شجرة ${tree.accountNum}', style: const TextStyle(color: AppColors.muted, fontWeight: FontWeight.w600, fontSize: 11)),
+                      Text(tree.name1, maxLines: 2, style: const TextStyle(color: AppColors.navy, fontWeight: FontWeight.w800, fontSize: 17)),
+                      Text('${fmtNumAlways(s.total)} زبون · ${fmtNumAlways(s.withDebt)} مدين', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const Text('إجمالي الديون', style: TextStyle(color: AppColors.muted, fontSize: 10, fontWeight: FontWeight.w600)),
+                    Text(fmtNumAlways(s.totalDebt), textDirection: TextDirection.ltr, style: const TextStyle(color: AppColors.navy, fontWeight: FontWeight.w800, fontSize: 18)),
+                  ],
+                ),
               ],
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text('إجمالي الديون', style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 10, fontWeight: FontWeight.w700)),
-              Text(fmtNumAlways(s.totalDebt), textDirection: TextDirection.ltr, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18)),
-            ],
           ),
         ],
       ),
@@ -261,13 +279,13 @@ class EdBranchStatsBar extends StatelessWidget {
       decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(AppColors.radiusSm), border: Border.all(color: AppColors.border)),
       child: Row(
         children: [
-          _cell(fmtNumAlways(summary.totalDebt), 'الديون', AppColors.danger),
+          _cell(fmtNumAlways(summary.totalDebt), 'الديون', EdAccountsTheme.debt),
           _div(),
-          _cell('${summary.withDebt}', 'مدين', AppColors.accent),
+          _cell('${summary.withDebt}', 'مدين', EdAccountsTheme.debit),
           _div(),
-          _cell('${summary.credit}', 'دائن', AppColors.success),
+          _cell('${summary.credit}', 'دائن', EdAccountsTheme.credit),
           _div(),
-          _cell('${summary.clear}', 'متعادل', AppColors.muted),
+          _cell('${summary.clear}', 'متعادل', EdAccountsTheme.neutral),
         ],
       ),
     );

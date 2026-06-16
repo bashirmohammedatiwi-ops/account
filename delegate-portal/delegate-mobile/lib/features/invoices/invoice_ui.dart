@@ -1,25 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../accounts/accounts_theme.dart';
+import '../../core/layout/ed_table_wrap.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/invoice_helpers.dart';
 import '../../models/models.dart';
-
-abstract final class InvTheme {
-  static const pageBg = Color(0xFFE4E9F0);
-}
-
-abstract final class _Inv {
-  static const card = AppColors.surface;
-  static const line = AppColors.borderStrong;
-  static const docTop = Color(0xFF1E3A5F);
-  static const hdrDefault = Color(0xFF1E3A5F);
-  static const hdrBarcode = Color(0xFF334155);
-  static const hdrQty = Color(0xFF0F766E);
-  static const hdrMoney = Color(0xFF1D4ED8);
-  static const net = AppColors.accentTeal;
-  static const discount = Color(0xFFB45309);
-}
 
 class EdInvoiceExportBar extends StatelessWidget {
   const EdInvoiceExportBar({super.key, required this.label, required this.onExport, this.loading = false});
@@ -36,28 +22,23 @@ class EdInvoiceExportBar extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: loading ? null : onExport,
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: BorderRadius.circular(10),
           child: Ink(
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFFFFFFFF), Color(0xFFECFDF5)],
-              ),
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: const Color(0xFF99F6E4)),
-              boxShadow: [BoxShadow(color: AppColors.accentTeal.withValues(alpha: 0.1), blurRadius: 8, offset: const Offset(0, 2))],
+              color: EdAccountsTheme.card,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: EdAccountsTheme.accent.withValues(alpha: 0.35)),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (loading)
-                  const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: _Inv.net))
+                  const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: EdAccountsTheme.accent))
                 else
-                  const Icon(Icons.download_rounded, size: 18, color: _Inv.net),
-                const SizedBox(width: 8),
-                Text(label, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: _Inv.net)),
+                  const Icon(Icons.download_rounded, size: 17, color: EdAccountsTheme.accent),
+                const SizedBox(width: 6),
+                Text(label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: EdAccountsTheme.accent)),
               ],
             ),
           ),
@@ -81,17 +62,18 @@ class EdInvoiceDocPanel extends StatelessWidget {
     final remarks = '${inv['remarks'] ?? ''}'.trim();
 
     return Container(
+      width: double.infinity,
       decoration: BoxDecoration(
-        color: _Inv.card,
+        color: EdAccountsTheme.card,
         borderRadius: BorderRadius.circular(AppColors.radiusSm),
-        border: Border.all(color: _Inv.line),
-        boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.06), blurRadius: 6, offset: const Offset(0, 2))],
+        border: Border.all(color: EdAccountsTheme.line),
+        boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(height: 3, color: _Inv.docTop),
+          Container(height: 3, color: EdAccountsTheme.accent),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
             child: Row(
@@ -103,10 +85,10 @@ class EdInvoiceDocPanel extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('شركة ديما الحياة', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.accentTeal)),
+                      const Text('شركة ديما الحياة', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: EdAccountsTheme.accent)),
                       Text(
                         '${inv['kindLabel'] ?? 'فاتورة مبيعات'}',
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, height: 1.35, color: AppColors.text),
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, height: 1.35, color: AppColors.navy),
                       ),
                       Text(
                         'رقم ${inv['num'] ?? '—'} · ${fmtDate(inv['date']?.toString())}',
@@ -115,7 +97,7 @@ class EdInvoiceDocPanel extends StatelessWidget {
                       if (remarks.isNotEmpty)
                         Text(
                           remarks,
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.accentTeal, height: 1.45),
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted, height: 1.45),
                         ),
                     ],
                   ),
@@ -136,7 +118,7 @@ class EdInvoiceDocPanel extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
             child: Table(
-              border: TableBorder.all(color: AppColors.border),
+              border: TableBorder.all(color: EdAccountsTheme.line),
               defaultVerticalAlignment: TableCellVerticalAlignment.middle,
               columnWidths: const {0: FlexColumnWidth(), 1: FlexColumnWidth(), 2: FlexColumnWidth(), 3: FlexColumnWidth(), 4: FlexColumnWidth(), 5: FlexColumnWidth(), 6: FlexColumnWidth(), 7: FlexColumnWidth()},
               children: [
@@ -149,7 +131,7 @@ class EdInvoiceDocPanel extends StatelessWidget {
                     _metaTh('إجمالي الفاتورة'),
                     _metaTd(fmtInvInt(inv['total'])),
                     _metaTh('الصافي للدفع'),
-                    _metaTd(fmtInvInt(inv['netPay']), color: _Inv.net, bold: true),
+                    _metaTd(fmtInvInt(inv['netPay']), color: EdAccountsTheme.credit, bold: true),
                   ],
                 ),
               ],
@@ -161,9 +143,9 @@ class EdInvoiceDocPanel extends StatelessWidget {
   }
 
   Widget _metaTh(String t) => Container(
-        color: const Color(0xFFF8FAFC),
+        color: EdAccountsTheme.tableHead,
         padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 6),
-        child: Text(t, textAlign: TextAlign.center, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+        child: Text(t, textAlign: TextAlign.center, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppColors.muted)),
       );
 
   Widget _metaTd(String t, {Color? color, bool bold = false}) => Padding(
@@ -197,17 +179,18 @@ class EdInvoiceLinesSection extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: AppColors.accentSoft,
+                color: EdAccountsTheme.accentSoft,
                 borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: AppColors.border),
+                border: Border.all(color: EdAccountsTheme.line),
               ),
-              child: Text('${lines.length} بند', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.accentTeal)),
+              child: Text('${lines.length} بند', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: EdAccountsTheme.accent)),
             ),
           ],
         ),
         const SizedBox(height: 10),
         if (lines.isEmpty)
           Container(
+            width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 36),
             alignment: Alignment.center,
             child: const Text('لا توجد بنود لهذه الفاتورة', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
@@ -228,46 +211,44 @@ class EdInvoiceLinesTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       decoration: BoxDecoration(
-        border: Border.all(color: _Inv.line),
+        border: Border.all(color: EdAccountsTheme.line),
         borderRadius: BorderRadius.circular(AppColors.radiusSm),
-        color: _Inv.card,
+        color: EdAccountsTheme.card,
       ),
       clipBehavior: Clip.antiAlias,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 580),
-          child: Table(
-            border: TableBorder.all(color: AppColors.border),
-            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-            columnWidths: const {
-              0: FixedColumnWidth(32),
-              1: FixedColumnWidth(88),
-              2: FlexColumnWidth(2.5),
-              3: FixedColumnWidth(52),
-              4: FixedColumnWidth(52),
-              5: FixedColumnWidth(68),
-              6: FixedColumnWidth(72),
-            },
-            children: [
-              TableRow(
-                children: [
-                  _th('م', _Inv.hdrDefault),
-                  _th('الباركود', _Inv.hdrBarcode),
-                  _th('اسم المادة', _Inv.hdrDefault),
-                  _th('الكمية', _Inv.hdrQty),
-                  _th('هدية', _Inv.hdrQty),
-                  _th('سعر الوحدة', _Inv.hdrMoney),
-                  _th('المبلغ', _Inv.hdrMoney),
-                ],
-              ),
-              ...lines.asMap().entries.map((e) => _lineRow(e.key, e.value)),
-              _sumRow('إجمالي الفاتورة', fmtInvInt(inv['total'])),
-              _sumRow('الحسومات', fmtInvInt(inv['discount']), valueColor: _Inv.discount),
-              _sumRow('الصافي للدفع', fmtInvInt(inv['netPay']), valueColor: _Inv.net, highlight: true),
-            ],
-          ),
+      child: EdFullWidthTable(
+        minWidth: 520,
+        builder: (_) => Table(
+          border: TableBorder.all(color: EdAccountsTheme.line),
+          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+          columnWidths: const {
+            0: FixedColumnWidth(32),
+            1: FixedColumnWidth(84),
+            2: FlexColumnWidth(3.5),
+            3: FixedColumnWidth(52),
+            4: FixedColumnWidth(52),
+            5: FlexColumnWidth(1.2),
+            6: FlexColumnWidth(1.2),
+          },
+          children: [
+            TableRow(
+              children: [
+                _th('م'),
+                _th('الباركود'),
+                _th('اسم المادة'),
+                _th('الكمية'),
+                _th('هدية'),
+                _th('سعر الوحدة'),
+                _th('المبلغ'),
+              ],
+            ),
+            ...lines.asMap().entries.map((e) => _lineRow(e.key, e.value)),
+            _sumRow('إجمالي الفاتورة', fmtInvInt(inv['total'])),
+            _sumRow('الحسومات', fmtInvInt(inv['discount'])),
+            _sumRow('الصافي للدفع', fmtInvInt(inv['netPay']), valueColor: EdAccountsTheme.credit, highlight: true),
+          ],
         ),
       ),
     );
@@ -276,7 +257,7 @@ class EdInvoiceLinesTable extends StatelessWidget {
   TableRow _lineRow(int index, Map<String, dynamic> line) {
     final remarks = '${line['remarks'] ?? ''}'.trim();
     return TableRow(
-      decoration: BoxDecoration(color: index.isEven ? const Color(0xFFFAFAFA) : Colors.white),
+      decoration: BoxDecoration(color: index.isEven ? EdAccountsTheme.cardTint : EdAccountsTheme.card),
       children: [
         _cell('${index + 1}', align: TextAlign.center, muted: true, bold: true),
         _cell(invoiceBarcode(line), align: TextAlign.center, mono: true, size: 10),
@@ -304,7 +285,7 @@ class EdInvoiceLinesTable extends StatelessWidget {
 
   TableRow _sumRow(String label, String value, {Color? valueColor, bool highlight = false}) {
     return TableRow(
-      decoration: BoxDecoration(color: highlight ? const Color(0xFFECFDF5) : const Color(0xFFF8FAFC)),
+      decoration: BoxDecoration(color: highlight ? EdAccountsTheme.creditSoft : EdAccountsTheme.cardTint),
       children: [
         _cell(''),
         _cell(''),
@@ -332,11 +313,11 @@ class EdInvoiceLinesTable extends StatelessWidget {
     );
   }
 
-  Widget _th(String text, Color bg) {
+  Widget _th(String text) {
     return Container(
-      color: bg,
+      color: EdAccountsTheme.tableHead,
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-      child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
+      child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: EdAccountsTheme.tableHeadText, fontSize: 10, fontWeight: FontWeight.w800)),
     );
   }
 
@@ -372,7 +353,7 @@ class EdInvoiceLinesTable extends StatelessWidget {
         fmtInvInt(n),
         textAlign: TextAlign.center,
         textDirection: TextDirection.ltr,
-        style: TextStyle(fontSize: net ? 12 : 11, fontWeight: FontWeight.w800, color: net ? _Inv.net : AppColors.text),
+        style: TextStyle(fontSize: net ? 12 : 11, fontWeight: FontWeight.w800, color: net ? EdAccountsTheme.credit : AppColors.text),
       ),
     );
   }

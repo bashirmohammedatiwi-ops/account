@@ -1,27 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/layout/breakpoints.dart';
+import '../../core/layout/ed_table_wrap.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/statement_helpers.dart';
 import '../../models/models.dart';
-
-/// ألوان أنيقة — Pearl Edari (بسيطة)
-abstract final class _Stmt {
-  static const card = AppColors.surface;
-  static const cardTint = AppColors.surfaceAlt;
-  static const line = AppColors.borderStrong;
-
-  static const heroStart = Color(0xFFF8FAFC);
-  static const heroEnd = Color(0xFFE8EDF3);
-  static const accent = AppColors.accentTeal;
-  static const accentSoft = AppColors.accentSoft;
-
-  static const debit = Color(0xFFB45309);
-  static const credit = AppColors.accentTeal;
-  static const debtValue = Color(0xFF7A5C3E);
-}
+import 'accounts_theme.dart';
 
 class EdStatementExportBar extends StatelessWidget {
   const EdStatementExportBar({super.key, required this.onExport, this.loading = false, this.compact = false});
@@ -39,22 +24,22 @@ class EdStatementExportBar extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         child: Ink(
           decoration: BoxDecoration(
-            color: _Stmt.card,
+            color: EdAccountsTheme.card,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: _Stmt.accent.withValues(alpha: 0.35)),
+            border: Border.all(color: EdAccountsTheme.accent.withValues(alpha: 0.35)),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               if (loading)
-                const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: _Stmt.accent))
+                const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: EdAccountsTheme.accent))
               else
-                const Icon(Icons.download_rounded, size: 17, color: _Stmt.accent),
+                const Icon(Icons.download_rounded, size: 17, color: EdAccountsTheme.accent),
               const SizedBox(width: 6),
               Text(
                 compact ? 'PDF' : 'تصدير الكشف PDF',
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: _Stmt.accent),
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: EdAccountsTheme.accent),
               ),
             ],
           ),
@@ -76,28 +61,28 @@ class EdStatementDebtField extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: _Stmt.card,
+        color: EdAccountsTheme.card,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.goldLine.withValues(alpha: 0.5)),
+        border: Border.all(color: EdAccountsTheme.line),
       ),
       child: Row(
         children: [
           Container(
             width: 40,
             height: 40,
-            decoration: BoxDecoration(color: AppColors.goldLine.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(10)),
-            child: const Icon(Icons.payments_outlined, color: _Stmt.debtValue, size: 20),
+            decoration: BoxDecoration(color: EdAccountsTheme.cardTint, borderRadius: BorderRadius.circular(10), border: Border.all(color: EdAccountsTheme.line)),
+            child: const Icon(Icons.payments_outlined, color: EdAccountsTheme.debt, size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('الديون', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.gold)),
+                const Text('الديون', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted)),
                 Text(
                   fmtNumAlways(amount),
                   textDirection: TextDirection.ltr,
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: _Stmt.debtValue),
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.navy),
                 ),
               ],
             ),
@@ -126,21 +111,18 @@ class EdStatementDocPanel extends StatelessWidget {
     final address = '${acc['address'] ?? ''}'.trim();
 
     return Container(
+      width: double.infinity,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: [_Stmt.heroStart, _Stmt.heroEnd],
-        ),
+        gradient: EdAccountsTheme.heroGradient,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _Stmt.line),
+        border: Border.all(color: EdAccountsTheme.line),
         boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.08), blurRadius: 18, offset: const Offset(0, 6))],
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(height: 4, color: _Stmt.accent),
+          Container(height: 4, color: EdAccountsTheme.accent),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
             child: Column(
@@ -153,18 +135,18 @@ class EdStatementDocPanel extends StatelessWidget {
                       width: 42,
                       height: 42,
                       decoration: BoxDecoration(
-                        color: _Stmt.accentSoft,
+                        color: EdAccountsTheme.accentSoft,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: _Stmt.accent.withValues(alpha: 0.15)),
+                        border: Border.all(color: EdAccountsTheme.accent.withValues(alpha: 0.15)),
                       ),
-                      child: const Icon(Icons.receipt_long_rounded, color: _Stmt.accent, size: 21),
+                      child: const Icon(Icons.receipt_long_rounded, color: EdAccountsTheme.accent, size: 21),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('كشف حساب', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _Stmt.accent)),
+                          const Text('كشف حساب', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: EdAccountsTheme.accent)),
                           const SizedBox(height: 4),
                           Text(
                             name,
@@ -207,9 +189,9 @@ class EdStatementDocPanel extends StatelessWidget {
                     final debt = stmt.debtAmount ?? 0;
                     final stats = <Widget>[
                       if (debt > 0)
-                        _StmtStatBox(label: 'الديون', value: fmtNumAlways(debt), fg: _Stmt.debtValue),
-                      _StmtStatBox(label: 'إجمالي مدين', value: fmtNumAlways(stmt.totalDebit), fg: _Stmt.debit),
-                      _StmtStatBox(label: 'إجمالي دائن', value: fmtNumAlways(stmt.totalCredit), fg: _Stmt.credit),
+                        _StmtStatBox(label: 'الديون', value: fmtNumAlways(debt), fg: EdAccountsTheme.debt),
+                      _StmtStatBox(label: 'إجمالي مدين', value: fmtNumAlways(stmt.totalDebit), fg: EdAccountsTheme.debit),
+                      _StmtStatBox(label: 'إجمالي دائن', value: fmtNumAlways(stmt.totalCredit), fg: EdAccountsTheme.credit),
                       _StmtStatBox(label: 'عدد الحركات', value: '$moveCount', fg: AppColors.navy),
                       _StmtStatBox(label: 'رصيد الحساب', value: fmtBalanceDisplay(currentBal), fg: balanceColor(currentBal)),
                     ];
@@ -260,9 +242,9 @@ class _StmtStatBox extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
-        color: _Stmt.cardTint,
+        color: EdAccountsTheme.cardTint,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _Stmt.line),
+        border: Border.all(color: EdAccountsTheme.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -299,40 +281,17 @@ class EdStatementMovesSection extends StatelessWidget {
       return _EdStatementMovesEmpty();
     }
 
-    final layout = EdLayout.of(context);
-    if (layout.isDesktop) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _EdStatementMovesHeader(stmt: stmt),
-          const SizedBox(height: 12),
-          EdStatementDataTable(
-            stmt: stmt,
-            accSeq: accSeq,
-            onInvoicePdf: onInvoicePdf,
-            onOpenInvoice: (ref, by) => context.push('/invoice/$ref?by=$by&acc=$accSeq'),
-          ),
-        ],
-      );
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _EdStatementMovesHeader(stmt: stmt),
         const SizedBox(height: 12),
-        for (var i = 0; i < lines.length; i++)
-          Padding(
-            padding: EdgeInsets.only(bottom: i < lines.length - 1 ? 10 : 0),
-            child: EdStatementMoveCard(
-              line: lines[i],
-              accSeq: accSeq,
-              onInvoicePdf: onInvoicePdf,
-              onOpenInvoice: (ref, by) => context.push('/invoice/$ref?by=$by&acc=$accSeq'),
-            ),
-          ),
-        const SizedBox(height: 12),
-        EdStatementTotalsCard(stmt: stmt),
+        EdStatementDataTable(
+          stmt: stmt,
+          accSeq: accSeq,
+          onInvoicePdf: onInvoicePdf,
+          onOpenInvoice: (ref, by) => context.push('/invoice/$ref?by=$by&acc=$accSeq'),
+        ),
       ],
     );
   }
@@ -349,62 +308,30 @@ List<Widget> edStatementMoveSlivers(
   if (stmt.lines.isEmpty) {
     return [
       SliverPadding(
-        padding: const EdgeInsets.fromLTRB(16, 18, 16, 32),
+        padding: EdgeInsets.fromLTRB(edPageHorizontalPadding(context), 18, edPageHorizontalPadding(context), 32),
         sliver: SliverToBoxAdapter(child: _EdStatementMovesEmpty()),
       ),
     ];
   }
 
-  final layout = EdLayout.of(context);
-  if (layout.isDesktop) {
-    return [
-      SliverPadding(
-        padding: const EdgeInsets.fromLTRB(16, 18, 16, 32),
-        sliver: SliverToBoxAdapter(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _EdStatementMovesHeader(stmt: stmt),
-              const SizedBox(height: 12),
-              EdStatementDataTable(
-                stmt: stmt,
-                accSeq: accSeq,
-                onInvoicePdf: onInvoicePdf,
-                onOpenInvoice: openInvoice,
-              ),
-            ],
-          ),
-        ),
-      ),
-    ];
-  }
-
-  final lines = stmt.lines;
   return [
     SliverPadding(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
-      sliver: SliverToBoxAdapter(child: _EdStatementMovesHeader(stmt: stmt)),
-    ),
-    SliverPadding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      sliver: SliverList(
-        delegate: SliverChildBuilderDelegate(
-          (context, i) => Padding(
-            padding: EdgeInsets.only(bottom: i < lines.length - 1 ? 10 : 0),
-            child: EdStatementMoveCard(
-              line: lines[i],
+      padding: EdgeInsets.fromLTRB(edPageHorizontalPadding(context), 18, edPageHorizontalPadding(context), 32),
+      sliver: SliverToBoxAdapter(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _EdStatementMovesHeader(stmt: stmt),
+            const SizedBox(height: 12),
+            EdStatementDataTable(
+              stmt: stmt,
               accSeq: accSeq,
               onInvoicePdf: onInvoicePdf,
               onOpenInvoice: openInvoice,
             ),
-          ),
-          childCount: lines.length,
+          ],
         ),
       ),
-    ),
-    SliverPadding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-      sliver: SliverToBoxAdapter(child: EdStatementTotalsCard(stmt: stmt)),
     ),
   ];
 }
@@ -425,8 +352,8 @@ class _EdStatementMovesEmpty extends StatelessWidget {
           Container(
             width: 52,
             height: 52,
-            decoration: BoxDecoration(color: _Stmt.accentSoft, borderRadius: BorderRadius.circular(14)),
-            child: const Icon(Icons.receipt_long_outlined, color: _Stmt.accent, size: 26),
+            decoration: BoxDecoration(color: EdAccountsTheme.accentSoft, borderRadius: BorderRadius.circular(14)),
+            child: const Icon(Icons.receipt_long_outlined, color: EdAccountsTheme.accent, size: 26),
           ),
           const SizedBox(height: 12),
           const Text('لا توجد حركات في كشف الحساب', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
@@ -451,11 +378,11 @@ class _EdStatementMovesHeader extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: _Stmt.accentSoft,
+            color: EdAccountsTheme.accentSoft,
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: _Stmt.line),
+            border: Border.all(color: EdAccountsTheme.line),
           ),
-          child: Text('$moveCount حركة', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _Stmt.accent)),
+          child: Text('$moveCount حركة', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: EdAccountsTheme.accent)),
         ),
       ],
     );
@@ -481,7 +408,7 @@ class EdStatementMoveCard extends StatelessWidget {
     final lookup = line.invoiceLookup;
     final showInvoice = line.isInvoiceLine && lookup != null;
     final exportPdf = onInvoicePdf;
-    final stripe = line.debit > 0 ? _Stmt.debit : (line.credit > 0 ? _Stmt.credit : AppColors.muted);
+    final stripe = line.debit > 0 ? EdAccountsTheme.debit : (line.credit > 0 ? EdAccountsTheme.credit : AppColors.muted);
 
     return Material(
       color: Colors.transparent,
@@ -490,9 +417,9 @@ class EdStatementMoveCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         child: Ink(
           decoration: BoxDecoration(
-            color: _Stmt.card,
+            color: EdAccountsTheme.card,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _Stmt.line),
+            border: Border.all(color: EdAccountsTheme.line),
             boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 2))],
           ),
           child: Stack(
@@ -526,8 +453,8 @@ class EdStatementMoveCard extends StatelessWidget {
                         if (line.isOpening)
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(color: _Stmt.accentSoft, borderRadius: BorderRadius.circular(999)),
-                            child: const Text('رصيد مدور', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: _Stmt.accent)),
+                            decoration: BoxDecoration(color: EdAccountsTheme.accentSoft, borderRadius: BorderRadius.circular(999)),
+                            child: const Text('رصيد مدور', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: EdAccountsTheme.accent)),
                           ),
                       ],
                     ),
@@ -546,9 +473,9 @@ class EdStatementMoveCard extends StatelessWidget {
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        Expanded(child: _AmtBox(label: 'مدين', value: line.debit, color: _Stmt.debit, emptyColor: AppColors.borderStrong)),
+                        Expanded(child: _AmtBox(label: 'مدين', value: line.debit, color: EdAccountsTheme.debit, emptyColor: AppColors.borderStrong)),
                         const SizedBox(width: 8),
-                        Expanded(child: _AmtBox(label: 'دائن', value: line.credit, color: _Stmt.credit, emptyColor: AppColors.borderStrong)),
+                        Expanded(child: _AmtBox(label: 'دائن', value: line.credit, color: EdAccountsTheme.credit, emptyColor: AppColors.borderStrong)),
                         const SizedBox(width: 8),
                         Expanded(
                           child: _AmtBox(
@@ -617,9 +544,9 @@ class _AmtBox extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
-        color: isEmpty ? _Stmt.cardTint : _Stmt.card,
+        color: isEmpty ? EdAccountsTheme.cardTint : EdAccountsTheme.card,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _Stmt.line),
+        border: Border.all(color: EdAccountsTheme.line),
       ),
       child: Column(
         children: [
@@ -647,9 +574,9 @@ class _TypeTag extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: _Stmt.accentSoft,
+        color: EdAccountsTheme.accentSoft,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: _Stmt.line),
+        border: Border.all(color: EdAccountsTheme.line),
       ),
       child: Text(txTypeLabel(line), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.withValues(alpha: 0.9))),
     );
@@ -666,7 +593,7 @@ class _MoveActionBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: filled ? _Stmt.accentSoft : AppColors.surface,
+      color: filled ? EdAccountsTheme.accentSoft : AppColors.surface,
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         onTap: onTap,
@@ -675,12 +602,12 @@ class _MoveActionBtn extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: filled ? _Stmt.accent.withValues(alpha: 0.3) : _Stmt.line),
+            border: Border.all(color: filled ? EdAccountsTheme.accent.withValues(alpha: 0.3) : EdAccountsTheme.line),
           ),
           alignment: Alignment.center,
           child: Text(
             label,
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: filled ? _Stmt.accent : AppColors.textSecondary),
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: filled ? EdAccountsTheme.accent : AppColors.textSecondary),
           ),
         ),
       ),
@@ -757,9 +684,9 @@ class _TotalRow extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(child: _AmtBox(label: 'مدين', valueText: debit.isEmpty ? '—' : debit, color: _Stmt.debit, emptyColor: AppColors.borderStrong)),
+              Expanded(child: _AmtBox(label: 'مدين', valueText: debit.isEmpty ? '—' : debit, color: EdAccountsTheme.debit, emptyColor: AppColors.borderStrong)),
               const SizedBox(width: 8),
-              Expanded(child: _AmtBox(label: 'دائن', valueText: credit.isEmpty ? '—' : credit, color: _Stmt.credit, emptyColor: AppColors.borderStrong)),
+              Expanded(child: _AmtBox(label: 'دائن', valueText: credit.isEmpty ? '—' : credit, color: EdAccountsTheme.credit, emptyColor: AppColors.borderStrong)),
               const SizedBox(width: 8),
               Expanded(
                 child: _AmtBox(
@@ -791,7 +718,7 @@ class EdStatementDataTable extends StatelessWidget {
   final Future<void> Function(String ref, String by)? onInvoicePdf;
   final void Function(String ref, String by) onOpenInvoice;
 
-  static const _hdr = AppColors.navySoft;
+  static const _hdr = EdAccountsTheme.tableHead;
 
   @override
   Widget build(BuildContext context) {
@@ -801,6 +728,7 @@ class EdStatementDataTable extends StatelessWidget {
     final currentBal = stmt.finalBalance;
 
     return Container(
+      width: double.infinity,
       decoration: BoxDecoration(
         border: Border.all(color: AppColors.borderStrong),
         borderRadius: BorderRadius.circular(14),
@@ -809,23 +737,13 @@ class EdStatementDataTable extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minWidth: 640),
-            child: Table(
-              border: TableBorder.all(color: AppColors.border, width: 1),
-              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-              columnWidths: {
-                0: const FixedColumnWidth(72),
-                1: const FixedColumnWidth(72),
-                2: const FlexColumnWidth(2.4),
-                if (showBranch) 3: const FixedColumnWidth(76),
-                (showBranch ? 4 : 3): const FixedColumnWidth(76),
-                (showBranch ? 5 : 4): const FixedColumnWidth(84),
-                (showBranch ? 6 : 5): const FixedColumnWidth(108),
-              },
-              children: [
+        child: EdFullWidthTable(
+          minWidth: 680,
+          builder: (_) => Table(
+            border: TableBorder.all(color: AppColors.border, width: 1),
+            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+            columnWidths: _columnWidths(showBranch),
+            children: [
                 TableRow(
                   decoration: const BoxDecoration(color: _hdr),
                   children: [
@@ -859,8 +777,19 @@ class EdStatementDataTable extends StatelessWidget {
             ),
           ),
         ),
-      ),
     );
+  }
+
+  Map<int, TableColumnWidth> _columnWidths(bool showBranch) {
+    return {
+      0: const FixedColumnWidth(68),
+      1: const FixedColumnWidth(68),
+      2: const FlexColumnWidth(4),
+      if (showBranch) 3: const FixedColumnWidth(72),
+      (showBranch ? 4 : 3): const FixedColumnWidth(76),
+      (showBranch ? 5 : 4): const FixedColumnWidth(88),
+      (showBranch ? 6 : 5): const FixedColumnWidth(104),
+    };
   }
 
   TableRow _dataRow(int index, StatementLine line, bool showBranch) {
@@ -877,8 +806,8 @@ class EdStatementDataTable extends StatelessWidget {
     return TableRow(
       decoration: bg != null ? BoxDecoration(color: bg) : null,
       children: [
-        _amtCell(line.debit, _Stmt.debit),
-        _amtCell(line.credit, _Stmt.credit),
+        _amtCell(line.debit, EdAccountsTheme.debit),
+        _amtCell(line.credit, EdAccountsTheme.credit),
         _descCell(line),
         if (showBranch) _textCell(line.branch2 ?? '', align: TextAlign.center, size: 11),
         _textCell(line.isOpening ? '' : fmtDate(line.date), align: TextAlign.center, size: 11),
@@ -899,8 +828,8 @@ class EdStatementDataTable extends StatelessWidget {
     return TableRow(
       decoration: BoxDecoration(color: highlight ? AppColors.surfaceMuted : AppColors.surface),
       children: [
-        _textCell(debit, align: TextAlign.center, color: debit.isNotEmpty ? _Stmt.debit : AppColors.borderStrong, bold: true, emptyAsDash: false),
-        _textCell(credit, align: TextAlign.center, color: credit.isNotEmpty ? _Stmt.credit : AppColors.borderStrong, bold: true, emptyAsDash: false),
+        _textCell(debit, align: TextAlign.center, color: debit.isNotEmpty ? EdAccountsTheme.debit : AppColors.borderStrong, bold: true, emptyAsDash: false),
+        _textCell(credit, align: TextAlign.center, color: credit.isNotEmpty ? EdAccountsTheme.credit : AppColors.borderStrong, bold: true, emptyAsDash: false),
         _textCell(label, align: TextAlign.right, bold: true, emptyAsDash: false),
         if (showBranch) _textCell('', align: TextAlign.center, emptyAsDash: false),
         _textCell('', align: TextAlign.center, emptyAsDash: false),
@@ -913,7 +842,7 @@ class EdStatementDataTable extends StatelessWidget {
   Widget _th(String text) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 9),
-      child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+      child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: EdAccountsTheme.tableHeadText, fontSize: 11, fontWeight: FontWeight.w700)),
     );
   }
 
@@ -995,7 +924,7 @@ class _TblBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: filled ? _Stmt.accentSoft : AppColors.surface,
+      color: filled ? EdAccountsTheme.accentSoft : AppColors.surface,
       borderRadius: BorderRadius.circular(6),
       child: InkWell(
         onTap: onTap,
@@ -1005,14 +934,14 @@ class _TblBtn extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: filled ? _Stmt.accent.withValues(alpha: 0.3) : _Stmt.line),
+            border: Border.all(color: filled ? EdAccountsTheme.accent.withValues(alpha: 0.3) : EdAccountsTheme.line),
           ),
           child: Text(
             label,
             textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: filled ? _Stmt.accent : AppColors.textSecondary),
+            style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: filled ? EdAccountsTheme.accent : AppColors.textSecondary),
           ),
         ),
       ),
