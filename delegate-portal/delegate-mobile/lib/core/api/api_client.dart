@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -7,12 +8,7 @@ import '../../config/app_config.dart';
 import '../../models/models.dart';
 import '../auth/auth_provider.dart';
 import 'api_exception.dart';
-
-class LoginResult {
-  const LoginResult({required this.token, required this.agent});
-  final String token;
-  final Agent agent;
-}
+import 'login_api.dart';
 
 class ApiClient {
   ApiClient(this._dio, this._read);
@@ -32,14 +28,16 @@ class ApiClient {
         queryParameters: query,
         options: Options(method: method, responseType: ResponseType.json),
       );
-      final data = res.data ?? {};
+      final data = _parseResponseData(res.data);
       if (data['ok'] == false) {
         throw ApiException('${data['error'] ?? 'خطأ غير متوقع'}', statusCode: res.statusCode);
       }
       return data;
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
-        throw ApiException('انتهت الجلسة — سجّل الدخول مجدداً', statusCode: 401);
+        final body = e.response?.data;
+        final msg = body is Map ? '${body['error'] ?? 'غير مصرح'}' : 'انتهت الجلسة — سجّل الدخول مجدداً';
+        throw ApiException(msg, statusCode: 401);
       }
       final msg = _friendlyError(e);
       throw ApiException(msg, statusCode: e.response?.statusCode);
@@ -66,18 +64,16 @@ class ApiClient {
       return Uint8List.fromList(res.data ?? []);
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
-        throw ApiException('انتهت الجلسة — سجّل الدخول مجدداً', statusCode: 401);
+        final body = e.response?.data;
+        final msg = body is Map ? '${body['error'] ?? 'غير مصرح'}' : 'انتهت الجلسة — سجّل الدخول مجدداً';
+        throw ApiException(msg, statusCode: 401);
       }
       throw ApiException(e.message ?? 'فشل تحميل الملف', statusCode: e.response?.statusCode);
     }
   }
 
   Future<LoginResult> login(String username, String password) async {
-    final data = await _json('POST', '/login', body: {'username': username, 'password': password});
-    return LoginResult(
-      token: data['token'] as String,
-      agent: Agent.fromJson(Map<String, dynamic>.from(data['agent'] as Map)),
-    );
+    return performLogin(_read.read(appConfigProvider), username, password);
   }
 
   Future<Agent> me() async {
@@ -203,7 +199,6 @@ class ApiClient {
 }
 
 final dioProvider = Provider<Dio>((ref) {
-  ref.watch(authProvider.select((s) => s.token));
   final dio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 30),
     receiveTimeout: const Duration(seconds: 120),
@@ -234,7 +229,16 @@ final dioProvider = Provider<Dio>((ref) {
   return dio;
 });
 
-final apiClientProvider = Provider<ApiClient>((ref) => ApiClient(ref.watch(dioProvider), ref));
+final apiClientProvider = Provider<ApiClient>((ref) => ApiClient(ref.read(dioProvider), ref));
+
+Map<String, dynamic> _parseResponseData(dynamic raw) {
+  if (raw is Map<String, dynamic>) return raw;
+  if (raw is Map) return Map<String, dynamic>.from(raw);
+  if (raw is String && raw.isNotEmpty) {
+    return Map<String, dynamic>.from(jsonDecode(raw) as Map);
+  }
+  return {};
+}
 
 final appConfigProvider = Provider<AppConfig>((ref) {
   throw UnimplementedError('AppConfig must be overridden');

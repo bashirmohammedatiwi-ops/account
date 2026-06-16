@@ -6,9 +6,9 @@ class Agent {
   final String username;
 
   factory Agent.fromJson(Map<String, dynamic> json) => Agent(
-        id: json['id'] as int,
-        name: (json['name'] ?? '') as String,
-        username: (json['username'] ?? '') as String,
+        id: (json['id'] as num).toInt(),
+        name: '${json['name'] ?? ''}',
+        username: '${json['username'] ?? ''}',
       );
 
   Map<String, dynamic> toJson() => {'id': id, 'name': name, 'username': username};
@@ -65,18 +65,28 @@ class BranchAccount {
   final num bal;
   final num? debtAmount;
   final String? debtStatus;
-  final String? summary;
+  final Map<String, dynamic>? summary;
+
+  String? get summaryLabel => summary?['label']?.toString();
+
+  bool matchesBranchFilter(String filter) {
+    if (filter == 'all') return true;
+    final debt = debtAmount ?? 0;
+    if (filter == 'debit') return debt > 0;
+    if (filter == 'credit') return bal > 0 && debt <= 0;
+    return true;
+  }
 
   factory BranchAccount.fromJson(Map<String, dynamic> json) => BranchAccount(
         seq: '${json['seq']}',
         accountNum: '${json['num'] ?? ''}',
         name1: '${json['name1'] ?? ''}',
-        name2: json['name2'] as String?,
-        address: json['address'] as String?,
+        name2: json['name2']?.toString(),
+        address: json['address']?.toString(),
         bal: json['bal'] as num? ?? 0,
         debtAmount: json['debtAmount'] as num?,
-        debtStatus: json['debtStatus'] as String?,
-        summary: json['summary'] as String?,
+        debtStatus: json['debtStatus']?.toString(),
+        summary: json['summary'] is Map ? Map<String, dynamic>.from(json['summary'] as Map) : null,
       );
 }
 

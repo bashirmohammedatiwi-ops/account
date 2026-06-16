@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../config/app_config.dart';
 import '../../models/models.dart';
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
+import '../api/login_api.dart';
 
 const _tokenKey = 'delegateToken';
 const _agentKey = 'delegateAgent';
@@ -111,13 +113,12 @@ class AuthNotifier extends Notifier<AuthState> {
     _sessionEpoch++;
     state = state.copyWith(loading: true);
     try {
-      final result = await ref.read(apiClientProvider).login(username, password);
+      final config = ref.read(appConfigProvider);
+      final result = await performLogin(config, username.trim(), password);
       try {
         await _write(_tokenKey, result.token);
         await _write(_agentKey, jsonEncode(result.agent.toJson()));
-      } catch (_) {
-        // الجلسة تبقى في الذاكرة حتى لو فشل الحفظ المحلي.
-      }
+      } catch (_) {}
       state = AuthState(token: result.token, agent: result.agent, loading: false);
     } catch (e) {
       state = const AuthState(loading: false);

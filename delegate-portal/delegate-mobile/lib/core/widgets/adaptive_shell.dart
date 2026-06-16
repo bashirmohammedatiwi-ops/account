@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../layout/breakpoints.dart';
+import '../theme/app_colors.dart';
+import 'ed_components.dart';
+
+/// غلاف التطبيق — بدون شريط سفلي (مثل الويب: الرئيسية = مركز التطبيقات)
 class AdaptiveShell extends StatelessWidget {
   const AdaptiveShell({super.key, required this.child});
 
   final Widget child;
 
   static const _destinations = [
-    _NavItem('/home', Icons.dashboard_rounded, 'الرئيسية'),
+    _NavItem('/home', Icons.home_rounded, 'الرئيسية'),
     _NavItem('/accounts', Icons.account_tree_rounded, 'كشوف'),
     _NavItem('/shop', Icons.storefront_rounded, 'المنتجات'),
     _NavItem('/orders', Icons.receipt_long_rounded, 'طلباتي'),
@@ -16,8 +21,9 @@ class AdaptiveShell extends StatelessWidget {
 
   int _selectedIndex(BuildContext context) {
     final loc = GoRouterState.of(context).uri.path;
-    for (var i = 0; i < _destinations.length; i++) {
-      if (loc == _destinations[i].path || (i > 0 && loc.startsWith(_destinations[i].path))) {
+    if (loc == '/home' || loc == '/settings') return 0;
+    for (var i = 1; i < _destinations.length; i++) {
+      if (loc == _destinations[i].path || loc.startsWith('${_destinations[i].path}/')) {
         return i;
       }
     }
@@ -27,33 +33,39 @@ class AdaptiveShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-    final wide = width >= 900;
+    final wide = width >= EdLayout.tabletMin;
     final selected = _selectedIndex(context);
+    final onHome = GoRouterState.of(context).uri.path == '/home';
 
     if (wide) {
       return Directionality(
         textDirection: TextDirection.rtl,
         child: Scaffold(
+          backgroundColor: AppColors.bg,
           body: Row(
             children: [
               NavigationRail(
-                extended: width >= 1100,
-                minExtendedWidth: 200,
-                selectedIndex: selected,
+                extended: width >= EdLayout.wideMin,
+                minExtendedWidth: 180,
+                selectedIndex: onHome ? 0 : selected.clamp(0, _destinations.length - 1),
                 onDestinationSelected: (i) => context.go(_destinations[i].path),
                 leading: Padding(
-                  padding: const EdgeInsets.only(top: 16, bottom: 8),
-                  child: Image.asset('assets/logo.png', width: 48, height: 48),
+                  padding: const EdgeInsets.only(top: 12, bottom: 8),
+                  child: InkWell(
+                    onTap: () => context.go('/home'),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.asset('assets/logo.png', width: 44, height: 44),
+                  ),
                 ),
                 trailing: Expanded(
                   child: Align(
                     alignment: Alignment.bottomCenter,
                     child: Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.only(bottom: 12),
                       child: IconButton(
                         tooltip: 'الحساب',
                         onPressed: () => context.push('/settings'),
-                        icon: const Icon(Icons.settings_outlined),
+                        icon: const Icon(Icons.person_outline_rounded),
                       ),
                     ),
                   ),
@@ -66,7 +78,7 @@ class AdaptiveShell extends StatelessWidget {
                         ))
                     .toList(),
               ),
-              const VerticalDivider(width: 1),
+              const VerticalDivider(width: 1, color: AppColors.border),
               Expanded(child: child),
             ],
           ),
@@ -76,16 +88,7 @@ class AdaptiveShell extends StatelessWidget {
 
     return Directionality(
       textDirection: TextDirection.rtl,
-      child: Scaffold(
-        body: child,
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: selected,
-          onDestinationSelected: (i) => context.go(_destinations[i].path),
-          destinations: _destinations
-              .map((d) => NavigationDestination(icon: Icon(d.icon), label: d.label))
-              .toList(),
-        ),
-      ),
+      child: Scaffold(backgroundColor: AppColors.bg, body: child),
     );
   }
 }
@@ -105,76 +108,51 @@ class AppPage extends StatelessWidget {
     this.actions,
     this.floatingActionButton,
     this.subtitle,
+    this.kicker,
     this.showBack = false,
+    this.onBack,
+    this.toolbar,
+    this.useHeader = true,
   });
 
   final String title;
   final String? subtitle;
+  final String? kicker;
   final Widget child;
   final List<Widget>? actions;
   final Widget? floatingActionButton;
   final bool showBack;
+  final VoidCallback? onBack;
+  final Widget? toolbar;
+  final bool useHeader;
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 900;
-    final canPop = showBack || GoRouter.of(context).canPop();
+    final router = GoRouter.of(context);
+    final canPop = showBack || router.canPop();
+    final back = onBack ?? () => router.pop();
 
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        appBar: wide
-            ? null
-            : AppBar(
-                leading: canPop
-                    ? IconButton(
-                        icon: const Icon(Icons.arrow_forward_rounded),
-                        onPressed: () => GoRouter.of(context).pop(),
-                      )
-                    : null,
-                title: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title),
-                    if (subtitle != null)
-                      Text(subtitle!, style: Theme.of(context).textTheme.bodySmall),
-                  ],
-                ),
+        backgroundColor: AppColors.bg,
+        appBar: useHeader
+            ? EdAppHeader(
+                title: title,
+                kicker: kicker,
+                subtitle: subtitle,
+                showBack: canPop,
+                onBack: canPop ? back : null,
                 actions: actions,
-              ),
+              )
+            : null,
         floatingActionButton: floatingActionButton,
-        body: SafeArea(
-          child: wide
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
-                      child: Row(
-                        children: [
-                          if (canPop)
-                            IconButton(
-                              icon: const Icon(Icons.arrow_forward_rounded),
-                              onPressed: () => GoRouter.of(context).pop(),
-                            ),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(title, style: Theme.of(context).textTheme.headlineSmall),
-                                if (subtitle != null)
-                                  Text(subtitle!, style: Theme.of(context).textTheme.bodyMedium),
-                              ],
-                            ),
-                          ),
-                          if (actions != null) ...actions!,
-                        ],
-                      ),
-                    ),
-                    Expanded(child: child),
-                  ],
-                )
-              : child,
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (toolbar != null) toolbar!,
+            Expanded(child: child),
+          ],
         ),
       ),
     );
@@ -191,9 +169,13 @@ class LoadingView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const CircularProgressIndicator(),
+          const SizedBox(
+            width: 36,
+            height: 36,
+            child: CircularProgressIndicator(strokeWidth: 3, color: AppColors.navy),
+          ),
           const SizedBox(height: 16),
-          Text(message, style: Theme.of(context).textTheme.bodyLarge),
+          Text(message, style: const TextStyle(color: AppColors.muted, fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -214,12 +196,16 @@ class ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline, size: 48, color: Theme.of(context).colorScheme.error),
-            const SizedBox(height: 12),
-            Text(message, textAlign: TextAlign.center),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(color: AppColors.dangerSoft, shape: BoxShape.circle),
+              child: const Icon(Icons.error_outline, size: 36, color: AppColors.danger),
+            ),
+            const SizedBox(height: 14),
+            Text(message, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600)),
             if (onRetry != null) ...[
               const SizedBox(height: 16),
-              FilledButton(onPressed: onRetry, child: const Text('إعادة المحاولة')),
+              EdPrimaryButton(label: 'إعادة المحاولة', onPressed: onRetry, fullWidth: false),
             ],
           ],
         ),
@@ -237,23 +223,24 @@ class StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: color,
-                  ),
-            ),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppColors.radiusSm),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 11, color: AppColors.muted, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            textDirection: TextDirection.ltr,
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: color ?? AppColors.text),
+          ),
+        ],
       ),
     );
   }
@@ -268,13 +255,16 @@ class EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 56, color: Theme.of(context).colorScheme.outline),
-          const SizedBox(height: 12),
-          Text(message, style: Theme.of(context).textTheme.titleMedium),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 52, color: AppColors.borderStrong),
+            const SizedBox(height: 12),
+            Text(message, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.muted)),
+          ],
+        ),
       ),
     );
   }

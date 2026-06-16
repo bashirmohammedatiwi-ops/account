@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -9,19 +10,28 @@ import '../../core/auth/auth_session.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_provider.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/layout/breakpoints.dart';
+import '../../core/utils/debounce.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/adaptive_shell.dart';
+import '../../core/widgets/ed_components.dart';
 import '../../models/models.dart';
 import '../home/home_screen.dart';
 
-final catalogBranchesProvider = FutureProvider((ref) => withAuth(ref, () => ref.read(apiClientProvider).getCatalogBranches()));
+final catalogBranchesProvider = FutureProvider((ref) {
+  ref.keepAlive();
+  return withAuth(ref, () => ref.read(apiClientProvider).getCatalogBranches());
+});
 
 final catalogSectionsProvider = FutureProvider.family<List<CatalogSection>, int>((ref, branchId) {
+  ref.keepAlive();
   return withAuth(ref, () => ref.read(apiClientProvider).getCatalogSections(branchId));
 });
 
 final catalogProductsProvider = FutureProvider.family<List<Product>, int>((ref, sectionId) {
+  ref.keepAlive();
   return withAuth(ref, () => ref.read(apiClientProvider).getProducts(sectionId));
 });
 
@@ -115,51 +125,45 @@ class _ShopBranchesScreenState extends ConsumerState<ShopBranchesScreen> {
     final branchesAsync = ref.watch(catalogBranchesProvider);
     return AppPage(
       title: 'فروع المنتجات',
+      kicker: 'المنتجات',
       subtitle: 'اختر فرع المنتجات',
+      showBack: true,
+      onBack: () => context.go('/home'),
       child: Column(
         children: [
           if (_resumeHint != null)
-            MaterialBanner(
-              content: Text('فاتورة محفوظة · $_resumeHint'),
-              leading: const Icon(Icons.save_outlined),
-              actions: [
-                TextButton(
-                  onPressed: () async {
-                    final agentId = ref.read(authProvider).agent?.id;
-                    if (agentId != null) {
-                      await ref.read(invoiceDraftProvider.notifier).load(agentId);
-                      final n = ref.read(invoiceDraftProvider.notifier);
-                      if (n.branchId != null && n.sectionId != null) {
-                        if (context.mounted) {
-                          context.go('/shop/${n.branchId}/sections/${n.sectionId}/products');
-                        }
-                      }
-                    }
-                  },
-                  child: const Text('متابعة'),
-                ),
-              ],
+            EdResumeBanner(
+              message: 'فاتورة محفوظة · $_resumeHint',
+              actionLabel: 'متابعة',
+              onAction: () async {
+                final agentId = ref.read(authProvider).agent?.id;
+                if (agentId != null) {
+                  await ref.read(invoiceDraftProvider.notifier).load(agentId);
+                  final n = ref.read(invoiceDraftProvider.notifier);
+                  if (n.branchId != null && n.sectionId != null && context.mounted) {
+                    context.go('/shop/${n.branchId}/sections/${n.sectionId}/products');
+                  }
+                }
+              },
             ),
           Expanded(
             child: branchesAsync.when(
         loading: () => const LoadingView(),
         error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(catalogBranchesProvider)),
         data: (branches) {
-          if (branches.isEmpty) return const EmptyState(message: 'لا توجد فروع منتجات');
+          if (branches.isEmpty) return const EmptyState(message: 'لا توجد فروع منتجات', icon: Icons.store_mall_directory_outlined);
           return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: branches.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (_, i) {
               final b = branches[i];
-              return Card(
-                child: ListTile(
-                  leading: const Icon(Icons.store_mall_directory_outlined),
-                  title: Text(b.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: Text(b.description ?? ''),
-                  trailing: const Icon(Icons.chevron_left),
-                  onTap: () => context.go('/shop/${b.id}/sections'),
-                ),
+              return EdNavCard(
+                icon: Icons.store_mall_directory_outlined,
+                title: b.name,
+                subtitle: b.description,
+                accent: AppColors.moduleShop,
+                onTap: () => context.go('/shop/${b.id}/sections'),
               );
             },
           );
@@ -181,27 +185,29 @@ class ShopSectionsScreen extends ConsumerWidget {
     final sectionsAsync = ref.watch(catalogSectionsProvider(branchId));
     return AppPage(
       title: 'الأقسام',
+      kicker: 'المنتجات',
       subtitle: 'اختر قسم المنتجات',
+      showBack: true,
+      onBack: () => context.pop(),
       child: sectionsAsync.when(
         loading: () => const LoadingView(),
         error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(catalogSectionsProvider(branchId))),
         data: (sections) {
-          if (sections.isEmpty) return const EmptyState(message: 'لا توجد أقسام');
+          if (sections.isEmpty) return const EmptyState(message: 'لا توجد أقسام', icon: Icons.category_outlined);
           return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: sections.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (_, i) {
               final s = sections[i];
-              return Card(
-                child: ListTile(
-                  title: Text(s.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  trailing: const Icon(Icons.chevron_left),
-                  onTap: () {
-                    ref.read(invoiceDraftProvider.notifier).branchId = branchId;
-                    context.go('/shop/$branchId/sections/${s.id}/products');
-                  },
-                ),
+              return EdNavCard(
+                icon: Icons.category_outlined,
+                title: s.name,
+                accent: AppColors.moduleShop,
+                onTap: () {
+                  ref.read(invoiceDraftProvider.notifier).branchId = branchId;
+                  context.go('/shop/$branchId/sections/${s.id}/products');
+                },
               );
             },
           );
@@ -211,22 +217,45 @@ class ShopSectionsScreen extends ConsumerWidget {
   }
 }
 
-class ShopProductsScreen extends ConsumerStatefulWidget {
+class ShopProductsScreen extends ConsumerWidget {
   const ShopProductsScreen({super.key, required this.branchId, required this.sectionId});
   final int branchId;
   final int sectionId;
 
   @override
-  ConsumerState<ShopProductsScreen> createState() => _ShopProductsScreenState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    return AppPage(
+      title: 'عرض وطلب',
+      kicker: 'المنتجات',
+      subtitle: 'أضف الكميات ثم اعرض الفاتورة',
+      showBack: true,
+      onBack: () => context.pop(),
+      child: ShopProductsPanel(branchId: branchId, sectionId: sectionId),
+    );
+  }
 }
 
-class _ShopProductsScreenState extends ConsumerState<ShopProductsScreen> {
+class ShopProductsPanel extends ConsumerStatefulWidget {
+  const ShopProductsPanel({super.key, required this.branchId, required this.sectionId, this.embedded = false});
+
+  final int branchId;
+  final int sectionId;
+  final bool embedded;
+
+  @override
+  ConsumerState<ShopProductsPanel> createState() => _ShopProductsPanelState();
+}
+
+class _ShopProductsPanelState extends ConsumerState<ShopProductsPanel> {
   String _filter = '';
+  String _filterApplied = '';
   final _barcodeCtrl = TextEditingController();
+  final _debouncer = Debouncer();
 
   @override
   void dispose() {
     _barcodeCtrl.dispose();
+    _debouncer.dispose();
     super.dispose();
   }
 
@@ -295,87 +324,104 @@ class _ShopProductsScreenState extends ConsumerState<ShopProductsScreen> {
     final productsAsync = ref.watch(catalogProductsProvider(widget.sectionId));
     final draft = ref.watch(invoiceDraftProvider);
     final agentId = ref.watch(authProvider).agent?.id;
+    final layout = EdLayout.of(context);
+    final cols = layout.gridColumns(phone: 2, tablet: 3, wide: 4, desktop: 5);
 
-    return AppPage(
-      title: 'عرض وطلب',
-      subtitle: 'أضف الكميات ثم اعرض الفاتورة',
-      showBack: true,
-      child: productsAsync.when(
-        loading: () => const LoadingView(),
-        error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(catalogProductsProvider(widget.sectionId))),
-        data: (products) {
-          final filtered = products.where((p) {
-            if (_filter.isEmpty) return true;
-            final q = _filter.toLowerCase();
-            return p.name.toLowerCase().contains(q) || (p.barcode ?? '').contains(q);
-          }).toList();
-
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: TextField(
-                        decoration: const InputDecoration(hintText: 'بحث عن منتج...', prefixIcon: Icon(Icons.search)),
-                        onChanged: (v) => setState(() => _filter = v.trim()),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: _barcodeCtrl,
-                        decoration: InputDecoration(
-                          hintText: 'باركود',
-                          prefixIcon: const Icon(Icons.qr_code_scanner),
-                          suffixIcon: IconButton(
-                            icon: const Icon(Icons.add_circle_outline),
-                            onPressed: () => _lookupBarcode(products),
-                          ),
-                        ),
-                        onSubmitted: (_) => _lookupBarcode(products),
-                      ),
-                    ),
-                  ],
+    final toolbar = Container(
+      color: AppColors.surface,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.border))),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: EdSearchField(
+              hint: 'بحث عن منتج...',
+              onChanged: (v) {
+                _filter = v.trim();
+                _debouncer.run(() {
+                  if (mounted) setState(() => _filterApplied = _filter);
+                });
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: _barcodeCtrl,
+              decoration: InputDecoration(
+                hintText: 'باركود',
+                isDense: true,
+                prefixIcon: const Icon(Icons.qr_code_scanner, color: AppColors.muted),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.add_circle_outline, color: AppColors.moduleShop),
+                  onPressed: () => _lookupBarcode(productsAsync.valueOrNull ?? []),
                 ),
               ),
-              Expanded(
-                child: GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: MediaQuery.sizeOf(context).width >= 900 ? 3 : 2,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 0.72,
-                  ),
-                  itemCount: filtered.length,
-                  itemBuilder: (_, i) => _ProductCard(product: filtered[i], agentId: agentId),
-                ),
+              onSubmitted: (_) => _lookupBarcode(productsAsync.valueOrNull ?? []),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final content = productsAsync.when(
+      loading: () => const LoadingView(message: 'جاري تحميل المنتجات...'),
+      error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(catalogProductsProvider(widget.sectionId))),
+      data: (products) {
+        final q = _filterApplied.toLowerCase();
+        final filtered = products.where((p) {
+          if (q.isEmpty) return true;
+          return p.name.toLowerCase().contains(q) || (p.barcode ?? '').contains(q);
+        }).toList();
+
+        return Column(
+          children: [
+            Expanded(
+              child: filtered.isEmpty
+                  ? const EmptyState(message: 'لا توجد منتجات', icon: Icons.inventory_2_outlined)
+                  : GridView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: cols,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        childAspectRatio: layout.isWide ? 0.72 : 0.68,
+                      ),
+                      itemCount: filtered.length,
+                      itemBuilder: (_, i) => _ProductCard(
+                        key: ValueKey(filtered[i].id),
+                        product: filtered[i],
+                        agentId: agentId,
+                      ),
+                    ),
+            ),
+            if (_lineCount(draft) > 0)
+              EdBottomActionBar(
+                label: 'الفاتورة (${fmtMoney(_total(products, draft))})',
+                onPressed: () => _openInvoiceSheet(products),
               ),
-            ],
-          );
-        },
-      ),
-      floatingActionButton: productsAsync.maybeWhen(
-        data: (products) {
-          final count = _lineCount(draft);
-          if (count == 0) return null;
-          return FloatingActionButton.extended(
-            onPressed: () => _openInvoiceSheet(products),
-            icon: const Icon(Icons.receipt_long),
-            label: Text('الفاتورة (${fmtMoney(_total(products, draft))})'),
-          );
-        },
-        orElse: () => null,
-      ),
+          ],
+        );
+      },
+    );
+
+    if (widget.embedded) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [toolbar, Expanded(child: content)],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [toolbar, Expanded(child: content)],
     );
   }
 }
 
 class _ProductCard extends ConsumerWidget {
-  const _ProductCard({required this.product, this.agentId});
+  const _ProductCard({super.key, required this.product, this.agentId});
   final Product product;
   final int? agentId;
 
@@ -386,71 +432,71 @@ class _ProductCard extends ConsumerWidget {
     final bonus = draft?.bonus ?? 0;
     final notifier = ref.read(invoiceDraftProvider.notifier);
 
-    return Card(
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppColors.radius),
+        border: Border.all(color: quant > 0 || bonus > 0 ? AppColors.moduleShop : AppColors.border),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
-              child: product.imageUrl != null
-                  ? Image.network(product.imageUrl!, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Icon(Icons.inventory_2_outlined, size: 48))
-                  : const Icon(Icons.inventory_2_outlined, size: 48),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceMuted,
+                  borderRadius: BorderRadius.circular(AppColors.radiusSm),
+                ),
+                padding: const EdgeInsets.all(8),
+                child: product.imageUrl != null
+                    ? CachedNetworkImage(
+                        imageUrl: product.imageUrl!,
+                        fit: BoxFit.contain,
+                        memCacheWidth: 240,
+                        placeholder: (_, __) => const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))),
+                        errorWidget: (_, __, ___) => const Icon(Icons.inventory_2_outlined, size: 40, color: AppColors.muted),
+                      )
+                    : const Icon(Icons.inventory_2_outlined, size: 40, color: AppColors.muted),
+              ),
             ),
-            Text(product.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-            Text(fmtMoney(product.price), style: TextStyle(color: Theme.of(context).colorScheme.primary)),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                _StepBtn(icon: Icons.remove, onTap: () {
-                  notifier.setQty(product.id, (quant - 1).clamp(0, 999999), bonus);
-                  if (agentId != null) notifier.persist(agentId!);
-                }),
-                Expanded(child: Text('${fmtQty(quant)}', textAlign: TextAlign.center)),
-                _StepBtn(icon: Icons.add, onTap: () {
-                  notifier.setQty(product.id, quant + 1, bonus);
-                  if (agentId != null) notifier.persist(agentId!);
-                }),
-              ],
+            Text(product.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+            Text(fmtMoney(product.price), style: const TextStyle(color: AppColors.moduleShop, fontWeight: FontWeight.w800, fontSize: 13)),
+            const SizedBox(height: 8),
+            EdQtyStepper(
+              value: fmtQty(quant),
+              onDec: () {
+                notifier.setQty(product.id, (quant - 1).clamp(0, 999999), bonus);
+                if (agentId != null) notifier.persist(agentId!);
+              },
+              onInc: () {
+                notifier.setQty(product.id, quant + 1, bonus);
+                if (agentId != null) notifier.persist(agentId!);
+              },
             ),
+            const SizedBox(height: 6),
             Row(
               children: [
-                const Text('هدية', style: TextStyle(fontSize: 12)),
+                const Text('هدية', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
                 const Spacer(),
-                _StepBtn(icon: Icons.remove, small: true, onTap: () {
-                  notifier.setQty(product.id, quant, (bonus - 1).clamp(0, 999999));
-                  if (agentId != null) notifier.persist(agentId!);
-                }),
-                Text('$bonus'),
-                _StepBtn(icon: Icons.add, small: true, onTap: () {
-                  notifier.setQty(product.id, quant, bonus + 1);
-                  if (agentId != null) notifier.persist(agentId!);
-                }),
+                EdQtyStepper(
+                  compact: true,
+                  value: '$bonus',
+                  onDec: () {
+                    notifier.setQty(product.id, quant, (bonus - 1).clamp(0, 999999));
+                    if (agentId != null) notifier.persist(agentId!);
+                  },
+                  onInc: () {
+                    notifier.setQty(product.id, quant, bonus + 1);
+                    if (agentId != null) notifier.persist(agentId!);
+                  },
+                ),
               ],
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _StepBtn extends StatelessWidget {
-  const _StepBtn({required this.icon, required this.onTap, this.small = false});
-  final IconData icon;
-  final VoidCallback onTap;
-  final bool small;
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      visualDensity: VisualDensity.compact,
-      iconSize: small ? 18 : 22,
-      onPressed: onTap,
-      icon: Icon(icon),
-      style: IconButton.styleFrom(
-        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-        minimumSize: Size(small ? 32 : 40, small ? 32 : 40),
       ),
     );
   }
@@ -570,10 +616,10 @@ class _InvoiceSheetState extends ConsumerState<_InvoiceSheet> {
       final d = draft[p.id];
       if (d == null || (d.quant <= 0 && d.bonus <= 0)) continue;
       total += d.quant * p.price;
-      rows.add(ListTile(
-        title: Text(p.name),
-        subtitle: Text('${fmtQty(d.quant)} + هدية ${fmtQty(d.bonus)}'),
-        trailing: Text(fmtMoney(d.quant * p.price)),
+      rows.add(EdLineRow(
+        title: p.name,
+        subtitle: '${fmtQty(d.quant)} + هدية ${fmtQty(d.bonus)}',
+        amount: fmtMoney(d.quant * p.price),
       ));
     }
 
@@ -581,28 +627,49 @@ class _InvoiceSheetState extends ConsumerState<_InvoiceSheet> {
       expand: false,
       initialChildSize: 0.85,
       builder: (_, controller) => Material(
+        color: AppColors.bg,
         child: ListView(
           controller: controller,
           padding: const EdgeInsets.all(20),
           children: [
-            Text('فاتورة الطلب', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 12),
-            ListTile(
-              leading: const Icon(Icons.person_outline),
-              title: Text(customer?.name1 ?? 'اختر الزبون'),
-              subtitle: customer != null ? Text(customer.accountNum) : null,
-              trailing: TextButton(onPressed: _pickCustomer, child: const Text('اختيار')),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: AppColors.moduleShop.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.receipt_long_rounded, color: AppColors.moduleShop),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text('فاتورة الطلب', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                ),
+              ],
             ),
-            const Divider(),
+            const SizedBox(height: 16),
+            EdNavCard(
+              icon: Icons.person_outline_rounded,
+              title: customer?.name1 ?? 'اختر الزبون',
+              subtitle: customer?.accountNum,
+              accent: AppColors.accentTeal,
+              trailing: 'اختيار',
+              onTap: _pickCustomer,
+            ),
+            const SizedBox(height: 12),
             TextField(
               controller: _notesCtrl,
               decoration: const InputDecoration(labelText: 'ملاحظات', hintText: 'اختياري...'),
               maxLines: 2,
               onChanged: (v) => ref.read(invoiceDraftProvider.notifier).notes = v,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
+            const EdSectionHeader(title: 'البنود'),
             ...rows,
-            const Divider(),
+            const SizedBox(height: 8),
+            EdDocPanel(
+              title: 'الإجمالي',
+              rows: [(label: 'المجموع', value: fmtMoney(total))],
+            ),
+            const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
@@ -622,12 +689,13 @@ class _InvoiceSheetState extends ConsumerState<_InvoiceSheet> {
                 const SizedBox(width: 12),
                 Expanded(
                   flex: 2,
-                  child: FilledButton(
-                    onPressed: _submitting ? null : () {
+                  child: EdPrimaryButton(
+                    label: 'إرسال للإدارة',
+                    loading: _submitting,
+                    onPressed: () {
                       ref.read(invoiceDraftProvider.notifier).notes = _notesCtrl.text;
                       _submit();
                     },
-                    child: _submitting ? const CircularProgressIndicator(color: Colors.white) : const Text('إرسال للإدارة'),
                   ),
                 ),
               ],
@@ -639,7 +707,10 @@ class _InvoiceSheetState extends ConsumerState<_InvoiceSheet> {
   }
 }
 
-final orderDetailProvider = FutureProvider.family<Order, int>((ref, id) => withAuth(ref, () => ref.read(apiClientProvider).getOrder(id)));
+final orderDetailProvider = FutureProvider.family<Order, int>((ref, id) {
+  ref.keepAlive();
+  return withAuth(ref, () => ref.read(apiClientProvider).getOrder(id));
+});
 
 class OrdersScreen extends ConsumerWidget {
   const OrdersScreen({super.key});
@@ -649,33 +720,32 @@ class OrdersScreen extends ConsumerWidget {
     final ordersAsync = ref.watch(ordersProvider);
     return AppPage(
       title: 'طلباتي',
+      kicker: 'الطلبات',
       subtitle: 'متابعة حالة الطلبات',
-      actions: [IconButton(onPressed: () => ref.invalidate(ordersProvider), icon: const Icon(Icons.refresh_rounded))],
+      showBack: true,
+      onBack: () => context.go('/home'),
+      actions: [
+        EdHeaderIconButton(icon: Icons.refresh_rounded, tooltip: 'تحديث', onPressed: () => ref.invalidate(ordersProvider)),
+      ],
       child: ordersAsync.when(
-        loading: () => const LoadingView(),
+        loading: () => const LoadingView(message: 'جاري تحميل الطلبات...'),
         error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(ordersProvider)),
         data: (orders) {
-          if (orders.isEmpty) return const EmptyState(message: 'لا توجد طلبات');
+          if (orders.isEmpty) return const EmptyState(message: 'لا توجد طلبات', icon: Icons.receipt_long_outlined);
           return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: orders.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (_, i) {
               final o = orders[i];
-              return Card(
-                child: ListTile(
-                  title: Text('طلب #${o.id}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: Text('${o.customerName ?? ''} · ${fmtDate(o.createdAt)}'),
-                  trailing: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(fmtMoney(o.totalAmount), style: const TextStyle(fontWeight: FontWeight.w700)),
-                      Text(orderStatusLabel(o.status), style: TextStyle(color: AppTheme.orderStatusColor(o.status), fontSize: 12)),
-                    ],
-                  ),
-                  onTap: () => context.go('/orders/${o.id}'),
-                ),
+              return EdOrderCard(
+                id: o.id,
+                customer: o.customerName ?? '—',
+                date: fmtDate(o.createdAt),
+                amount: fmtMoney(o.totalAmount),
+                statusLabel: orderStatusLabel(o.status),
+                statusColor: AppTheme.orderStatusColor(o.status),
+                onTap: () => context.go('/orders/${o.id}'),
               );
             },
           );
@@ -691,47 +761,63 @@ class OrderDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final orderAsync = ref.watch(orderDetailProvider(id));
     return AppPage(
       title: 'تفاصيل الطلب',
+      kicker: 'الطلبات',
       subtitle: '#$id',
       showBack: true,
-      child: orderAsync.when(
-        loading: () => const LoadingView(),
-        error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(orderDetailProvider(id))),
-        data: (order) {
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(orderStatusLabel(order.status), style: TextStyle(color: AppTheme.orderStatusColor(order.status), fontWeight: FontWeight.w700)),
-                      Text('الزبون: ${order.customerName ?? ''}'),
-                      Text('الفرع: ${order.catalogBranchName ?? ''}'),
-                      Text('المجموع: ${fmtMoney(order.totalAmount)}'),
-                      if (order.notes != null && order.notes!.isNotEmpty) Text('ملاحظات: ${order.notes}'),
-                    ],
-                  ),
-                ),
+      onBack: () => context.pop(),
+      child: OrderDetailBody(id: id),
+    );
+  }
+}
+
+class OrderDetailBody extends ConsumerWidget {
+  const OrderDetailBody({super.key, required this.id});
+
+  final int id;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final orderAsync = ref.watch(orderDetailProvider(id));
+
+    return orderAsync.when(
+      loading: () => const LoadingView(),
+      error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(orderDetailProvider(id))),
+      data: (order) {
+        final statusColor = AppTheme.orderStatusColor(order.status);
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            EdDocPanel(
+              title: 'معلومات الطلب',
+              rows: [
+                (label: 'الحالة', value: orderStatusLabel(order.status)),
+                (label: 'الزبون', value: order.customerName ?? '—'),
+                (label: 'الفرع', value: order.catalogBranchName ?? '—'),
+                (label: 'المجموع', value: fmtMoney(order.totalAmount)),
+                if (order.notes != null && order.notes!.isNotEmpty) (label: 'ملاحظات', value: order.notes!),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(999),
               ),
-              const SizedBox(height: 12),
-              Card(
-                child: Column(
-                  children: order.lines.map((line) => ListTile(
-                        title: Text(line.matName),
-                        subtitle: Text('${fmtQty(line.quant)} + هدية ${fmtQty(line.bonus)}'),
-                        trailing: Text(fmtMoney(line.lineTotal ?? line.quant * line.unitPrice)),
-                      )).toList(),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+              child: Text(orderStatusLabel(order.status), style: TextStyle(color: statusColor, fontWeight: FontWeight.w800)),
+            ),
+            const SizedBox(height: 16),
+            const EdSectionHeader(title: 'البنود'),
+            ...order.lines.map((line) => EdLineRow(
+                  title: line.matName,
+                  subtitle: '${fmtQty(line.quant)} + هدية ${fmtQty(line.bonus)}',
+                  amount: fmtMoney(line.lineTotal ?? line.quant * line.unitPrice),
+                )),
+          ],
+        );
+      },
     );
   }
 }

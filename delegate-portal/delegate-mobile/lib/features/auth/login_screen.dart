@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_provider.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/widgets/ed_components.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -38,8 +40,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       setState(() => _error = e.message);
     } on DioException catch (e) {
       setState(() => _error = _connectionMessage(e));
-    } catch (e) {
-      setState(() => _error = _connectionMessage(e));
+    } catch (_) {
+      setState(() => _error = 'فشل تسجيل الدخول — حاول مجدداً');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -59,92 +61,79 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 900;
+    final wide = MediaQuery.sizeOf(context).width >= 768;
 
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
+        backgroundColor: AppColors.bg,
         body: wide
             ? Row(
                 children: [
-                  Expanded(
-                    flex: 5,
-                    child: Container(
-                      color: const Color(0xFF0F766E),
-                      padding: const EdgeInsets.all(48),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Image.asset('assets/logo.png', width: 72, height: 72),
-                          const SizedBox(height: 24),
-                          Text(
-                            'بوابة المندوب',
-                            style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'كشوف حساب · طلبات · تقارير',
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                  color: Colors.white.withValues(alpha: 0.9),
-                                ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Expanded(flex: 4, child: _form(context)),
+                  const Expanded(flex: 5, child: EdLoginAside()),
+                  Expanded(flex: 4, child: _form(context, showBrand: false)),
                 ],
               )
-            : _form(context),
+            : _form(context, showBrand: true),
       ),
     );
   }
 
-  Widget _form(BuildContext context) {
+  Widget _form(BuildContext context, {required bool showBrand}) {
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (MediaQuery.sizeOf(context).width < 900) ...[
-                Center(child: Image.asset('assets/logo.png', width: 64, height: 64)),
-                const SizedBox(height: 16),
-                Text('تسجيل الدخول', style: Theme.of(context).textTheme.headlineMedium, textAlign: TextAlign.center),
-                const SizedBox(height: 24),
-              ] else
-                Text('تسجيل الدخول', style: Theme.of(context).textTheme.headlineMedium),
-              const SizedBox(height: 24),
-              TextField(
-                controller: _userCtrl,
-                decoration: const InputDecoration(labelText: 'اسم المستخدم', prefixIcon: Icon(Icons.person_outline)),
-                textInputAction: TextInputAction.next,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _passCtrl,
-                decoration: const InputDecoration(labelText: 'كلمة المرور', prefixIcon: Icon(Icons.lock_outline)),
-                obscureText: true,
-                onSubmitted: (_) => _submit(),
-              ),
-              if (_error != null) ...[
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(AppColors.radius),
+              border: Border.all(color: AppColors.border),
+              boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.06), blurRadius: 20, offset: const Offset(0, 8))],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (showBrand) ...[
+                  Center(child: Image.asset('assets/logo.png', width: 56, height: 56)),
+                  const SizedBox(height: 12),
+                  const Text('Edari — بوابة المندوب', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 20),
+                ],
+                const Text('تسجيل الدخول', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                const Text('أدخل بيانات حساب المندوب', style: TextStyle(color: AppColors.muted, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: _userCtrl,
+                  decoration: const InputDecoration(labelText: 'اسم المستخدم', prefixIcon: Icon(Icons.person_outline)),
+                  textInputAction: TextInputAction.next,
+                ),
                 const SizedBox(height: 12),
-                Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                TextField(
+                  controller: _passCtrl,
+                  decoration: const InputDecoration(labelText: 'كلمة المرور', prefixIcon: Icon(Icons.lock_outline)),
+                  obscureText: true,
+                  onSubmitted: (_) => _submit(),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.dangerSoft,
+                      borderRadius: BorderRadius.circular(AppColors.radiusSm),
+                      border: Border.all(color: AppColors.danger.withValues(alpha: 0.25)),
+                    ),
+                    child: Text(_error!, style: const TextStyle(color: AppColors.danger, fontWeight: FontWeight.w600)),
+                  ),
+                ],
+                const SizedBox(height: 20),
+                EdPrimaryButton(label: 'دخول', onPressed: _submit, loading: _loading),
               ],
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: _loading ? null : _submit,
-                child: _loading
-                    ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('دخول'),
-              ),
-            ],
+            ),
           ),
         ),
       ),

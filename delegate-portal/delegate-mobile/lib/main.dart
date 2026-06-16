@@ -5,10 +5,13 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'app.dart';
 import 'config/app_config.dart';
 import 'core/api/api_client.dart';
+import 'core/layout/breakpoints.dart';
 import 'core/theme/app_theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  PaintingBinding.instance.imageCache.maximumSize = 300;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 100 << 20;
 
   runApp(
     ProviderScope(
@@ -38,6 +41,7 @@ class EdariDelegateApp extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
+      scrollBehavior: const EdScrollBehavior(),
       routerConfig: router,
     );
   }

@@ -4,10 +4,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/pdf_utils.dart';
 import '../../core/utils/statement_helpers.dart';
 import '../../core/widgets/adaptive_shell.dart';
+import '../../core/widgets/ed_components.dart';
 import '../../models/models.dart';
 import 'accounts_screens.dart';
 
@@ -21,69 +23,75 @@ class StatementPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final stmtAsync = ref.watch(statementProvider(accSeq));
-    final api = ref.watch(apiClientProvider);
+    final api = ref.read(apiClientProvider);
 
     return stmtAsync.when(
-      loading: () => const LoadingView(),
+      loading: () => const LoadingView(message: 'جاري تحميل الكشف...'),
       error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(statementProvider(accSeq))),
       data: (stmt) => RefreshIndicator(
+        color: AppColors.navy,
         onRefresh: () async => ref.invalidate(statementProvider(accSeq)),
-        child: ListView(
-          padding: EdgeInsets.all(compact ? 8 : 16),
-          children: [
-            if (!compact)
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${stmt.account['name1'] ?? ''} / ${stmt.account['num'] ?? accSeq}',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(compact ? 10 : 16, compact ? 10 : 16, compact ? 10 : 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (!compact)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${stmt.account['name1'] ?? ''}',
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () async {
+                              try {
+                                final bytes = await api.getStatementPdf(accSeq);
+                                await saveAndOpenPdf(bytes, 'statement-$accSeq.pdf');
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+                                }
+                              }
+                            },
+                            icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                            label: const Text('PDF'),
+                          ),
+                        ],
+                      ),
+                    if (stmt.debtAmount != null && stmt.debtAmount! > 0) ...[
+                      if (!compact) const SizedBox(height: 12),
+                      EdDebtBanner(amount: fmtNumAlways(stmt.debtAmount)),
+                      const SizedBox(height: 12),
+                    ],
+                    EdDocPanel(
+                      title: 'ملخص الكشف — ${stmt.account['num'] ?? accSeq}',
+                      rows: [
+                        (label: 'إجمالي مدين', value: fmtNumAlways(stmt.totalDebit)),
+                        (label: 'إجمالي دائن', value: fmtNumAlways(stmt.totalCredit)),
+                        (label: stmt.summary?['label']?.toString() ?? 'الرصيد', value: fmtNumAlways(stmt.summary?['amount'] ?? stmt.finalBalance)),
+                      ],
                     ),
-                  ),
-                  IconButton(
-                    tooltip: 'PDF كامل',
-                    onPressed: () async {
-                      try {
-                        final bytes = await api.getStatementPdf(accSeq);
-                        await saveAndOpenPdf(bytes, 'statement-$accSeq.pdf');
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-                        }
-                      }
-                    },
-                    icon: const Icon(Icons.picture_as_pdf_outlined),
-                  ),
-                ],
-              ),
-            if (stmt.debtAmount != null && stmt.debtAmount! > 0)
-              Card(
-                color: const Color(0xFFFFF7ED),
-                child: ListTile(
-                  leading: const Icon(Icons.warning_amber_rounded, color: Color(0xFFEA580C)),
-                  title: const Text('الديون'),
-                  trailing: Text(
-                    fmtNumAlways(stmt.debtAmount),
-                    style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFFEA580C)),
-                  ),
+                    const SizedBox(height: 16),
+                    const Text('الحركات', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.textSecondary)),
+                    const SizedBox(height: 8),
+                  ],
                 ),
               ),
-            Row(
-              children: [
-                Expanded(child: StatCard(label: 'مدين', value: fmtNumAlways(stmt.totalDebit))),
-                const SizedBox(width: 8),
-                Expanded(child: StatCard(label: 'دائن', value: fmtNumAlways(stmt.totalCredit))),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: StatCard(
-                    label: stmt.summary?['label']?.toString() ?? 'الرصيد',
-                    value: fmtNumAlways(stmt.summary?['amount'] ?? stmt.finalBalance),
-                  ),
-                ),
-              ],
             ),
-            const SizedBox(height: 12),
-            ...stmt.lines.map((line) => _StatementLineTile(line: line, accSeq: accSeq)),
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(compact ? 10 : 16, 0, compact ? 10 : 16, 16),
+              sliver: SliverList.separated(
+                itemCount: stmt.lines.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (_, i) => _StatementLineTile(line: stmt.lines[i], accSeq: accSeq),
+              ),
+            ),
           ],
         ),
       ),
@@ -98,12 +106,16 @@ class _StatementLineTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final api = ref.watch(apiClientProvider);
+    final api = ref.read(apiClientProvider);
     final lookup = line.invoiceLookup;
+    final typeColor = txTypeColor(line);
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      color: line.isOpening ? const Color(0xFFEFF6FF) : null,
+    return Container(
+      decoration: BoxDecoration(
+        color: line.isOpening ? AppColors.accentSoft : AppColors.surface,
+        borderRadius: BorderRadius.circular(AppColors.radiusSm),
+        border: Border.all(color: AppColors.border),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -112,41 +124,36 @@ class _StatementLineTile extends ConsumerWidget {
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: txTypeColor(line).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
+                    color: typeColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Text(txTypeLabel(line), style: TextStyle(color: txTypeColor(line), fontWeight: FontWeight.w700, fontSize: 12)),
+                  child: Text(txTypeLabel(line), style: TextStyle(color: typeColor, fontWeight: FontWeight.w800, fontSize: 11)),
                 ),
                 const Spacer(),
-                Text(fmtDate(line.date), style: Theme.of(context).textTheme.bodySmall),
+                if (line.date != null)
+                  Text(line.date!, style: const TextStyle(fontSize: 11, color: AppColors.muted, fontWeight: FontWeight.w600)),
               ],
             ),
             const SizedBox(height: 8),
-            Text(line.description, style: const TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
+            Text(line.description, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+            const SizedBox(height: 10),
             Row(
               children: [
-                if (line.debit > 0)
-                  Text('مدين ${fmtNum(line.debit)}', style: const TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.w700)),
-                if (line.credit > 0) ...[
-                  if (line.debit > 0) const SizedBox(width: 12),
-                  Text('دائن ${fmtNum(line.credit)}', style: const TextStyle(color: Color(0xFF059669), fontWeight: FontWeight.w700)),
-                ],
-                const Spacer(),
-                if (line.balance != null)
-                  Text('${fmtNum(line.balance)}', style: Theme.of(context).textTheme.labelLarge),
+                _amountCell('مدين', line.debit, AppColors.danger),
+                _amountCell('دائن', line.credit, AppColors.success),
+                _amountCell('رصيد', line.balance, AppColors.accent),
               ],
             ),
-            if (line.isInvoiceLine && lookup != null) ...[
-              const SizedBox(height: 8),
+            if (lookup != null) ...[
+              const SizedBox(height: 10),
               Row(
                 children: [
                   TextButton.icon(
                     onPressed: () => context.push('/invoice/${lookup.ref}?by=${lookup.by}&acc=$accSeq'),
-                    icon: const Icon(Icons.receipt_outlined, size: 18),
-                    label: const Text('تفاصيل'),
+                    icon: const Icon(Icons.receipt_long_outlined, size: 16),
+                    label: const Text('فاتورة'),
                   ),
                   TextButton.icon(
                     onPressed: () async {
@@ -159,7 +166,7 @@ class _StatementLineTile extends ConsumerWidget {
                         }
                       }
                     },
-                    icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                    icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
                     label: const Text('PDF'),
                   ),
                 ],
@@ -167,6 +174,22 @@ class _StatementLineTile extends ConsumerWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _amountCell(String label, num? value, Color color) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 10, color: AppColors.muted, fontWeight: FontWeight.w700)),
+          Text(
+            value != null && value != 0 ? fmtNumAlways(value) : '—',
+            textDirection: TextDirection.ltr,
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: color),
+          ),
+        ],
       ),
     );
   }

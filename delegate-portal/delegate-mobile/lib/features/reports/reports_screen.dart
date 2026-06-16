@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/layout/breakpoints.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/adaptive_shell.dart';
+import '../../core/widgets/ed_components.dart';
 import '../../models/models.dart';
 import '../home/home_screen.dart';
 
@@ -77,104 +80,140 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     });
   }
 
+  Widget _filtersPanel() {
+    final treesAsync = ref.watch(treesProvider);
+
+    return EdPanelCard(
+      title: 'معايير التقرير',
+      subtitle: 'اختر الشجرة والفترة',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          treesAsync.when(
+            loading: () => const LinearProgressIndicator(color: AppColors.navy),
+            error: (e, _) => Text('$e', style: const TextStyle(color: AppColors.danger)),
+            data: (trees) => DropdownButtonFormField<String>(
+              initialValue: _treeSeq,
+              decoration: const InputDecoration(labelText: 'شجرة الحساب'),
+              items: trees.map((t) => DropdownMenuItem(value: t.seq, child: Text('${t.name1} (${t.accountNum})'))).toList(),
+              onChanged: (v) => setState(() => _treeSeq = v),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(child: _DateField(label: 'من', value: _from, onPick: (d) => setState(() => _from = d))),
+              const SizedBox(width: 12),
+              Expanded(child: _DateField(label: 'إلى', value: _to, onPick: (d) => setState(() => _to = d))),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ActionChip(label: const Text('هذا الشهر'), onPressed: () => _presetMonth(0), backgroundColor: AppColors.surfaceMuted, side: const BorderSide(color: AppColors.border)),
+              ActionChip(label: const Text('الشهر الماضي'), onPressed: () => _presetMonth(-1), backgroundColor: AppColors.surfaceMuted, side: const BorderSide(color: AppColors.border)),
+              ActionChip(
+                label: const Text('هذه السنة'),
+                onPressed: () {
+                  final y = DateTime.now().year;
+                  setState(() {
+                    _from = DateTime(y, 1, 1);
+                    _to = DateTime(y, 12, 31);
+                  });
+                },
+                backgroundColor: AppColors.surfaceMuted,
+                side: const BorderSide(color: AppColors.border),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          EdPrimaryButton(label: 'عرض التقرير', loading: _loading && _result == null, onPressed: _loading ? null : () => _run()),
+          if (_error != null) ...[
+            const SizedBox(height: 10),
+            Text(_error!, style: const TextStyle(color: AppColors.danger, fontWeight: FontWeight.w600)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _resultsPanel() {
+    if (_loading && _result == null) return const LoadingView(message: 'جاري تحميل التقرير...');
+    if (_result == null) {
+      return const EmptyState(message: 'حدّد المعايير واضغط «عرض التقرير»', icon: Icons.bar_chart_rounded);
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      children: [
+        EdStatsBar(
+          items: [
+            (label: 'مبيعات', value: fmtMoney(_result!.summary.salesAmount), color: AppColors.success),
+            (label: 'مردود', value: fmtMoney(_result!.summary.returnsAmount), color: AppColors.danger),
+            (label: 'صافي', value: fmtMoney(_result!.summary.netAmount), color: AppColors.navy),
+          ],
+        ),
+        const SizedBox(height: 16),
+        const EdSectionHeader(title: 'الفواتير', subtitle: 'اضغط لعرض التفاصيل'),
+        ..._result!.invoices.map((inv) {
+          final accent = inv.isReturn ? AppColors.danger : AppColors.moduleReports;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: EdNavCard(
+              icon: inv.isReturn ? Icons.undo_rounded : Icons.receipt_long_rounded,
+              title: '${inv.isReturn ? 'مردود' : 'فاتورة'} ${inv.invoiceNum}',
+              subtitle: '${inv.customerName ?? ''} · ${fmtDate(inv.date)}',
+              accent: accent,
+              trailing: fmtMoney(inv.amount),
+              onTap: () => context.push('/invoice/${inv.ref}?by=auto${inv.accSeq != null ? '&acc=${inv.accSeq}' : ''}'),
+            ),
+          );
+        }),
+        if (_result!.invoices.length < _result!.total)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: OutlinedButton(
+              onPressed: _loading ? null : () => _run(loadMore: true),
+              child: _loading ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('تحميل المزيد'),
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final treesAsync = ref.watch(treesProvider);
+    final layout = EdLayout.of(context);
 
     return AppPage(
       title: 'تقارير المبيعات',
+      kicker: 'التقارير',
       subtitle: 'ملخص وقائمة الفواتير',
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    treesAsync.when(
-                      loading: () => const LinearProgressIndicator(),
-                      error: (e, _) => Text('$e'),
-                      data: (trees) => DropdownButtonFormField<String>(
-                        value: _treeSeq,
-                        decoration: const InputDecoration(labelText: 'شجرة الحساب'),
-                        items: trees.map((t) => DropdownMenuItem(value: t.seq, child: Text('${t.name1} (${t.accountNum})'))).toList(),
-                        onChanged: (v) => setState(() => _treeSeq = v),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(child: _DateField(label: 'من', value: _from, onPick: (d) => setState(() => _from = d))),
-                        const SizedBox(width: 12),
-                        Expanded(child: _DateField(label: 'إلى', value: _to, onPick: (d) => setState(() => _to = d))),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        ActionChip(label: const Text('هذا الشهر'), onPressed: () { _presetMonth(0); }),
-                        ActionChip(label: const Text('الشهر الماضي'), onPressed: () { _presetMonth(-1); }),
-                        ActionChip(label: const Text('هذه السنة'), onPressed: () {
-                          final y = DateTime.now().year;
-                          setState(() {
-                            _from = DateTime(y, 1, 1);
-                            _to = DateTime(y, 12, 31);
-                          });
-                        }),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    FilledButton(onPressed: _loading ? null : () => _run(), child: const Text('عرض التقرير')),
-                    if (_error != null) ...[
-                      const SizedBox(height: 8),
-                      Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ),
-          if (_loading && _result == null) const Expanded(child: LoadingView()),
-          if (_result != null)
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                children: [
-                  Row(
-                    children: [
-                      Expanded(child: StatCard(label: 'مبيعات', value: fmtMoney(_result!.summary.salesAmount))),
-                      const SizedBox(width: 8),
-                      Expanded(child: StatCard(label: 'مردود', value: fmtMoney(_result!.summary.returnsAmount))),
-                      const SizedBox(width: 8),
-                      Expanded(child: StatCard(label: 'صافي', value: fmtMoney(_result!.summary.netAmount))),
-                    ],
+      showBack: true,
+      onBack: () => context.go('/home'),
+      child: layout.isWide
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  width: layout.sidePanelWidth + 60,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: _filtersPanel(),
                   ),
-                  const SizedBox(height: 16),
-                  ..._result!.invoices.map((inv) => Card(
-                        child: ListTile(
-                          title: Text('${inv.isReturn ? 'مردود' : 'فاتورة'} ${inv.invoiceNum}'),
-                          subtitle: Text('${inv.customerName ?? ''} · ${fmtDate(inv.date)}'),
-                          trailing: Text(fmtMoney(inv.amount), style: const TextStyle(fontWeight: FontWeight.w700)),
-                          onTap: () => context.push('/invoice/${inv.ref}?by=auto${inv.accSeq != null ? '&acc=${inv.accSeq}' : ''}'),
-                        ),
-                      )),
-                  if (_result!.invoices.length < _result!.total)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: OutlinedButton(
-                        onPressed: _loading ? null : () => _run(loadMore: true),
-                        child: _loading ? const CircularProgressIndicator() : const Text('تحميل المزيد'),
-                      ),
-                    ),
-                ],
-              ),
+                ),
+                const VerticalDivider(width: 1, color: AppColors.border),
+                Expanded(child: _resultsPanel()),
+              ],
+            )
+          : Column(
+              children: [
+                Padding(padding: const EdgeInsets.all(16), child: _filtersPanel()),
+                Expanded(child: _resultsPanel()),
+              ],
             ),
-        ],
-      ),
     );
   }
 }
@@ -192,6 +231,7 @@ class _DateField extends StatelessWidget {
         final d = await showDatePicker(context: context, initialDate: value, firstDate: DateTime(2010), lastDate: DateTime(2100));
         if (d != null) onPick(d);
       },
+      borderRadius: BorderRadius.circular(AppColors.radiusSm),
       child: InputDecorator(
         decoration: InputDecoration(labelText: label),
         child: Text('${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year}'),

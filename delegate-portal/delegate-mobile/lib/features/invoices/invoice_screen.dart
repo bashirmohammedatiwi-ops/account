@@ -7,6 +7,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/pdf_utils.dart';
 import '../../core/widgets/adaptive_shell.dart';
+import '../../core/widgets/ed_components.dart';
 import '../../models/models.dart';
 
 final invoiceProvider = FutureProvider.family<InvoiceDetail, ({String ref, String by, String? accSeq})>((ref, p) {
@@ -27,76 +28,56 @@ class InvoiceScreen extends ConsumerWidget {
 
     return AppPage(
       title: 'تفاصيل الفاتورة',
+      kicker: 'الفواتير',
       showBack: true,
       subtitle: invoiceAsync.maybeWhen(
         data: (d) => '${d.invoice['num'] ?? ref}',
         orElse: () => ref,
       ),
       actions: [
-        IconButton(
+        EdHeaderIconButton(
+          icon: Icons.picture_as_pdf_outlined,
           tooltip: 'PDF',
-          onPressed: invoiceAsync.hasValue
-              ? () async {
-                  try {
-                    final bytes = await api.getInvoicePdf(ref, by: by, accSeq: accSeq);
-                    await saveAndOpenPdf(bytes, 'invoice-$ref.pdf');
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-                    }
-                  }
+          onPressed: () {
+            if (!invoiceAsync.hasValue) return;
+            () async {
+              try {
+                final bytes = await api.getInvoicePdf(ref, by: by, accSeq: accSeq);
+                await saveAndOpenPdf(bytes, 'invoice-$ref.pdf');
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
                 }
-              : null,
-          icon: const Icon(Icons.picture_as_pdf_outlined),
+              }
+            }();
+          },
         ),
       ],
       child: invoiceAsync.when(
-        loading: () => const LoadingView(),
+        loading: () => const LoadingView(message: 'جاري تحميل الفاتورة...'),
         error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => refWatch.invalidate(invoiceProvider(params))),
         data: (detail) {
           final inv = detail.invoice;
+          final customerName = detail.customer != null ? '${detail.customer!['name1'] ?? detail.customer!['name'] ?? ''}' : '—';
+
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('فاتورة ${inv['num'] ?? ''}', style: Theme.of(context).textTheme.titleLarge),
-                      Text('التاريخ: ${fmtDate(inv['date']?.toString())}'),
-                      if (detail.customer != null)
-                        Text('الزبون: ${detail.customer!['name1'] ?? detail.customer!['name'] ?? ''}'),
-                      Text('المبلغ: ${fmtMoney(inv['amount'] ?? inv['total'])}'),
-                    ],
-                  ),
-                ),
+              EdDocPanel(
+                title: 'فاتورة ${inv['num'] ?? ''}',
+                rows: [
+                  (label: 'التاريخ', value: fmtDate(inv['date']?.toString())),
+                  (label: 'الزبون', value: customerName),
+                  (label: 'المبلغ', value: fmtMoney(inv['amount'] ?? inv['total'])),
+                ],
               ),
-              const SizedBox(height: 12),
-              Card(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: DataTable(
-                    columns: const [
-                      DataColumn(label: Text('المادة')),
-                      DataColumn(label: Text('الكمية')),
-                      DataColumn(label: Text('هدية')),
-                      DataColumn(label: Text('السعر')),
-                      DataColumn(label: Text('المجموع')),
-                    ],
-                    rows: detail.lines.map((line) {
-                      return DataRow(cells: [
-                        DataCell(Text('${line['matName'] ?? line['name'] ?? ''}')),
-                        DataCell(Text(fmtQty(line['quant'] ?? line['qty']))),
-                        DataCell(Text(fmtQty(line['bonus'] ?? 0))),
-                        DataCell(Text(fmtMoney(line['price'] ?? line['unitPrice']))),
-                        DataCell(Text(fmtMoney(line['lineTotal'] ?? line['amount']))),
-                      ]);
-                    }).toList(),
-                  ),
-                ),
-              ),
+              const SizedBox(height: 16),
+              const EdSectionHeader(title: 'البنود'),
+              ...detail.lines.map((line) => EdLineRow(
+                    title: '${line['matName'] ?? line['name'] ?? ''}',
+                    subtitle: '${fmtQty(line['quant'] ?? line['qty'])} + هدية ${fmtQty(line['bonus'] ?? 0)} · ${fmtMoney(line['price'] ?? line['unitPrice'])}',
+                    amount: fmtMoney(line['lineTotal'] ?? line['amount']),
+                  )),
             ],
           );
         },

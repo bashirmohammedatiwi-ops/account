@@ -3,11 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/accounts/accounts_hub_screen.dart';
-import '../../features/accounts/accounts_screens.dart';
 import '../../features/auth/login_screen.dart';
-import '../../features/commerce/commerce_screens.dart';
+import '../../features/commerce/shop_hub_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/invoices/invoice_screen.dart';
+import '../../features/orders/orders_hub_screen.dart';
 import '../../features/reports/reports_screen.dart';
 import '../../features/settings/settings_screen.dart';
 import '../auth/auth_provider.dart';
@@ -70,23 +70,36 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               );
             },
           ),
-          GoRoute(path: '/shop', builder: (_, _) => const ShopBranchesScreen()),
           GoRoute(
-            path: '/shop/:branchId/sections',
-            builder: (context, state) =>
-                ShopSectionsScreen(branchId: int.parse(state.pathParameters['branchId']!)),
+            path: '/shop',
+            builder: (_, _) => const ShopHubScreen(),
+            routes: [
+              GoRoute(
+                path: ':branchId/sections',
+                builder: (context, state) => ShopHubScreen(
+                  branchId: int.parse(state.pathParameters['branchId']!),
+                ),
+              ),
+              GoRoute(
+                path: ':branchId/sections/:sectionId/products',
+                builder: (context, state) => ShopHubScreen(
+                  branchId: int.parse(state.pathParameters['branchId']!),
+                  sectionId: int.parse(state.pathParameters['sectionId']!),
+                ),
+              ),
+            ],
           ),
           GoRoute(
-            path: '/shop/:branchId/sections/:sectionId/products',
-            builder: (context, state) => ShopProductsScreen(
-              branchId: int.parse(state.pathParameters['branchId']!),
-              sectionId: int.parse(state.pathParameters['sectionId']!),
-            ),
-          ),
-          GoRoute(path: '/orders', builder: (_, _) => const OrdersScreen()),
-          GoRoute(
-            path: '/orders/:id',
-            builder: (context, state) => OrderDetailScreen(id: int.parse(state.pathParameters['id']!)),
+            path: '/orders',
+            builder: (_, _) => const OrdersHubScreen(),
+            routes: [
+              GoRoute(
+                path: ':id',
+                builder: (context, state) => OrdersHubScreen(
+                  orderId: int.parse(state.pathParameters['id']!),
+                ),
+              ),
+            ],
           ),
           GoRoute(path: '/reports', builder: (_, _) => const ReportsScreen()),
           GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
