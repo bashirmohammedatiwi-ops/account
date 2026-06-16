@@ -4,83 +4,91 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
-import '../../core/utils/formatters.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/utils/pdf_utils.dart';
 import '../../core/widgets/adaptive_shell.dart';
-import '../../core/widgets/ed_components.dart';
 import '../../models/models.dart';
+import 'invoice_ui.dart';
 
 final invoiceProvider = FutureProvider.family<InvoiceDetail, ({String ref, String by, String? accSeq})>((ref, p) {
+  ref.keepAlive();
   return withAuth(ref, () => ref.read(apiClientProvider).getInvoice(p.ref, by: p.by, accSeq: p.accSeq));
 });
 
-class InvoiceScreen extends ConsumerWidget {
+class InvoiceScreen extends ConsumerStatefulWidget {
   const InvoiceScreen({super.key, required this.ref, required this.by, this.accSeq});
   final String ref;
   final String by;
   final String? accSeq;
 
   @override
-  Widget build(BuildContext context, WidgetRef refWatch) {
-    final params = (ref: ref, by: by, accSeq: accSeq);
-    final invoiceAsync = refWatch.watch(invoiceProvider(params));
-    final api = refWatch.watch(apiClientProvider);
+  ConsumerState<InvoiceScreen> createState() => _InvoiceScreenState();
+}
+
+class _InvoiceScreenState extends ConsumerState<InvoiceScreen> {
+  bool _exporting = false;
+
+  Future<void> _exportPdf() async {
+    setState(() => _exporting = true);
+    try {
+      final bytes = await ref.read(apiClientProvider).getInvoicePdf(widget.ref, by: widget.by, accSeq: widget.accSeq);
+      await saveAndOpenPdf(bytes, 'invoice-${widget.ref}.pdf');
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final params = (ref: widget.ref, by: widget.by, accSeq: widget.accSeq);
+    final invoiceAsync = ref.watch(invoiceProvider(params));
 
     return AppPage(
       title: 'تفاصيل الفاتورة',
-      kicker: 'الفواتير',
+      kicker: 'Edari · الفاتورة',
       showBack: true,
       subtitle: invoiceAsync.maybeWhen(
-        data: (d) => '${d.invoice['num'] ?? ref}',
-        orElse: () => ref,
+        data: (d) => 'فاتورة ${d.invoice['num'] ?? widget.ref}',
+        orElse: () => widget.ref,
       ),
-      actions: [
-        EdHeaderIconButton(
-          icon: Icons.picture_as_pdf_outlined,
-          tooltip: 'PDF',
-          onPressed: () {
-            if (!invoiceAsync.hasValue) return;
-            () async {
-              try {
-                final bytes = await api.getInvoicePdf(ref, by: by, accSeq: accSeq);
-                await saveAndOpenPdf(bytes, 'invoice-$ref.pdf');
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-                }
-              }
-            }();
-          },
-        ),
-      ],
-      child: invoiceAsync.when(
-        loading: () => const LoadingView(message: 'جاري تحميل الفاتورة...'),
-        error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => refWatch.invalidate(invoiceProvider(params))),
-        data: (detail) {
-          final inv = detail.invoice;
-          final customerName = detail.customer != null ? '${detail.customer!['name1'] ?? detail.customer!['name'] ?? ''}' : '—';
-
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              EdDocPanel(
-                title: 'فاتورة ${inv['num'] ?? ''}',
-                rows: [
-                  (label: 'التاريخ', value: fmtDate(inv['date']?.toString())),
-                  (label: 'الزبون', value: customerName),
-                  (label: 'المبلغ', value: fmtMoney(inv['amount'] ?? inv['total'])),
+      child: ColoredBox(
+        color: InvTheme.pageBg,
+        child: invoiceAsync.when(
+          loading: () => const LoadingView(message: 'جاري تحميل الفاتورة...'),
+          error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(invoiceProvider(params))),
+          data: (detail) {
+            final num = detail.invoice['num'] ?? widget.ref;
+            return RefreshIndicator(
+              color: AppColors.navy,
+              onRefresh: () async => ref.invalidate(invoiceProvider(params)),
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                    sliver: SliverList(
+                      delegate: SliverChildListDelegate([
+                        EdInvoiceExportBar(
+                          label: 'تصدير فاتورة $num PDF',
+                          onExport: _exportPdf,
+                          loading: _exporting,
+                        ),
+                        const SizedBox(height: 12),
+                        EdInvoiceDocPanel(detail: detail),
+                      ]),
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                    sliver: SliverToBoxAdapter(child: EdInvoiceLinesSection(detail: detail)),
+                  ),
                 ],
               ),
-              const SizedBox(height: 16),
-              const EdSectionHeader(title: 'البنود'),
-              ...detail.lines.map((line) => EdLineRow(
-                    title: '${line['matName'] ?? line['name'] ?? ''}',
-                    subtitle: '${fmtQty(line['quant'] ?? line['qty'])} + هدية ${fmtQty(line['bonus'] ?? 0)} · ${fmtMoney(line['price'] ?? line['unitPrice'])}',
-                    amount: fmtMoney(line['lineTotal'] ?? line['amount']),
-                  )),
-            ],
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }

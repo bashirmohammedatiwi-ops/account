@@ -1,103 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../layout/breakpoints.dart';
 import '../theme/app_colors.dart';
 import 'ed_components.dart';
 
-/// غلاف التطبيق — بدون شريط سفلي (مثل الويب: الرئيسية = مركز التطبيقات)
+/// غلاف التطبيق — بدون شريط جانبي أو سفلي (التنقل من الرئيسية فقط)
 class AdaptiveShell extends StatelessWidget {
   const AdaptiveShell({super.key, required this.child});
 
   final Widget child;
 
-  static const _destinations = [
-    _NavItem('/home', Icons.home_rounded, 'الرئيسية'),
-    _NavItem('/accounts', Icons.account_tree_rounded, 'كشوف'),
-    _NavItem('/shop', Icons.storefront_rounded, 'المنتجات'),
-    _NavItem('/orders', Icons.receipt_long_rounded, 'طلباتي'),
-    _NavItem('/reports', Icons.bar_chart_rounded, 'تقارير'),
-  ];
-
-  int _selectedIndex(BuildContext context) {
-    final loc = GoRouterState.of(context).uri.path;
-    if (loc == '/home' || loc == '/settings') return 0;
-    for (var i = 1; i < _destinations.length; i++) {
-      if (loc == _destinations[i].path || loc.startsWith('${_destinations[i].path}/')) {
-        return i;
-      }
-    }
-    return 0;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
-    final wide = width >= EdLayout.tabletMin;
-    final selected = _selectedIndex(context);
-    final onHome = GoRouterState.of(context).uri.path == '/home';
-
-    if (wide) {
-      return Directionality(
-        textDirection: TextDirection.rtl,
-        child: Scaffold(
-          backgroundColor: AppColors.bg,
-          body: Row(
-            children: [
-              NavigationRail(
-                extended: width >= EdLayout.wideMin,
-                minExtendedWidth: 180,
-                selectedIndex: onHome ? 0 : selected.clamp(0, _destinations.length - 1),
-                onDestinationSelected: (i) => context.go(_destinations[i].path),
-                leading: Padding(
-                  padding: const EdgeInsets.only(top: 12, bottom: 8),
-                  child: InkWell(
-                    onTap: () => context.go('/home'),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.asset('assets/logo.png', width: 44, height: 44),
-                  ),
-                ),
-                trailing: Expanded(
-                  child: Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: IconButton(
-                        tooltip: 'الحساب',
-                        onPressed: () => context.push('/settings'),
-                        icon: const Icon(Icons.person_outline_rounded),
-                      ),
-                    ),
-                  ),
-                ),
-                destinations: _destinations
-                    .map((d) => NavigationRailDestination(
-                          icon: Icon(d.icon),
-                          selectedIcon: Icon(d.icon, fill: 1),
-                          label: Text(d.label),
-                        ))
-                    .toList(),
-              ),
-              const VerticalDivider(width: 1, color: AppColors.border),
-              Expanded(child: child),
-            ],
-          ),
-        ),
-      );
-    }
-
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(backgroundColor: AppColors.bg, body: child),
     );
   }
-}
-
-class _NavItem {
-  const _NavItem(this.path, this.icon, this.label);
-  final String path;
-  final IconData icon;
-  final String label;
 }
 
 class AppPage extends StatelessWidget {

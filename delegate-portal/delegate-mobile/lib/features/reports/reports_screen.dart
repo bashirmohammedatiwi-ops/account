@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart';
-import '../../core/layout/breakpoints.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/adaptive_shell.dart';
@@ -185,35 +184,18 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final layout = EdLayout.of(context);
-
     return AppPage(
       title: 'تقارير المبيعات',
       kicker: 'التقارير',
       subtitle: 'ملخص وقائمة الفواتير',
       showBack: true,
       onBack: () => context.go('/home'),
-      child: layout.isWide
-          ? Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(
-                  width: layout.sidePanelWidth + 60,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: _filtersPanel(),
-                  ),
-                ),
-                const VerticalDivider(width: 1, color: AppColors.border),
-                Expanded(child: _resultsPanel()),
-              ],
-            )
-          : Column(
-              children: [
-                Padding(padding: const EdgeInsets.all(16), child: _filtersPanel()),
-                Expanded(child: _resultsPanel()),
-              ],
-            ),
+      child: Column(
+        children: [
+          Padding(padding: const EdgeInsets.all(16), child: _filtersPanel()),
+          Expanded(child: _resultsPanel()),
+        ],
+      ),
     );
   }
 }

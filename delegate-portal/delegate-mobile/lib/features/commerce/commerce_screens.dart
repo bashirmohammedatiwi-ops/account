@@ -327,10 +327,7 @@ class _ShopProductsPanelState extends ConsumerState<ShopProductsPanel> {
     final layout = EdLayout.of(context);
     final cols = layout.gridColumns(phone: 2, tablet: 3, wide: 4, desktop: 5);
 
-    final toolbar = Container(
-      color: AppColors.surface,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.border))),
+    final toolbar = EdPageToolbar(
       child: Row(
         children: [
           Expanded(

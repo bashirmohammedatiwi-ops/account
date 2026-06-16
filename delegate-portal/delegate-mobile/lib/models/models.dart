@@ -104,6 +104,7 @@ class StatementLine {
     this.billSeq,
     this.billNum,
     this.invoiceRef,
+    this.branch2,
   });
 
   final String description;
@@ -118,6 +119,7 @@ class StatementLine {
   final String? billSeq;
   final String? billNum;
   final String? invoiceRef;
+  final String? branch2;
 
   bool get isInvoiceLine {
     if (isOpening || isReconciliation || !hasInvoice) return false;
@@ -151,6 +153,7 @@ class StatementLine {
         billSeq: json['billSeq']?.toString(),
         billNum: json['billNum']?.toString(),
         invoiceRef: json['invoiceRef']?.toString(),
+        branch2: json['branch2'] as String?,
       );
 }
 
@@ -172,6 +175,8 @@ class AccountStatement {
     this.finalBalance = 0,
     this.summary,
     this.debtAmount,
+    this.periodStart,
+    this.periodEnd,
   });
 
   final Map<String, dynamic> account;
@@ -182,6 +187,8 @@ class AccountStatement {
   final num finalBalance;
   final Map<String, dynamic>? summary;
   final num? debtAmount;
+  final String? periodStart;
+  final String? periodEnd;
 
   factory AccountStatement.fromJson(Map<String, dynamic> json) => AccountStatement(
         account: Map<String, dynamic>.from(json['account'] as Map? ?? {}),
@@ -194,6 +201,8 @@ class AccountStatement {
         finalBalance: json['finalBalance'] as num? ?? 0,
         summary: json['summary'] != null ? Map<String, dynamic>.from(json['summary'] as Map) : null,
         debtAmount: json['debtAmount'] as num?,
+        periodStart: json['periodStart'] as String?,
+        periodEnd: json['periodEnd'] as String?,
       );
 }
 

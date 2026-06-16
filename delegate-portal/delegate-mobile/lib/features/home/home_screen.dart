@@ -23,30 +23,34 @@ class HomeScreen extends ConsumerWidget {
     final treeCount = treesAsync.maybeWhen(data: (t) => '${t.length}', orElse: () => '—');
     final orderCount = ordersAsync.maybeWhen(data: (o) => '${o.length}', orElse: () => '—');
 
-    final apps = [
-      EdAppTile(
+    final modules = [
+      EdModuleCard(
         icon: Icons.account_tree_rounded,
-        label: 'كشوف\nالحساب',
+        title: 'كشوف الحساب',
+        subtitle: 'شجرات · زبائن · كشوف وحركات',
         color: AppColors.moduleAccounts,
         badge: treeCount,
         onTap: () => context.go('/accounts'),
       ),
-      EdAppTile(
+      EdModuleCard(
         icon: Icons.storefront_rounded,
-        label: 'المنتجات',
+        title: 'المنتجات',
+        subtitle: 'عرض وطلب · فاتورة مندوب',
         color: AppColors.moduleShop,
         onTap: () => context.go('/shop'),
       ),
-      EdAppTile(
+      EdModuleCard(
         icon: Icons.receipt_long_rounded,
-        label: 'طلباتي',
+        title: 'طلباتي',
+        subtitle: 'متابعة الطلبات والحالات',
         color: AppColors.moduleOrders,
         badge: orderCount,
         onTap: () => context.go('/orders'),
       ),
-      EdAppTile(
+      EdModuleCard(
         icon: Icons.bar_chart_rounded,
-        label: 'التقارير',
+        title: 'التقارير',
+        subtitle: 'ملخص المبيعات والأداء',
         color: AppColors.moduleReports,
         onTap: () => context.go('/reports'),
       ),
@@ -85,17 +89,13 @@ class HomeScreen extends ConsumerWidget {
               agentName: agent?.name ?? 'مندوب',
               treeCount: treeCount,
               orderCount: orderCount,
-              apps: apps,
+              modules: modules,
             )
           : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
               children: [
                 EdHeroCard(agentName: agent?.name ?? 'مندوب', avatarText: agent?.name),
-                const SizedBox(height: 24),
-                const Text('التطبيقات', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.textSecondary)),
-                const SizedBox(height: 14),
-                Center(child: Wrap(alignment: WrapAlignment.center, spacing: 24, runSpacing: 24, children: apps)),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
                 EdStatsBar(
                   items: [
                     (label: 'الأشجار', value: treeCount, color: AppColors.accentTeal),
@@ -103,6 +103,15 @@ class HomeScreen extends ConsumerWidget {
                     (label: 'الحالة', value: 'نشط', color: AppColors.success),
                   ],
                 ),
+                const SizedBox(height: 28),
+                const Text('التطبيقات', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.text)),
+                const SizedBox(height: 6),
+                const Text('اختر وحدة العمل للمتابعة', style: TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 16),
+                for (var i = 0; i < modules.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 12),
+                  modules[i],
+                ],
               ],
             ),
     );
@@ -114,18 +123,18 @@ class _WideHome extends StatelessWidget {
     required this.agentName,
     required this.treeCount,
     required this.orderCount,
-    required this.apps,
+    required this.modules,
   });
 
   final String agentName;
   final String treeCount;
   final String orderCount;
-  final List<Widget> apps;
+  final List<Widget> modules;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(20),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -148,24 +157,19 @@ class _WideHome extends StatelessWidget {
           ),
           const SizedBox(width: 28),
           Expanded(
-            flex: 4,
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(AppColors.radiusLg),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('التطبيقات', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 8),
-                  const Text('اختر وحدة العمل', style: TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 24),
-                  Wrap(spacing: 28, runSpacing: 28, children: apps),
+            flex: 5,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('التطبيقات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                const Text('كل وحدة في صفحة مستقلة — ارجع للرئيسية في أي وقت', style: TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 20),
+                for (var i = 0; i < modules.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 12),
+                  modules[i],
                 ],
-              ),
+              ],
             ),
           ),
         ],

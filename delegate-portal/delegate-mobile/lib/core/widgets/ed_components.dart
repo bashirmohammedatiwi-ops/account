@@ -159,7 +159,121 @@ class EdHeroCard extends StatelessWidget {
   }
 }
 
-/// أيقونة تطبيق دائرية — مثل `.ed-app-tile`
+/// شريط أدوات تحت الرأس — خلفية بيضاء وحد سفلي
+class EdPageToolbar extends StatelessWidget {
+  const EdPageToolbar({super.key, required this.child, this.padding});
+
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: padding ?? const EdgeInsets.fromLTRB(16, 10, 16, 12),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      child: child,
+    );
+  }
+}
+
+/// بطاقة تطبيق رئيسية — من الرئيسية فقط
+class EdModuleCard extends StatelessWidget {
+  const EdModuleCard({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+    this.badge,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+  final String? badge;
+
+  bool get _showBadge => badge != null && badge != '—' && badge != '0';
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      elevation: 0,
+      shadowColor: AppColors.navy.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(AppColors.radiusLg),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppColors.radiusLg),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppColors.radiusLg),
+            border: Border.all(color: AppColors.border),
+            boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.05), blurRadius: 16, offset: const Offset(0, 6))],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppColors.radiusLg),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(width: 5, color: color),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 14, 16),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: color.withValues(alpha: 0.2)),
+                            ),
+                            child: Icon(icon, color: color, size: 26),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.text)),
+                                const SizedBox(height: 4),
+                                Text(subtitle, style: const TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                          ),
+                          if (_showBadge)
+                            Container(
+                              margin: const EdgeInsets.only(left: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(999)),
+                              child: Text(badge!, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+                            ),
+                          const SizedBox(width: 6),
+                          Icon(Icons.arrow_back_ios_new_rounded, size: 14, color: color.withValues(alpha: 0.85)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// أيقونة تطبيق دائرية — للاستخدام المضغوط
 class EdAppTile extends StatelessWidget {
   const EdAppTile({
     super.key,
