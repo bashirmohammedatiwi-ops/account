@@ -1,7 +1,7 @@
 /**
  * Sync Edari purchase movements + consumer prices to price-app server.
  * Usage:
- *   node sync-client/price-app-sync.js --server URL [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--key KEY]
+ *   node sync-client/price-app-sync.js --server URL [--all] [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--key KEY]
  */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
@@ -20,6 +20,10 @@ const SYNC_KEY = process.argv.includes('--key')
   ? process.argv[process.argv.indexOf('--key') + 1]
   : (process.env.PRICE_SYNC_KEY || '');
 
+const FETCH_ALL = process.argv.includes('--all')
+  || process.env.PRICE_SYNC_ALL === '1'
+  || process.env.PRICE_SYNC_ALL === 'true';
+
 const DATE_FROM = process.argv.includes('--from')
   ? process.argv[process.argv.indexOf('--from') + 1]
   : (process.env.PRICE_SYNC_FROM || '');
@@ -28,9 +32,11 @@ const DATE_TO = process.argv.includes('--to')
   ? process.argv[process.argv.indexOf('--to') + 1]
   : (process.env.PRICE_SYNC_TO || '');
 
-const UPLOAD_BATCH = 400;
+const UPLOAD_BATCH = 300;
+const BILL_SEQ_CHUNK = 60;
+const QUERY_TIMEOUT_MS = 300000;
 
-async function query(sql, timeoutMs = 120000) {
+async function query(sql, timeoutMs = QUERY_TIMEOUT_MS) {
   const r = await odbcBridge.runQuery({ ...getEdariConnection(), sql, timeoutMs });
   if (!r.ok) throw new Error(r.error || 'Query failed');
   return r.rows || [];
@@ -62,7 +68,7 @@ function sqlTimestampStart(iso) {
 }
 
 function buildDateRangeSql(dateFrom, dateTo, column = 'i."Date"') {
-  if (!dateFrom || !dateTo) return '1=1';
+  if (FETCH_ALL || !dateFrom || !dateTo) return '1=1';
   const endExclusive = nextDayIso(dateTo);
   return `${column} >= ${sqlTimestampStart(dateFrom)} AND ${column} < ${sqlTimestampStart(endExclusive)}`;
 }
@@ -70,6 +76,14 @@ function buildDateRangeSql(dateFrom, dateTo, column = 'i."Date"') {
 function reportProgress(step, total, pct, msg) {
   const line = `@PROGRESS|${step}|${total}|${pct}|${msg || ''}`;
   console.log(line);
+}
+
+function resolveMaterialBarcode(row) {
+  const barcode = String(row.Barcode ?? '').trim();
+  if (barcode && barcode !== '0') return barcode;
+  const num = String(row.Num ?? row.MatNum ?? '').trim();
+  if (num && num !== '0') return num;
+  return '';
 }
 
 async function fetchAccountNames(accSeqs) {
@@ -85,49 +99,82 @@ async function fetchAccountNames(accSeqs) {
   return map;
 }
 
-async function fetchPurchaseMovements(dateFrom, dateTo) {
+async function fetchPurchaseBillSeqs(dateFrom, dateTo) {
   const dateSql = buildDateRangeSql(dateFrom, dateTo);
-  const baseCols = 'l.BillSeq, l.BillNo, l.Mat, l.MatName, l.Quant, l.Price';
-  const withSum = `${baseCols}, l.Sum`;
-  const selectCols = withSum;
+  const rows = await query(`
+    SELECT Seq
+    FROM File15n i
+    WHERE i.Kind = 3 AND ${dateSql}
+    ORDER BY i."Date" ASC, i.Seq ASC
+  `);
+  return [...new Set(rows.map((r) => String(r.Seq)).filter(Boolean))];
+}
 
-  let rows;
+async function fetchPurchaseLinesChunk(billSeqs) {
+  if (!billSeqs.length) return [];
+
+  const ids = billSeqs.join(',');
+  const baseCols = 'l.Seq AS LineSeq, l.BillSeq, l.BillNo, l.Mat, l.MatName, l.Quant, l.Price';
+  const selectWithSum = `${baseCols}, l.Sum`;
+  const joinSql = `
+    FROM file14n l
+    INNER JOIN File15n i ON i.Seq = l.BillSeq
+    INNER JOIN File13n m ON m.Seq = l.Mat
+    WHERE l.BillSeq IN (${ids})
+      AND i.Kind = 3
+      AND m.SubCount = 0
+  `;
+
   try {
-    rows = await query(`
-      SELECT ${selectCols},
+    return await query(`
+      SELECT ${selectWithSum},
         i.Num AS InvNum, i."Date" AS InvDate, i.Two AS AccSeq, i.Kind AS InvKind,
-        m.Barcode, m.Name1, m.SellPr4
-      FROM file14n l
-      INNER JOIN File15n i ON i.Seq = l.BillSeq
-      INNER JOIN File13n m ON m.Seq = l.Mat
-      WHERE i.Kind = 3 AND m.SubCount = 0 AND ${dateSql}
-      ORDER BY i."Date" DESC, l.BillSeq, l.BillNo
-    `, 180000);
+        m.Barcode, m.Num, m.Name1, m.SellPr4
+      ${joinSql}
+      ORDER BY i."Date" ASC, l.BillSeq ASC, l.BillNo ASC
+    `);
   } catch {
-    rows = await query(`
-      SELECT ${baseCols},
-        i.Num AS InvNum, i."Date" AS InvDate, i.Two AS AccSeq, i.Kind AS InvKind,
-        m.Barcode, m.Name1, m.SellPr4
-      FROM file14n l
-      INNER JOIN File15n i ON i.Seq = l.BillSeq
-      INNER JOIN File13n m ON m.Seq = l.Mat
-      WHERE i.Kind = 3 AND m.SubCount = 0 AND ${dateSql}
-      ORDER BY i."Date" DESC, l.BillSeq, l.BillNo
-    `, 180000);
+    try {
+      return await query(`
+        SELECT l.BillSeq, l.BillNo, l.Mat, l.MatName, l.Quant, l.Price, l.Sum,
+          i.Num AS InvNum, i."Date" AS InvDate, i.Two AS AccSeq, i.Kind AS InvKind,
+          m.Barcode, m.Num, m.Name1, m.SellPr4
+        ${joinSql}
+        ORDER BY i."Date" ASC, l.BillSeq ASC, l.BillNo ASC
+      `);
+    } catch {
+      return await query(`
+        SELECT ${baseCols},
+          i.Num AS InvNum, i."Date" AS InvDate, i.Two AS AccSeq, i.Kind AS InvKind,
+          m.Barcode, m.Num, m.Name1, m.SellPr4
+        ${joinSql}
+        ORDER BY i."Date" ASC, l.BillSeq ASC, l.BillNo ASC
+      `);
+    }
   }
+}
 
-  const accMap = await fetchAccountNames(rows.map((r) => r.AccSeq));
+function mapRowsToMovements(rows, accMap) {
   const movements = [];
   const productMap = new Map();
+  const seenKeys = new Set();
 
   for (const row of rows) {
-    const barcode = String(row.Barcode || '').trim();
+    const barcode = resolveMaterialBarcode(row);
     if (!barcode) continue;
 
     const quantity = Number(row.Quant || 0);
     const unitPrice = Number(row.Price || 0);
     let totalPrice = Number(row.Sum || 0);
     if (!totalPrice && quantity && unitPrice) totalPrice = quantity * unitPrice;
+
+    const lineSeq = String(row.LineSeq ?? row.Seq ?? '').trim();
+    const edariKey = lineSeq
+      ? `L:${lineSeq}`
+      : `${row.BillSeq}:${row.BillNo}:${row.Mat}`;
+
+    if (seenKeys.has(edariKey)) continue;
+    seenKeys.add(edariKey);
 
     const supplier = accMap.get(String(sqlInt(row.AccSeq))) || '';
     const date = normalizeEdariDateIso(row.InvDate);
@@ -142,38 +189,74 @@ async function fetchPurchaseMovements(dateFrom, dateTo) {
       unit_price: unitPrice,
       total_price: totalPrice,
       date: date || null,
-      edari_key: `${row.BillSeq}:${row.BillNo}`,
+      edari_key: edariKey,
     });
 
     if (!productMap.has(barcode)) {
-      productMap.set(barcode, { barcode, name, consumer_price: consumerPrice > 0 ? consumerPrice : null });
-    } else if (consumerPrice > 0) {
-      productMap.get(barcode).consumer_price = consumerPrice;
-      if (name) productMap.get(barcode).name = name;
+      productMap.set(barcode, {
+        barcode,
+        name,
+        consumer_price: consumerPrice > 0 ? consumerPrice : null,
+      });
+    } else {
+      const existing = productMap.get(barcode);
+      if (name) existing.name = name;
+      if (consumerPrice > 0) existing.consumer_price = consumerPrice;
     }
   }
 
+  return { movements, products: [...productMap.values()] };
+}
+
+async function fetchPurchaseMovements(dateFrom, dateTo) {
+  reportProgress(1, 4, 0, FETCH_ALL ? 'جلب كل فواتير المشتريات...' : 'جلب فواتير المشتريات للفترة...');
+  const billSeqs = await fetchPurchaseBillSeqs(dateFrom, dateTo);
+  reportProgress(1, 4, 15, `فواتير مشتريات: ${billSeqs.length}`);
+
+  if (!billSeqs.length) {
+    return { movements: [], products: [], bills: 0, rawLines: 0 };
+  }
+
+  const allRows = [];
+  const parts = chunk(billSeqs, BILL_SEQ_CHUNK);
+  for (let i = 0; i < parts.length; i++) {
+    const rows = await fetchPurchaseLinesChunk(parts[i]);
+    allRows.push(...rows);
+    const pct = 15 + Math.round(((i + 1) / parts.length) * 55);
+    reportProgress(1, 4, pct, `بنود: ${allRows.length} (${i + 1}/${parts.length})`);
+  }
+
+  reportProgress(1, 4, 75, 'جلب أسماء الموردين...');
+  const accMap = await fetchAccountNames(allRows.map((r) => r.AccSeq));
+  const mapped = mapRowsToMovements(allRows, accMap);
+
+  reportProgress(1, 4, 100, `تم: ${mapped.movements.length} حركة من ${billSeqs.length} فاتورة`);
   return {
-    movements,
-    products: [...productMap.values()],
+    ...mapped,
+    bills: billSeqs.length,
+    rawLines: allRows.length,
   };
 }
 
 async function fetchConsumerPrices() {
   const rows = await query(`
-    SELECT Barcode, Name1, SellPr4
+    SELECT Barcode, Num, Name1, SellPr4
     FROM File13n
     WHERE SubCount = 0
-      AND Barcode IS NOT NULL
-      AND TRIM(Barcode) <> ''
-      AND SellPr4 > 0
-  `, 180000);
+  `);
 
-  return rows.map((row) => ({
-    barcode: String(row.Barcode || '').trim(),
-    name: String(row.Name1 || '').trim(),
-    consumer_price: Number(row.SellPr4 || 0),
-  })).filter((p) => p.barcode);
+  const map = new Map();
+  for (const row of rows) {
+    const barcode = resolveMaterialBarcode(row);
+    if (!barcode) continue;
+    const sellPr4 = Number(row.SellPr4 || 0);
+    map.set(barcode, {
+      barcode,
+      name: String(row.Name1 || '').trim(),
+      consumer_price: sellPr4 > 0 ? sellPr4 : null,
+    });
+  }
+  return [...map.values()];
 }
 
 function mergeProducts(primary = [], extra = []) {
@@ -220,7 +303,7 @@ async function uploadAll(serverUrl, syncKey, products, movements) {
     const result = await uploadBatch(serverUrl, syncKey, { products: part, movements: [] });
     productsUpserted += result.products_upserted || 0;
     consumerPricesUpdated += result.consumer_prices_updated || 0;
-    reportProgress(2, 3, Math.round(((i + 1) / productParts.length) * 100), `منتجات: ${productsUpserted}`);
+    reportProgress(3, 4, Math.round(((i + 1) / Math.max(productParts.length, 1)) * 40), `رفع منتجات: ${i + 1}/${productParts.length}`);
   }
 
   const movementParts = chunk(movements, UPLOAD_BATCH);
@@ -228,7 +311,7 @@ async function uploadAll(serverUrl, syncKey, products, movements) {
     const part = movementParts[i];
     const result = await uploadBatch(serverUrl, syncKey, { products: [], movements: part });
     movementsUpserted += result.movements_upserted || 0;
-    reportProgress(3, 3, Math.round(((i + 1) / movementParts.length) * 100), `حركات: ${movementsUpserted}`);
+    reportProgress(3, 4, 40 + Math.round(((i + 1) / Math.max(movementParts.length, 1)) * 60), `رفع حركات: ${movementsUpserted}/${movements.length}`);
   }
 
   return { productsUpserted, consumerPricesUpdated, movementsUpserted };
@@ -238,26 +321,36 @@ async function main() {
   const serverUrl = String(SERVER || '').trim().replace(/\/$/, '');
   if (!serverUrl) throw new Error('عنوان سيرفر الأسعار غير مضبوط');
 
-  reportProgress(1, 3, 0, 'قراءة حركة المشتريات من Edari...');
-  const { movements, products: movementProducts } = await fetchPurchaseMovements(DATE_FROM, DATE_TO);
-  reportProgress(1, 3, 100, `تم: ${movements.length} حركة`);
+  const dateFrom = FETCH_ALL ? '' : DATE_FROM;
+  const dateTo = FETCH_ALL ? '' : DATE_TO;
 
-  reportProgress(2, 3, 0, 'قراءة أسعار المستهلك...');
+  if (!FETCH_ALL && (!dateFrom || !dateTo)) {
+    throw new Error('حدد تاريخ البداية والنهاية، أو فعّل «جلب كل الحركات»');
+  }
+
+  const purchaseData = await fetchPurchaseMovements(dateFrom, dateTo);
+
+  reportProgress(2, 4, 0, 'قراءة أسعار المستهلك...');
   const consumerProducts = await fetchConsumerPrices();
-  const products = mergeProducts(movementProducts, consumerProducts);
-  reportProgress(2, 3, 100, `تم: ${products.length} منتج`);
+  const products = mergeProducts(purchaseData.products, consumerProducts);
+  reportProgress(2, 4, 100, `منتجات: ${products.length}`);
 
-  reportProgress(3, 3, 0, 'رفع البيانات إلى سيرفر الأسعار...');
-  const uploadResult = await uploadAll(serverUrl, SYNC_KEY, products, movements);
+  reportProgress(3, 4, 0, 'رفع البيانات إلى سيرفر الأسعار...');
+  const uploadResult = await uploadAll(serverUrl, SYNC_KEY, products, purchaseData.movements);
 
   const summary = {
     ok: true,
+    fetchAll: FETCH_ALL,
+    bills: purchaseData.bills || 0,
+    rawLines: purchaseData.rawLines || 0,
     products: products.length,
-    movements: movements.length,
+    movements: purchaseData.movements.length,
     ...uploadResult,
   };
 
-  console.log(`✓ تم رفع الأسعار: ${summary.productsUpserted} منتج، ${summary.movementsUpserted} حركة مشتريات، ${summary.consumerPricesUpdated} سعر مستهلك`);
+  console.log(
+    `✓ تم رفع الأسعار: ${summary.productsUpserted} منتج، ${summary.movementsUpserted} حركة مشتريات (${summary.bills} فاتورة)، ${summary.consumerPricesUpdated} سعر مستهلك`
+  );
   console.log(`@SYNC_RESULT|${JSON.stringify(summary)}`);
   return summary;
 }

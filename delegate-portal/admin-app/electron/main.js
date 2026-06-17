@@ -898,7 +898,7 @@ ipcMain.handle('run-background-sync-now', async () => {
 
 let activePriceSyncPromise = null;
 
-function runPriceAppSyncScript({ serverUrl, syncKey, dateFrom, dateTo } = {}) {
+function runPriceAppSyncScript({ serverUrl, syncKey, dateFrom, dateTo, fetchAll } = {}) {
   if (activePriceSyncPromise) return activePriceSyncPromise;
 
   activePriceSyncPromise = new Promise((resolve, reject) => {
@@ -907,19 +907,25 @@ function runPriceAppSyncScript({ serverUrl, syncKey, dateFrom, dateTo } = {}) {
     const nodeBin = getNodeBin();
     let stdout = '';
     const syncTarget = String(serverUrl || 'http://187.124.23.65:5000').replace(/\/$/, '');
+    const syncAll = fetchAll !== false && fetchAll !== '0';
 
     const args = [script, '--server', syncTarget];
     if (syncKey) args.push('--key', syncKey);
-    if (dateFrom) args.push('--from', dateFrom);
-    if (dateTo) args.push('--to', dateTo);
+    if (syncAll) {
+      args.push('--all');
+    } else {
+      if (dateFrom) args.push('--from', dateFrom);
+      if (dateTo) args.push('--to', dateTo);
+    }
 
     const child = spawn(nodeBin, args, {
       cwd: portalDir,
       env: portalChildEnv({
         PRICE_APP_SERVER: syncTarget,
         PRICE_SYNC_KEY: syncKey || '',
-        PRICE_SYNC_FROM: dateFrom || '',
-        PRICE_SYNC_TO: dateTo || '',
+        PRICE_SYNC_ALL: syncAll ? '1' : '0',
+        PRICE_SYNC_FROM: syncAll ? '' : (dateFrom || ''),
+        PRICE_SYNC_TO: syncAll ? '' : (dateTo || ''),
       }),
       windowsHide: true,
     });

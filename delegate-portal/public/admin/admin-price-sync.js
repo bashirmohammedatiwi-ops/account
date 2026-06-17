@@ -27,6 +27,34 @@ function applyPriceSyncKey(key) {
   if (el) el.value = norm;
 }
 
+function isPriceSyncAllDates() {
+  const el = document.getElementById('priceSyncAllDates');
+  if (!el) return true;
+  if (localStorage.getItem('priceSyncAllDates') === '0') return false;
+  return el.checked;
+}
+
+function applyPriceSyncAllDates(all) {
+  localStorage.setItem('priceSyncAllDates', all ? '1' : '0');
+  const el = document.getElementById('priceSyncAllDates');
+  if (el) el.checked = all;
+  updatePriceSyncDateUi();
+}
+
+function updatePriceSyncDateUi() {
+  const all = isPriceSyncAllDates();
+  const fromEl = document.getElementById('priceSyncDateFrom');
+  const toEl = document.getElementById('priceSyncDateTo');
+  const hint = document.getElementById('priceSyncDateHint');
+  if (fromEl) fromEl.disabled = all;
+  if (toEl) toEl.disabled = all;
+  if (hint) {
+    hint.textContent = all
+      ? 'يُجلب كل فواتير المشتريات (Kind=3) مع كل البنود — مثل تقرير حركة المادة في Edari.'
+      : 'يُرفع فقط الحركات ضمن الفترة المحددة. لجلب كل التاريخ فعّل الخيار أعلاه.';
+  }
+}
+
 function setPriceSyncStatus(text, state = '') {
   const el = document.getElementById('priceSyncStatus');
   if (!el) return;
@@ -49,7 +77,7 @@ function appendPriceSyncLog(line) {
   const p = document.createElement('p');
   p.textContent = line;
   feed.prepend(p);
-  while (feed.children.length > 12) feed.removeChild(feed.lastChild);
+  while (feed.children.length > 20) feed.removeChild(feed.lastChild);
 }
 
 async function verifyPriceAppServer() {
@@ -69,21 +97,28 @@ async function verifyPriceAppServer() {
 async function runPriceAppSync() {
   const serverUrl = resolvePriceAppServerUrl();
   const syncKey = resolvePriceSyncKey();
-  const dateFrom = document.getElementById('priceSyncDateFrom')?.value || '';
-  const dateTo = document.getElementById('priceSyncDateTo')?.value || '';
+  const fetchAll = isPriceSyncAllDates();
+  const dateFrom = fetchAll ? '' : (document.getElementById('priceSyncDateFrom')?.value || '');
+  const dateTo = fetchAll ? '' : (document.getElementById('priceSyncDateTo')?.value || '');
 
   applyPriceAppServerUrl(serverUrl);
   applyPriceSyncKey(syncKey);
+  applyPriceSyncAllDates(fetchAll);
 
   if (!serverUrl) {
     alert('أدخل عنوان سيرفر الأسعار');
     return;
   }
 
+  if (!fetchAll && (!dateFrom || !dateTo)) {
+    alert('حدد تاريخ البداية والنهاية، أو فعّل «جلب كل الحركات»');
+    return;
+  }
+
   const btn = document.getElementById('btnPriceSyncNow');
   if (btn) btn.disabled = true;
   setPriceSyncProgress(true, 'بدء المزامنة...', 5);
-  appendPriceSyncLog(`بدء المزامنة → ${serverUrl}`);
+  appendPriceSyncLog(fetchAll ? 'مزامنة: كل حركات المشتريات' : `مزامنة: ${dateFrom} → ${dateTo}`);
 
   let unsubscribe = null;
   if (window.edariDesktop?.onPriceSyncProgress) {
@@ -105,13 +140,14 @@ async function runPriceAppSync() {
     const result = await window.edariDesktop.runPriceAppSync({
       serverUrl,
       syncKey,
+      fetchAll,
       dateFrom,
       dateTo,
     });
 
     if (!result?.ok) throw new Error(result?.error || 'فشلت المزامنة');
 
-    const msg = `تم! ${result.productsUpserted || 0} منتج، ${result.movementsUpserted || 0} حركة، ${result.consumerPricesUpdated || 0} سعر مستهلك`;
+    const msg = `تم! ${result.bills || 0} فاتورة، ${result.movementsUpserted || 0} حركة، ${result.productsUpserted || 0} منتج`;
     setPriceSyncProgress(true, msg, 100);
     appendPriceSyncLog(msg);
     setPriceSyncStatus('آخر مزامنة ناجحة', 'ok');
@@ -135,11 +171,14 @@ function initPriceSyncPage() {
 
   const today = new Date();
   const from = new Date(today);
-  from.setFullYear(from.getFullYear() - 1);
+  from.setFullYear(from.getFullYear() - 5);
   const toEl = document.getElementById('priceSyncDateTo');
   const fromEl = document.getElementById('priceSyncDateFrom');
   if (toEl && !toEl.value) toEl.value = today.toISOString().slice(0, 10);
   if (fromEl && !fromEl.value) fromEl.value = from.toISOString().slice(0, 10);
+
+  const savedAll = localStorage.getItem('priceSyncAllDates');
+  applyPriceSyncAllDates(savedAll !== '0');
 
   void verifyPriceAppServer();
 }
@@ -152,4 +191,7 @@ document.getElementById('btnPriceSyncVerify')?.addEventListener('click', () => v
 document.getElementById('priceAppServerUrl')?.addEventListener('change', () => {
   applyPriceAppServerUrl(document.getElementById('priceAppServerUrl').value);
   void verifyPriceAppServer();
+});
+document.getElementById('priceSyncAllDates')?.addEventListener('change', (e) => {
+  applyPriceSyncAllDates(e.target.checked);
 });
