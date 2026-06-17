@@ -646,6 +646,13 @@ body {
   font-weight: 700;
 }
 
+.sync-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
 .sync-hero-meta {
   display: inline-flex;
   align-items: center;

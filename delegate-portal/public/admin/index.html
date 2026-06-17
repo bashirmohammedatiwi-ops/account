@@ -446,7 +446,10 @@
               <p>رفع حركة المشتريات لكل منتج (مصدر، فاتورة، كمية، سعر، تاريخ) وسعر المستهلك الحالي إلى سيرفر الأسعار.</p>
               <p class="muted" id="priceSyncLastResult">—</p>
             </div>
-            <button type="button" class="btn btn-primary btn-lg" id="btnPriceSyncNow">مزامنة الآن</button>
+            <div class="sync-hero-actions">
+              <button type="button" class="btn btn-primary btn-lg" id="btnPriceSyncNow">مزامنة كاملة</button>
+              <button type="button" class="btn btn-soft btn-lg" id="btnPriceSyncFull">إعادة مزامنة كاملة</button>
+            </div>
           </div>
 
           <div class="sync-progress hidden" id="priceSyncProgress">
@@ -462,24 +465,15 @@
           <div class="panel-row sync-main">
             <section class="panel panel-grow">
               <div class="panel-head">
-                <h2 class="panel-title">فترة حركة المشتريات</h2>
+                <h2 class="panel-title">طريقة المزامنة</h2>
               </div>
               <div class="form-stack">
-                <label class="check-row check-inline price-sync-all-row">
-                  <input type="checkbox" id="priceSyncAllDates" checked>
-                  <span>جلب <strong>كل</strong> حركات المشتريات (بدون فلتر تاريخ — موصى به)</span>
-                </label>
-                <div class="field-row" id="priceSyncDateRow">
-                  <label class="field">
-                    <span>من تاريخ</span>
-                    <input type="date" id="priceSyncDateFrom" class="search" disabled>
-                  </label>
-                  <label class="field">
-                    <span>إلى تاريخ</span>
-                    <input type="date" id="priceSyncDateTo" class="search" disabled>
-                  </label>
-                </div>
-                <p class="field-hint" id="priceSyncDateHint">يُجلب كل فواتير المشتريات (Kind=3) مع كل البنود — مثل تقرير حركة المادة في Edari.</p>
+                <ul class="simple-list">
+                  <li>تُرفع حركات المشتريات من فواتير Edari Kind=1 (مثل تقرير «حركة مواد — مشتريات»)</li>
+                  <li>أول مزامنة: كل البيانات بدون اختيار تاريخ</li>
+                  <li>بعدها: «تحديث الأسعار» يرفع الحركات الجديدة أو المعدّلة فقط</li>
+                </ul>
+                <p class="field-hint" id="priceSyncModeHint">—</p>
               </div>
             </section>
 
