@@ -28,7 +28,8 @@ const SYNC_KEY = process.argv.includes('--key')
 const FORCE_FULL = process.argv.includes('--full');
 const FORCE_INCREMENTAL = process.argv.includes('--incremental');
 
-const SYNC_STATE_FILE = path.join(__dirname, '..', 'data', 'price-sync-state.json');
+const SYNC_STATE_FILE = process.env.PRICE_SYNC_STATE_FILE
+  || path.join(__dirname, '..', 'data', 'price-sync-state.json');
 
 /** Supplier purchase invoices in Edari (matches material movement «مشتريات»). */
 const PURCHASE_KINDS = [1];
@@ -112,9 +113,10 @@ function loadSyncState() {
 }
 
 function saveSyncState(state) {
-  const dir = path.dirname(SYNC_STATE_FILE);
+  const file = SYNC_STATE_FILE;
+  const dir = path.dirname(file);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(SYNC_STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
+  fs.writeFileSync(file, JSON.stringify(state, null, 2), 'utf8');
 }
 
 async function fetchAccountNames(accSeqs) {
@@ -414,7 +416,11 @@ async function main(options = {}) {
       movements: purchaseData.movements.length,
     },
   };
-  saveSyncState(nextState);
+  try {
+    saveSyncState(nextState);
+  } catch (err) {
+    console.error(`تحذير: تعذر حفظ حالة المزامنة: ${err.message || err}`);
+  }
 
   const summary = {
     ok: true,

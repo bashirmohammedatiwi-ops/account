@@ -906,8 +906,10 @@ function runPriceAppSyncScript({ serverUrl, syncKey, mode } = {}) {
     const script = path.join(portalDir, 'sync-client', 'price-app-sync.js');
     const nodeBin = getNodeBin();
     let stdout = '';
+    let stderr = '';
     const syncTarget = String(serverUrl || 'http://187.124.23.65:5000').replace(/\/$/, '');
     const syncMode = mode === 'full' ? 'full' : 'incremental';
+    const syncStateFile = path.join(app.getPath('userData'), 'price-sync-state.json');
 
     const args = [script, '--server', syncTarget];
     if (syncKey) args.push('--key', syncKey);
@@ -918,6 +920,7 @@ function runPriceAppSyncScript({ serverUrl, syncKey, mode } = {}) {
       env: portalChildEnv({
         PRICE_APP_SERVER: syncTarget,
         PRICE_SYNC_KEY: syncKey || '',
+        PRICE_SYNC_STATE_FILE: syncStateFile,
       }),
       windowsHide: true,
     });
@@ -932,8 +935,12 @@ function runPriceAppSyncScript({ serverUrl, syncKey, mode } = {}) {
     });
 
     child.stderr.on('data', (d) => {
-      const text = d.toString().trim();
-      if (text) pushSyncProgress(text);
+      const text = d.toString();
+      stderr += text;
+      text.split(/\r?\n/).forEach((line) => {
+        const trimmed = line.trim();
+        if (trimmed) pushSyncProgress(trimmed);
+      });
     });
 
     child.on('error', (err) => {
@@ -944,7 +951,19 @@ function runPriceAppSyncScript({ serverUrl, syncKey, mode } = {}) {
     child.on('close', (code) => {
       activePriceSyncPromise = null;
       if (code !== 0) {
-        reject(new Error(stdout.trim().split(/\r?\n/).pop() || 'فشلت مزامنة الأسعار'));
+        const errFromStderr = stderr
+          .trim()
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .pop();
+        const errFromStdout = stdout
+          .trim()
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter((line) => line && !line.startsWith('@PROGRESS|'))
+          .pop();
+        reject(new Error(errFromStderr || errFromStdout || 'فشلت مزامنة الأسعار'));
         return;
       }
       const jsonLine = stdout.split(/\r?\n/).reverse().find((line) => line.startsWith('@SYNC_RESULT|'));
