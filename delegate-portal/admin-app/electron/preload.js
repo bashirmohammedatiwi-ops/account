@@ -30,6 +30,12 @@ contextBridge.exposeInMainWorld('edariDesktop', {
   setAutoSyncEnabled: (enabled) => ipcRenderer.invoke('set-auto-sync-enabled', enabled),
   setStartAtLogin: (enabled) => ipcRenderer.invoke('set-start-at-login', enabled),
   runBackgroundSyncNow: () => ipcRenderer.invoke('run-background-sync-now'),
+  runPriceAppSync: (params) => ipcRenderer.invoke('run-price-app-sync', params || {}),
+  onPriceSyncProgress: (handler) => {
+    const listener = (_event, line) => handler(line);
+    ipcRenderer.on('sync-progress', listener);
+    return () => ipcRenderer.removeListener('sync-progress', listener);
+  },
   lookupEdariMaterial: (code) => ipcRenderer.invoke('lookup-edari-material', code),
   onSyncProgress: (handler) => {
     const listener = (_event, line) => handler(line);

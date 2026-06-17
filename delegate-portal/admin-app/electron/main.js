@@ -896,6 +896,77 @@ ipcMain.handle('run-background-sync-now', async () => {
   return backgroundSync?.runNow();
 });
 
+let activePriceSyncPromise = null;
+
+function runPriceAppSyncScript({ serverUrl, syncKey, dateFrom, dateTo } = {}) {
+  if (activePriceSyncPromise) return activePriceSyncPromise;
+
+  activePriceSyncPromise = new Promise((resolve, reject) => {
+    const portalDir = getPortalDir();
+    const script = path.join(portalDir, 'sync-client', 'price-app-sync.js');
+    const nodeBin = getNodeBin();
+    let stdout = '';
+    const syncTarget = String(serverUrl || 'http://187.124.23.65:5000').replace(/\/$/, '');
+
+    const args = [script, '--server', syncTarget];
+    if (syncKey) args.push('--key', syncKey);
+    if (dateFrom) args.push('--from', dateFrom);
+    if (dateTo) args.push('--to', dateTo);
+
+    const child = spawn(nodeBin, args, {
+      cwd: portalDir,
+      env: portalChildEnv({
+        PRICE_APP_SERVER: syncTarget,
+        PRICE_SYNC_KEY: syncKey || '',
+        PRICE_SYNC_FROM: dateFrom || '',
+        PRICE_SYNC_TO: dateTo || '',
+      }),
+      windowsHide: true,
+    });
+
+    child.stdout.on('data', (d) => {
+      const text = d.toString();
+      stdout += text;
+      text.split(/\r?\n/).forEach((line) => {
+        const trimmed = line.trim();
+        if (trimmed) pushSyncProgress(trimmed);
+      });
+    });
+
+    child.stderr.on('data', (d) => {
+      const text = d.toString().trim();
+      if (text) pushSyncProgress(text);
+    });
+
+    child.on('error', (err) => {
+      activePriceSyncPromise = null;
+      reject(err);
+    });
+
+    child.on('close', (code) => {
+      activePriceSyncPromise = null;
+      if (code !== 0) {
+        reject(new Error(stdout.trim().split(/\r?\n/).pop() || 'فشلت مزامنة الأسعار'));
+        return;
+      }
+      const jsonLine = stdout.split(/\r?\n/).reverse().find((line) => line.startsWith('@SYNC_RESULT|'));
+      if (jsonLine) {
+        try {
+          resolve(JSON.parse(jsonLine.slice('@SYNC_RESULT|'.length)));
+          return;
+        } catch { /* fall through */ }
+      }
+      resolve({ ok: true });
+    });
+  });
+
+  return activePriceSyncPromise;
+}
+
+ipcMain.handle('run-price-app-sync', (_e, params = {}) => {
+  return runPriceAppSyncScript(params);
+});
+
 ipcMain.handle('lookup-edari-material', async (_e, code) => {
   try {
     Object.assign(process.env, edariEnvExtra());

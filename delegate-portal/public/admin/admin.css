@@ -1479,6 +1479,10 @@ tfoot .final { background: var(--primary-light); font-weight: 700; }
 .edari-conn-status.is-warn,
 .db-conn-status.is-warn { color: #b45309; font-weight: 600; }
 
+.price-sync-status.ok { color: #059669; font-weight: 600; }
+.price-sync-status.err { color: var(--danger); font-weight: 600; }
+.price-sync-status.pending { color: #b45309; font-weight: 600; }
+
 .db-settings-hero .panel-title { margin-bottom: 8px; }
 .db-settings-hero .panel-desc { margin-bottom: 10px; max-width: 720px; }
 .db-settings-notes { margin: 0; }
