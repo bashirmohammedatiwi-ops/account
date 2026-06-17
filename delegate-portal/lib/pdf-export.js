@@ -38,11 +38,13 @@ const STYLES = {
   boxVal: { fontSize: 8.5, font: 'Roboto', bold: true, color: C.text },
   boxSub: { fontSize: 7, bold: true, color: C.muted },
   srTh: { fontSize: 9.5, bold: true, color: '#ffffff' },
-  srTd: { fontSize: 9, bold: true, color: '#111827' },
-  srName: { fontSize: 9, bold: true, color: '#111827' },
-  srMoney: { fontSize: 9.5, font: 'Roboto', bold: true, color: '#111827' },
-  srDate: { fontSize: 8.5, font: 'Roboto', bold: true, color: '#1f2937' },
-  srCode: { fontSize: 8.5, font: 'Roboto', bold: true, color: '#374151' }
+  srTd: { fontSize: 9, bold: true, color: '#0f172a' },
+  srName: { fontSize: 9, bold: true, color: '#0f172a' },
+  srMoney: { fontSize: 10, font: 'Roboto', bold: true, color: '#0f172a' },
+  srDate: { fontSize: 8.5, font: 'Roboto', bold: true, color: '#1e293b' },
+  srCode: { fontSize: 8.5, font: 'Roboto', bold: true, color: '#334155' },
+  srTotalMoney: { fontSize: 12, font: 'Roboto', bold: true, color: '#dc2626' },
+  srTotalQty: { fontSize: 11, font: 'Roboto', bold: true, color: '#dc2626' }
 };
 
 const SR = {
@@ -55,34 +57,46 @@ const SR = {
 };
 
 const SALES = {
-  ink: '#1e293b',
-  muted: '#64748b',
-  line: '#e2e8f0',
-  surface: '#f8fafc',
-  head: '#334155',
+  ink: '#0f172a',
+  muted: '#475569',
+  line: '#cbd5e1',
+  lineStrong: '#64748b',
+  surface: '#f1f5f9',
+  head: '#1e3a5f',
+  headAlt: '#0f766e',
   headText: '#ffffff',
   accent: '#0f766e',
-  accentLight: '#ecfdf5',
-  debit: '#b91c1c',
+  accentLight: '#d1fae5',
+  debit: '#dc2626',
+  debitLight: '#fef2f2',
   credit: '#15803d',
-  zebra: '#fafbfc',
-  total: '#f1f5f9',
-  summary: '#fff7ed'
+  creditLight: '#ecfdf5',
+  giftLight: '#fef9c3',
+  zebra: '#f8fafc',
+  total: '#ffffff',
+  totalLabel: '#1e293b',
+  summary: '#fff7ed',
+  summarySales: '#ecfdf5',
+  summaryReturns: '#fef2f2',
+  summaryGifts: '#fffbeb',
+  qty: '#2563eb'
 };
 
 const STMT = {
-  ink: '#1e293b',
-  muted: '#64748b',
-  line: '#e2e8f0',
-  surface: '#f8fafc',
-  head: '#475569',
+  ink: '#0f172a',
+  muted: '#475569',
+  line: '#cbd5e1',
+  lineStrong: '#64748b',
+  surface: '#f1f5f9',
+  head: '#1e3a5f',
   headText: '#ffffff',
   accent: '#0f766e',
-  debit: '#b91c1c',
+  debit: '#dc2626',
   credit: '#15803d',
-  zebra: '#fafbfc',
-  total: '#f1f5f9',
-  final: '#e2e8f0'
+  opening: '#f0fdfa',
+  zebra: '#f8fafc',
+  total: '#ffffff',
+  final: '#ffffff'
 };
 /** pdfmake-rtl: العمود الأول = يمين الجدول، الأخير = يسار */
 // كشف حساب — يمين→يسار: مدين، دائن، البيان، التاريخ، رصيد الحساب
@@ -312,19 +326,30 @@ function pdfTopHeader({ docLabel, badgeText, sideNote, infoLabel, infoValue, inf
 }
 
 function stmtLayout() {
+  return stmtTableLayout();
+}
+
+function stmtTableLayout() {
   return {
     hLineWidth: (i, node) => {
-      if (i === 0 || i === 1) return 0.4;
-      if (node && i === node.table.body.length) return 0.4;
-      return 0.15;
+      const n = node?.table?.body?.length || 0;
+      if (i === 0 || i === 1) return 0.65;
+      if (n > 3 && i === n - 2) return 1.25;
+      if (n > 2 && i === n - 1) return 0.9;
+      if (node && i === n) return 0.7;
+      return 0.2;
     },
-    vLineWidth: () => 0.15,
-    hLineColor: () => STMT.line,
+    vLineWidth: () => 0.2,
+    hLineColor: (i, node) => {
+      const n = node?.table?.body?.length || 0;
+      if (n > 3 && i === n - 2) return STMT.debit;
+      return STMT.line;
+    },
     vLineColor: () => STMT.line,
     paddingLeft: () => 5,
     paddingRight: () => 5,
-    paddingTop: () => 4,
-    paddingBottom: () => 4
+    paddingTop: () => 5,
+    paddingBottom: () => 5
   };
 }
 
@@ -332,11 +357,11 @@ function stmtTh(text) {
   return {
     text,
     bold: true,
-    fontSize: 8,
+    fontSize: 9,
     color: STMT.headText,
     fillColor: STMT.head,
     alignment: 'center',
-    margin: [2, 6, 2, 6]
+    margin: [3, 7, 3, 7]
   };
 }
 
@@ -345,18 +370,18 @@ function stmtTdMoney(value, fill, color) {
   return {
     text: String(value ?? '—'),
     font: 'Roboto',
-    fontSize: 8.5,
-    bold: !empty,
+    fontSize: empty ? 9 : 10,
+    bold: true,
     color: color || (empty ? STMT.muted : STMT.ink),
     alignment: 'center',
     fillColor: fill || null,
     noWrap: true,
-    margin: [2, 4, 2, 4]
+    margin: [2, 5, 2, 5]
   };
 }
 
 function stmtRowFill(rowIndex, highlight) {
-  if (highlight) return STMT.surface;
+  if (highlight) return STMT.opening;
   return rowIndex % 2 === 0 ? '#ffffff' : STMT.zebra;
 }
 
@@ -374,26 +399,29 @@ function stmtLineRow(row, rowIndex) {
   const fill = stmtRowFill(rowIndex, row.isOpening || row.isReconciliation);
   const balText = formatRunningBalance(row.balance) || '—';
   const dateText = row.isOpening ? '' : fmtDate(row.date);
+  const descBold = row.isOpening || row.isReconciliation;
   return [
     stmtTdMoney(row.debit ? fmtNum(row.debit) : '—', fill, row.debit ? STMT.debit : null),
     stmtTdMoney(row.credit ? fmtNum(row.credit) : '—', fill, row.credit ? STMT.credit : null),
     {
       text: String(row.description || '—'),
-      fontSize: 8.5,
+      fontSize: 9,
+      bold: descBold,
       color: STMT.ink,
       alignment: 'right',
       fillColor: fill || null,
-      margin: [4, 4, 4, 4]
+      margin: [5, 5, 5, 5]
     },
     {
       text: dateText,
       font: 'Roboto',
-      fontSize: 8,
+      fontSize: 9,
+      bold: true,
       color: STMT.muted,
       alignment: 'center',
       fillColor: fill || null,
       noWrap: true,
-      margin: [2, 4, 2, 4]
+      margin: [2, 5, 2, 5]
     },
     stmtTdMoney(balText, fill, STMT.accent)
   ];
@@ -411,12 +439,12 @@ function stmtTotalsTableRow(stmt) {
     {
       text: 'المجموع',
       bold: true,
-      fontSize: 9,
+      fontSize: 10,
       color: STMT.ink,
       alignment: 'right',
       fillColor: fill,
       colSpan: 2,
-      margin: [4, 5, 4, 5]
+      margin: [5, 6, 5, 6]
     },
     emptyCell(),
     stmtTdMoney(formatRunningBalance(stmt.finalBalance) || '—', fill, STMT.ink)
@@ -428,108 +456,118 @@ function stmtFinalTableRow(stmt) {
   const fill = STMT.final;
   const debitAmt = summary.side === 'debit' ? fmtNum(summary.amount) : '—';
   const creditAmt = summary.side === 'credit' ? fmtNum(summary.amount) : '—';
+  const sideColor = summary.side === 'debit' ? STMT.debit : (summary.side === 'credit' ? STMT.credit : STMT.accent);
   return [
     stmtTdMoney(debitAmt, fill, summary.side === 'debit' ? STMT.debit : null),
     stmtTdMoney(creditAmt, fill, summary.side === 'credit' ? STMT.credit : null),
     {
       text: summary.label || 'الرصيد النهائي',
       bold: true,
-      fontSize: 9,
+      fontSize: 10,
       color: STMT.ink,
       alignment: 'right',
       fillColor: fill,
       colSpan: 2,
-      margin: [4, 6, 4, 6]
+      margin: [5, 7, 5, 7]
     },
     emptyCell(),
-    stmtTdMoney(formatRunningBalance(stmt.finalBalance) || '—', fill, STMT.accent)
+    stmtTdMoney(formatRunningBalance(stmt.finalBalance) || '—', fill, sideColor)
   ];
 }
 
 function stmtStatPill(label, value, accent) {
   return {
     stack: [
-      { text: label, fontSize: 7, color: STMT.muted, alignment: 'center' },
+      { text: label, fontSize: 7.5, bold: true, color: STMT.muted, alignment: 'center' },
       {
         text: value,
         font: 'Roboto',
         bold: true,
-        fontSize: 10,
+        fontSize: 11,
         color: accent || STMT.ink,
         alignment: 'center',
-        margin: [0, 3, 0, 0]
+        margin: [0, 4, 0, 0]
       }
     ],
-    fillColor: STMT.surface,
-    margin: [6, 7, 6, 7]
+    fillColor: '#ffffff',
+    margin: [5, 8, 5, 8]
   };
 }
 
 function statementPdfHeader(acc, periodNote, stats, index = 1, total = 1) {
   const logo = getLogoDataUrl();
   const statRows = stats || [];
+  const accountNum = acc.num ? String(acc.num) : '—';
+  const accountName = acc.name1 ? String(acc.name1) : '';
 
-  const topLine = {
-    columns: [
-      {
-        width: '*',
-        stack: [
-          { text: COMPANY_NAME, fontSize: 9, color: STMT.muted, alignment: 'right' },
-          {
-            text: 'كشف حساب',
-            fontSize: 15,
-            bold: true,
-            color: STMT.ink,
-            alignment: 'right',
-            margin: [0, 2, 0, 0]
-          }
-        ]
-      },
-      logo
-        ? { image: logo, width: 26, alignment: 'left', margin: [0, 2, 0, 0] }
-        : { text: '', width: 28 }
-    ],
-    margin: [0, 0, 0, 6]
+  const headerBand = {
+    table: {
+      widths: ['*', logo ? 44 : 0],
+      body: [[
+        {
+          stack: [
+            { text: COMPANY_NAME, fontSize: 8.5, bold: true, color: '#cbd5e1', alignment: 'right' },
+            {
+              text: 'كشف حساب — صندوق',
+              fontSize: 14,
+              bold: true,
+              color: STMT.headText,
+              alignment: 'right',
+              margin: [0, 3, 0, 0]
+            }
+          ],
+          fillColor: STMT.head,
+          margin: [14, 11, 14, 11]
+        },
+        logo
+          ? { image: logo, width: 30, alignment: 'center', margin: [6, 10, 10, 10], fillColor: STMT.head }
+          : { text: '', border: [false, false, false, false] }
+      ]]
+    },
+    layout: 'noBorders',
+    margin: [0, 0, 0, 0]
   };
 
-  const accountStrip = {
+  const accountCard = {
     table: {
-      widths: ['*', 'auto'],
+      widths: ['*', total > 1 ? 52 : 0],
       body: [[
         {
           stack: [
             {
               text: [
-                { text: acc.num ? `حساب ${acc.num}` : '—', bold: true, fontSize: 10, color: STMT.ink },
-                { text: acc.name1 ? `   ·   ${acc.name1}` : '', fontSize: 9, color: STMT.muted }
+                { text: 'حساب ', fontSize: 9, bold: true, color: STMT.muted },
+                { text: accountNum, fontSize: 11, bold: true, color: STMT.ink }
               ],
               alignment: 'right'
             },
+            ...(accountName
+              ? [{ text: accountName, fontSize: 10.5, bold: true, color: STMT.ink, alignment: 'right', margin: [0, 4, 0, 0] }]
+              : []),
             ...(periodNote
-              ? [{ text: periodNote, fontSize: 8, color: STMT.muted, alignment: 'right', margin: [0, 3, 0, 0] }]
+              ? [{ text: periodNote, fontSize: 8.5, bold: true, color: STMT.muted, alignment: 'right', margin: [0, 5, 0, 0] }]
               : [])
           ],
           fillColor: STMT.surface,
-          margin: [10, 8, 10, 8]
+          margin: [12, 10, 12, 10]
         },
         total > 1
           ? {
-            text: `${index} / ${total}`,
-            font: 'Roboto',
-            fontSize: 9,
-            color: STMT.muted,
-            alignment: 'center',
+            stack: [
+              { text: 'صفحة', fontSize: 7.5, bold: true, color: STMT.muted, alignment: 'center' },
+              { text: `${index}/${total}`, font: 'Roboto', fontSize: 11, bold: true, color: STMT.accent, alignment: 'center', margin: [0, 3, 0, 0] }
+            ],
             fillColor: STMT.surface,
-            margin: [12, 8, 12, 8]
+            margin: [6, 10, 10, 10]
           }
-          : { text: '', fillColor: STMT.surface, margin: [0, 8, 0, 8] }
+          : { text: '', border: [false, false, false, false] }
       ]]
     },
     layout: {
-      hLineWidth: () => 0.4,
-      vLineWidth: () => 0.4,
-      hLineColor: () => STMT.line,
-      vLineColor: () => STMT.line
+      hLineWidth: () => 0.55,
+      vLineWidth: () => 0.55,
+      hLineColor: () => STMT.lineStrong,
+      vLineColor: () => STMT.lineStrong
     },
     margin: [0, 0, 0, 8]
   };
@@ -541,18 +579,18 @@ function statementPdfHeader(acc, periodNote, stats, index = 1, total = 1) {
         body: [statRows.map(([label, value, accent]) => stmtStatPill(label, value, accent))]
       },
       layout: {
-        hLineWidth: () => 0.35,
-        vLineWidth: () => 0.35,
-        hLineColor: () => STMT.line,
-        vLineColor: () => STMT.line
+        hLineWidth: () => 0.55,
+        vLineWidth: () => 0.55,
+        hLineColor: () => STMT.lineStrong,
+        vLineColor: () => STMT.lineStrong
       },
-      margin: [0, 0, 0, 10]
+      margin: [0, 0, 0, 12]
     }
     : null;
 
   return {
-    stack: [topLine, accountStrip, statsBlock].filter(Boolean),
-    margin: [0, 0, 0, 4]
+    stack: [headerBand, accountCard, statsBlock].filter(Boolean),
+    margin: [0, 0, 0, 6]
   };
 }
 
@@ -700,8 +738,8 @@ async function createPdfBuffer(docDefinition) {
 function stmtPdfFooter() {
   return (currentPage, pageCount) => ({
     columns: [
-      { text: COMPANY_NAME, fontSize: 7, color: STMT.muted, alignment: 'right' },
-      { text: `${currentPage} / ${pageCount}`, font: 'Roboto', fontSize: 7, color: STMT.muted, alignment: 'left' }
+      { text: COMPANY_NAME, fontSize: 8, bold: true, color: STMT.muted, alignment: 'right' },
+      { text: `${currentPage} / ${pageCount}`, font: 'Roboto', fontSize: 8, bold: true, color: STMT.muted, alignment: 'left' }
     ],
     margin: [12, 0, 12, 0]
   });
@@ -710,10 +748,10 @@ function stmtPdfFooter() {
 function statementBaseDoc(content) {
   return {
     rtl: true,
-    defaultStyle: { font: 'Cairo', fontSize: 8.5, bold: false, color: STMT.ink },
+    defaultStyle: { font: 'Cairo', fontSize: 9, bold: true, color: STMT.ink },
     pageSize: 'A4',
     pageOrientation: 'portrait',
-    pageMargins: [14, 14, 14, 22],
+    pageMargins: [14, 14, 14, 24],
     footer: stmtPdfFooter(),
     content
   };
@@ -761,14 +799,15 @@ function statementBlock(stmt, meta = {}) {
             body: tableBody,
             dontBreakRows: false
           },
-          layout: stmtLayout()
+          layout: stmtTableLayout()
         }
         : {
           text: 'لا توجد حركات لهذا الحساب في الفترة المحددة',
-          fontSize: 9,
+          fontSize: 10,
+          bold: true,
           color: STMT.muted,
           alignment: 'center',
-          margin: [0, 14, 0, 0]
+          margin: [0, 16, 0, 0]
         }
     ],
     pageBreak: meta.pageBreak || undefined
@@ -886,17 +925,79 @@ const SALES_RPT_WIDTHS = [82, 66, 46, '*', 92, 64];
 function srLayout() {
   return {
     hLineWidth: (i, node) => {
-      if (i === 0 || i === 1) return 0.45;
-      if (node && i === node.table.body.length) return 0.45;
-      return 0.15;
+      if (i === 0 || i === 1) return 0.55;
+      if (node && i === node.table.body.length) return 0.55;
+      return 0.2;
     },
-    vLineWidth: () => 0.15,
+    vLineWidth: () => 0.2,
     hLineColor: () => SALES.line,
     vLineColor: () => SALES.line,
-    paddingLeft: () => 4,
-    paddingRight: () => 4,
-    paddingTop: () => 3,
-    paddingBottom: () => 3
+    paddingLeft: () => 5,
+    paddingRight: () => 5,
+    paddingTop: () => 4,
+    paddingBottom: () => 4
+  };
+}
+
+/** تخطيط جدول تفاصيل الشجرة — خط أحمر واضح قبل صف الإجمالي */
+function srTreeTableLayout() {
+  return {
+    hLineWidth: (i, node) => {
+      const n = node?.table?.body?.length || 0;
+      if (i === 0 || i === 1) return 0.65;
+      if (n > 2 && i === n - 1) return 1.4;
+      if (node && i === n) return 0.75;
+      return 0.18;
+    },
+    vLineWidth: () => 0.18,
+    hLineColor: (i, node) => {
+      const n = node?.table?.body?.length || 0;
+      if (n > 2 && i === n - 1) return SALES.debit;
+      return SALES.line;
+    },
+    vLineColor: () => SALES.line,
+    paddingLeft: () => 5,
+    paddingRight: () => 5,
+    paddingTop: () => 4,
+    paddingBottom: () => 4
+  };
+}
+
+function srSummaryLayout() {
+  return {
+    hLineWidth: (i, node) => {
+      if (i === 0 || i === 1) return 0.65;
+      if (node && i === node.table.body.length) return 0.85;
+      return 0.22;
+    },
+    vLineWidth: () => 0.22,
+    hLineColor: (i, node) => {
+      if (node && i === node.table.body.length) return SALES.lineStrong;
+      return SALES.line;
+    },
+    vLineColor: () => SALES.line,
+    paddingLeft: () => 6,
+    paddingRight: () => 6,
+    paddingTop: () => 5,
+    paddingBottom: () => 5
+  };
+}
+
+/** تخطيط أنيق للملخص الإجمالي — خطوط خفيفة */
+function srGrandSummaryLayout() {
+  return {
+    hLineWidth: (i, node) => {
+      if (i === 0 || i === 1) return 0.5;
+      if (node && i === node.table.body.length) return 0.55;
+      return 0.12;
+    },
+    vLineWidth: () => 0,
+    hLineColor: () => SALES.line,
+    vLineColor: () => SALES.line,
+    paddingLeft: () => 8,
+    paddingRight: () => 8,
+    paddingTop: () => 6,
+    paddingBottom: () => 6
   };
 }
 
@@ -904,11 +1005,11 @@ function srTh(text, fill = SALES.head) {
   return {
     text,
     bold: true,
-    fontSize: 8.5,
+    fontSize: 9,
     color: SALES.headText,
     alignment: 'center',
     fillColor: fill,
-    margin: [2, 5, 2, 5]
+    margin: [3, 6, 3, 6]
   };
 }
 
@@ -921,6 +1022,67 @@ function srCell(value, style, align, fill, color) {
     color: color || undefined,
     margin: [2, 2.5, 2, 2.5]
   };
+}
+
+const SR_TREES_WIDTHS = [82, 62, 62, '*'];
+const SR_GRAND_WIDTHS = [88, 68, '*'];
+
+function srSummaryCountCell(value, fill) {
+  return {
+    text: String(value ?? '0'),
+    font: 'Roboto',
+    fontSize: 10,
+    bold: true,
+    color: SALES.qty,
+    alignment: 'center',
+    fillColor: fill || null,
+    margin: [2, 3, 2, 3]
+  };
+}
+
+function srSummaryTreeHeaderCells() {
+  return [
+    srTh('المبلغ الإجمالي'),
+    srTh('إجمالي الهدايا'),
+    srTh('العدد (مبيعات)'),
+    srTh('الشجرة')
+  ];
+}
+
+/** رأس ملخص مبسّط — يسار←يمين: المبلغ · العدد · البند */
+function srGrandSummaryHeaderCells() {
+  return [
+    srTh('المبلغ', '#334155'),
+    srTh('العدد', '#334155'),
+    srTh('البند', '#334155')
+  ];
+}
+
+/** صف ملخص إجمالي — بدون عمود الهدايا */
+function srGrandSummaryDataCells(label, qty, amount, fill, amountColor) {
+  return [
+    srMoneyCell(fmtSummaryAmount(amount), fill, amountColor || SALES.debit),
+    srSummaryCountCell(fmtSummaryQty(qty), fill),
+    {
+      text: label,
+      bold: true,
+      fontSize: 9.5,
+      color: SALES.ink,
+      alignment: 'right',
+      fillColor: fill,
+      margin: [8, 7, 8, 7]
+    }
+  ];
+}
+
+/** صف شجرة — يسار←يمين: المبلغ · الهدايا · العدد · الشجرة (الاسم يمين) */
+function srSummaryTreeCells(title, qty, bonus, amount, fill) {
+  return [
+    srMoneyCell(fmtSummaryAmount(amount), fill, SALES.debit),
+    srCell(fmtSummaryQty(bonus), 'srTd', 'center', fill),
+    srSummaryCountCell(fmtSummaryQty(qty), fill),
+    { text: title, style: 'srName', alignment: 'right', fillColor: fill, margin: [6, 6, 6, 6] }
+  ];
 }
 
 function salesRptHeaderRow() {
@@ -938,10 +1100,10 @@ function srMoneyCell(value, fill, color) {
   return { text: value, style: 'srMoney', color: color || undefined, alignment: 'center', noWrap: true, fillColor: fill || null, margin: [2, 3.5, 2, 3.5] };
 }
 
-const SR_GIFT_FILL = '#fef3c7';
-const SR_RETURN_FILL = '#fde2e2';
-const SR_GIFT_TEXT = '#854d0e';
-const SR_RETURN_TEXT = '#991b1b';
+const SR_GIFT_FILL = '#fef9c3';
+const SR_RETURN_FILL = '#fee2e2';
+const SR_GIFT_TEXT = '#92400e';
+const SR_RETURN_TEXT = '#b91c1c';
 
 function salesRptLineRow(line, rowIndex) {
   // هدية = أصفر، مردود = أحمر، غير ذلك = تخطيط متناوب
@@ -966,33 +1128,118 @@ function salesRptTreeTitleRow(treeTitle, lineCount) {
   return [
     {
       text: [
-        { text: 'شجرة: ', color: '#99f6e4', bold: true, fontSize: 8.5 },
-        { text: treeTitle, color: '#ffffff', bold: true, fontSize: 10 },
-        { text: countText, color: '#cbd5e1', fontSize: 8 }
+        { text: 'شجرة: ', color: '#99f6e4', bold: true, fontSize: 9 },
+        { text: treeTitle, color: '#ffffff', bold: true, fontSize: 11 },
+        { text: countText, color: '#e2e8f0', fontSize: 8.5 }
       ],
       colSpan: 6,
       fillColor: SALES.head,
       alignment: 'right',
-      margin: [10, 7, 10, 7]
+      margin: [12, 8, 12, 8]
     },
     emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell()
   ];
 }
 
-// دليل ألوان: هدية (أصفر) · مردود (أحمر)
-function salesRptLegend() {
-  const chip = (text, fill, color) => ({
-    table: { body: [[{ text, fillColor: fill, color, bold: true, fontSize: 8, margin: [10, 3, 10, 3] }]] },
-    layout: { defaultBorder: false, paddingLeft: () => 0, paddingRight: () => 0, paddingTop: () => 0, paddingBottom: () => 0 }
-  });
+// دليل ألوان: هدية · مردود · إجمالي الشجرة
+function salesRptLegendChip(label, fill, textColor, borderColor) {
   return {
-    columns: [
-      { width: '*', text: '' },
-      { width: 'auto', stack: [chip('هدية', SR_GIFT_FILL, SR_GIFT_TEXT)] },
-      { width: 6, text: '' },
-      { width: 'auto', stack: [chip('مردود', SR_RETURN_FILL, SR_RETURN_TEXT)] }
+    table: {
+      widths: ['*', 18],
+      body: [[
+        {
+          text: label,
+          bold: true,
+          fontSize: 9,
+          color: textColor,
+          alignment: 'right',
+          fillColor: '#ffffff',
+          margin: [10, 8, 4, 8]
+        },
+        {
+          text: '',
+          fillColor: fill,
+          margin: [0, 5, 0, 5]
+        }
+      ]]
+    },
+    layout: {
+      hLineWidth: () => 0.6,
+      vLineWidth: () => 0.6,
+      hLineColor: () => borderColor,
+      vLineColor: () => borderColor,
+      paddingLeft: () => 0,
+      paddingRight: () => 0,
+      paddingTop: () => 0,
+      paddingBottom: () => 0
+    }
+  };
+}
+
+function salesRptLegend() {
+  const chips = [
+    salesRptLegendChip('هدية', SR_GIFT_FILL, SR_GIFT_TEXT, '#fbbf24'),
+    salesRptLegendChip('مردود', SR_RETURN_FILL, SR_RETURN_TEXT, '#f87171'),
+    salesRptLegendChip('إجمالي الشجرة', '#ffffff', SALES.debit, SALES.debit)
+  ];
+
+  return {
+    table: {
+      widths: ['*'],
+      body: [
+        [{
+          text: 'دليل الألوان',
+          bold: true,
+          fontSize: 10,
+          color: SALES.ink,
+          alignment: 'right',
+          fillColor: SALES.surface,
+          margin: [12, 8, 12, 6]
+        }],
+        [{
+          columns: [
+            { width: '*', stack: [chips[0]] },
+            { width: 10, text: '' },
+            { width: '*', stack: [chips[1]] },
+            { width: 10, text: '' },
+            { width: '*', stack: [chips[2]] }
+          ],
+          fillColor: SALES.surface,
+          margin: [10, 0, 10, 10]
+        }]
+      ]
+    },
+    layout: {
+      hLineWidth: (i, node) => (i === 0 || i === node.table.body.length ? 0.65 : 0),
+      vLineWidth: () => 0.65,
+      hLineColor: () => SALES.lineStrong,
+      vLineColor: () => SALES.lineStrong,
+      paddingLeft: () => 0,
+      paddingRight: () => 0,
+      paddingTop: () => 0,
+      paddingBottom: () => 0
+    },
+    margin: [0, 0, 0, 12]
+  };
+}
+
+function salesTreeSeparator() {
+  return {
+    stack: [
+      {
+        canvas: [{ type: 'line', x1: 0, y1: 0, x2: 567, y2: 0, lineWidth: 1.2, lineColor: SALES.lineStrong }],
+        margin: [0, 6, 0, 0]
+      },
+      {
+        table: {
+          widths: ['*'],
+          body: [[{ text: '', fillColor: SALES.surface, margin: [0, 2, 0, 2] }]]
+        },
+        layout: 'noBorders',
+        margin: [0, 0, 0, 0]
+      }
     ],
-    margin: [0, 0, 0, 8]
+    margin: [0, 10, 0, 12]
   };
 }
 
@@ -1022,8 +1269,8 @@ function salesRptTreeBlock(section) {
       body,
       dontBreakRows: false
     },
-    layout: srLayout(),
-    margin: [0, 0, 0, 14]
+    layout: srTreeTableLayout(),
+    margin: [0, 0, 0, 6]
   };
 }
 
@@ -1043,31 +1290,28 @@ function salesRptNoticeRow(text) {
   ];
 }
 
-const SR_TOTAL_FILL = SALES.accentLight;
+const SR_TOTAL_FILL = '#ffffff';
 
 function salesRptTreeTotalsRow(summary) {
   const fill = SR_TOTAL_FILL;
+  const red = SALES.debit;
   const moneyTotal = {
     text: fmtInvPrice(summary.netAmount),
-    font: 'Roboto',
-    bold: true,
-    fontSize: 10.5,
-    color: SALES.accent,
+    style: 'srTotalMoney',
+    color: red,
     alignment: 'center',
     noWrap: true,
     fillColor: fill,
-    margin: [2, 5, 2, 5]
+    margin: [2, 7, 2, 7]
   };
   const qtyTotal = {
     text: fmtNum(summary.qtySum || 0, 0),
-    font: 'Roboto',
-    bold: true,
-    fontSize: 10.5,
-    color: SALES.accent,
+    style: 'srTotalQty',
+    color: red,
     alignment: 'center',
     noWrap: true,
     fillColor: fill,
-    margin: [2, 5, 2, 5]
+    margin: [2, 7, 2, 7]
   };
   return [
     moneyTotal,
@@ -1076,19 +1320,18 @@ function salesRptTreeTotalsRow(summary) {
     {
       text: 'إجمالي الشجرة',
       bold: true,
-      fontSize: 9.5,
-      color: SALES.ink,
+      fontSize: 10.5,
+      color: SALES.totalLabel,
       alignment: 'right',
       fillColor: fill,
       colSpan: 3,
-      margin: [4, 6, 4, 6]
+      margin: [6, 7, 6, 7]
     },
     emptyCell(),
     emptyCell()
   ];
 }
 
-const SR_SUMMARY_FILL = '#f5dcc8';
 
 function fmtSummaryQty(v) {
   return fmtNum(Math.round(Number(v) || 0), 0);
@@ -1138,19 +1381,19 @@ function aggregateReportCategories(report) {
 function salesStatPill(label, value, accent) {
   return {
     stack: [
-      { text: label, fontSize: 7, color: SALES.muted, alignment: 'center' },
+      { text: label, fontSize: 7.5, bold: true, color: SALES.muted, alignment: 'center' },
       {
         text: value,
         font: 'Roboto',
         bold: true,
-        fontSize: 10,
+        fontSize: 11,
         color: accent || SALES.ink,
         alignment: 'center',
-        margin: [0, 3, 0, 0]
+        margin: [0, 4, 0, 0]
       }
     ],
-    fillColor: SALES.surface,
-    margin: [6, 7, 6, 7]
+    fillColor: '#ffffff',
+    margin: [6, 8, 6, 8]
   };
 }
 
@@ -1171,27 +1414,32 @@ function salesReportPdfHeader(report) {
   metaBits.push(`${report.sections?.length || 0} شجرة`);
   const cats = aggregateReportCategories(report);
 
-  const topLine = {
-    columns: [
-      {
-        width: '*',
-        stack: [
-          { text: COMPANY_NAME, fontSize: 9, color: SALES.muted, alignment: 'right' },
-          {
-            text: 'تقرير مبيعات — شجرات المواد',
-            fontSize: 14,
-            bold: true,
-            color: SALES.ink,
-            alignment: 'right',
-            margin: [0, 2, 0, 0]
-          }
-        ]
-      },
-      logo
-        ? { image: logo, width: 28, alignment: 'left', margin: [0, 0, 0, 0] }
-        : { text: '', width: 30 }
-    ],
-    margin: [0, 0, 0, 6]
+  const headerBand = {
+    table: {
+      widths: ['*', logo ? 44 : 0],
+      body: [[
+        {
+          stack: [
+            { text: COMPANY_NAME, fontSize: 8.5, bold: true, color: '#cbd5e1', alignment: 'right' },
+            {
+              text: 'تقرير مبيعات — شجرات المواد',
+              fontSize: 14,
+              bold: true,
+              color: SALES.headText,
+              alignment: 'right',
+              margin: [0, 3, 0, 0]
+            }
+          ],
+          fillColor: SALES.head,
+          margin: [14, 11, 14, 11]
+        },
+        logo
+          ? { image: logo, width: 30, alignment: 'center', margin: [6, 10, 10, 10], fillColor: SALES.head }
+          : { text: '', border: [false, false, false, false] }
+      ]]
+    },
+    layout: 'noBorders',
+    margin: [0, 0, 0, 0]
   };
 
   const infoStrip = {
@@ -1200,21 +1448,21 @@ function salesReportPdfHeader(report) {
       body: [[
         {
           stack: [
-            ...(periodText ? [{ text: periodText, fontSize: 8.5, color: SALES.muted, alignment: 'right' }] : []),
-            { text: metaBits.join('   ·   '), fontSize: 8, color: SALES.muted, alignment: 'right', margin: [0, 2, 0, 0] }
+            ...(periodText ? [{ text: periodText, fontSize: 9, bold: true, color: SALES.muted, alignment: 'right' }] : []),
+            { text: metaBits.join('   ·   '), fontSize: 8.5, bold: true, color: SALES.muted, alignment: 'right', margin: [0, 3, 0, 0] }
           ],
           fillColor: SALES.surface,
-          margin: [10, 8, 10, 8]
+          margin: [12, 9, 12, 9]
         }
       ]]
     },
     layout: {
-      hLineWidth: () => 0.4,
-      vLineWidth: () => 0.4,
-      hLineColor: () => SALES.line,
-      vLineColor: () => SALES.line
+      hLineWidth: () => 0.55,
+      vLineWidth: () => 0.55,
+      hLineColor: () => SALES.lineStrong,
+      vLineColor: () => SALES.lineStrong
     },
-    margin: [0, 0, 0, 8]
+    margin: [0, 0, 0, 10]
   };
 
   const statsBlock = {
@@ -1222,23 +1470,23 @@ function salesReportPdfHeader(report) {
       widths: ['*', '*', '*', '*'],
       body: [[
         salesStatPill('مبيعات', fmtSummaryAmount(cats.sales?.amount || 0), SALES.debit),
-        salesStatPill('هدايا', fmtSummaryBonus(cats.gifts?.bonus || 0), SALES.ink),
+        salesStatPill('هدايا', fmtSummaryQty(cats.gifts?.bonus || 0), '#b45309'),
         salesStatPill('مردود', fmtSummaryAmount(cats.returns?.amount || 0), SALES.credit),
         salesStatPill('صافي', fmtSummaryAmount(
           Number(cats.sales?.amount || 0) - Number(cats.returns?.amount || 0)
-        ), SALES.accent)
+        ), SALES.headAlt)
       ]]
     },
     layout: {
-      hLineWidth: () => 0.35,
-      vLineWidth: () => 0.35,
-      hLineColor: () => SALES.line,
-      vLineColor: () => SALES.line
+      hLineWidth: () => 0.55,
+      vLineWidth: () => 0.55,
+      hLineColor: () => SALES.lineStrong,
+      vLineColor: () => SALES.lineStrong
     },
-    margin: [0, 0, 0, 10]
+    margin: [0, 0, 0, 14]
   };
 
-  return { stack: [topLine, infoStrip, statsBlock] };
+  return { stack: [headerBand, infoStrip, statsBlock] };
 }
 
 function treeSummaryMetrics(section) {
@@ -1256,49 +1504,35 @@ function treeSummaryMetrics(section) {
 
 function salesGrandSummaryBlock(report) {
   const cats = aggregateReportCategories(report);
-  const period = report.period || {};
-  const periodText = period.dateFrom && period.dateTo
-    ? `ملخص إجمالي — ${fmtDate(period.dateFrom)} → ${fmtDate(period.dateTo)}`
-    : 'ملخص إجمالي المبيعات';
 
-  const titleRow = [
-    {
-      text: periodText,
-      colSpan: 4,
-      bold: true,
-      fontSize: 9.5,
-      color: SALES.headText,
-      fillColor: SALES.head,
-      alignment: 'center',
-      margin: [6, 6, 6, 6]
-    },
-    emptyCell(), emptyCell(), emptyCell()
-  ];
-
-  const row = (label, qty, bonus, amount, fill) => [
-    srMoneyCell(fmtSummaryAmount(amount), fill, SALES.ink),
-    srCell(fmtSummaryBonus(bonus), 'srTd', 'center', fill),
-    srCell(fmtSummaryQty(qty), 'srTd', 'center', fill),
-    { text: label, bold: true, fontSize: 9, color: SALES.ink, alignment: 'right', fillColor: fill, margin: [6, 5, 6, 5] }
-  ];
-
-  const fill = SALES.summary;
   const body = [
-    titleRow,
-    row('مبيعات', cats.sales?.qty, cats.sales?.bonus, cats.sales?.amount, fill),
-    row('هدايا', cats.gifts?.qty, cats.gifts?.bonus, cats.gifts?.amount, '#fffbeb'),
-    row('مردود', cats.returns?.qty, cats.returns?.bonus, cats.returns?.amount, '#fef2f2')
+    srGrandSummaryHeaderCells(),
+    srGrandSummaryDataCells('مبيعات', cats.sales?.qty, cats.sales?.amount, SALES.summarySales, SALES.debit),
+    srGrandSummaryDataCells('هدايا', cats.gifts?.bonus, cats.gifts?.amount, SALES.summaryGifts, '#b45309'),
+    srGrandSummaryDataCells('مردود', cats.returns?.qty, cats.returns?.amount, SALES.summaryReturns, SALES.credit)
   ];
 
   return {
-    table: {
-      headerRows: 0,
-      widths: [82, 62, 62, '*'],
-      body,
-      dontBreakRows: true
-    },
-    layout: srLayout(),
-    margin: [0, 0, 0, 12]
+    stack: [
+      {
+        text: 'الملخص الإجمالي',
+        bold: true,
+        fontSize: 11,
+        color: SALES.head,
+        alignment: 'right',
+        margin: [0, 0, 0, 5]
+      },
+      {
+        table: {
+          headerRows: 1,
+          widths: SR_GRAND_WIDTHS,
+          body,
+          dontBreakRows: true
+        },
+        layout: srGrandSummaryLayout()
+      }
+    ],
+    margin: [0, 0, 0, 14]
   };
 }
 
@@ -1318,36 +1552,26 @@ function salesTreesSummaryBlock(report) {
     { salesQty: 0, giftsBonus: 0, amount: 0 }
   );
 
-  const headerRow = [
-    srTh('المبلغ الإجمالي'),
-    srTh('إجمالي الهدايا'),
-    srTh('العدد (مبيعات)'),
-    srTh('الشجرة')
-  ];
+  const headerRow = srSummaryTreeHeaderCells();
 
   const body = [headerRow];
   rows.forEach((r, i) => {
     const fill = i % 2 === 0 ? '#ffffff' : SALES.zebra;
-    body.push([
-      srMoneyCell(fmtSummaryAmount(r.amount), fill, SALES.accent),
-      srCell(fmtSummaryBonus(r.giftsBonus), 'srTd', 'center', fill),
-      srCell(fmtSummaryQty(r.salesQty), 'srTd', 'center', fill),
-      { text: r.title, style: 'srName', alignment: 'right', fillColor: fill, margin: [4, 4, 4, 4] }
-    ]);
+    body.push(srSummaryTreeCells(r.title, r.salesQty, r.giftsBonus, r.amount, fill));
   });
 
   body.push([
-    srMoneyCell(fmtSummaryAmount(totals.amount), SALES.total, SALES.accent),
-    srCell(fmtSummaryBonus(totals.giftsBonus), 'srTd', 'center', SALES.total),
-    srCell(fmtSummaryQty(totals.salesQty), 'srTd', 'center', SALES.total),
+    srMoneyCell(fmtSummaryAmount(totals.amount), SALES.total, SALES.debit),
+    srCell(fmtSummaryQty(totals.giftsBonus), 'srTd', 'center', SALES.total),
+    srSummaryCountCell(fmtSummaryQty(totals.salesQty), SALES.total),
     {
       text: 'المجموع',
       bold: true,
-      fontSize: 9.5,
-      color: SALES.ink,
+      fontSize: 10.5,
+      color: SALES.totalLabel,
       alignment: 'right',
       fillColor: SALES.total,
-      margin: [6, 6, 6, 6]
+      margin: [6, 7, 6, 7]
     }
   ]);
 
@@ -1356,7 +1580,7 @@ function salesTreesSummaryBlock(report) {
       {
         text: 'ملخص الشجرات المحددة',
         bold: true,
-        fontSize: 11,
+        fontSize: 11.5,
         color: SALES.ink,
         alignment: 'right',
         margin: [0, 0, 0, 6]
@@ -1364,14 +1588,14 @@ function salesTreesSummaryBlock(report) {
       {
         table: {
           headerRows: 1,
-          widths: [82, 62, 62, '*'],
+          widths: SR_TREES_WIDTHS,
           body,
           dontBreakRows: true
         },
-        layout: srLayout()
+        layout: srSummaryLayout()
       }
     ],
-    margin: [0, 0, 0, 14]
+    margin: [0, 0, 0, 16]
   };
 }
 
@@ -1383,9 +1607,22 @@ async function buildTreeSalesReportPdf(report) {
     salesRptLegend()
   ].filter(Boolean);
 
-  for (const section of report.sections || []) {
-    content.push(salesRptTreeBlock(section));
+  const sections = report.sections || [];
+  if (sections.length) {
+    content.push({
+      text: 'تفاصيل الشجرات',
+      bold: true,
+      fontSize: 12,
+      color: SALES.head,
+      alignment: 'right',
+      margin: [0, 4, 0, 10]
+    });
   }
+
+  sections.forEach((section, index) => {
+    if (index > 0) content.push(salesTreeSeparator());
+    content.push(salesRptTreeBlock(section));
+  });
 
   return createPdfBuffer({
     rtl: true,
