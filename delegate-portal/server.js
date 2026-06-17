@@ -19,7 +19,7 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 app.use(cors({
   origin: true,
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Sync-Key', 'x-sync-key'],
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS']
 }));
 app.use(express.json({ limit: '50mb' }));

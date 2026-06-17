@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('edariDesktop', {
   backendUrl: readLaunchArg('edari-backend', 'http://187.124.23.65:5005'),
   useRemote: readLaunchArg('edari-remote', '1') !== '0',
   runLocalSync: (serverUrl, syncKey, treeSeqs) => ipcRenderer.invoke('run-local-sync', { serverUrl, syncKey, treeSeqs }),
+  verifySyncTarget: (serverUrl, syncKey) => ipcRenderer.invoke('verify-sync-target', { serverUrl, syncKey }),
   listEdariTrees: () => ipcRenderer.invoke('list-edari-trees'),
   listEdariMaterialTrees: () => ipcRenderer.invoke('list-edari-material-trees'),
   listEdariSalesBranches: (params) => ipcRenderer.invoke('list-edari-sales-branches', params || {}),

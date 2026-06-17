@@ -2,6 +2,7 @@ const { app, BrowserWindow, Menu, ipcMain, Tray, nativeImage, dialog } = require
 const { spawn } = require('child_process');
 const path = require('path');
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const { createBackgroundSync } = require('./background-sync');
 const { startStaticAdmin } = require('./static-admin');
@@ -172,6 +173,47 @@ function spawnServer() {
     startedServer = true;
     serverProcess.on('error', reject);
     checkHealth(`http://127.0.0.1:${PORT}`).then(resolve).catch(reject);
+  });
+}
+
+function httpRequestJson(targetUrl, options = {}) {
+  return new Promise((resolve, reject) => {
+    let urlObj;
+    try {
+      urlObj = new URL(targetUrl);
+    } catch (err) {
+      reject(new Error('عنوان السيرفر غير صالح'));
+      return;
+    }
+
+    const lib = urlObj.protocol === 'https:' ? https : http;
+    const req = lib.request({
+      hostname: urlObj.hostname,
+      port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
+      path: `${urlObj.pathname}${urlObj.search}`,
+      method: options.method || 'GET',
+      headers: options.headers || {},
+      timeout: 20000
+    }, (res) => {
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        let data = {};
+        try {
+          data = body ? JSON.parse(body) : {};
+        } catch {
+          data = {};
+        }
+        resolve({ status: res.statusCode || 0, data });
+      });
+    });
+
+    req.on('error', (err) => reject(new Error(err.message || 'تعذّر الاتصال بالسيرفر')));
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('انتهت مهلة الاتصال بسيرفر الرفع'));
+    });
+    req.end();
   });
 }
 
@@ -671,6 +713,21 @@ function initBackgroundSync() {
 
 ipcMain.handle('run-local-sync', (_e, { serverUrl, syncKey, treeSeqs }) => {
   return runLocalSyncScript(serverUrl, syncKey, treeSeqs, { source: 'manual' });
+});
+
+ipcMain.handle('verify-sync-target', async (_e, { serverUrl, syncKey }) => {
+  const base = String(serverUrl || BACKEND_URL).replace(/\/$/, '');
+  const key = String(syncKey || '').trim();
+  if (!base) throw new Error('عنوان سيرفر الرفع غير مضبوط');
+  if (!key) throw new Error('مفتاح المزامنة فارغ');
+
+  const { status, data } = await httpRequestJson(`${base}/api/sync/status`, {
+    headers: { 'X-Sync-Key': key }
+  });
+  if (status !== 200 || !data.ok) {
+    throw new Error(data.error || 'تعذّر التحقق من السيرفر — تأكد من العنوان ومفتاح المزامنة');
+  }
+  return data;
 });
 
 ipcMain.handle('list-edari-trees', () => {

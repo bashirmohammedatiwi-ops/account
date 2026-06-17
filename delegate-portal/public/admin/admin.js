@@ -916,10 +916,24 @@ function applySyncProgressLine(line) {
 }
 
 async function verifySyncTarget(serverUrl, syncKey) {
-  const res = await fetch(`${serverUrl}/api/sync/status`, {
-    headers: { 'X-Sync-Key': syncKey },
-    cache: 'no-store'
-  });
+  if (window.edariDesktop?.verifySyncTarget) {
+    return window.edariDesktop.verifySyncTarget(serverUrl, syncKey);
+  }
+
+  let res;
+  try {
+    res = await fetch(`${serverUrl}/api/sync/status`, {
+      headers: { 'X-Sync-Key': syncKey },
+      cache: 'no-store'
+    });
+  } catch (err) {
+    const msg = String(err?.message || err);
+    if (msg === 'Failed to fetch') {
+      throw new Error('تعذّر الاتصال بسيرفر الرفع — تحقق من العنوان والشبكة ومفتاح المزامنة (CORS)');
+    }
+    throw err;
+  }
+
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.ok) {
     throw new Error(data.error || 'تعذّر التحقق من السيرفر — تأكد من العنوان ومفتاح المزامنة');
