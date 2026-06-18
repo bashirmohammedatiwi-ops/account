@@ -286,28 +286,24 @@ function renderProductDetailPanel() {
   const lineTotal = (d.quant || 0) * Number(p.price || 0);
   panel.innerHTML = `
     <div class="shop-detail-inner">
-      <div class="shop-detail-scroll">
-        ${img ? `<button type="button" class="shop-detail-hero" data-view-product-id="${p.id}" aria-label="عرض الصورة"><img src="${img}" alt=""></button>` : ''}
-        <h3 class="shop-detail-name">${esc(p.name)}</h3>
-        <p class="shop-detail-meta">
-          <span dir="ltr">${esc(p.barcode || p.skuNum || '—')}</span>
-          <span class="shop-detail-price" dir="ltr">${fmtInvInt(p.price)}</span>
-        </p>
-        <div class="shop-detail-qty">
-          ${renderQtyBlock(p.id, 'quant', d.quant || 0)}
-          ${renderQtyBlock(p.id, 'bonus', d.bonus || 0)}
-        </div>
-        <div class="shop-detail-summary">
-          <span>مخزون <strong dir="ltr">${stock > 0 ? fmtInvInt(stock) : '—'}</strong></span>
-          <span>إجمالي <strong dir="ltr" data-detail-line-total>${fmtInvInt(lineTotal)}</strong></span>
-        </div>
+      ${img ? `<button type="button" class="shop-detail-hero" data-view-product-id="${p.id}" aria-label="عرض الصورة"><img src="${img}" alt=""></button>` : ''}
+      <h3 class="shop-detail-name">${esc(p.name)}</h3>
+      <p class="shop-detail-meta">
+        <span dir="ltr">${esc(p.barcode || p.skuNum || '—')}</span>
+        <span class="shop-detail-price" dir="ltr">${fmtInvInt(p.price)}</span>
+      </p>
+      <div class="shop-detail-qty">
+        ${renderQtyBlock(p.id, 'quant', d.quant || 0)}
+        ${renderQtyBlock(p.id, 'bonus', d.bonus || 0)}
       </div>
-      <div class="shop-detail-foot">
-        <button type="button" class="shop-detail-add" data-draft-action data-product-id="${p.id}" data-field="quant" data-delta="1">إضافة</button>
-        <label class="shop-detail-notes">
-          <textarea id="shopDetailNotes" rows="2" placeholder="ملاحظات...">${esc(commerce.invoiceNotes || '')}</textarea>
-        </label>
+      <div class="shop-detail-summary">
+        <span>مخزون <strong dir="ltr">${stock > 0 ? fmtInvInt(stock) : '—'}</strong></span>
+        <span>إجمالي <strong dir="ltr" data-detail-line-total>${fmtInvInt(lineTotal)}</strong></span>
       </div>
+      <button type="button" class="shop-detail-add" data-draft-action data-product-id="${p.id}" data-field="quant" data-delta="1">إضافة</button>
+      <label class="shop-detail-notes">
+        <textarea id="shopDetailNotes" rows="1" placeholder="ملاحظات...">${esc(commerce.invoiceNotes || '')}</textarea>
+      </label>
     </div>`;
 }
 
