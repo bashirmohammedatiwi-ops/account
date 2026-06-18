@@ -1,4 +1,6 @@
-/* Mobile commerce v3: showcase products + live Edari-style invoice + localStorage */
+/* Mobile commerce v3: Edari-style showcase + live invoice + localStorage */
+const PRODUCTS_PER_PAGE = 8;
+
 const commerce = {
   branches: [],
   sections: [],
@@ -7,6 +9,7 @@ const commerce = {
   orders: [],
   selectedBranch: null,
   selectedSection: null,
+  selectedProductId: null,
   draft: {},
   invoiceCustomer: null,
   invoiceNotes: '',
@@ -39,8 +42,49 @@ function getDraft(productId) {
   return commerce.draft[id];
 }
 
+function invoiceUnitsTotal() {
+  return Object.values(commerce.draft).reduce((s, d) => s + Number(d.quant || 0), 0);
+}
+
+function chunkArray(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+function findProduct(id) {
+  return commerce.products.find((p) => p.id === Number(id)) || null;
+}
+
+function selectProduct(productId) {
+  commerce.selectedProductId = productId ? Number(productId) : null;
+  renderProductDetailPanel();
+  document.querySelectorAll('.shop-prod-card').forEach((el) => {
+    el.classList.toggle('shop-prod-card-active', Number(el.dataset.productId) === commerce.selectedProductId);
+  });
+}
+
 function invoiceLineCount() {
   return Object.values(commerce.draft).filter((d) => d.quant > 0 || d.bonus > 0).length;
+}
+
+function updateShopOrderStats() {
+  const unitsEl = document.getElementById('shopStatUnits');
+  const itemsEl = document.getElementById('shopStatItems');
+  const totalEl = document.getElementById('shopStatTotal');
+  const nameEl = document.getElementById('shopCustomerName');
+  if (unitsEl) unitsEl.textContent = fmtInvInt(invoiceUnitsTotal());
+  if (itemsEl) itemsEl.textContent = String(invoiceLineCount());
+  if (totalEl) totalEl.textContent = fmtInvInt(invoiceTotalAmount());
+  if (nameEl) {
+    const c = commerce.invoiceCustomer;
+    if (c?.name1) {
+      const extra = [c.treeName, c.num].filter(Boolean).join(' · ');
+      nameEl.textContent = extra ? `${c.name1} / ${extra}` : c.name1;
+    } else {
+      nameEl.textContent = '— اختر زبوناً —';
+    }
+  }
 }
 
 function invoiceTotalAmount() {
@@ -156,25 +200,35 @@ function adjustDraft(productId, field, delta) {
 }
 
 function syncProductRow(productId) {
-  const row = document.querySelector(`[data-product-id="${productId}"]`);
-  if (!row) return;
-  const d = getDraft(productId);
-  const qEl = row.querySelector('[data-draft-q]');
-  const bEl = row.querySelector('[data-draft-b]');
-  if (qEl) qEl.textContent = String(d.quant || 0);
-  if (bEl) bEl.textContent = String(d.bonus || 0);
-  row.classList.toggle('prod-row-active', (d.quant || 0) > 0 || (d.bonus || 0) > 0);
+  const id = Number(productId);
+  const d = getDraft(id);
+  const active = (d.quant || 0) > 0 || (d.bonus || 0) > 0;
+  const card = document.querySelector(`.shop-prod-card[data-product-id="${id}"]`);
+  if (card) card.classList.toggle('shop-prod-card-in-cart', active);
+  if (commerce.selectedProductId === id) {
+    const qEl = document.querySelector('[data-detail-q]');
+    const bEl = document.querySelector('[data-detail-b]');
+    const lineEl = document.querySelector('[data-detail-line-total]');
+    if (qEl) qEl.textContent = String(d.quant || 0);
+    if (bEl) bEl.textContent = String(d.bonus || 0);
+    if (lineEl) {
+      const p = findProduct(id);
+      lineEl.textContent = fmtInvInt((d.quant || 0) * Number(p?.price || 0));
+    }
+  }
+  updateShopOrderStats();
 }
 
 function renderQtyBlock(productId, field, value) {
   const isGift = field === 'bonus';
-  const attr = isGift ? 'b' : 'q';
+  const detailAttr = isGift ? 'data-detail-b' : 'data-detail-q';
+  const label = isGift ? 'عينة' : 'وحدة';
   return `
-    <div class="prod-step${isGift ? ' prod-step-gift' : ''}">
-      <span class="prod-step-label">${isGift ? 'هدية' : 'كمية'}</span>
+    <div class="shop-detail-step${isGift ? ' shop-detail-step-gift' : ''}">
+      <span class="prod-step-label">${label}</span>
       <div class="prod-step-btns">
         <button type="button" class="prod-btn prod-btn-minus" data-draft-action data-product-id="${productId}" data-field="${field}" data-delta="-1" aria-label="نقص">−</button>
-        <span class="prod-step-val" dir="ltr" data-draft-${attr}>${value}</span>
+        <span class="prod-step-val" dir="ltr" ${detailAttr}>${value}</span>
         <button type="button" class="prod-btn prod-btn-plus" data-draft-action data-product-id="${productId}" data-field="${field}" data-delta="1" aria-label="زيادة">+</button>
       </div>
     </div>`;
@@ -186,32 +240,142 @@ function productImageSrc(p) {
   return `${window.location.origin}${p.imageUrl}`;
 }
 
-function renderProductCard(p) {
+function renderProductGridCard(p) {
   const d = getDraft(p.id);
-  const active = d.quant > 0 || d.bonus > 0;
-  const stock = Number(p.minOrderQty ?? 0);
+  const selected = commerce.selectedProductId === p.id;
+  const inCart = (d.quant || 0) > 0 || (d.bonus || 0) > 0;
   const img = productImageSrc(p);
   return `
-    <article class="prod-row${active ? ' prod-row-active' : ''}" data-product-id="${p.id}">
-      <div class="prod-thumb">
+    <button type="button" class="shop-prod-card${selected ? ' shop-prod-card-active' : ''}${inCart ? ' shop-prod-card-in-cart' : ''}" data-product-id="${p.id}" data-select-product="${p.id}">
+      <span class="shop-prod-card-media">
         ${img
-    ? `<img src="${img}" alt="" class="prod-thumb-img" loading="lazy">`
-    : '<span class="prod-thumb-empty" aria-hidden="true">📦</span>'}
-      </div>
-      <div class="prod-main">
-        <h3 class="prod-name">${esc(p.name)}</h3>
-        <p class="prod-barcode" dir="ltr">${esc(p.barcode || p.skuNum || '—')}</p>
-        <p class="prod-price-line">
-          <strong dir="ltr">${fmtInvInt(p.price)}</strong>
-          <span>جملة</span>
-          ${stock > 0 ? `<em>رصيد ${fmtInvInt(stock)}</em>` : ''}
-        </p>
-      </div>
-      <div class="prod-controls">
+    ? `<img src="${img}" alt="" class="shop-prod-card-img" loading="lazy">`
+    : '<span class="shop-prod-card-empty" aria-hidden="true">📦</span>'}
+      </span>
+      <span class="shop-prod-card-name">${esc(p.name)}</span>
+    </button>`;
+}
+
+function renderProductDetailPanel() {
+  const panel = document.getElementById('shopProductDetail');
+  if (!panel) return;
+  const p = findProduct(commerce.selectedProductId);
+  if (!p) {
+    panel.innerHTML = `
+      <div class="shop-detail-empty">
+        <span aria-hidden="true">📦</span>
+        <p>اختر صنفاً من القائمة</p>
+      </div>`;
+    return;
+  }
+  const d = getDraft(p.id);
+  const img = productImageSrc(p);
+  const stock = Number(p.minOrderQty ?? 0);
+  const lineTotal = (d.quant || 0) * Number(p.price || 0);
+  panel.innerHTML = `
+    <div class="shop-detail-inner">
+      <h3 class="shop-detail-title">معلومات الصنف</h3>
+      <dl class="shop-detail-info">
+        <div><dt>الاسم</dt><dd>${esc(p.name)}</dd></div>
+        <div><dt>رقم الصنف</dt><dd dir="ltr">${esc(p.barcode || p.skuNum || '—')}</dd></div>
+        <div><dt>القسم</dt><dd>${esc(commerce.selectedSection?.name || p.sectionName || '—')}</dd></div>
+        <div><dt>السعر</dt><dd dir="ltr">${fmtInvInt(p.price)} IQD</dd></div>
+      </dl>
+      <div class="shop-detail-qty">
         ${renderQtyBlock(p.id, 'quant', d.quant || 0)}
         ${renderQtyBlock(p.id, 'bonus', d.bonus || 0)}
       </div>
-    </article>`;
+      <div class="shop-detail-totals">
+        <div><span>كمية المخزون</span><strong dir="ltr">${stock > 0 ? fmtInvInt(stock) : '—'}</strong></div>
+        <div><span>المجموع الإجمالي</span><strong dir="ltr" data-detail-line-total>${fmtInvInt(lineTotal)}</strong></div>
+      </div>
+      <div class="shop-detail-actions">
+        <button type="button" class="shop-detail-btn shop-detail-btn-gold" data-draft-action data-product-id="${p.id}" data-field="bonus" data-delta="1">إضافة بركة</button>
+        ${img ? `<button type="button" class="shop-detail-btn shop-detail-btn-gold" data-view-product-id="${p.id}">عرض الصور</button>` : ''}
+      </div>
+      <label class="shop-detail-notes">
+        <span>ملاحظات</span>
+        <textarea id="shopDetailNotes" rows="2" placeholder="ملاحظات على الطلبية...">${esc(commerce.invoiceNotes || '')}</textarea>
+      </label>
+    </div>`;
+}
+
+function renderSectionTabs() {
+  const tabs = document.getElementById('shopSectionTabs');
+  if (!tabs) return;
+  if (!commerce.sections.length) {
+    tabs.innerHTML = '';
+    return;
+  }
+  tabs.innerHTML = commerce.sections.map((s) => `
+    <button type="button" class="shop-edari-tab${commerce.selectedSection?.id === s.id ? ' active' : ''}"
+      role="tab" aria-selected="${commerce.selectedSection?.id === s.id}"
+      data-shop-section-tab="${s.id}">${esc(s.name)}</button>`).join('');
+}
+
+function renderPageDots(pageCount, activeIndex = 0) {
+  const dots = document.getElementById('shopPageDots');
+  if (!dots) return;
+  if (pageCount <= 1) {
+    dots.innerHTML = '';
+    dots.classList.add('hidden');
+    return;
+  }
+  dots.classList.remove('hidden');
+  dots.innerHTML = Array.from({ length: pageCount }, (_, i) => `
+    <span class="shop-page-dot${i === activeIndex ? ' active' : ''}" data-page-dot="${i}"></span>`).join('');
+}
+
+function bindProductPagesScroll() {
+  const vp = document.getElementById('shopPagesViewport');
+  const dotsEl = document.getElementById('shopPageDots');
+  if (!vp || vp.dataset.boundScroll) return;
+  vp.dataset.boundScroll = '1';
+  vp.addEventListener('scroll', () => {
+    const w = vp.clientWidth || 1;
+    const idx = Math.round(vp.scrollLeft / w);
+    dotsEl?.querySelectorAll('.shop-page-dot').forEach((dot, i) => {
+      dot.classList.toggle('active', i === idx);
+    });
+  }, { passive: true });
+}
+
+function renderProductPages() {
+  const track = document.getElementById('shopProductsPages');
+  const vp = document.getElementById('shopPagesViewport');
+  if (!track) return;
+  const items = filteredProducts();
+  if (!items.length) {
+    track.innerHTML = '<div class="shop-pages-empty"><p>لا توجد منتجات</p></div>';
+    renderPageDots(0);
+    return;
+  }
+  const pages = chunkArray(items, PRODUCTS_PER_PAGE);
+  if (!commerce.selectedProductId || !items.some((p) => p.id === commerce.selectedProductId)) {
+    commerce.selectedProductId = items[0].id;
+  }
+  track.innerHTML = pages.map((pageItems) => `
+    <div class="shop-page">
+      <div class="shop-page-grid">
+        ${pageItems.map(renderProductGridCard).join('')}
+      </div>
+    </div>`).join('');
+  renderPageDots(pages.length, 0);
+  if (vp) vp.scrollLeft = 0;
+  bindProductPagesScroll();
+  renderProductDetailPanel();
+}
+
+function renderProductShowcase() {
+  renderSectionTabs();
+  const meta = document.getElementById('shopProductsMeta');
+  if (meta) {
+    const branchName = commerce.selectedBranch?.name || '';
+    const n = filteredProducts().length;
+    meta.textContent = branchName ? `${branchName} · ${n} منتج` : `${n} منتج`;
+  }
+  renderProductPages();
+  updateInvoiceUI();
 }
 
 function filteredProducts() {
@@ -224,12 +388,62 @@ function filteredProducts() {
 }
 
 function renderProductsList() {
-  const list = document.getElementById('shopProductsList');
-  if (!list) return;
-  const items = filteredProducts();
-  list.innerHTML = items.map(renderProductCard).join('')
-    || '<div class="empty-state"><p>لا توجد منتجات</p></div>';
-  updateInvoiceUI();
+  renderProductShowcase();
+}
+
+async function loadSectionProducts() {
+  if (!commerce.selectedSection?.id) return;
+  const data = await commerceApi(`/catalog/sections/${commerce.selectedSection.id}/products`);
+  commerce.products = data.products || [];
+  commerce.productFilter = '';
+  const searchEl = document.getElementById('shopProductSearch');
+  if (searchEl) searchEl.value = '';
+  applyPersistedDraft();
+  renderProductShowcase();
+  persistInvoiceDraft();
+}
+
+async function switchSection(sectionId) {
+  const next = commerce.sections.find((x) => x.id === Number(sectionId));
+  if (!next || commerce.selectedSection?.id === next.id) return;
+  commerce.selectedSection = next;
+  commerce.selectedProductId = null;
+  setOverlay(true);
+  try {
+    await loadSectionProducts();
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    setOverlay(false);
+  }
+}
+
+async function openShopCatalog() {
+  if (!commerce.selectedBranch) return goToScreen('shop');
+  setOverlay(true);
+  try {
+    const data = await commerceApi(`/catalog/branches/${commerce.selectedBranch.id}/sections`);
+    commerce.sections = data.sections || [];
+    if (!commerce.sections.length) {
+      alert('لا توجد أقسام في هذا الفرع');
+      return;
+    }
+    const saved = loadInvoiceDraft();
+    let section = commerce.selectedSection;
+    if (!section || !commerce.sections.some((s) => s.id === section.id)) {
+      if (saved?.sectionId && saved.branchId === commerce.selectedBranch.id) {
+        section = commerce.sections.find((s) => s.id === saved.sectionId);
+      }
+      section = section || commerce.sections[0];
+    }
+    commerce.selectedSection = section;
+    await loadSectionProducts();
+    goToScreen('shop-products');
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    setOverlay(false);
+  }
 }
 
 function todayInvoiceDate() {
@@ -431,6 +645,7 @@ function updateInvoiceUI() {
   const openBtn = document.getElementById('btnOpenInvoice');
   if (bar) bar.classList.toggle('has-lines', count > 0);
   if (openBtn) openBtn.classList.toggle('has-items', count > 0);
+  updateShopOrderStats();
 }
 
 function clearInvoiceDraft({ resetNotes = true } = {}) {
@@ -439,14 +654,13 @@ function clearInvoiceDraft({ resetNotes = true } = {}) {
     commerce.invoiceNotes = '';
     const notesEl = document.getElementById('invoiceNotes');
     if (notesEl) notesEl.value = '';
+    const detailNotes = document.getElementById('shopDetailNotes');
+    if (detailNotes) detailNotes.value = '';
   }
-  document.querySelectorAll('.prod-row').forEach((row) => {
-    row.classList.remove('prod-row-active');
-    const qEl = row.querySelector('[data-draft-q]');
-    const bEl = row.querySelector('[data-draft-b]');
-    if (qEl) qEl.textContent = '0';
-    if (bEl) bEl.textContent = '0';
+  document.querySelectorAll('.shop-prod-card').forEach((row) => {
+    row.classList.remove('shop-prod-card-in-cart');
   });
+  renderProductDetailPanel();
   clearInvoiceStorage();
   updateInvoiceUI();
 }
@@ -472,7 +686,7 @@ async function loadShopBranches() {
     document.querySelectorAll('[data-shop-branch]').forEach((btn) => {
       btn.addEventListener('click', () => {
         commerce.selectedBranch = commerce.branches.find((x) => x.id === Number(btn.dataset.shopBranch));
-        openShopSections();
+        void openShopCatalog();
       });
     });
     updateResumeBanner();
@@ -483,30 +697,13 @@ async function loadShopBranches() {
   }
 }
 
-async function openShopSections() {
+async function openShopProducts() {
   if (!commerce.selectedBranch) return goToScreen('shop');
+  if (!commerce.selectedSection) return openShopCatalog();
   setOverlay(true);
   try {
-    const data = await commerceApi(`/catalog/branches/${commerce.selectedBranch.id}/sections`);
-    commerce.sections = data.sections || [];
-    document.getElementById('shopSectionsMeta').textContent = `${esc(commerce.selectedBranch.name)} · ${commerce.sections.length} قسم`;
-    document.getElementById('shopSectionsList').innerHTML = commerce.sections.map((s, i) => `
-      <button type="button" class="inv-shop-card inv-shop-card-section" data-shop-section="${s.id}" style="--delay:${i * 40}ms">
-        <span class="inv-shop-icon">📁</span>
-        <span class="inv-shop-copy">
-          <strong>${esc(s.name)}</strong>
-          <span class="inv-shop-hint">عرض وطلب مع فاتورة حية</span>
-        </span>
-        ${ICONS.chevron}
-      </button>`).join('') || '<div class="empty-state"><p>لا توجد أقسام</p></div>';
-
-    document.querySelectorAll('[data-shop-section]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        commerce.selectedSection = commerce.sections.find((x) => x.id === Number(btn.dataset.shopSection));
-        openShopProducts();
-      });
-    });
-    goToScreen('shop-sections');
+    await loadSectionProducts();
+    goToScreen('shop-products');
   } catch (e) {
     alert(e.message);
   } finally {
@@ -514,28 +711,19 @@ async function openShopSections() {
   }
 }
 
-async function openShopProducts() {
-  if (!commerce.selectedSection) return openShopSections();
-  setOverlay(true);
-  try {
-    const data = await commerceApi(`/catalog/sections/${commerce.selectedSection.id}/products`);
-    commerce.products = data.products || [];
-    commerce.productFilter = '';
-    const searchEl = document.getElementById('shopProductSearch');
-    if (searchEl) searchEl.value = '';
-    applyPersistedDraft();
-    const branchName = commerce.selectedBranch?.name || '';
-    const sectionName = commerce.selectedSection?.name || '';
-    document.getElementById('shopProductsMeta').textContent =
-      `${branchName} · ${sectionName} · ${commerce.products.length} منتج`;
-    renderProductsList();
-    persistInvoiceDraft();
-    goToScreen('shop-products');
-  } catch (e) {
-    alert(e.message);
-  } finally {
-    setOverlay(false);
-  }
+function openProductImage(productId) {
+  const p = findProduct(productId);
+  const url = p ? productImageSrc(p) : '';
+  if (!url) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'shop-image-lightbox';
+  overlay.innerHTML = `
+    <button type="button" class="shop-image-lightbox-close" aria-label="إغلاق">×</button>
+    <img src="${url}" alt="">`;
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay || e.target.closest('.shop-image-lightbox-close')) overlay.remove();
+  });
+  document.body.appendChild(overlay);
 }
 
 async function submitInvoice() {
@@ -654,6 +842,7 @@ function selectInvoiceCustomer(branch) {
   };
   closeCustomerPicker();
   updateInvoiceUI();
+  updateShopOrderStats();
   persistInvoiceDraft();
 }
 
@@ -735,13 +924,9 @@ window.commerceNav = {
       title.textContent = 'المنتجات';
       crumb.textContent = 'عرض وطلب · اختر فرعاً';
       if (kicker) kicker.textContent = 'Edari · الطلبات';
-    } else if (name === 'shop-sections') {
-      title.textContent = commerce.selectedBranch?.name || 'الأقسام';
-      crumb.textContent = 'اختر قسماً';
-      if (kicker) kicker.textContent = 'Edari · الأقسام';
     } else if (name === 'shop-products') {
-      title.textContent = commerce.selectedSection?.name || 'عرض وطلب';
-      crumb.textContent = `${commerce.selectedBranch?.name || ''} · فاتورة حية`;
+      title.textContent = commerce.selectedBranch?.name || 'عرض وطلب';
+      crumb.textContent = `${commerce.selectedSection?.name || ''} · فاتورة حية`.trim();
       if (kicker) kicker.textContent = 'Edari · عرض للزبون';
     } else if (name === 'my-orders') {
       title.textContent = 'طلباتي';
@@ -759,6 +944,7 @@ window.commerceNav = {
     if (name === 'my-orders') void loadMyOrders();
     if (name === 'shop-products') {
       applyPersistedDraft();
+      renderProductShowcase();
       updateInvoiceUI();
     }
   },
@@ -782,7 +968,7 @@ window.commerceNav = {
       return true;
     }
     if (state.screen === 'shop-products') {
-      openShopSections();
+      goToScreen('shop');
       return true;
     }
     if (state.screen === 'shop-sections') {
@@ -802,7 +988,7 @@ window.commerceNav = {
       return true;
     }
     if (state.screen === 'shop-sections') {
-      void openShopSections();
+      void openShopCatalog();
       return true;
     }
     if (state.screen === 'shop-products') {
@@ -820,11 +1006,46 @@ window.commerceNav = {
 function initCommerceMobile() {
   restoreDraftIntoMemory();
 
-  document.getElementById('shopProductsList')?.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-draft-action]');
-    if (!btn) return;
-    adjustDraft(btn.dataset.productId, btn.dataset.field, Number(btn.dataset.delta));
+  document.getElementById('shopSectionTabs')?.addEventListener('click', (e) => {
+    const tab = e.target.closest('[data-shop-section-tab]');
+    if (!tab) return;
+    void switchSection(tab.dataset.shopSectionTab);
   });
+
+  document.getElementById('shopProductsPages')?.addEventListener('click', (e) => {
+    const selectBtn = e.target.closest('[data-select-product]');
+    if (selectBtn) {
+      selectProduct(selectBtn.dataset.selectProduct);
+      return;
+    }
+    const draftBtn = e.target.closest('[data-draft-action]');
+    if (draftBtn) {
+      adjustDraft(draftBtn.dataset.productId, draftBtn.dataset.field, Number(draftBtn.dataset.delta));
+    }
+    const imgBtn = e.target.closest('[data-view-product-id]');
+    if (imgBtn) openProductImage(imgBtn.dataset.viewProductId);
+  });
+
+  document.getElementById('shopProductDetail')?.addEventListener('click', (e) => {
+    const draftBtn = e.target.closest('[data-draft-action]');
+    if (draftBtn) {
+      adjustDraft(draftBtn.dataset.productId, draftBtn.dataset.field, Number(draftBtn.dataset.delta));
+      return;
+    }
+    const imgBtn = e.target.closest('[data-view-product-id]');
+    if (imgBtn) openProductImage(imgBtn.dataset.viewProductId);
+  });
+
+  document.getElementById('shopProductDetail')?.addEventListener('input', (e) => {
+    if (e.target.id !== 'shopDetailNotes') return;
+    commerce.invoiceNotes = e.target.value || '';
+    const notesEl = document.getElementById('invoiceNotes');
+    if (notesEl) notesEl.value = commerce.invoiceNotes;
+    persistInvoiceDraft();
+    renderLiveInvoicePanel();
+  });
+
+  document.getElementById('btnShopPickCustomer')?.addEventListener('click', () => openCustomerPicker());
 
   document.getElementById('invoiceModalLines')?.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-invoice-action]');
@@ -840,7 +1061,15 @@ function initCommerceMobile() {
 
   document.getElementById('shopProductSearch')?.addEventListener('input', (e) => {
     commerce.productFilter = e.target.value || '';
-    renderProductsList();
+    renderProductShowcase();
+  });
+
+  document.getElementById('shopPageDots')?.addEventListener('click', (e) => {
+    const dot = e.target.closest('[data-page-dot]');
+    if (!dot) return;
+    const vp = document.getElementById('shopPagesViewport');
+    if (!vp) return;
+    vp.scrollTo({ left: Number(dot.dataset.pageDot) * vp.clientWidth, behavior: 'smooth' });
   });
 
   document.getElementById('btnSubmitInvoice')?.addEventListener('click', () => submitInvoice());

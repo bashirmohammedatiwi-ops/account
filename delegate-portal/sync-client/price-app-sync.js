@@ -31,8 +31,8 @@ const FORCE_INCREMENTAL = process.argv.includes('--incremental');
 const SYNC_STATE_FILE = process.env.PRICE_SYNC_STATE_FILE
   || path.join(__dirname, '..', 'data', 'price-sync-state.json');
 
-/** Supplier purchase invoices in Edari (matches material movement «مشتريات»). */
-const PURCHASE_KINDS = [1];
+/** Purchase invoice kinds: 1 = supplier purchases, 3 = purchase/stock invoices in Edari. */
+const PURCHASE_KINDS = [1, 3];
 
 const UPLOAD_BATCH = 300;
 const QUERY_TIMEOUT_MS = 300000;
@@ -278,6 +278,52 @@ async function fetchPurchaseMovements({ incremental = false, syncState = null } 
   return mapped;
 }
 
+/** Materials with PurchaseTot but no invoice lines in the current DB (common after year rollover). */
+async function fetchAggregatePurchaseMovements() {
+  const kindList = PURCHASE_KINDS.join(', ');
+  const rows = await query(`
+    SELECT m.Seq, m.Barcode, m.Num, m.Name1, m.PurchaseTot, m.PurchaseAm, m.SellPr4
+    FROM File13n m
+    WHERE m.SubCount = 0 AND m.PurchaseTot > 0
+      AND NOT EXISTS (
+        SELECT 1 FROM file14n l
+        INNER JOIN File15n i ON i.Seq = l.BillSeq
+        WHERE l.Mat = m.Seq AND i.Kind IN (${kindList})
+      )
+  `);
+
+  const movements = [];
+  const products = [];
+  for (const row of rows) {
+    const barcode = resolveMaterialBarcode(row);
+    if (!barcode) continue;
+    const qty = Number(row.PurchaseTot || 0);
+    if (qty <= 0) continue;
+    const total = Number(row.PurchaseAm || 0);
+    const unit = total > 0 ? total / qty : 0;
+    const consumerPrice = Number(row.SellPr4 || 0);
+
+    movements.push({
+      barcode,
+      supplier: 'مشتريات مسجّلة (بدون تفاصيل فواتير)',
+      invoice: '—',
+      quantity: qty,
+      unit_price: unit,
+      total_price: total > 0 ? total : qty * unit,
+      date: null,
+      edari_key: `AGG:${row.Seq}`,
+    });
+
+    products.push({
+      barcode,
+      name: String(row.Name1 || '').trim(),
+      consumer_price: consumerPrice > 0 ? consumerPrice : null,
+    });
+  }
+
+  return { movements, products, count: movements.length };
+}
+
 async function fetchProductCatalog() {
   const rows = await query(`
     SELECT Barcode, Num, Name1, SellPr4, InTot, OutTot
@@ -379,6 +425,16 @@ async function main(options = {}) {
 
   const purchaseData = await fetchPurchaseMovements({ incremental, syncState: prevState });
 
+  if (!incremental) {
+    reportProgress(1, 4, 92, 'جلب مشتريات بدون تفاصيل فواتير...');
+    const aggregate = await fetchAggregatePurchaseMovements();
+    if (aggregate.movements.length) {
+      purchaseData.movements.push(...aggregate.movements);
+      purchaseData.products = mergeProducts(purchaseData.products || [], aggregate.products);
+      purchaseData.aggregateMovements = aggregate.count;
+    }
+  }
+
   reportProgress(2, 4, 0, 'قراءة الأسعار والرصيد...');
   const catalogProducts = await fetchProductCatalog();
   const products = mergeProducts(purchaseData.products, catalogProducts);
@@ -429,6 +485,7 @@ async function main(options = {}) {
     rawLines: purchaseData.rawLines || 0,
     skippedNoBarcode: purchaseData.skippedNoBarcode || 0,
     skippedDedupe: purchaseData.skippedDedupe || 0,
+    aggregateMovements: purchaseData.aggregateMovements || 0,
     products: products.length,
     movements: purchaseData.movements.length,
     ...uploadResult,
@@ -450,4 +507,11 @@ if (require.main === module) {
     });
 }
 
-module.exports = { main, fetchPurchaseMovements, fetchProductCatalog, loadSyncState, saveSyncState };
+module.exports = {
+  main,
+  fetchPurchaseMovements,
+  fetchAggregatePurchaseMovements,
+  fetchProductCatalog,
+  loadSyncState,
+  saveSyncState,
+};
