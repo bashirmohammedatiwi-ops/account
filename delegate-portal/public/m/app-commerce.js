@@ -1,5 +1,5 @@
 /* Mobile commerce v3: Edari-style showcase + live invoice + localStorage */
-const PRODUCTS_PER_PAGE = 8;
+const PRODUCTS_PER_PAGE = 6;
 
 const commerce = {
   branches: [],
@@ -274,28 +274,23 @@ function renderProductDetailPanel() {
   const lineTotal = (d.quant || 0) * Number(p.price || 0);
   panel.innerHTML = `
     <div class="shop-detail-inner">
-      <h3 class="shop-detail-title">معلومات الصنف</h3>
-      <dl class="shop-detail-info">
-        <div><dt>الاسم</dt><dd>${esc(p.name)}</dd></div>
-        <div><dt>رقم الصنف</dt><dd dir="ltr">${esc(p.barcode || p.skuNum || '—')}</dd></div>
-        <div><dt>القسم</dt><dd>${esc(commerce.selectedSection?.name || p.sectionName || '—')}</dd></div>
-        <div><dt>السعر</dt><dd dir="ltr">${fmtInvInt(p.price)} IQD</dd></div>
-      </dl>
+      ${img ? `<button type="button" class="shop-detail-hero" data-view-product-id="${p.id}" aria-label="عرض الصورة"><img src="${img}" alt=""></button>` : ''}
+      <h3 class="shop-detail-name">${esc(p.name)}</h3>
+      <p class="shop-detail-meta">
+        <span dir="ltr">${esc(p.barcode || p.skuNum || '—')}</span>
+        <span class="shop-detail-price" dir="ltr">${fmtInvInt(p.price)} IQD</span>
+      </p>
       <div class="shop-detail-qty">
         ${renderQtyBlock(p.id, 'quant', d.quant || 0)}
         ${renderQtyBlock(p.id, 'bonus', d.bonus || 0)}
       </div>
-      <div class="shop-detail-totals">
-        <div><span>كمية المخزون</span><strong dir="ltr">${stock > 0 ? fmtInvInt(stock) : '—'}</strong></div>
-        <div><span>المجموع الإجمالي</span><strong dir="ltr" data-detail-line-total>${fmtInvInt(lineTotal)}</strong></div>
+      <div class="shop-detail-summary">
+        <span>المخزون <strong dir="ltr">${stock > 0 ? fmtInvInt(stock) : '—'}</strong></span>
+        <span>الإجمالي <strong dir="ltr" data-detail-line-total>${fmtInvInt(lineTotal)}</strong></span>
       </div>
-      <div class="shop-detail-actions">
-        <button type="button" class="shop-detail-btn shop-detail-btn-gold" data-draft-action data-product-id="${p.id}" data-field="bonus" data-delta="1">إضافة بركة</button>
-        ${img ? `<button type="button" class="shop-detail-btn shop-detail-btn-gold" data-view-product-id="${p.id}">عرض الصور</button>` : ''}
-      </div>
+      <button type="button" class="shop-detail-add" data-draft-action data-product-id="${p.id}" data-field="quant" data-delta="1">إضافة</button>
       <label class="shop-detail-notes">
-        <span>ملاحظات</span>
-        <textarea id="shopDetailNotes" rows="2" placeholder="ملاحظات على الطلبية...">${esc(commerce.invoiceNotes || '')}</textarea>
+        <textarea id="shopDetailNotes" rows="2" placeholder="ملاحظات...">${esc(commerce.invoiceNotes || '')}</textarea>
       </label>
     </div>`;
 }
@@ -368,12 +363,6 @@ function renderProductPages() {
 
 function renderProductShowcase() {
   renderSectionTabs();
-  const meta = document.getElementById('shopProductsMeta');
-  if (meta) {
-    const branchName = commerce.selectedBranch?.name || '';
-    const n = filteredProducts().length;
-    meta.textContent = branchName ? `${branchName} · ${n} منتج` : `${n} منتج`;
-  }
   renderProductPages();
   updateInvoiceUI();
 }
@@ -1032,8 +1021,8 @@ function initCommerceMobile() {
       adjustDraft(draftBtn.dataset.productId, draftBtn.dataset.field, Number(draftBtn.dataset.delta));
       return;
     }
-    const imgBtn = e.target.closest('[data-view-product-id]');
-    if (imgBtn) openProductImage(imgBtn.dataset.viewProductId);
+    const heroBtn = e.target.closest('[data-view-product-id]');
+    if (heroBtn) openProductImage(heroBtn.dataset.viewProductId);
   });
 
   document.getElementById('shopProductDetail')?.addEventListener('input', (e) => {
