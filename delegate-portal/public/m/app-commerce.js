@@ -1,5 +1,20 @@
 /* Mobile commerce v3: Edari-style showcase + live invoice + localStorage */
-const PRODUCTS_PER_PAGE = 6;
+
+function shopGridLayout() {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  let cols = 2;
+  if (w >= 1280) cols = 4;
+  else if (w >= 600) cols = 3;
+  let rows = 2;
+  if (w >= 1024 && h >= 680) rows = 3;
+  else if (w >= 768 && h >= 560) rows = 3;
+  return { cols, rows, perPage: cols * rows };
+}
+
+function getProductsPerPage() {
+  return shopGridLayout().perPage;
+}
 
 const commerce = {
   branches: [],
@@ -78,12 +93,7 @@ function updateShopOrderStats() {
   if (totalEl) totalEl.textContent = fmtInvInt(invoiceTotalAmount());
   if (nameEl) {
     const c = commerce.invoiceCustomer;
-    if (c?.name1) {
-      const extra = [c.treeName, c.num].filter(Boolean).join(' · ');
-      nameEl.textContent = extra ? `${c.name1} / ${extra}` : c.name1;
-    } else {
-      nameEl.textContent = '— اختر زبوناً —';
-    }
+    nameEl.textContent = c?.name1 || 'اختر زبوناً';
   }
 }
 
@@ -261,6 +271,7 @@ function renderProductDetailPanel() {
   if (!panel) return;
   const p = findProduct(commerce.selectedProductId);
   if (!p) {
+    panel.classList.add('is-empty');
     panel.innerHTML = `
       <div class="shop-detail-empty">
         <span aria-hidden="true">📦</span>
@@ -268,30 +279,35 @@ function renderProductDetailPanel() {
       </div>`;
     return;
   }
+  panel.classList.remove('is-empty');
   const d = getDraft(p.id);
   const img = productImageSrc(p);
   const stock = Number(p.minOrderQty ?? 0);
   const lineTotal = (d.quant || 0) * Number(p.price || 0);
   panel.innerHTML = `
     <div class="shop-detail-inner">
-      ${img ? `<button type="button" class="shop-detail-hero" data-view-product-id="${p.id}" aria-label="عرض الصورة"><img src="${img}" alt=""></button>` : ''}
-      <h3 class="shop-detail-name">${esc(p.name)}</h3>
-      <p class="shop-detail-meta">
-        <span dir="ltr">${esc(p.barcode || p.skuNum || '—')}</span>
-        <span class="shop-detail-price" dir="ltr">${fmtInvInt(p.price)} IQD</span>
-      </p>
-      <div class="shop-detail-qty">
-        ${renderQtyBlock(p.id, 'quant', d.quant || 0)}
-        ${renderQtyBlock(p.id, 'bonus', d.bonus || 0)}
+      <div class="shop-detail-scroll">
+        ${img ? `<button type="button" class="shop-detail-hero" data-view-product-id="${p.id}" aria-label="عرض الصورة"><img src="${img}" alt=""></button>` : ''}
+        <h3 class="shop-detail-name">${esc(p.name)}</h3>
+        <p class="shop-detail-meta">
+          <span dir="ltr">${esc(p.barcode || p.skuNum || '—')}</span>
+          <span class="shop-detail-price" dir="ltr">${fmtInvInt(p.price)}</span>
+        </p>
+        <div class="shop-detail-qty">
+          ${renderQtyBlock(p.id, 'quant', d.quant || 0)}
+          ${renderQtyBlock(p.id, 'bonus', d.bonus || 0)}
+        </div>
+        <div class="shop-detail-summary">
+          <span>مخزون <strong dir="ltr">${stock > 0 ? fmtInvInt(stock) : '—'}</strong></span>
+          <span>إجمالي <strong dir="ltr" data-detail-line-total>${fmtInvInt(lineTotal)}</strong></span>
+        </div>
       </div>
-      <div class="shop-detail-summary">
-        <span>المخزون <strong dir="ltr">${stock > 0 ? fmtInvInt(stock) : '—'}</strong></span>
-        <span>الإجمالي <strong dir="ltr" data-detail-line-total>${fmtInvInt(lineTotal)}</strong></span>
+      <div class="shop-detail-foot">
+        <button type="button" class="shop-detail-add" data-draft-action data-product-id="${p.id}" data-field="quant" data-delta="1">إضافة</button>
+        <label class="shop-detail-notes">
+          <textarea id="shopDetailNotes" rows="2" placeholder="ملاحظات...">${esc(commerce.invoiceNotes || '')}</textarea>
+        </label>
       </div>
-      <button type="button" class="shop-detail-add" data-draft-action data-product-id="${p.id}" data-field="quant" data-delta="1">إضافة</button>
-      <label class="shop-detail-notes">
-        <textarea id="shopDetailNotes" rows="2" placeholder="ملاحظات...">${esc(commerce.invoiceNotes || '')}</textarea>
-      </label>
     </div>`;
 }
 
@@ -345,7 +361,7 @@ function renderProductPages() {
     renderPageDots(0);
     return;
   }
-  const pages = chunkArray(items, PRODUCTS_PER_PAGE);
+  const pages = chunkArray(items, getProductsPerPage());
   if (!commerce.selectedProductId || !items.some((p) => p.id === commerce.selectedProductId)) {
     commerce.selectedProductId = items[0].id;
   }
@@ -1102,6 +1118,25 @@ function initCommerceMobile() {
   if (notesEl && commerce.invoiceNotes) notesEl.value = commerce.invoiceNotes;
   updateInvoiceUI();
   updateResumeBanner();
+
+  let shopResizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(shopResizeTimer);
+    shopResizeTimer = setTimeout(() => {
+      if (state.screen !== 'shop-products') return;
+      renderProductPages();
+    }, 160);
+  }, { passive: true });
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+      clearTimeout(shopResizeTimer);
+      shopResizeTimer = setTimeout(() => {
+        if (state.screen !== 'shop-products') return;
+        renderProductPages();
+      }, 160);
+    }, { passive: true });
+  }
 }
 
 initCommerceMobile();

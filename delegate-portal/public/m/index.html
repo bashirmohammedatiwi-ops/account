@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260617shop2">
+  <link rel="stylesheet" href="styles.css?v=20260617shop4">
   <link rel="stylesheet" href="portal-pro.css?v=20260613rptscroll">
 </head>
 <body class="ed-body">
@@ -410,23 +410,15 @@
         <div class="shop-edari">
           <header class="shop-edari-head">
             <button type="button" class="shop-edari-customer" id="btnShopPickCustomer">
-              <span class="shop-edari-customer-label">اسم الزبون</span>
-              <strong id="shopCustomerName">— اختر زبوناً —</strong>
+              <strong id="shopCustomerName">اختر زبوناً</strong>
             </button>
-            <div class="shop-edari-stats">
-              <div class="shop-edari-stat">
-                <span>عدد الوحدات</span>
-                <strong dir="ltr" id="shopStatUnits">0</strong>
-              </div>
-              <div class="shop-edari-stat">
-                <span>عدد الأصناف</span>
-                <strong dir="ltr" id="shopStatItems">0</strong>
-              </div>
-              <div class="shop-edari-stat">
-                <span>قيمة الطلبية</span>
-                <strong dir="ltr" id="shopStatTotal">0</strong>
-              </div>
-            </div>
+            <p class="shop-edari-head-stats">
+              <strong class="shop-edari-head-total" dir="ltr" id="shopStatTotal">0</strong>
+              <span class="shop-edari-head-sep">·</span>
+              <span><span dir="ltr" id="shopStatItems">0</span> صنف</span>
+              <span class="shop-edari-head-sep">·</span>
+              <span><span dir="ltr" id="shopStatUnits">0</span> وح</span>
+            </p>
           </header>
 
           <div class="shop-edari-tabs-wrap">
@@ -548,6 +540,6 @@
   </div>
   <script src="app.js?v=20260613dateview"></script>
   <script src="app-reports.js?v=20260613rpt3"></script>
-  <script src="app-commerce.js?v=20260617shop2"></script>
+  <script src="app-commerce.js?v=20260617shop4"></script>
 </body>
 </html>
