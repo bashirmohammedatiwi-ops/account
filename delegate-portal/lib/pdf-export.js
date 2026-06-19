@@ -103,13 +103,12 @@ const STMT = {
 const STMT_WIDTHS = [56, 56, '*', 50, 62];
 const INV_WIDTHS = [42, 34, 20, 22, '*', 58, 11];
 
-let logoDataUrlCache;
-function getLogoDataUrl() {
-  if (logoDataUrlCache !== undefined) return logoDataUrlCache;
-  logoDataUrlCache = fs.existsSync(LOGO_PATH)
-    ? `data:image/png;base64,${fs.readFileSync(LOGO_PATH).toString('base64')}`
-    : null;
-  return logoDataUrlCache;
+let logoImageCache;
+function getLogoImage() {
+  if (logoImageCache !== undefined) return logoImageCache;
+  const abs = path.resolve(LOGO_PATH);
+  logoImageCache = fs.existsSync(abs) ? abs : null;
+  return logoImageCache;
 }
 
 function fmtNum(v, digits = 0) {
@@ -207,7 +206,7 @@ function boxLayout() {
 }
 
 function pdfTopHeader({ docLabel, badgeText, sideNote, infoLabel, infoValue, infoExtra, stats, bannerWidth = 575 }) {
-  const logo = getLogoDataUrl();
+  const logo = getLogoImage();
   const logoCell = logo
     ? { image: logo, width: 32, alignment: 'center', margin: [4, 5, 4, 5] }
     : { text: '' };
@@ -495,7 +494,7 @@ function stmtStatPill(label, value, accent) {
 }
 
 function statementPdfHeader(acc, periodNote, stats, index = 1, total = 1) {
-  const logo = getLogoDataUrl();
+  const logo = getLogoImage();
   const statRows = stats || [];
   const accountNum = acc.num ? String(acc.num) : '—';
   const accountName = acc.name1 ? String(acc.name1) : '';
@@ -983,33 +982,33 @@ function srSummaryLayout() {
   };
 }
 
-/** تخطيط أنيق للملخص الإجمالي — خطوط خفيفة */
-function srGrandSummaryLayout() {
+function srSimpleGridLayout() {
   return {
-    hLineWidth: (i, node) => {
-      if (i === 0 || i === 1) return 0.5;
-      if (node && i === node.table.body.length) return 0.55;
-      return 0.12;
-    },
-    vLineWidth: () => 0,
+    hLineWidth: () => 0.55,
+    vLineWidth: () => 0.55,
     hLineColor: () => SALES.line,
     vLineColor: () => SALES.line,
     paddingLeft: () => 8,
     paddingRight: () => 8,
-    paddingTop: () => 6,
-    paddingBottom: () => 6
+    paddingTop: () => 8,
+    paddingBottom: () => 8
   };
 }
 
-function srTh(text, fill = SALES.head) {
+/** تخطيط أنيق للملخص الإجمالي — خطوط خفيفة */
+function srGrandSummaryLayout() {
+  return srSimpleGridLayout();
+}
+
+function srTh(text, fill = '#475569') {
   return {
     text,
     bold: true,
-    fontSize: 9,
-    color: SALES.headText,
+    fontSize: 10.5,
+    color: '#ffffff',
     alignment: 'center',
     fillColor: fill,
-    margin: [3, 6, 3, 6]
+    margin: [4, 8, 4, 8]
   };
 }
 
@@ -1024,20 +1023,39 @@ function srCell(value, style, align, fill, color) {
   };
 }
 
-const SR_TREES_WIDTHS = [82, 62, 62, '*'];
-const SR_GRAND_WIDTHS = [88, 68, '*'];
+const SR_TREES_WIDTHS = [100, 72, 82, '*'];
+const SR_GRAND_WIDTHS = [102, 78, '*'];
 
-function srSummaryCountCell(value, fill) {
+function srSummaryAmountCell(value, fill, isTotal = false) {
   return {
     text: String(value ?? '0'),
     font: 'Roboto',
-    fontSize: 10,
+    fontSize: isTotal ? 19 : 17,
     bold: true,
-    color: SALES.qty,
+    color: SALES.ink,
     alignment: 'center',
+    noWrap: true,
     fillColor: fill || null,
-    margin: [2, 3, 2, 3]
+    margin: [4, 12, 4, 12]
   };
+}
+
+function srSummaryQtyCell(value, fill, isTotal = false) {
+  return {
+    text: String(value ?? '0'),
+    font: 'Roboto',
+    fontSize: isTotal ? 22 : 19,
+    bold: true,
+    color: SALES.debit,
+    alignment: 'center',
+    noWrap: true,
+    fillColor: fill || null,
+    margin: [4, 12, 4, 12]
+  };
+}
+
+function srSummaryCountCell(value, fill) {
+  return srSummaryQtyCell(value, fill, false);
 }
 
 function srSummaryTreeHeaderCells() {
@@ -1049,28 +1067,96 @@ function srSummaryTreeHeaderCells() {
   ];
 }
 
+function srGrandTh(text) {
+  return {
+    text,
+    bold: true,
+    fontSize: 12,
+    color: '#ffffff',
+    alignment: 'center',
+    fillColor: '#475569',
+    margin: [6, 11, 6, 11]
+  };
+}
+
 /** رأس ملخص مبسّط — يسار←يمين: المبلغ · العدد · البند */
 function srGrandSummaryHeaderCells() {
   return [
-    srTh('المبلغ', '#334155'),
-    srTh('العدد', '#334155'),
-    srTh('البند', '#334155')
+    srGrandTh('المبلغ'),
+    srGrandTh('العدد'),
+    srGrandTh('البند')
   ];
 }
 
 /** صف ملخص إجمالي — بدون عمود الهدايا */
-function srGrandSummaryDataCells(label, qty, amount, fill, amountColor) {
+function srGrandSummaryDataCells(label, qty, amount, fill) {
   return [
-    srMoneyCell(fmtSummaryAmount(amount), fill, amountColor || SALES.debit),
-    srSummaryCountCell(fmtSummaryQty(qty), fill),
+    {
+      text: fmtSummaryAmount(amount),
+      font: 'Roboto',
+      bold: true,
+      fontSize: 16,
+      color: SALES.ink,
+      alignment: 'center',
+      noWrap: true,
+      fillColor: fill,
+      margin: [6, 13, 6, 13]
+    },
+    {
+      text: fmtSummaryQty(qty),
+      font: 'Roboto',
+      bold: true,
+      fontSize: 14,
+      color: SALES.ink,
+      alignment: 'center',
+      noWrap: true,
+      fillColor: fill,
+      margin: [6, 13, 6, 13]
+    },
     {
       text: label,
       bold: true,
-      fontSize: 9.5,
+      fontSize: 13,
       color: SALES.ink,
       alignment: 'right',
       fillColor: fill,
-      margin: [8, 7, 8, 7]
+      margin: [12, 13, 12, 13]
+    }
+  ];
+}
+
+function srGrandSummaryNetRow(netAmount) {
+  const fill = '#e2e8f0';
+  return [
+    {
+      text: fmtSummaryAmount(netAmount),
+      font: 'Roboto',
+      bold: true,
+      fontSize: 18,
+      color: SALES.ink,
+      alignment: 'center',
+      noWrap: true,
+      fillColor: fill,
+      margin: [6, 14, 6, 14]
+    },
+    {
+      text: '—',
+      font: 'Roboto',
+      bold: true,
+      fontSize: 14,
+      color: SALES.muted,
+      alignment: 'center',
+      fillColor: fill,
+      margin: [6, 14, 6, 14]
+    },
+    {
+      text: 'صافي',
+      bold: true,
+      fontSize: 14,
+      color: SALES.ink,
+      alignment: 'right',
+      fillColor: fill,
+      margin: [12, 14, 12, 14]
     }
   ];
 }
@@ -1078,10 +1164,27 @@ function srGrandSummaryDataCells(label, qty, amount, fill, amountColor) {
 /** صف شجرة — يسار←يمين: المبلغ · الهدايا · العدد · الشجرة (الاسم يمين) */
 function srSummaryTreeCells(title, qty, bonus, amount, fill) {
   return [
-    srMoneyCell(fmtSummaryAmount(amount), fill, SALES.debit),
-    srCell(fmtSummaryQty(bonus), 'srTd', 'center', fill),
-    srSummaryCountCell(fmtSummaryQty(qty), fill),
-    { text: title, style: 'srName', alignment: 'right', fillColor: fill, margin: [6, 6, 6, 6] }
+    srSummaryAmountCell(fmtSummaryAmount(amount), fill),
+    {
+      text: fmtSummaryQty(bonus),
+      font: 'Roboto',
+      fontSize: 14,
+      bold: true,
+      color: SALES.ink,
+      alignment: 'center',
+      fillColor: fill,
+      margin: [4, 12, 4, 12]
+    },
+    srSummaryQtyCell(fmtSummaryQty(qty), fill),
+    {
+      text: title,
+      bold: true,
+      fontSize: 12,
+      color: SALES.ink,
+      alignment: 'right',
+      fillColor: fill,
+      margin: [10, 10, 10, 10]
+    }
   ];
 }
 
@@ -1141,85 +1244,29 @@ function salesRptTreeTitleRow(treeTitle, lineCount) {
   ];
 }
 
-// دليل ألوان: هدية · مردود · إجمالي الشجرة
-function salesRptLegendChip(label, fill, textColor, borderColor) {
+function salesDetailsDivider() {
   return {
-    table: {
-      widths: ['*', 18],
-      body: [[
-        {
-          text: label,
-          bold: true,
-          fontSize: 9,
-          color: textColor,
-          alignment: 'right',
-          fillColor: '#ffffff',
-          margin: [10, 8, 4, 8]
+    stack: [
+      {
+        canvas: [
+          { type: 'line', x1: 0, y1: 0, x2: 567, y2: 0, lineWidth: 2.2, lineColor: SALES.head },
+          { type: 'line', x1: 0, y1: 5, x2: 567, y2: 5, lineWidth: 0.6, lineColor: SALES.lineStrong }
+        ],
+        margin: [0, 4, 0, 0]
+      },
+      {
+        table: {
+          widths: ['*'],
+          body: [[{
+            text: ' ',
+            fillColor: '#f1f5f9',
+            margin: [0, 10, 0, 10]
+          }]]
         },
-        {
-          text: '',
-          fillColor: fill,
-          margin: [0, 5, 0, 5]
-        }
-      ]]
-    },
-    layout: {
-      hLineWidth: () => 0.6,
-      vLineWidth: () => 0.6,
-      hLineColor: () => borderColor,
-      vLineColor: () => borderColor,
-      paddingLeft: () => 0,
-      paddingRight: () => 0,
-      paddingTop: () => 0,
-      paddingBottom: () => 0
-    }
-  };
-}
-
-function salesRptLegend() {
-  const chips = [
-    salesRptLegendChip('هدية', SR_GIFT_FILL, SR_GIFT_TEXT, '#fbbf24'),
-    salesRptLegendChip('مردود', SR_RETURN_FILL, SR_RETURN_TEXT, '#f87171'),
-    salesRptLegendChip('إجمالي الشجرة', '#ffffff', SALES.debit, SALES.debit)
-  ];
-
-  return {
-    table: {
-      widths: ['*'],
-      body: [
-        [{
-          text: 'دليل الألوان',
-          bold: true,
-          fontSize: 10,
-          color: SALES.ink,
-          alignment: 'right',
-          fillColor: SALES.surface,
-          margin: [12, 8, 12, 6]
-        }],
-        [{
-          columns: [
-            { width: '*', stack: [chips[0]] },
-            { width: 10, text: '' },
-            { width: '*', stack: [chips[1]] },
-            { width: 10, text: '' },
-            { width: '*', stack: [chips[2]] }
-          ],
-          fillColor: SALES.surface,
-          margin: [10, 0, 10, 10]
-        }]
-      ]
-    },
-    layout: {
-      hLineWidth: (i, node) => (i === 0 || i === node.table.body.length ? 0.65 : 0),
-      vLineWidth: () => 0.65,
-      hLineColor: () => SALES.lineStrong,
-      vLineColor: () => SALES.lineStrong,
-      paddingLeft: () => 0,
-      paddingRight: () => 0,
-      paddingTop: () => 0,
-      paddingBottom: () => 0
-    },
-    margin: [0, 0, 0, 12]
+        layout: 'noBorders'
+      }
+    ],
+    margin: [0, 10, 0, 6]
   };
 }
 
@@ -1378,42 +1425,152 @@ function aggregateReportCategories(report) {
   return out;
 }
 
-function salesStatPill(label, value, accent) {
+const KPI_CARD_W = 136;
+const KPI_CARD_H = 108;
+const KPI_CARD_GAP = 8;
+const KPI_CARD_RADIUS = 14;
+
+function roundedRectCanvas(w, h, r, color) {
+  return {
+    canvas: [
+      { type: 'rect', x: 0, y: 0, w, h, r, color }
+    ],
+    width: w,
+    height: h
+  };
+}
+
+function reportLineCount(report) {
+  const grand = report.grandSummary?.lineCount;
+  if (grand != null) return Number(grand) || 0;
+  return (report.sections || []).reduce((n, s) => n + (s.lines?.length || 0), 0);
+}
+
+function salesKpiCard(label, value, sub, color) {
+  return {
+    width: KPI_CARD_W,
+    stack: [
+      roundedRectCanvas(KPI_CARD_W, KPI_CARD_H, KPI_CARD_RADIUS, color),
+      {
+        margin: [14, -KPI_CARD_H + 16, 14, 0],
+        stack: [
+          {
+            text: label,
+            fontSize: 12,
+            bold: true,
+            color: '#ffffff',
+            alignment: 'right'
+          },
+          {
+            text: value,
+            font: 'Roboto',
+            bold: true,
+            fontSize: 21,
+            color: '#ffffff',
+            alignment: 'right',
+            margin: [0, 10, 0, 0]
+          },
+          {
+            text: sub,
+            fontSize: 10.5,
+            bold: true,
+            color: '#f8fafc',
+            alignment: 'right',
+            margin: [0, 8, 0, 0]
+          }
+        ]
+      }
+    ]
+  };
+}
+
+function salesKpiStatsBlock(report, cats) {
+  const net = Number(cats.sales?.amount || 0) - Number(cats.returns?.amount || 0);
+  const lineCount = reportLineCount(report);
+  const treeCount = (report.sections || []).length;
+
+  const cards = [
+    salesKpiCard(
+      'صافي المبيعات',
+      fmtSummaryAmount(net),
+      `${lineCount} بند · ${treeCount} شجرة`,
+      '#1e293b'
+    ),
+    salesKpiCard(
+      'مردود',
+      fmtSummaryAmount(cats.returns?.amount || 0),
+      `العدد ${fmtSummaryQty(cats.returns?.qty || 0)}`,
+      '#dc2626'
+    ),
+    salesKpiCard(
+      'هدايا',
+      fmtSummaryAmount(cats.gifts?.amount || 0),
+      `العدد ${fmtSummaryQty(cats.gifts?.bonus || 0)}`,
+      '#d97706'
+    ),
+    salesKpiCard(
+      'مبيعات',
+      fmtSummaryAmount(cats.sales?.amount || 0),
+      `العدد ${fmtSummaryQty(cats.sales?.qty || 0)}`,
+      '#0d9488'
+    )
+  ];
+
+  const row = [];
+  cards.forEach((card, index) => {
+    if (index > 0) row.push({ width: KPI_CARD_GAP, text: '' });
+    row.push(card);
+  });
+
+  return {
+    columns: row,
+    margin: [0, 0, 0, 18]
+  };
+}
+
+function salesOverviewSection(report) {
+  const cats = aggregateReportCategories(report);
+  const netAmount = Number(cats.sales?.amount || 0) - Number(cats.returns?.amount || 0);
+
+  const tableBody = [
+    srGrandSummaryHeaderCells(),
+    srGrandSummaryDataCells('مبيعات', cats.sales?.qty, cats.sales?.amount, '#ffffff'),
+    srGrandSummaryDataCells('هدايا', cats.gifts?.bonus, cats.gifts?.amount, SALES.zebra),
+    srGrandSummaryDataCells('مردود', cats.returns?.qty, cats.returns?.amount, '#ffffff'),
+    srGrandSummaryNetRow(netAmount)
+  ];
+
   return {
     stack: [
-      { text: label, fontSize: 7.5, bold: true, color: SALES.muted, alignment: 'center' },
+      salesKpiStatsBlock(report, cats),
       {
-        text: value,
-        font: 'Roboto',
+        text: 'الملخص الإجمالي',
         bold: true,
-        fontSize: 11,
-        color: accent || SALES.ink,
-        alignment: 'center',
-        margin: [0, 4, 0, 0]
+        fontSize: 14,
+        color: SALES.ink,
+        alignment: 'right',
+        margin: [0, 0, 0, 10]
+      },
+      {
+        table: {
+          headerRows: 1,
+          widths: SR_GRAND_WIDTHS,
+          body: tableBody,
+          dontBreakRows: true
+        },
+        layout: srGrandSummaryLayout()
       }
     ],
-    fillColor: '#ffffff',
-    margin: [6, 8, 6, 8]
+    margin: [0, 0, 0, 16]
   };
 }
 
 function salesReportPdfHeader(report) {
-  const logo = getLogoDataUrl();
+  const logo = getLogoImage();
   const period = report.period || {};
   const periodText = period.dateFrom && period.dateTo
-    ? `الفترة: ${fmtDate(period.dateFrom)} → ${fmtDate(period.dateTo)}`
+    ? `${fmtDate(period.dateFrom)}  —  ${fmtDate(period.dateTo)}`
     : '';
-  const filterBits = [];
-  if (report.filters?.includeSales !== false) filterBits.push('مبيعات');
-  if (report.filters?.includeReturns !== false) filterBits.push('مرتجعات');
-  if (report.filters?.onlyGifts) filterBits.push('هدايا فقط');
-  const branchCount = (report.filters?.branches || []).length;
-  const filterText = filterBits.join(' · ') || 'جميع الحركات';
-  const metaBits = [filterText];
-  if (branchCount) metaBits.push(`${branchCount} فرع`);
-  metaBits.push(`${report.sections?.length || 0} شجرة`);
-  const cats = aggregateReportCategories(report);
-
   const headerBand = {
     table: {
       widths: ['*', logo ? 44 : 0],
@@ -1442,51 +1599,24 @@ function salesReportPdfHeader(report) {
     margin: [0, 0, 0, 0]
   };
 
-  const infoStrip = {
-    table: {
-      widths: ['*'],
-      body: [[
-        {
-          stack: [
-            ...(periodText ? [{ text: periodText, fontSize: 9, bold: true, color: SALES.muted, alignment: 'right' }] : []),
-            { text: metaBits.join('   ·   '), fontSize: 8.5, bold: true, color: SALES.muted, alignment: 'right', margin: [0, 3, 0, 0] }
-          ],
-          fillColor: SALES.surface,
-          margin: [12, 9, 12, 9]
-        }
-      ]]
-    },
-    layout: {
-      hLineWidth: () => 0.55,
-      vLineWidth: () => 0.55,
-      hLineColor: () => SALES.lineStrong,
-      vLineColor: () => SALES.lineStrong
-    },
-    margin: [0, 0, 0, 10]
-  };
-
-  const statsBlock = {
-    table: {
-      widths: ['*', '*', '*', '*'],
-      body: [[
-        salesStatPill('مبيعات', fmtSummaryAmount(cats.sales?.amount || 0), SALES.debit),
-        salesStatPill('هدايا', fmtSummaryQty(cats.gifts?.bonus || 0), '#b45309'),
-        salesStatPill('مردود', fmtSummaryAmount(cats.returns?.amount || 0), SALES.credit),
-        salesStatPill('صافي', fmtSummaryAmount(
-          Number(cats.sales?.amount || 0) - Number(cats.returns?.amount || 0)
-        ), SALES.headAlt)
-      ]]
-    },
-    layout: {
-      hLineWidth: () => 0.55,
-      vLineWidth: () => 0.55,
-      hLineColor: () => SALES.lineStrong,
-      vLineColor: () => SALES.lineStrong
-    },
+  const infoStrip = periodText ? {
+    stack: [
+      {
+        ...roundedRectCanvas(555, 58, 14, '#f8fafc'),
+        alignment: 'center'
+      },
+      {
+        margin: [0, -50, 0, 0],
+        stack: [
+          { text: 'الفترة', fontSize: 10, bold: true, color: SALES.muted, alignment: 'center', margin: [0, 0, 0, 5] },
+          { text: periodText, fontSize: 15, bold: true, color: SALES.head, alignment: 'center' }
+        ]
+      }
+    ],
     margin: [0, 0, 0, 14]
-  };
+  } : null;
 
-  return { stack: [headerBand, infoStrip, statsBlock] };
+  return { stack: [headerBand, ...(infoStrip ? [infoStrip] : [])] };
 }
 
 function treeSummaryMetrics(section) {
@@ -1503,37 +1633,7 @@ function treeSummaryMetrics(section) {
 }
 
 function salesGrandSummaryBlock(report) {
-  const cats = aggregateReportCategories(report);
-
-  const body = [
-    srGrandSummaryHeaderCells(),
-    srGrandSummaryDataCells('مبيعات', cats.sales?.qty, cats.sales?.amount, SALES.summarySales, SALES.debit),
-    srGrandSummaryDataCells('هدايا', cats.gifts?.bonus, cats.gifts?.amount, SALES.summaryGifts, '#b45309'),
-    srGrandSummaryDataCells('مردود', cats.returns?.qty, cats.returns?.amount, SALES.summaryReturns, SALES.credit)
-  ];
-
-  return {
-    stack: [
-      {
-        text: 'الملخص الإجمالي',
-        bold: true,
-        fontSize: 11,
-        color: SALES.head,
-        alignment: 'right',
-        margin: [0, 0, 0, 5]
-      },
-      {
-        table: {
-          headerRows: 1,
-          widths: SR_GRAND_WIDTHS,
-          body,
-          dontBreakRows: true
-        },
-        layout: srGrandSummaryLayout()
-      }
-    ],
-    margin: [0, 0, 0, 14]
-  };
+  return salesOverviewSection(report);
 }
 
 /** جدول ملخص الشجرات المحددة — قبل تفاصيل كل شجرة */
@@ -1561,17 +1661,26 @@ function salesTreesSummaryBlock(report) {
   });
 
   body.push([
-    srMoneyCell(fmtSummaryAmount(totals.amount), SALES.total, SALES.debit),
-    srCell(fmtSummaryQty(totals.giftsBonus), 'srTd', 'center', SALES.total),
-    srSummaryCountCell(fmtSummaryQty(totals.salesQty), SALES.total),
+    srSummaryAmountCell(fmtSummaryAmount(totals.amount), SALES.total, true),
+    {
+      text: fmtSummaryQty(totals.giftsBonus),
+      font: 'Roboto',
+      fontSize: 15,
+      bold: true,
+      color: SALES.ink,
+      alignment: 'center',
+      fillColor: SALES.total,
+      margin: [4, 13, 4, 13]
+    },
+    srSummaryQtyCell(fmtSummaryQty(totals.salesQty), SALES.total, true),
     {
       text: 'المجموع',
       bold: true,
-      fontSize: 10.5,
+      fontSize: 13,
       color: SALES.totalLabel,
       alignment: 'right',
       fillColor: SALES.total,
-      margin: [6, 7, 6, 7]
+      margin: [10, 11, 10, 11]
     }
   ]);
 
@@ -1580,10 +1689,10 @@ function salesTreesSummaryBlock(report) {
       {
         text: 'ملخص الشجرات المحددة',
         bold: true,
-        fontSize: 11.5,
+        fontSize: 13,
         color: SALES.ink,
         alignment: 'right',
-        margin: [0, 0, 0, 6]
+        margin: [0, 0, 0, 8]
       },
       {
         table: {
@@ -1599,23 +1708,45 @@ function salesTreesSummaryBlock(report) {
   };
 }
 
-async function buildTreeSalesReportPdf(report) {
+const SALES_PAGE_WIDTH = 595.28;
+const SALES_PAGE_HEIGHT = 841.89;
+
+function estimateSalesReportHeight(report) {
+  const sections = report.sections || [];
+  let h = 36;
+  h += 250;
+  h += 100;
+  if (sections.length) h += 36 + sections.length * 28 + 40;
+  if (sections.length) h += 28;
+  sections.forEach((section, index) => {
+    if (index > 0) h += 16;
+    h += 42;
+    const lineCount = section.lines?.length || 0;
+    h += Math.max(lineCount, 1) * 17;
+    if (lineCount) h += 26;
+    h += 10;
+  });
+  h += 24;
+  return Math.ceil(Math.max(h * 1.15 + 80, SALES_PAGE_HEIGHT));
+}
+
+function buildSalesReportContent(report) {
   const content = [
     salesReportPdfHeader(report),
     salesGrandSummaryBlock(report),
-    salesTreesSummaryBlock(report),
-    salesRptLegend()
+    salesTreesSummaryBlock(report)
   ].filter(Boolean);
 
   const sections = report.sections || [];
   if (sections.length) {
+    content.push(salesDetailsDivider());
     content.push({
       text: 'تفاصيل الشجرات',
       bold: true,
-      fontSize: 12,
+      fontSize: 14,
       color: SALES.head,
       alignment: 'right',
-      margin: [0, 4, 0, 10]
+      margin: [0, 0, 0, 12]
     });
   }
 
@@ -1624,22 +1755,39 @@ async function buildTreeSalesReportPdf(report) {
     content.push(salesRptTreeBlock(section));
   });
 
-  return createPdfBuffer({
+  return content;
+}
+
+function salesReportDocDefinition(content, pageSize) {
+  return {
     rtl: true,
     defaultStyle: { font: 'Cairo', fontSize: 8, bold: false, color: SALES.ink },
-    pageSize: 'A4',
+    pageSize,
     pageOrientation: 'portrait',
     pageMargins: [14, 14, 14, 22],
     styles: STYLES,
-    footer: (currentPage, pageCount) => ({
-      columns: [
-        { text: COMPANY_NAME, fontSize: 7, color: SALES.muted, alignment: 'right' },
-        { text: `${currentPage} / ${pageCount}`, font: 'Roboto', fontSize: 7, color: SALES.muted, alignment: 'left' }
-      ],
+    footer: () => ({
+      text: COMPANY_NAME,
+      fontSize: 7,
+      color: SALES.muted,
+      alignment: 'center',
       margin: [12, 0, 12, 0]
     }),
     content
-  });
+  };
+}
+
+async function createSingleLongPagePdf(report) {
+  const content = buildSalesReportContent(report);
+  const pageHeight = estimateSalesReportHeight(report);
+  return createPdfBuffer(salesReportDocDefinition(content, {
+    width: SALES_PAGE_WIDTH,
+    height: pageHeight
+  }));
+}
+
+async function buildTreeSalesReportPdf(report) {
+  return createSingleLongPagePdf(report);
 }
 
 module.exports = {

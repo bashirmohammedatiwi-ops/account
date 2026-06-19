@@ -85,9 +85,12 @@ function applySyncServerUrl(url) {
 function setServerStatus(state, text) {
   const dot = document.getElementById('statusDot');
   const label = document.getElementById('statusText');
-  if (!dot || !label) return;
-  dot.className = `status-dot ${state}`;
-  label.textContent = text;
+  if (dot) dot.className = `status-dot ${state}`;
+  if (label) label.textContent = text;
+  const dashDot = document.getElementById('dashStatusDot');
+  const dashLabel = document.getElementById('dashStatusText');
+  if (dashDot) dashDot.className = `status-dot ${state}`;
+  if (dashLabel) dashLabel.textContent = text;
 }
 
 async function checkBackendHealth() {
@@ -165,13 +168,13 @@ async function api(path, opts = {}) {
 }
 
 const PAGE_META = {
-  dashboard: { title: 'الرئيسية', sub: 'نظرة عامة واختصارات سريعة' },
-  catalog: { title: 'المنتجات', sub: 'إضافة بالباركود من Edari' },
-  orders: { title: 'طلبات الشراء', sub: 'طلبات المندوبين — موافقة ومتابعة' },
-  salesReport: { title: 'تقرير المبيعات', sub: 'كشف مواد حسب شجرة المواد (086، 087…) — PDF' },
-  priceSync: { title: 'مزامنة الأسعار', sub: 'رفع حركة المشتريات وسعر المستهلك إلى تطبيق الويب' },
+  dashboard: { title: 'الرئيسية', sub: 'نظرة عامة على النظام والاختصارات' },
+  catalog: { title: 'المنتجات', sub: 'فروع، أقسام، وباركود من Edari' },
+  orders: { title: 'طلبات الشراء', sub: 'مراجعة طلبات المندوبين واعتمادها' },
+  salesReport: { title: 'التقارير', sub: 'مبيعات الشجرات وكشوف الحسابات — PDF' },
+  priceSync: { title: 'مزامنة الأسعار', sub: 'رفع المشتريات وسعر المستهلك لتطبيق الويب' },
   sync: { title: 'رفع البيانات', sub: 'مزامنة EdariNX مع سيرفر المندوبين' },
-  database: { title: 'إعدادات قاعدة البيانات', sub: 'اتصال EdariNX — Alias، المسارات، و nxServer' },
+  database: { title: 'قاعدة البيانات', sub: 'اتصال EdariNX — Alias والمسارات' },
   agents: { title: 'المندوبون', sub: 'حسابات الدخول وصلاحيات الشجرات' }
 };
 
@@ -202,14 +205,36 @@ function showPage(name) {
 async function loadDashboard() {
   const data = await api('/api/admin/dashboard');
   const { counts, last } = data;
-  document.getElementById('dashStats').innerHTML = [
-    ['حسابات', counts.accounts, 'مزامَنة'],
-    ['حركات', counts.journal, 'مزامَنة'],
-    ['مندوبون', counts.agents, 'نشطون']
-  ].map(([k, v, note]) => `
-    <div class="stat-card">
-      <div class="k">${esc(k)}${note ? ` · ${esc(note)}` : ''}</div>
-      <div class="v">${fmtNumAlways(v)}</div>
+  const statDefs = [
+    {
+      tone: 'tone-teal',
+      label: 'حسابات',
+      note: 'مزامَنة',
+      value: counts.accounts,
+      icon: '<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>'
+    },
+    {
+      tone: 'tone-blue',
+      label: 'حركات',
+      note: 'مزامَنة',
+      value: counts.journal,
+      icon: '<svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>'
+    },
+    {
+      tone: 'tone-violet',
+      label: 'مندوبون',
+      note: 'نشطون',
+      value: counts.agents,
+      icon: '<svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>'
+    }
+  ];
+  document.getElementById('dashStats').innerHTML = statDefs.map((s) => `
+    <div class="stat-card ${s.tone}">
+      <span class="stat-card-icon" aria-hidden="true">${s.icon}</span>
+      <div class="stat-card-body">
+        <div class="k">${esc(s.label)} · ${esc(s.note)}</div>
+        <div class="v">${fmtNumAlways(s.value)}</div>
+      </div>
     </div>`).join('');
 
   if (last) {
@@ -1224,7 +1249,7 @@ document.querySelectorAll('.nav-item').forEach((btn) => {
   btn.addEventListener('click', () => showPage(btn.dataset.page));
 });
 
-document.querySelectorAll('.quick-card[data-goto], .shortcut[data-goto]').forEach((btn) => {
+document.querySelectorAll('.quick-card[data-goto], .shortcut[data-goto], .module-card[data-goto]').forEach((btn) => {
   btn.addEventListener('click', () => showPage(btn.dataset.goto));
 });
 

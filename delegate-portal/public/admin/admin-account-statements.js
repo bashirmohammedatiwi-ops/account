@@ -348,10 +348,14 @@ async function exportStmtPdf() {
 }
 
 function initReportTabs() {
-  const tabs = [...document.querySelectorAll('.reports-tab[data-report-tab]')];
+  const tabs = [...document.querySelectorAll('.rpt-type-card[data-report-tab]')];
   if (!tabs.length) return;
   const show = (name) => {
-    tabs.forEach((t) => t.classList.toggle('active', t.dataset.reportTab === name));
+    tabs.forEach((t) => {
+      const on = t.dataset.reportTab === name;
+      t.classList.toggle('active', on);
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
     document.querySelectorAll('.report-view').forEach((v) => {
       v.classList.toggle('hidden', v.id !== `reportView-${name}`);
     });

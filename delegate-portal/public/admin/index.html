@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Edari Admin — لوحة التحكم</title>
-  <link rel="stylesheet" href="admin.css?v=20260615color">
+  <link rel="stylesheet" href="admin.css?v=20260620ui">
 </head>
 <body>
   <div id="topLoader" class="top-loader" hidden aria-live="polite">
@@ -17,47 +17,67 @@
   <div id="app" class="app">
     <aside class="sidebar">
       <div class="sidebar-brand">
-        <div class="brand-mark">E</div>
-        <div>
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 2L4 7v10l8 5 8-5V7l-8-5z"/><path d="M12 12l8-5M12 12v10M12 12L4 7"/></svg>
+        </div>
+        <div class="sidebar-brand-text">
           <strong>Edari</strong>
           <span>لوحة الإدارة</span>
         </div>
       </div>
 
-      <p class="nav-label">القائمة</p>
       <nav class="sidebar-nav">
-        <button type="button" class="nav-item active" data-page="dashboard">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/><path d="M9 20v-6h6v6"/></svg></span>
-          <span>الرئيسية</span>
-        </button>
-        <button type="button" class="nav-item" data-page="catalog">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7.5 12 12.5l8.7-5"/><path d="M12 22V12.5"/></svg></span>
-          <span>المنتجات</span>
-        </button>
-        <button type="button" class="nav-item" data-page="orders">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></span>
-          <span>طلبات الشراء</span>
-        </button>
-        <button type="button" class="nav-item" data-page="salesReport">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span>
-          <span>التقارير</span>
-        </button>
-        <button type="button" class="nav-item" data-page="priceSync">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6"/></svg></span>
-          <span>مزامنة الأسعار</span>
-        </button>
-        <button type="button" class="nav-item" data-page="sync">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg></span>
-          <span>رفع البيانات</span>
-        </button>
-        <button type="button" class="nav-item" data-page="database">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg></span>
-          <span>قاعدة البيانات</span>
-        </button>
-        <button type="button" class="nav-item" data-page="agents">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
-          <span>المندوبون</span>
-        </button>
+        <div class="nav-group">
+          <p class="nav-label">عام</p>
+          <button type="button" class="nav-item active" data-page="dashboard">
+            <span class="nav-icon ic-home" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/><path d="M9 20v-6h6v6"/></svg></span>
+            <span class="nav-text">الرئيسية</span>
+          </button>
+        </div>
+
+        <div class="nav-group">
+          <p class="nav-label">التجارة</p>
+          <button type="button" class="nav-item" data-page="catalog">
+            <span class="nav-icon ic-catalog" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96 12 12.01l8.73-5.05M12 22.08V12"/></svg></span>
+            <span class="nav-text">المنتجات</span>
+          </button>
+          <button type="button" class="nav-item" data-page="orders">
+            <span class="nav-icon ic-orders" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></span>
+            <span class="nav-text">طلبات الشراء</span>
+          </button>
+        </div>
+
+        <div class="nav-group">
+          <p class="nav-label">التقارير</p>
+          <button type="button" class="nav-item" data-page="salesReport">
+            <span class="nav-icon ic-reports" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg></span>
+            <span class="nav-text">التقارير</span>
+          </button>
+        </div>
+
+        <div class="nav-group">
+          <p class="nav-label">النظام</p>
+          <button type="button" class="nav-item" data-page="priceSync">
+            <span class="nav-icon ic-price" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+            <span class="nav-text">مزامنة الأسعار</span>
+          </button>
+          <button type="button" class="nav-item" data-page="sync">
+            <span class="nav-icon ic-sync" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg></span>
+            <span class="nav-text">رفع البيانات</span>
+          </button>
+          <button type="button" class="nav-item" data-page="database">
+            <span class="nav-icon ic-db" aria-hidden="true"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg></span>
+            <span class="nav-text">قاعدة البيانات</span>
+          </button>
+        </div>
+
+        <div class="nav-group">
+          <p class="nav-label">الفريق</p>
+          <button type="button" class="nav-item" data-page="agents">
+            <span class="nav-icon ic-agents" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+            <span class="nav-text">المندوبون</span>
+          </button>
+        </div>
       </nav>
 
       <div class="sidebar-foot">
@@ -91,38 +111,57 @@
       <main class="main">
         <!-- Dashboard -->
         <section class="page active" id="page-dashboard">
+          <div class="dash-hero panel">
+            <div class="dash-hero-main">
+              <p class="dash-eyebrow">Edari Admin</p>
+              <h2 class="dash-hero-title">لوحة التحكم</h2>
+              <p class="dash-hero-sub">إدارة المنتجات والطلبات والتقارير — كل شيء في مكان واحد</p>
+            </div>
+            <div class="dash-hero-side">
+              <div class="dash-live-status">
+                <span class="status-dot off" id="dashStatusDot"></span>
+                <span id="dashStatusText">جاري الاتصال...</span>
+              </div>
+            </div>
+          </div>
+
           <div class="stats-grid" id="dashStats"></div>
 
-          <nav class="shortcut-strip" aria-label="اختصارات سريعة">
-            <button type="button" class="shortcut" data-goto="catalog">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/></svg>
-              المنتجات
+          <div class="section-head">
+            <h3 class="section-head-title">الأقسام</h3>
+            <p class="section-head-sub">انتقل مباشرة إلى أي جزء من النظام</p>
+          </div>
+
+          <div class="module-grid">
+            <button type="button" class="module-card" data-goto="catalog">
+              <span class="module-icon tone-teal"><svg viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/></svg></span>
+              <span class="module-body"><strong>المنتجات</strong><span>أقسام، باركود، صور</span></span>
             </button>
-            <button type="button" class="shortcut" data-goto="orders">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/></svg>
-              الطلبات
+            <button type="button" class="module-card" data-goto="orders">
+              <span class="module-icon tone-blue"><svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/></svg></span>
+              <span class="module-body"><strong>طلبات الشراء</strong><span>مراجعة وموافقة</span></span>
             </button>
-            <button type="button" class="shortcut" data-goto="salesReport">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
-              التقارير
+            <button type="button" class="module-card" data-goto="salesReport">
+              <span class="module-icon tone-indigo"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span>
+              <span class="module-body"><strong>التقارير</strong><span>مبيعات وكشوف حساب</span></span>
             </button>
-            <button type="button" class="shortcut" data-goto="priceSync">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6"/></svg>
-              مزامنة الأسعار
+            <button type="button" class="module-card" data-goto="priceSync">
+              <span class="module-icon tone-amber"><svg viewBox="0 0 24 24"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+              <span class="module-body"><strong>مزامنة الأسعار</strong><span>تطبيق الويب</span></span>
             </button>
-            <button type="button" class="shortcut" data-goto="sync">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
-              رفع البيانات
+            <button type="button" class="module-card" data-goto="sync">
+              <span class="module-icon tone-cyan"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg></span>
+              <span class="module-body"><strong>رفع البيانات</strong><span>Edari → السيرفر</span></span>
             </button>
-            <button type="button" class="shortcut" data-goto="database">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-              قاعدة البيانات
+            <button type="button" class="module-card" data-goto="database">
+              <span class="module-icon tone-slate"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></span>
+              <span class="module-body"><strong>قاعدة البيانات</strong><span>اتصال EdariNX</span></span>
             </button>
-            <button type="button" class="shortcut" data-goto="agents">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-              المندوبون
+            <button type="button" class="module-card" data-goto="agents">
+              <span class="module-icon tone-violet"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></span>
+              <span class="module-body"><strong>المندوبون</strong><span>صلاحيات وشجرات</span></span>
             </button>
-          </nav>
+          </div>
 
           <div class="panel-row dash-panels">
             <section class="panel panel-flat">
@@ -265,173 +304,218 @@
 
         <!-- Reports: sales by trees + account statements -->
         <section class="page" id="page-salesReport">
-          <div class="reports-head">
-            <div class="reports-head-text">
-              <h2 class="reports-head-title">التقارير</h2>
-              <p class="reports-head-sub">تقارير مباشرة من Edari — مبيعات الشجرات مع فلترة وتثبيت الفروع، وكشوف الحسابات</p>
+          <header class="rpt-hero">
+            <div class="rpt-hero-intro">
+              <span class="rpt-hero-badge">التقارير</span>
+              <h2 class="rpt-hero-title">تقارير مباشرة من Edari</h2>
+              <p class="rpt-hero-sub">اختر نوع التقرير، حدّد الفترة والمعايير، ثم معاينة أو تصدير PDF</p>
             </div>
-            <div class="reports-tabs" role="tablist">
-              <button type="button" class="reports-tab active" data-report-tab="sales" role="tab">
-                <span class="reports-tab-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span>
-                <span>مبيعات الشجرات</span>
+            <div class="rpt-type-cards" role="tablist">
+              <button type="button" class="rpt-type-card active" data-report-tab="sales" role="tab" aria-selected="true">
+                <span class="rpt-type-ic sales" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg></span>
+                <span class="rpt-type-body">
+                  <strong>مبيعات الشجرات</strong>
+                  <small>فروع · شجرات · مبيعات ومرتجعات</small>
+                </span>
               </button>
-              <button type="button" class="reports-tab" data-report-tab="statement" role="tab">
-                <span class="reports-tab-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg></span>
-                <span>كشف حساب</span>
+              <button type="button" class="rpt-type-card" data-report-tab="statement" role="tab" aria-selected="false">
+                <span class="rpt-type-ic statement" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg></span>
+                <span class="rpt-type-body">
+                  <strong>كشف حساب</strong>
+                  <small>حسابات متعددة · PDF واحد</small>
+                </span>
               </button>
             </div>
-          </div>
+          </header>
 
-          <!-- ===== Sales by trees — dashboard ===== -->
+          <!-- ===== Sales by trees ===== -->
           <div class="report-view" id="reportView-sales">
+            <div class="rpt-workspace">
+              <aside class="rpt-config">
+                <div class="rpt-config-block">
+                  <div class="rpt-step-head">
+                    <span class="rpt-step-num">1</span>
+                    <div>
+                      <h3>الفترة الزمنية</h3>
+                      <p>اختصارات سريعة أو تواريخ مخصّصة</p>
+                    </div>
+                  </div>
+                  <div class="rpt2-seg rpt2-seg-full" role="group" aria-label="الفترة">
+                    <button type="button" class="rpt2-seg-btn" data-sales-preset="today">اليوم</button>
+                    <button type="button" class="rpt2-seg-btn" data-sales-preset="yesterday">أمس</button>
+                    <button type="button" class="rpt2-seg-btn" data-sales-preset="month">الشهر</button>
+                    <button type="button" class="rpt2-seg-btn" data-sales-preset="last-month">الشهر الماضي</button>
+                  </div>
+                  <div class="rpt2-daterange rpt2-daterange-stack">
+                    <label class="rpt-date-field">
+                      <span>من</span>
+                      <input type="date" id="salesReportDateFrom" class="search" aria-label="من تاريخ">
+                    </label>
+                    <label class="rpt-date-field">
+                      <span>إلى</span>
+                      <input type="date" id="salesReportDateTo" class="search" aria-label="إلى تاريخ">
+                    </label>
+                  </div>
+                </div>
 
-            <!-- Control bar -->
-            <div class="rpt2-bar">
-              <div class="rpt2-bar-line">
-                <div class="rpt2-seg" role="group" aria-label="الفترة">
-                  <button type="button" class="rpt2-seg-btn" data-sales-preset="today">اليوم</button>
-                  <button type="button" class="rpt2-seg-btn" data-sales-preset="yesterday">أمس</button>
-                  <button type="button" class="rpt2-seg-btn" data-sales-preset="month">الشهر</button>
-                  <button type="button" class="rpt2-seg-btn" data-sales-preset="last-month">الشهر الماضي</button>
+                <div class="rpt-config-block">
+                  <div class="rpt-step-head">
+                    <span class="rpt-step-num">2</span>
+                    <div>
+                      <h3>نوع الحركة</h3>
+                      <p>ما الذي تريد تضمينه في التقرير؟</p>
+                    </div>
+                  </div>
+                  <div class="rpt2-kindpills rpt2-kindpills-stack">
+                    <label class="kind-pill kind-pill-block"><input type="checkbox" id="salesFilterSales" checked><span>مبيعات</span></label>
+                    <label class="kind-pill kind-pill-block"><input type="checkbox" id="salesFilterReturns" checked><span>مرتجعات</span></label>
+                    <label class="kind-pill kind-pill-block"><input type="checkbox" id="salesFilterGifts"><span>هدايا فقط</span></label>
+                  </div>
                 </div>
-                <div class="rpt2-daterange">
-                  <input type="date" id="salesReportDateFrom" class="search" aria-label="من تاريخ">
-                  <span class="rpt2-arrow">←</span>
-                  <input type="date" id="salesReportDateTo" class="search" aria-label="إلى تاريخ">
-                </div>
-                <div class="rpt2-kindpills">
-                  <label class="kind-pill"><input type="checkbox" id="salesFilterSales" checked><span>مبيعات</span></label>
-                  <label class="kind-pill"><input type="checkbox" id="salesFilterReturns" checked><span>مرتجعات</span></label>
-                  <label class="kind-pill"><input type="checkbox" id="salesFilterGifts"><span>هدايا فقط</span></label>
-                </div>
-                <div class="rpt2-bar-actions">
-                  <button type="button" class="btn btn-soft" id="btnSalesReportPreview">معاينة</button>
-                  <button type="button" class="btn btn-primary" id="btnSalesReportPdf">تصدير PDF</button>
-                </div>
-              </div>
-            </div>
 
-            <!-- Selection panels -->
-            <div class="rpt2-select">
-              <!-- Branches -->
-              <section class="rpt2-pane">
-                <header class="rpt2-pane-head">
-                  <span class="rpt2-pane-ic branches" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg></span>
-                  <div class="rpt2-pane-titles">
-                    <h4>الفروع <span class="rpt-optional">اختياري</span></h4>
-                    <p id="salesBranchHint">تُحمَّل تلقائياً حسب الفترة — اتركها فارغة لإجمالي كل الفروع</p>
+                <div class="rpt-config-block">
+                  <div class="rpt-step-head">
+                    <span class="rpt-step-num">3</span>
+                    <div>
+                      <h3>الفروع <span class="rpt-optional">اختياري</span></h3>
+                      <p id="salesBranchHint">اتركها فارغة لإجمالي كل الفروع</p>
+                    </div>
+                    <div class="rpt2-pane-actions">
+                      <button type="button" class="btn btn-soft btn-sm" id="btnSalesSelectPinnedBranches">★ المثبّتة</button>
+                      <button type="button" class="btn btn-ghost btn-sm" id="btnSalesClearBranches">مسح</button>
+                    </div>
                   </div>
-                  <div class="rpt2-pane-actions">
-                    <button type="button" class="btn btn-soft btn-sm" id="btnSalesSelectPinnedBranches">★ المثبّتة</button>
-                    <button type="button" class="btn btn-ghost btn-sm" id="btnSalesClearBranches">مسح</button>
+                  <div class="ms" id="salesBranchMS">
+                    <button type="button" class="ms-trigger" id="salesBranchTrigger" aria-haspopup="listbox" aria-expanded="false">
+                      <span class="ms-trigger-text" id="salesBranchTriggerText">كل الفروع</span>
+                      <span class="ms-caret" aria-hidden="true">▾</span>
+                    </button>
+                    <div class="ms-panel" id="salesBranchPanel" hidden>
+                      <input type="search" class="search ms-search" id="salesBranchSearch" placeholder="بحث عن فرع…">
+                      <div class="ms-list" id="salesBranchList"></div>
+                    </div>
                   </div>
-                </header>
-                <div class="ms" id="salesBranchMS">
-                  <button type="button" class="ms-trigger" id="salesBranchTrigger" aria-haspopup="listbox" aria-expanded="false">
-                    <span class="ms-trigger-text" id="salesBranchTriggerText">كل الفروع</span>
-                    <span class="ms-caret" aria-hidden="true">▾</span>
-                  </button>
-                  <div class="ms-panel" id="salesBranchPanel" hidden>
-                    <input type="search" class="search ms-search" id="salesBranchSearch" placeholder="بحث عن فرع…">
-                    <div class="ms-list" id="salesBranchList"></div>
-                  </div>
+                  <div class="ms-selected" id="salesBranchSelected"></div>
                 </div>
-                <div class="ms-selected" id="salesBranchSelected"></div>
-              </section>
 
-              <!-- Trees -->
-              <section class="rpt2-pane">
-                <header class="rpt2-pane-head">
-                  <span class="rpt2-pane-ic trees" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2v20M12 8l5-3M12 14l6-3M12 8L7 5M12 14l-6-3"/></svg></span>
-                  <div class="rpt2-pane-titles">
-                    <h4>شجرات المواد</h4>
-                    <p id="salesReportTreeHint">اختر شجرة أو أكثر (086، 087…)</p>
+                <div class="rpt-config-block">
+                  <div class="rpt-step-head">
+                    <span class="rpt-step-num">4</span>
+                    <div>
+                      <h3>شجرات المواد</h3>
+                      <p id="salesReportTreeHint">اختر شجرة أو أكثر (086، 087…)</p>
+                    </div>
+                    <div class="rpt2-pane-actions">
+                      <button type="button" class="btn btn-soft btn-sm" id="btnSalesSelectPinned">★ المثبّتة</button>
+                      <button type="button" class="btn btn-ghost btn-sm" id="btnSalesClearTrees">مسح</button>
+                    </div>
                   </div>
-                  <div class="rpt2-pane-actions">
-                    <button type="button" class="btn btn-soft btn-sm" id="btnSalesSelectPinned">★ المثبّتة</button>
-                    <button type="button" class="btn btn-ghost btn-sm" id="btnSalesClearTrees">مسح</button>
+                  <div class="ms" id="salesTreeMS">
+                    <button type="button" class="ms-trigger" id="salesTreeTrigger" aria-haspopup="listbox" aria-expanded="false">
+                      <span class="ms-trigger-text" id="salesTreeTriggerText">اختر الشجرات</span>
+                      <span class="ms-caret" aria-hidden="true">▾</span>
+                    </button>
+                    <div class="ms-panel" id="salesTreePanel" hidden>
+                      <input type="search" class="search ms-search" id="salesReportTreeSearch" placeholder="بحث: 086، كاتريس…">
+                      <div class="ms-list" id="salesTreeList"></div>
+                    </div>
                   </div>
-                </header>
-                <div class="ms" id="salesTreeMS">
-                  <button type="button" class="ms-trigger" id="salesTreeTrigger" aria-haspopup="listbox" aria-expanded="false">
-                    <span class="ms-trigger-text" id="salesTreeTriggerText">اختر الشجرات</span>
-                    <span class="ms-caret" aria-hidden="true">▾</span>
-                  </button>
-                  <div class="ms-panel" id="salesTreePanel" hidden>
-                    <input type="search" class="search ms-search" id="salesReportTreeSearch" placeholder="بحث: 086، كاتريس…">
-                    <div class="ms-list" id="salesTreeList"></div>
-                  </div>
+                  <div class="ms-selected" id="salesSelectedChips"></div>
                 </div>
-                <div class="ms-selected" id="salesSelectedChips"></div>
-              </section>
-            </div>
 
-            <!-- Results -->
-            <div class="rpt2-results" id="salesReportResultsPanel">
-              <div id="salesReportPreview">
-                <div class="report-empty">
-                  <span class="report-empty-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span>
-                  <p>اختر الفترة والشجرات (والفروع إن رغبت) ثم «معاينة» أو «تصدير PDF»</p>
+                <div class="rpt-config-actions">
+                  <button type="button" class="btn btn-soft btn-block" id="btnSalesReportPreview">معاينة التقرير</button>
+                  <button type="button" class="btn btn-primary btn-block" id="btnSalesReportPdf">تصدير PDF</button>
+                </div>
+              </aside>
+
+              <div class="rpt-main">
+                <div class="rpt2-results" id="salesReportResultsPanel">
+                  <div class="rpt-results-head">
+                    <h3>نتيجة التقرير</h3>
+                    <p>ستظهر المعاينة هنا بعد اختيار الشجرات والفترة</p>
+                  </div>
+                  <div id="salesReportPreview">
+                    <div class="report-empty">
+                      <span class="report-empty-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg></span>
+                      <p>اختر الفترة والشجرات (والفروع إن رغبت) ثم «معاينة» أو «تصدير PDF»</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- ===== Account statements — dashboard ===== -->
+          <!-- ===== Account statements ===== -->
           <div class="report-view hidden" id="reportView-statement">
-
-            <!-- Control bar -->
-            <div class="rpt2-bar">
-              <div class="rpt2-bar-line">
-                <div class="rpt2-seg" role="group" aria-label="الفترة">
-                  <button type="button" class="rpt2-seg-btn" data-stmt-preset="today">اليوم</button>
-                  <button type="button" class="rpt2-seg-btn" data-stmt-preset="yesterday">أمس</button>
-                  <button type="button" class="rpt2-seg-btn" data-stmt-preset="month">الشهر</button>
-                  <button type="button" class="rpt2-seg-btn" data-stmt-preset="last-month">الشهر الماضي</button>
-                </div>
-                <div class="rpt2-daterange">
-                  <input type="date" id="stmtDateFrom" class="search" aria-label="من تاريخ">
-                  <span class="rpt2-arrow">←</span>
-                  <input type="date" id="stmtDateTo" class="search" aria-label="إلى تاريخ">
-                </div>
-                <div class="rpt2-bar-actions">
-                  <button type="button" class="btn btn-soft" id="btnStmtPreview">معاينة</button>
-                  <button type="button" class="btn btn-primary" id="btnStmtPdf">تصدير PDF</button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Accounts selection -->
-            <div class="rpt2-select">
-              <section class="rpt2-pane rpt2-pane-wide">
-                <header class="rpt2-pane-head">
-                  <span class="rpt2-pane-ic accounts" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg></span>
-                  <div class="rpt2-pane-titles">
-                    <h4>الحسابات</h4>
-                    <p>أدخل أرقام الحسابات — كلها تُصدَّر في PDF واحد</p>
+            <div class="rpt-workspace">
+              <aside class="rpt-config">
+                <div class="rpt-config-block">
+                  <div class="rpt-step-head">
+                    <span class="rpt-step-num">1</span>
+                    <div>
+                      <h3>الفترة الزمنية</h3>
+                      <p>اختصارات سريعة أو تواريخ مخصّصة</p>
+                    </div>
                   </div>
-                  <div class="rpt2-pane-actions">
-                    <button type="button" class="btn btn-soft btn-sm" id="btnStmtSaveList">★ حفظ التحديد</button>
+                  <div class="rpt2-seg rpt2-seg-full" role="group" aria-label="الفترة">
+                    <button type="button" class="rpt2-seg-btn" data-stmt-preset="today">اليوم</button>
+                    <button type="button" class="rpt2-seg-btn" data-stmt-preset="yesterday">أمس</button>
+                    <button type="button" class="rpt2-seg-btn" data-stmt-preset="month">الشهر</button>
+                    <button type="button" class="rpt2-seg-btn" data-stmt-preset="last-month">الشهر الماضي</button>
                   </div>
-                </header>
-                <div class="stmt-add-row">
-                  <input id="stmtAccountInput" class="search" type="text" inputmode="numeric" autocomplete="off" placeholder="رقم الحساب ثم Enter (مثال: 131) — أو عدّة أرقام بفاصلة" />
-                  <button type="button" class="btn btn-soft" id="btnStmtAdd">إضافة</button>
+                  <div class="rpt2-daterange rpt2-daterange-stack">
+                    <label class="rpt-date-field">
+                      <span>من</span>
+                      <input type="date" id="stmtDateFrom" class="search" aria-label="من تاريخ">
+                    </label>
+                    <label class="rpt-date-field">
+                      <span>إلى</span>
+                      <input type="date" id="stmtDateTo" class="search" aria-label="إلى تاريخ">
+                    </label>
+                  </div>
                 </div>
-                <div id="stmtSelectedChips" class="sales-selected-chips"></div>
-                <div class="rpt-pinned" id="stmtSavedWrap">
-                  <div class="rpt-pinned-head"><span>★ القائمة المحفوظة</span></div>
-                  <div id="stmtSavedBar" class="rpt-pinned-bar sales-pinned-bar"></div>
-                </div>
-              </section>
-            </div>
 
-            <!-- Results -->
-            <div class="rpt2-results">
-              <div id="stmtPreview" class="stmt-preview">
-                <div class="report-empty">
-                  <span class="report-empty-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg></span>
-                  <p class="muted">اختر الحسابات والفترة ثم «معاينة» أو «تصدير PDF»</p>
+                <div class="rpt-config-block rpt-config-block-grow">
+                  <div class="rpt-step-head">
+                    <span class="rpt-step-num">2</span>
+                    <div>
+                      <h3>الحسابات</h3>
+                      <p>أدخل أرقام الحسابات — كلها تُصدَّر في PDF واحد</p>
+                    </div>
+                    <div class="rpt2-pane-actions">
+                      <button type="button" class="btn btn-soft btn-sm" id="btnStmtSaveList">★ حفظ التحديد</button>
+                    </div>
+                  </div>
+                  <div class="stmt-add-row">
+                    <input id="stmtAccountInput" class="search" type="text" inputmode="numeric" autocomplete="off" placeholder="رقم الحساب ثم Enter (مثال: 131)" />
+                    <button type="button" class="btn btn-soft" id="btnStmtAdd">إضافة</button>
+                  </div>
+                  <div id="stmtSelectedChips" class="sales-selected-chips"></div>
+                  <div class="rpt-pinned" id="stmtSavedWrap">
+                    <div class="rpt-pinned-head"><span>★ القائمة المحفوظة</span></div>
+                    <div id="stmtSavedBar" class="rpt-pinned-bar sales-pinned-bar"></div>
+                  </div>
+                </div>
+
+                <div class="rpt-config-actions">
+                  <button type="button" class="btn btn-soft btn-block" id="btnStmtPreview">معاينة التقرير</button>
+                  <button type="button" class="btn btn-primary btn-block" id="btnStmtPdf">تصدير PDF</button>
+                </div>
+              </aside>
+
+              <div class="rpt-main">
+                <div class="rpt2-results">
+                  <div class="rpt-results-head">
+                    <h3>نتيجة كشف الحساب</h3>
+                    <p>ستظهر المعاينة هنا بعد اختيار الحسابات والفترة</p>
+                  </div>
+                  <div id="stmtPreview" class="stmt-preview">
+                    <div class="report-empty">
+                      <span class="report-empty-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg></span>
+                      <p class="muted">اختر الحسابات والفترة ثم «معاينة» أو «تصدير PDF»</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
