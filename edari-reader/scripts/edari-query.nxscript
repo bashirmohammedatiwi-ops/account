@@ -1,0 +1,141 @@
+<%
+function UrlDecode(const s: string): string;
+var
+  i: integer;
+  hex: string;
+begin
+  Result := '';
+  i := 1;
+  while i <= Length(s) do
+  begin
+    if s[i] = '+' then
+    begin
+      Result := Result + ' ';
+      Inc(i);
+    end
+    else if (s[i] = '%') and (i + 2 <= Length(s)) then
+    begin
+      hex := Copy(s, i + 1, 2);
+      Result := Result + Chr(StrToInt('$' + hex));
+      i := i + 3;
+    end
+    else
+    begin
+      Result := Result + s[i];
+      Inc(i);
+    end;
+  end;
+end;
+
+function JsonEscapeAscii(const s: string): string;
+var
+  i: integer;
+  c: char;
+begin
+  Result := '';
+  for i := 1 to Length(s) do
+  begin
+    c := s[i];
+    case c of
+      '\': Result := Result + '\\';
+      '"': Result := Result + '\"';
+      #8: Result := Result + '\b';
+      #9: Result := Result + '\t';
+      #10: Result := Result + '\n';
+      #13: Result := Result + '\r';
+    else
+      if Ord(c) < 32 then
+        Result := Result + '\u' + IntToHex(Ord(c), 4)
+      else
+        Result := Result + c;
+    end;
+  end;
+end;
+
+function JsonEscapeValue(const s: string): string;
+begin
+  Result := s;
+  Result := StringReplace(Result, '\', '\\', [rfReplaceAll]);
+  Result := StringReplace(Result, '"', '\"', [rfReplaceAll]);
+  Result := StringReplace(Result, #13#10, '\n', [rfReplaceAll]);
+  Result := StringReplace(Result, #13, '\n', [rfReplaceAll]);
+  Result := StringReplace(Result, #10, '\n', [rfReplaceAll]);
+  Result := StringReplace(Result, #9, '\t', [rfReplaceAll]);
+end;
+
+var
+  aSession: TnxSession;
+  adb: TnxDatabase;
+  aQuery: TnxQuery;
+  aliasName, sqlText, upperSql, cell: string;
+  i: integer;
+  rowCount: integer;
+  firstRow: boolean;
+begin
+  aliasName := UrlDecode(Trim(Request('alias')));
+  sqlText := UrlDecode(Trim(Request('sql')));
+
+  if (aliasName = '') or (sqlText = '') then
+  begin
+    Output.Write('{"ok":false,"error":"alias and sql required"}');
+    Exit;
+  end;
+
+  upperSql := UpperCase(Trim(sqlText));
+  if (Copy(upperSql, 1, 6) <> 'SELECT') and (Copy(upperSql, 1, 4) <> 'WITH') then
+  begin
+    Output.Write('{"ok":false,"error":"Only SELECT queries allowed"}');
+    Exit;
+  end;
+
+  aSession := TnxSession.Create(nil);
+  adb := TnxDatabase.Create(nil);
+  aQuery := TnxQuery.Create(nil);
+  try
+    aSession.ServerEngine := ServerEngine;
+    aSession.Active := true;
+    adb.AliasName := aliasName;
+    adb.Session := aSession;
+    adb.Open;
+    aQuery.Database := adb;
+    aQuery.SQL.Text := sqlText;
+    aQuery.Open;
+
+    Output.Write('{"ok":true,"driver":"nxServer","columns":[');
+    for i := 0 to aQuery.FieldCount - 1 do
+    begin
+      if i > 0 then Output.Write(',');
+      Output.Write('"'+JsonEscapeAscii(aQuery.Fields.Fields[i].FieldName)+'"');
+    end;
+    Output.Write('],"rows":[');
+
+    rowCount := 0;
+    firstRow := true;
+    while not aQuery.Eof do
+    begin
+      if not firstRow then Output.Write(',');
+      firstRow := false;
+      Output.Write('[');
+      for i := 0 to aQuery.FieldCount - 1 do
+      begin
+        if i > 0 then Output.Write(',');
+        if aQuery.Fields.Fields[i].IsNull then
+          Output.Write('null')
+        else
+        begin
+          cell := aQuery.Fields.Fields[i].AsString;
+          Output.Write('"'+JsonEscapeValue(cell)+'"');
+        end;
+      end;
+      Output.Write(']');
+      Inc(rowCount);
+      aQuery.Next;
+    end;
+    Output.Write('],"rowCount":'+IntToStr(rowCount)+'}');
+  finally
+    aQuery.Free;
+    adb.Free;
+    aSession.Free;
+  end;
+end.
+%>

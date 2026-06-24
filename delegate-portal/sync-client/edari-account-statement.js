@@ -12,6 +12,7 @@ const odbcBridge = require(path.join(edariRoot, 'lib', 'odbc-bridge'));
 const { getEdariConnection } = require('./edari-connection');
 const {
   parseAmount,
+  parseJournalAmount,
   isDebitRow,
   sortJournalRowsAsc,
   buildJournalDescription,
@@ -73,11 +74,11 @@ function mapAccount(a) {
     name1: a.Name1 ?? '',
     name2: a.Name2 ?? '',
     address: a.Address ?? '',
-    bal: Number(a.Bal ?? 0),
-    tot1: Number(a.Tot1 ?? 0),
-    tot2: Number(a.Tot2 ?? 0),
+    bal: parseAmount(a.Bal ?? 0),
+    tot1: parseAmount(a.Tot1 ?? 0),
+    tot2: parseAmount(a.Tot2 ?? 0),
     fix_date: a.FixDate ?? '',
-    fix_bal: Number(a.FixBal ?? 0),
+    fix_bal: parseAmount(a.FixBal ?? 0),
     sub_count: Number(a.SubCount ?? 0)
   };
 }
@@ -92,7 +93,7 @@ function mapJournalRow(j) {
     seq: String(j.Seq ?? '').replace(/[^0-9]/g, ''),
     acc_seq: String(j.Acc ?? '').replace(/[^0-9]/g, ''),
     tx_date: j.Date ?? j.DtCreated ?? '',
-    am: Number(j.Am ?? 0),
+    am: parseJournalAmount(j.Am ?? 0),
     is_debit: dept === 'True' || dept === true || dept === 1 ? 1 : 0,
     exp1: String(j.Exp1 ?? j.Remarks ?? '').trim(),
     exp2: String(j.Exp2 ?? '').trim(),
@@ -187,7 +188,7 @@ function filterRowsInDateRange(rows, dateFrom, dateTo) {
 function buildStatement(account, allRows, period = {}) {
   const { dateFrom, dateTo } = period;
   const movementRows = filterRowsInDateRange(allRows, dateFrom, dateTo);
-  const openingBalance = resolvePeriodOpeningBalance(account, allRows, dateFrom);
+  const openingBalance = resolvePeriodOpeningBalance(account, allRows, dateFrom, dateTo);
 
   const stmt = buildLines(movementRows, openingBalance);
 

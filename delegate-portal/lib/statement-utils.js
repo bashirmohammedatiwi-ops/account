@@ -1,6 +1,24 @@
 function parseAmount(v) {
-  const n = Number(v);
-  return Number.isNaN(n) ? 0 : n;
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  let s = String(v).trim().replace(/,/g, '');
+  if (!s) return 0;
+  let neg = false;
+  if (/^-/.test(s)) {
+    neg = true;
+    s = s.slice(1).trim();
+  } else if (s.endsWith('-')) {
+    neg = true;
+    s = s.slice(0, -1).trim();
+  }
+  const n = Number(s);
+  if (Number.isNaN(n)) return 0;
+  return neg ? -Math.abs(n) : n;
+}
+
+/** مبالغ حركات اليومية — Edari يعرضها كأعداد صحيحة */
+function parseJournalAmount(v) {
+  return Math.round(parseAmount(v));
 }
 
 function isDebitRow(row) {
@@ -173,21 +191,16 @@ function netMovementAmount(rows) {
 
 /** الرصيد الحالي من Edari — موجب = دائن، سالب = مدين */
 function resolveAccountNetBalance(account = {}) {
-  const accountBal = parseAmount(account.bal ?? account.Bal);
-  if (accountBal !== 0) return accountBal;
-  const tot1 = parseAmount(account.tot1 ?? account.Tot1);
-  const tot2 = parseAmount(account.tot2 ?? account.Tot2);
-  if (tot1 > 0 || tot2 > 0) return tot2 - tot1;
-  return 0;
+  return parseAmount(account.bal ?? account.Bal);
 }
 
 function normalizeCarriedBalance(balance, account = {}, { fromFixBal = false } = {}) {
   const b = parseAmount(balance);
   if (b === 0) return 0;
-  // FixBal في Edari قد يكون موجباً ويُعرض في عمود المدين — نعكس حسب Bal
+  // FixBal في Edari قد يُخزَّن بإشارة معاكسة لـ Bal — نعكس فقط عند تعارض واضح
   if (fromFixBal) {
     const accountBal = parseAmount(account?.bal ?? account?.Bal);
-    if (b > 0 && accountBal <= 0) return -Math.abs(b);
+    if (b > 0 && accountBal < 0) return -Math.abs(b);
     if (b < 0 && accountBal > 0) return Math.abs(b);
   }
   return b;
@@ -365,12 +378,12 @@ function buildStatementLines(rows, options = {}) {
   };
 }
 
-/** صف الرصيد النهائي — Edari: الرصيد الحالي / رصيد دائن */
+/** صف الرصيد النهائي — Edari: الرصيد الحالي / رصيد مدين / رصيد دائن */
 function balanceSummaryLabel(balance, accountName = '') {
   const n = parseAmount(balance);
   const suffix = accountName ? ` ${String(accountName).trim()}` : '';
-  if (n < 0) return { label: `رصيد مدين${suffix}`, amount: Math.abs(n), side: 'credit' };
-  if (n > 0) return { label: `رصيد دائن${suffix}`, amount: n, side: 'debit' };
+  if (n < 0) return { label: `رصيد مدين${suffix}`, amount: Math.abs(n), side: 'debit' };
+  if (n > 0) return { label: `رصيد دائن${suffix}`, amount: n, side: 'credit' };
   return { label: `الرصيد الحالي${suffix}`, amount: 0, side: 'credit' };
 }
 
@@ -399,36 +412,124 @@ function resolveDebtFromAccount(account = {}) {
   });
 }
 
+function rowsInDateRange(rows, dateFrom, dateTo) {
+  const start = startOfCalendarDay(dateFrom);
+  const end = endOfCalendarDay(dateTo || dateFrom);
+  if (start == null || !end) return [];
+  return (rows || []).filter((row) => {
+    const t = journalSortKey(row).t;
+    return t >= start && t <= end;
+  });
+}
+
+function rowsAfterDate(rows, dateTo) {
+  const end = endOfCalendarDay(dateTo);
+  if (!end) return [];
+  return (rows || []).filter((row) => journalSortKey(row).t > end);
+}
+
+/** رصيد افتتاح الفترة = مجموع حركات اليومية قبل dateFrom (من الصفر) */
+function computeBalanceBeforePeriod(allRows, dateFrom) {
+  const periodStart = startOfCalendarDay(dateFrom);
+  if (periodStart == null) return 0;
+  let balance = 0;
+  for (const row of sortJournalRowsAsc(allRows || [])) {
+    const t = journalSortKey(row).t;
+    if (t <= 0 || t >= periodStart) continue;
+    const am = parseAmount(row.am ?? row.Am);
+    balance += isDebitRow(row) ? -am : am;
+  }
+  return balance;
+}
+
+/** صافي حركات بين بداية rangeFrom (شامل) وبداية rangeTo (غير شامل) */
+function computeNetMovementBetween(allRows, rangeFrom, rangeToExclusive) {
+  const from = startOfCalendarDay(rangeFrom);
+  const to = startOfCalendarDay(rangeToExclusive);
+  if (from == null || to == null) return 0;
+  let net = 0;
+  for (const row of sortJournalRowsAsc(allRows || [])) {
+    const t = journalSortKey(row).t;
+    if (t <= 0 || t < from || t >= to) continue;
+    const am = parseAmount(row.am ?? row.Am);
+    net += isDebitRow(row) ? -am : am;
+  }
+  return net;
+}
+
+function isoDateAddDays(dateInput, deltaDays) {
+  const d = parseEdariDate(dateInput);
+  if (!d || Number.isNaN(d.getTime())) return null;
+  d.setDate(d.getDate() + deltaDays);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** صافي حركات يوم التقويم السابق مباشرةً */
+function previousDayNet(allRows, dateFrom) {
+  const prev = isoDateAddDays(dateFrom, -1);
+  if (!prev) return 0;
+  return netMovementAmount(rowsInDateRange(allRows, prev, prev));
+}
+
 /**
- * Opening balance at the start of dateFrom (رصيد مدور).
- * When FixDate is before the period, anchor on FixBal then apply movements
- * strictly after the fix day and before the period start — matching Edari.
+ * رصيد بداية الفترة انطلاقاً من FixBal (الرصيد المُدقّق في نهاية FixDate).
+ * - الفترة بعد FixDate: نُقدّم بإضافة الحركات بين نهاية FixDate وبداية الفترة.
+ * - الفترة عند/قبل FixDate: نُرجِع بطرح الحركات من بداية الفترة حتى نهاية FixDate.
+ * هذا يطابق Edari الذي يعتمد FixBal كنقطة تثبيت وليس إعادة حساب من الصفر.
  */
-function resolvePeriodOpeningBalance(account, allRows, dateFrom) {
+function balanceAtPeriodStartFromFix(allRows, fixBal, fixDayEnd, periodStart) {
+  let balance = fixBal;
+  const forward = periodStart > fixDayEnd;
+  for (const row of sortJournalRowsAsc(allRows || [])) {
+    const t = journalSortKey(row).t;
+    if (t <= 0) continue;
+    const am = parseAmount(row.am ?? row.Am);
+    const mv = isDebitRow(row) ? -am : am;
+    if (forward) {
+      if (t > fixDayEnd && t < periodStart) balance += mv;
+    } else if (t >= periodStart && t <= fixDayEnd) {
+      balance -= mv;
+    }
+  }
+  return balance;
+}
+
+/**
+ * Opening balance at the start of dateFrom (رصيد مدور) — matches Edari box statements.
+ *
+ * Main boxes (FixBal ≠ 0): anchor on FixBal at FixDate (forward/backward through movements).
+ * Cashier boxes (FixBal = 0, valid FixDate): daily independent report — opening always 0.
+ * No valid FixDate: cumulative accounts — sum all journal movements before period.
+ */
+function resolvePeriodOpeningBalance(account, allRows, dateFrom, dateTo) {
   const periodStart = startOfCalendarDay(dateFrom);
   if (periodStart == null) return 0;
 
-  const fixRaw = account?.fix_date ?? account?.fixDate;
-  const fixBal = parseAmount(account?.fix_bal ?? account?.fixBal);
-  if (isValidFixDate(fixRaw)) {
-    const fixDay = startOfCalendarDay(fixRaw);
-    if (fixDay != null && fixDay < periodStart && fixBal !== 0) {
-      let balance = normalizeCarriedBalance(fixBal, account, { fromFixBal: true });
-      const tailRows = (allRows || []).filter((row) => {
-        const t = startOfCalendarDay(row.tx_date || row.Date || row.date);
-        return t != null && t > fixDay && t < periodStart;
-      });
-      return balance + netMovementAmount(tailRows);
-    }
+  const fixDateRaw = account?.fix_date ?? account?.fixDate ?? '';
+  const fixBalRaw = parseAmount(account?.fix_bal ?? account?.fixBal);
+  const hasValidFixDate = isValidFixDate(fixDateRaw);
+
+  if (!hasValidFixDate) {
+    // حسابات تراكمية (مثل زيادة ونقص 31209) — FixDate فارغ، الرصيد من الحركات السابقة
+    return computeBalanceBeforePeriod(allRows, dateFrom);
   }
 
-  const balanceNow = resolveAccountNetBalance(account);
-  const rowsFromPeriodStart = (allRows || []).filter((row) => journalSortKey(row).t >= periodStart);
-  return balanceNow - netMovementAmount(rowsFromPeriodStart);
+  const fixBal = fixBalRaw !== 0
+    ? normalizeCarriedBalance(fixBalRaw, account, { fromFixBal: true })
+    : 0;
+
+  // صناديق الكاشير (FixBal = 0): كشف يومي مستقل — رصيد مدور صفر دائماً
+  if (fixBal === 0) {
+    return 0;
+  }
+
+  const fixDayEnd = endOfCalendarDay(fixDateRaw);
+  return balanceAtPeriodStartFromFix(allRows, fixBal, fixDayEnd, periodStart);
 }
 
 module.exports = {
   parseAmount,
+  parseJournalAmount,
   isDebitRow,
   buildStatementLines,
   balanceSummaryLabel,

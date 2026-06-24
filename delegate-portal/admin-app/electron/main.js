@@ -646,15 +646,18 @@ let edariStatementModule = null;
 function loadEdariStatementModule(forceReload = false) {
   Object.assign(process.env, edariEnvExtra());
   const modPath = path.join(getPortalDir(), 'sync-client', 'edari-account-statement.js');
+  const utilsPath = path.join(getPortalDir(), 'lib', 'statement-utils.js');
   if (forceReload || !edariStatementModule) {
-    delete require.cache[require.resolve(modPath)];
+    for (const p of [modPath, utilsPath]) {
+      try { delete require.cache[require.resolve(p)]; } catch (_) { /* ignore */ }
+    }
     edariStatementModule = require(modPath);
   }
   return edariStatementModule;
 }
 
 async function queryEdariAccountStatementsInProcess(params = {}) {
-  const { queryEdariAccountStatements } = loadEdariStatementModule();
+  const { queryEdariAccountStatements } = loadEdariStatementModule(true);
   return queryEdariAccountStatements(params);
 }
 

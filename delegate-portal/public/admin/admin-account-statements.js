@@ -348,7 +348,7 @@ async function exportStmtPdf() {
 }
 
 function initReportTabs() {
-  const tabs = [...document.querySelectorAll('.rpt-type-card[data-report-tab]')];
+  const tabs = [...document.querySelectorAll('.rx-tab[data-report-tab]')];
   if (!tabs.length) return;
   const show = (name) => {
     tabs.forEach((t) => {

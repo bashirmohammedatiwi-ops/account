@@ -181,75 +181,155 @@ function clearSelectedTrees() {
 function selectPinnedTrees() {
   if (!salesReport.pinned.length) {
     showToast('لا توجد شجرات مثبّتة — اضغط ★ بجانب الشجرة لتثبيتها', 'err');
-    return;
+    return false;
   }
   salesReport.pinned.forEach((k) => salesReport.selected.add(String(k)));
   invalidateSalesPreview();
   renderSalesReportTrees();
+  return true;
+}
+
+function applyDefaultPinnedSelection() {
+  salesReport.selected.clear();
+  salesReport.selectedBranches.clear();
+  salesReport.pinned.forEach((k) => salesReport.selected.add(String(k)));
+  salesReport.pinnedBranches.forEach((b) => salesReport.selectedBranches.add(String(b.code)));
+  renderSalesReportTrees();
+  renderBranchUI();
+}
+
+function selectAllPinned(opts = {}) {
+  const { silent = false } = opts;
+  const hasTrees = salesReport.pinned.length > 0;
+  const hasBranches = salesReport.pinnedBranches.length > 0;
+  if (!hasTrees && !hasBranches) {
+    if (!silent) showToast('لا توجد شجرات أو فروع مثبّتة — اضغط ★ بجانب العنصر لتثبيته', 'err');
+    return;
+  }
+  applyDefaultPinnedSelection();
+  invalidateSalesPreview();
+  if (!silent) {
+    const parts = [];
+    if (hasTrees) parts.push(`${salesReport.pinned.length} شجرة`);
+    if (hasBranches) parts.push(`${salesReport.pinnedBranches.length} فرع`);
+    showToast(`تم تحديد المثبّتة: ${parts.join(' · ')}`);
+  }
 }
 
 function toggleTreePin(key) {
   const k = String(key);
   if (salesReport.pinned.includes(k)) {
     salesReport.pinned = salesReport.pinned.filter((x) => x !== k);
+    salesReport.selected.delete(k);
   } else {
     salesReport.pinned = [...salesReport.pinned, k];
+    salesReport.selected.add(k);
   }
   savePinnedTrees();
+  invalidateSalesPreview();
   renderSalesReportTrees();
+}
+
+function treeMetaOf(t) {
+  return { key: treeKeyOf(t), num: t.num || treeKeyOf(t), name: t.name1 || '—', sub: t.subCount || 0 };
+}
+
+function renderTreePickItem(t, pinnedSet) {
+  const { key, num, name, sub } = treeMetaOf(t);
+  const selected = salesReport.selected.has(key);
+  const pinned = pinnedSet.has(key);
+  return `
+    <div class="pick-item${selected ? ' is-on' : ''}" data-tree="${esc(key)}" role="option" aria-selected="${selected}">
+      <span class="pick-item-check" aria-hidden="true">${selected ? '✓' : ''}</span>
+      <span class="pick-item-code">${esc(String(num))}</span>
+      <span class="pick-item-name">${esc(name)}</span>
+      <span class="pick-item-meta" title="عدد المواد">${sub}</span>
+      <button type="button" class="pick-item-star${pinned ? ' is-pinned' : ''}" data-pin-tree="${esc(key)}" title="${pinned ? 'إلغاء التثبيت' : 'تثبيت'}">★</button>
+    </div>`;
+}
+
+function renderTreePinCard(key) {
+  const selected = salesReport.selected.has(key);
+  const label = treeDisplayLabel(key);
+  const parts = label.split(' — ');
+  const num = parts[0] || key;
+  const name = parts.slice(1).join(' — ') || '—';
+  return `
+    <button type="button" class="pick-pin-card${selected ? ' is-on' : ''}" data-quick-tree="${esc(key)}" title="${esc(label)}">
+      <span class="pick-pin-card-star" aria-hidden="true">★</span>
+      <span class="pick-pin-card-code">${esc(num)}</span>
+      <span class="pick-pin-card-name">${esc(name)}</span>
+      ${selected ? '<span class="pick-pin-card-check" aria-hidden="true">✓</span>' : ''}
+    </button>`;
+}
+
+function renderPinnedTreesSection() {
+  const grid = document.getElementById('salesPinnedTreesGrid');
+  const zone = document.getElementById('salesTreesPinZone');
+  const empty = document.getElementById('salesPinnedTreesEmpty');
+  const countEl = document.getElementById('salesPinnedTreeCount');
+  if (!grid) return;
+  const pinned = salesReport.pinned.map(String);
+  if (countEl) countEl.textContent = pinned.length ? ` (${pinned.length})` : '';
+  if (!pinned.length) {
+    grid.innerHTML = '';
+    if (zone) zone.classList.add('is-empty');
+    if (empty) empty.classList.remove('hidden');
+    return;
+  }
+  if (zone) zone.classList.remove('is-empty');
+  if (empty) empty.classList.add('hidden');
+  grid.innerHTML = pinned.map((key) => renderTreePinCard(key)).join('');
 }
 
 function renderTreeList() {
   const list = document.getElementById('salesTreeList');
+  const metaEl = document.getElementById('salesTreeListMeta');
   if (!list) return;
   const pinnedSet = new Set(salesReport.pinned.map(String));
+  const q = (document.getElementById('salesReportTreeSearch')?.value || '').trim().toLowerCase();
   const base = filteredSalesReportTrees();
   const present = new Set(base.map(treeKeyOf));
-  // Pinned trees that aren't in the master list (e.g. excluded roots) must still show
-  const q = (document.getElementById('salesReportTreeSearch')?.value || '').trim().toLowerCase();
   const pinnedExtra = salesReport.pinned
     .map(String)
     .filter((k) => !present.has(k))
     .map((k) => ({ num: k, name1: '(مثبّتة)', seq: k, subCount: 0 }))
     .filter((t) => !q || `${t.num} ${t.name1}`.toLowerCase().includes(q));
-  const trees = [...base, ...pinnedExtra];
+  let trees = [...base, ...pinnedExtra];
+  if (!q) trees = trees.filter((t) => !pinnedSet.has(treeKeyOf(t)));
+  if (metaEl) metaEl.textContent = trees.length ? `${trees.length} شجرة` : '';
   if (!trees.length) {
-    list.innerHTML = '<div class="ms-empty">لا توجد شجرات مطابقة</div>';
+    list.innerHTML = `<div class="pick-empty">${q ? 'لا توجد شجرات مطابقة' : 'كل الشجرات المثبّتة أعلاه — أو ابحث لإضافة المزيد'}</div>`;
     return;
   }
-  const sorted = [...trees].sort((a, b) => {
-    const pa = pinnedSet.has(treeKeyOf(a)) ? 0 : 1;
-    const pb = pinnedSet.has(treeKeyOf(b)) ? 0 : 1;
-    return pa - pb;
-  });
-  list.innerHTML = sorted.map((t) => {
-    const key = treeKeyOf(t);
-    const selected = salesReport.selected.has(key);
-    const pinned = pinnedSet.has(key);
-    const label = `${t.num || '—'} — ${t.name1 || '—'}`;
-    return `
-    <div class="ms-row${selected ? ' selected' : ''}" data-tree="${esc(key)}" role="option" aria-selected="${selected}">
-      <span class="ms-check" aria-hidden="true">${selected ? '✓' : ''}</span>
-      <span class="ms-row-label">${esc(label)}</span>
-      <span class="ms-row-sub">${t.subCount || 0}</span>
-      <button type="button" class="ms-pin${pinned ? ' on' : ''}" data-pin-tree="${esc(key)}" title="تثبيت">★</button>
-    </div>`;
-  }).join('');
+  const sorted = [...trees].sort((a, b) => String(a.num || '').localeCompare(String(b.num || ''), 'ar'));
+  list.innerHTML = sorted.map((t) => renderTreePickItem(t, pinnedSet)).join('');
 }
 
 function renderSelectedChips() {
   const wrap = document.getElementById('salesSelectedChips');
+  const countEl = document.getElementById('salesTreeSelCount');
   if (!wrap) return;
   const keys = [...salesReport.selected];
+  if (countEl) countEl.textContent = String(keys.length);
   if (!keys.length) {
     wrap.innerHTML = '';
     return;
   }
-  wrap.innerHTML = keys.map((key) => `
-    <span class="ms-chip" title="${esc(treeDisplayLabel(key))}">
-      <span class="ms-chip-text">${esc(treeDisplayLabel(key))}</span>
-      <button type="button" class="ms-chip-x" data-remove-tree="${esc(key)}" aria-label="إزالة">×</button>
-    </span>`).join('');
+  wrap.innerHTML = keys.map((key) => {
+    const label = treeDisplayLabel(key);
+    const num = label.split(' — ')[0] || key;
+    return `
+    <span class="pick-sel-chip">
+      <span class="pick-sel-chip-code">${esc(num)}</span>
+      <span class="pick-sel-chip-text">${esc(label)}</span>
+      <button type="button" class="pick-sel-chip-x" data-remove-tree="${esc(key)}" aria-label="إزالة">×</button>
+    </span>`;
+  }).join('');
+}
+
+function renderPinnedQuickBar() {
+  renderPinnedTreesSection();
 }
 
 function updateTreeTrigger() {
@@ -292,17 +372,58 @@ function branchLabelOf(code) {
   return pinned?.label || `الفرع ${c}`;
 }
 
-function renderBranchUI() {
-  renderBranchList();
-  renderBranchSelected();
-  updateBranchTrigger();
-  updateBranchHint();
+function renderBranchPinCard(b) {
+  const code = String(b.code);
+  const selected = salesReport.selectedBranches.has(code);
+  const label = b.label || code;
+  return `
+    <button type="button" class="pick-pin-card pick-pin-card-branch${selected ? ' is-on' : ''}" data-quick-branch="${esc(code)}" title="${esc(label)}">
+      <span class="pick-pin-card-star" aria-hidden="true">★</span>
+      <span class="pick-pin-card-code">${esc(code)}</span>
+      <span class="pick-pin-card-name">${esc(label.replace(/^\d+\s*[-–]?\s*/, '') || label)}</span>
+      ${selected ? '<span class="pick-pin-card-check" aria-hidden="true">✓</span>' : ''}
+    </button>`;
 }
 
 function filteredBranches() {
   const q = (document.getElementById('salesBranchSearch')?.value || '').trim().toLowerCase();
   if (!q) return salesReport.branches;
   return salesReport.branches.filter((b) => `${b.code} ${b.label || ''}`.toLowerCase().includes(q));
+}
+
+function renderPinnedBranchesSection() {
+  const grid = document.getElementById('salesPinnedBranchesGrid');
+  const zone = document.getElementById('salesBranchesPinZone');
+  const empty = document.getElementById('salesPinnedBranchesEmpty');
+  const countEl = document.getElementById('salesPinnedBranchCount');
+  if (!grid) return;
+  const pinned = salesReport.pinnedBranches;
+  if (countEl) countEl.textContent = pinned.length ? ` (${pinned.length})` : '';
+  if (!pinned.length) {
+    grid.innerHTML = '';
+    if (zone) zone.classList.add('is-empty');
+    if (empty) empty.classList.remove('hidden');
+    return;
+  }
+  if (zone) zone.classList.remove('is-empty');
+  if (empty) empty.classList.add('hidden');
+  grid.innerHTML = pinned.map((b) => renderBranchPinCard(b)).join('');
+}
+
+function renderBranchPickItem(b, pinnedSet) {
+  const code = String(b.code);
+  const selected = salesReport.selectedBranches.has(code);
+  const pinned = pinnedSet.has(code);
+  const label = b.label || code;
+  const shortName = label.replace(new RegExp(`^${code}\\s*[-–]?\\s*`), '') || label;
+  return `
+    <div class="pick-item pick-item-branch${selected ? ' is-on' : ''}" data-branch="${esc(code)}" role="option" aria-selected="${selected}">
+      <span class="pick-item-check" aria-hidden="true">${selected ? '✓' : ''}</span>
+      <span class="pick-item-code">${esc(code)}</span>
+      <span class="pick-item-name">${esc(shortName)}</span>
+      <span class="pick-item-meta" title="فواتير">${b.invoiceCount || 0}</span>
+      <button type="button" class="pick-item-star${pinned ? ' is-pinned' : ''}" data-pin-branch="${esc(code)}" title="${pinned ? 'إلغاء التثبيت' : 'تثبيت'}">★</button>
+    </div>`;
 }
 
 function renderBranchList() {
@@ -312,51 +433,50 @@ function renderBranchList() {
   const q = (document.getElementById('salesBranchSearch')?.value || '').trim().toLowerCase();
   const base = filteredBranches();
   const present = new Set(base.map((b) => String(b.code)));
-  // Pinned branches with no invoices in the period must still be selectable
   const pinnedExtra = salesReport.pinnedBranches
     .filter((b) => !present.has(String(b.code)))
     .map((b) => ({ code: String(b.code), label: b.label, invoiceCount: 0 }))
     .filter((b) => !q || `${b.code} ${b.label || ''}`.toLowerCase().includes(q));
-  const branches = [...base, ...pinnedExtra];
+  let branches = [...base, ...pinnedExtra];
+  if (!q) branches = branches.filter((b) => !pinnedSet.has(String(b.code)));
   const loadingRow = salesReport.branchesLoading
-    ? '<div class="ms-empty"><span class="ms-inline-spin"></span> جاري تحميل الفروع من Edari…</div>'
+    ? '<div class="pick-empty"><span class="ms-inline-spin"></span> جاري تحميل الفروع…</div>'
     : '';
   if (!branches.length) {
-    list.innerHTML = loadingRow || `<div class="ms-empty">${salesReport.branches.length ? 'لا فروع مطابقة' : 'لا فروع في هذه الفترة'}</div>`;
+    list.innerHTML = loadingRow || `<div class="pick-empty">${q ? 'لا فروع مطابقة' : (salesReport.branches.length ? 'الفروع المثبّتة أعلاه' : 'لا فروع في هذه الفترة')}</div>`;
     return;
   }
-  const sorted = [...branches].sort((a, b) => {
-    const pa = pinnedSet.has(String(a.code)) ? 0 : 1;
-    const pb = pinnedSet.has(String(b.code)) ? 0 : 1;
-    return pa - pb;
-  });
-  list.innerHTML = loadingRow + sorted.map((b) => {
-    const code = String(b.code);
-    const selected = salesReport.selectedBranches.has(code);
-    const pinned = pinnedSet.has(code);
-    return `
-    <div class="ms-row${selected ? ' selected' : ''}" data-branch="${esc(code)}" role="option" aria-selected="${selected}">
-      <span class="ms-check" aria-hidden="true">${selected ? '✓' : ''}</span>
-      <span class="ms-row-label">${esc(b.label || code)}</span>
-      <span class="ms-row-sub">${b.invoiceCount || 0}</span>
-      <button type="button" class="ms-pin${pinned ? ' on' : ''}" data-pin-branch="${esc(code)}" title="تثبيت">★</button>
-    </div>`;
-  }).join('');
+  const sorted = [...branches].sort((a, b) => String(a.code).localeCompare(String(b.code), 'ar'));
+  list.innerHTML = loadingRow + sorted.map((b) => renderBranchPickItem(b, pinnedSet)).join('');
 }
 
 function renderBranchSelected() {
   const wrap = document.getElementById('salesBranchSelected');
+  const countEl = document.getElementById('salesBranchSelCount');
   if (!wrap) return;
   const codes = [...salesReport.selectedBranches];
+  if (countEl) countEl.textContent = String(codes.length);
   if (!codes.length) {
     wrap.innerHTML = '';
     return;
   }
-  wrap.innerHTML = codes.map((code) => `
-    <span class="ms-chip" title="${esc(branchLabelOf(code))}">
-      <span class="ms-chip-text">${esc(branchLabelOf(code))}</span>
-      <button type="button" class="ms-chip-x" data-remove-branch="${esc(String(code))}" aria-label="إزالة">×</button>
-    </span>`).join('');
+  wrap.innerHTML = codes.map((code) => {
+    const label = branchLabelOf(code);
+    return `
+    <span class="pick-sel-chip pick-sel-chip-branch">
+      <span class="pick-sel-chip-code">${esc(String(code))}</span>
+      <span class="pick-sel-chip-text">${esc(label)}</span>
+      <button type="button" class="pick-sel-chip-x" data-remove-branch="${esc(String(code))}" aria-label="إزالة">×</button>
+    </span>`;
+  }).join('');
+}
+
+function renderBranchUI() {
+  renderPinnedBranchesSection();
+  renderBranchList();
+  renderBranchSelected();
+  updateBranchTrigger();
+  updateBranchHint();
 }
 
 function updateBranchTrigger() {
@@ -379,21 +499,25 @@ function toggleBranch(code) {
 function selectPinnedBranches() {
   if (!salesReport.pinnedBranches.length) {
     showToast('لا توجد فروع مثبّتة — اضغط ★ بجانب الفرع لتثبيته', 'err');
-    return;
+    return false;
   }
   salesReport.pinnedBranches.forEach((b) => salesReport.selectedBranches.add(String(b.code)));
   invalidateSalesPreview();
   renderBranchUI();
+  return true;
 }
 
 function toggleBranchPin(code) {
   const c = String(code);
   if (salesReport.pinnedBranches.some((b) => String(b.code) === c)) {
     salesReport.pinnedBranches = salesReport.pinnedBranches.filter((b) => String(b.code) !== c);
+    salesReport.selectedBranches.delete(c);
   } else {
     salesReport.pinnedBranches = [...salesReport.pinnedBranches, { code: c, label: branchLabelOf(c) }];
+    salesReport.selectedBranches.add(c);
   }
   savePinnedBranches();
+  invalidateSalesPreview();
   renderBranchUI();
 }
 
@@ -434,8 +558,13 @@ function invalidateSalesPreview() {
   salesReport.lastReport = null;
   salesReport.lastFilters = null;
   const preview = document.getElementById('salesReportPreview');
-  if (preview && !preview.querySelector('.loading')) {
-    preview.innerHTML = '<p class="muted">غيّرت الفلاتر — اضغط «معاينة» لتحديث النتائج</p>';
+  if (preview && !preview.querySelector('.loading') && !preview.querySelector('.rpt2-kpis')) {
+    preview.innerHTML = `
+      <div class="report-empty">
+        <span class="report-empty-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg></span>
+        <strong>تم تغيير الفلاتر</strong>
+        <p>اضغط معاينة أو «★ تحديد المثبّتة» لتحديث النتائج</p>
+      </div>`;
   }
 }
 
@@ -491,6 +620,7 @@ function renderSalesReportTrees() {
   renderTreeList();
   renderSelectedChips();
   updateTreeTrigger();
+  renderPinnedQuickBar();
 }
 
 function renderSalesReportPreview(report) {
@@ -809,19 +939,15 @@ function initSalesReportPage() {
     });
   });
 
-  // Dropdown triggers
-  document.getElementById('salesTreeTrigger')?.addEventListener('click', () => openMsPanel('salesTreeMS'));
-  document.getElementById('salesBranchTrigger')?.addEventListener('click', () => openMsPanel('salesBranchMS'));
-
-  // Close dropdowns on outside click
-  document.addEventListener('click', (e) => {
-    if (!e.target.closest('.ms')) {
-      document.querySelectorAll('.ms-panel').forEach((p) => { p.hidden = true; });
-      document.querySelectorAll('.ms-trigger').forEach((t) => t.setAttribute('aria-expanded', 'false'));
-    }
+  document.getElementById('salesPinnedTreesGrid')?.addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-quick-tree]');
+    if (chip) toggleTree(chip.dataset.quickTree);
+  });
+  document.getElementById('salesPinnedBranchesGrid')?.addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-quick-branch]');
+    if (chip) toggleBranch(chip.dataset.quickBranch);
   });
 
-  // Trees: list interactions (select row / pin star)
   document.getElementById('salesTreeList')?.addEventListener('click', (e) => {
     const pin = e.target.closest('[data-pin-tree]');
     if (pin) { e.stopPropagation(); toggleTreePin(pin.dataset.pinTree); return; }
@@ -832,8 +958,12 @@ function initSalesReportPage() {
     const key = e.target.closest('[data-remove-tree]')?.dataset.removeTree;
     if (key) removeSelectedTree(key);
   });
+  document.getElementById('salesBranchSelected')?.addEventListener('click', (e) => {
+    const code = e.target.closest('[data-remove-branch]')?.dataset.removeBranch;
+    if (code) toggleBranch(code);
+  });
   document.getElementById('btnSalesClearTrees')?.addEventListener('click', clearSelectedTrees);
-  document.getElementById('btnSalesSelectPinned')?.addEventListener('click', selectPinnedTrees);
+  document.getElementById('btnSalesSelectAllPinned')?.addEventListener('click', selectAllPinned);
   document.getElementById('salesReportTreeSearch')?.addEventListener('input', renderTreeList);
 
   // Branches: list interactions (select row / pin star)
@@ -843,12 +973,7 @@ function initSalesReportPage() {
     const row = e.target.closest('[data-branch]');
     if (row) toggleBranch(row.dataset.branch);
   });
-  document.getElementById('salesBranchSelected')?.addEventListener('click', (e) => {
-    const code = e.target.closest('[data-remove-branch]')?.dataset.removeBranch;
-    if (code) toggleBranch(code);
-  });
   document.getElementById('btnSalesClearBranches')?.addEventListener('click', clearSelectedBranches);
-  document.getElementById('btnSalesSelectPinnedBranches')?.addEventListener('click', selectPinnedBranches);
   document.getElementById('salesBranchSearch')?.addEventListener('input', renderBranchList);
 
   document.getElementById('btnSalesReportPreview')?.addEventListener('click', () => {
@@ -856,6 +981,21 @@ function initSalesReportPage() {
   });
   document.getElementById('btnSalesReportPdf')?.addEventListener('click', () => {
     void exportSalesReportPdf();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    const page = document.getElementById('page-salesReport');
+    if (!page?.classList.contains('active')) return;
+    const salesView = document.getElementById('reportView-sales');
+    if (!salesView || salesView.classList.contains('hidden')) return;
+    if (e.target.matches('input, textarea, select')) return;
+    if (e.ctrlKey && e.key === 'Enter') {
+      e.preventDefault();
+      void runSalesReportPreview();
+    } else if (e.altKey && (e.key === 'p' || e.key === 'P')) {
+      e.preventDefault();
+      void exportSalesReportPdf();
+    }
   });
 
   // Auto-reload branches when the custom dates change
@@ -879,6 +1019,8 @@ async function loadSalesReportPage() {
     loadSalesReportTrees(),
     loadSalesReportBranches({ silent: true })
   ]);
+  applyDefaultPinnedSelection();
+  renderPinnedQuickBar();
 }
 
 initSalesReportPage();

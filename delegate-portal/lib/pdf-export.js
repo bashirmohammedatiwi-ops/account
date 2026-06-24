@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 const pdfmake = require('@digicole/pdfmake-rtl');
-const { formatRunningBalance } = require('./statement-utils');
 
 pdfmake.addFonts(require('@digicole/pdfmake-rtl/fonts/Cairo'));
 pdfmake.addFonts(require('@digicole/pdfmake-rtl/fonts/Roboto'));
@@ -88,19 +87,43 @@ const STMT = {
   line: '#cbd5e1',
   lineStrong: '#64748b',
   surface: '#f1f5f9',
-  head: '#1e3a5f',
+  head: '#115e59',
   headText: '#ffffff',
   accent: '#0f766e',
   debit: '#dc2626',
   credit: '#15803d',
   opening: '#f0fdfa',
   zebra: '#f8fafc',
-  total: '#ffffff',
-  final: '#ffffff'
+  total: '#f0fdfa',
+  final: '#ecfdf5'
 };
-/** pdfmake-rtl: العمود الأول = يمين الجدول، الأخير = يسار */
-// كشف حساب — يمين→يسار: مدين، دائن، البيان، التاريخ، رصيد الحساب
-const STMT_WIDTHS = [56, 56, '*', 50, 62];
+/**
+ * ترتيب الكتابة في المصفوفة (قبل عكس pdfmake-rtl):
+ * مدين → دائن → البيان → التاريخ
+ * مع rtl:true على الجدول يُعكس مرة واحدة دائماً → مدين يمين
+ */
+const STMT_WIDTHS = [82, 82, '*', 72];
+const STMT_COL_COUNT = 4;
+/** أحجام خطوط كشف الصناديق — أوضح للقراءة والطباعة */
+const STMT_FONT = {
+  th: 13,
+  money: 16,
+  moneyEmpty: 12,
+  desc: 15,
+  date: 13,
+  totalMoney: 17,
+  totalLabel: 16,
+  title: 15,
+  period: 13,
+  notice: 13
+};
+/** Cairo-Bold أوضح من Roboto-Medium للنصوص والأرقام */
+const STMT_TEXT_FONT = 'Cairo';
+const STMT_PAGE_WIDTH = 595.28;
+const STMT_PAGE_HEIGHT = 841.89;
+/** pdfmake حد أقصى تقريبي لارتفاع الصفحة (نقطة) */
+const STMT_MAX_PAGE_HEIGHT = 14000;
+const STMT_RED = '#dc2626';
 const INV_WIDTHS = [42, 34, 20, 22, '*', 58, 11];
 
 let logoImageCache;
@@ -332,16 +355,16 @@ function stmtTableLayout() {
   return {
     hLineWidth: (i, node) => {
       const n = node?.table?.body?.length || 0;
-      if (i === 0 || i === 1) return 0.65;
-      if (n > 3 && i === n - 2) return 1.25;
-      if (n > 2 && i === n - 1) return 0.9;
-      if (node && i === n) return 0.7;
-      return 0.2;
+      if (i === 0) return 0;
+      if (i === 1) return 0.55;
+      if (i === n) return 2;
+      return 0.15;
     },
-    vLineWidth: () => 0.2,
+    vLineWidth: () => 0.15,
     hLineColor: (i, node) => {
       const n = node?.table?.body?.length || 0;
-      if (n > 3 && i === n - 2) return STMT.debit;
+      if (i === n) return STMT_RED;
+      if (i === 1) return STMT.lineStrong;
       return STMT.line;
     },
     vLineColor: () => STMT.line,
@@ -352,30 +375,32 @@ function stmtTableLayout() {
   };
 }
 
-function stmtTh(text) {
+function stmtTh(text, opts = {}) {
   return {
     text,
+    font: STMT_TEXT_FONT,
     bold: true,
-    fontSize: 9,
-    color: STMT.headText,
-    fillColor: STMT.head,
+    fontSize: opts.fontSize || STMT_FONT.th,
+    color: opts.color || STMT.headText,
+    fillColor: opts.fill || STMT.head,
     alignment: 'center',
-    margin: [3, 7, 3, 7]
+    margin: [4, 8, 4, 8]
   };
 }
 
-function stmtTdMoney(value, fill, color) {
+function stmtTdMoney(value, fill, color, opts = {}) {
   const empty = !value || value === '—';
+  const fontSize = opts.fontSize || (empty ? STMT_FONT.moneyEmpty : STMT_FONT.money);
   return {
     text: String(value ?? '—'),
-    font: 'Roboto',
-    fontSize: empty ? 9 : 10,
+    font: STMT_TEXT_FONT,
+    fontSize,
     bold: true,
     color: color || (empty ? STMT.muted : STMT.ink),
     alignment: 'center',
     fillColor: fill || null,
     noWrap: true,
-    margin: [2, 5, 2, 5]
+    margin: [4, 9, 4, 9]
   };
 }
 
@@ -389,40 +414,43 @@ function stmtHeaderRow() {
     stmtTh('مدين'),
     stmtTh('دائن'),
     stmtTh('البيان'),
-    stmtTh('التاريخ'),
-    stmtTh('رصيد الحساب')
+    stmtTh('التاريخ')
   ];
+}
+
+function stmtTdDesc(text, fill, opts = {}) {
+  const cell = {
+    text: String(text ?? '—'),
+    font: STMT_TEXT_FONT,
+    fontSize: opts.fontSize || STMT_FONT.desc,
+    bold: true,
+    color: STMT.ink,
+    alignment: 'right',
+    fillColor: fill || null,
+    margin: opts.margin || [8, 10, 8, 10]
+  };
+  if (opts.colSpan) cell.colSpan = opts.colSpan;
+  return cell;
 }
 
 function stmtLineRow(row, rowIndex) {
   const fill = stmtRowFill(rowIndex, row.isOpening || row.isReconciliation);
-  const balText = formatRunningBalance(row.balance) || '—';
   const dateText = row.isOpening ? '' : fmtDate(row.date);
-  const descBold = row.isOpening || row.isReconciliation;
   return [
     stmtTdMoney(row.debit ? fmtNum(row.debit) : '—', fill, row.debit ? STMT.debit : null),
-    stmtTdMoney(row.credit ? fmtNum(row.credit) : '—', fill, row.credit ? STMT.credit : null),
-    {
-      text: String(row.description || '—'),
-      fontSize: 9,
-      bold: descBold,
-      color: STMT.ink,
-      alignment: 'right',
-      fillColor: fill || null,
-      margin: [5, 5, 5, 5]
-    },
+    stmtTdMoney(row.credit ? fmtNum(row.credit) : '—', fill, row.credit ? STMT.ink : null),
+    stmtTdDesc(row.description || '—', fill),
     {
       text: dateText,
-      font: 'Roboto',
-      fontSize: 9,
+      font: STMT_TEXT_FONT,
+      fontSize: STMT_FONT.date,
       bold: true,
       color: STMT.muted,
       alignment: 'center',
       fillColor: fill || null,
       noWrap: true,
-      margin: [2, 5, 2, 5]
-    },
-    stmtTdMoney(balText, fill, STMT.accent)
+      margin: [4, 7, 4, 7]
+    }
   ];
 }
 
@@ -433,20 +461,10 @@ function emptyCell() {
 function stmtTotalsTableRow(stmt) {
   const fill = STMT.total;
   return [
-    stmtTdMoney(fmtNum(stmt.totalDebit), fill, STMT.debit),
-    stmtTdMoney(fmtNum(stmt.totalCredit), fill, STMT.credit),
-    {
-      text: 'المجموع',
-      bold: true,
-      fontSize: 10,
-      color: STMT.ink,
-      alignment: 'right',
-      fillColor: fill,
-      colSpan: 2,
-      margin: [5, 6, 5, 6]
-    },
-    emptyCell(),
-    stmtTdMoney(formatRunningBalance(stmt.finalBalance) || '—', fill, STMT.ink)
+    stmtTdMoney(fmtNum(stmt.totalDebit), fill, STMT.debit, { fontSize: STMT_FONT.totalMoney }),
+    stmtTdMoney(fmtNum(stmt.totalCredit), fill, STMT.ink, { fontSize: STMT_FONT.totalMoney }),
+    stmtTdDesc('المجموع', fill, { fontSize: STMT_FONT.totalLabel, colSpan: 2, margin: [8, 11, 8, 11] }),
+    emptyCell()
   ];
 }
 
@@ -455,141 +473,198 @@ function stmtFinalTableRow(stmt) {
   const fill = STMT.final;
   const debitAmt = summary.side === 'debit' ? fmtNum(summary.amount) : '—';
   const creditAmt = summary.side === 'credit' ? fmtNum(summary.amount) : '—';
-  const sideColor = summary.side === 'debit' ? STMT.debit : (summary.side === 'credit' ? STMT.credit : STMT.accent);
   return [
-    stmtTdMoney(debitAmt, fill, summary.side === 'debit' ? STMT.debit : null),
-    stmtTdMoney(creditAmt, fill, summary.side === 'credit' ? STMT.credit : null),
-    {
-      text: summary.label || 'الرصيد النهائي',
-      bold: true,
-      fontSize: 10,
-      color: STMT.ink,
-      alignment: 'right',
-      fillColor: fill,
-      colSpan: 2,
-      margin: [5, 7, 5, 7]
-    },
-    emptyCell(),
-    stmtTdMoney(formatRunningBalance(stmt.finalBalance) || '—', fill, sideColor)
+    stmtTdMoney(debitAmt, fill, summary.side === 'debit' ? STMT.debit : null, { fontSize: STMT_FONT.totalMoney }),
+    stmtTdMoney(creditAmt, fill, summary.side === 'credit' ? STMT.ink : null, { fontSize: STMT_FONT.totalMoney }),
+    stmtTdDesc(summary.label || 'الرصيد النهائي', fill, { fontSize: STMT_FONT.totalLabel, colSpan: 2, margin: [8, 11, 8, 11] }),
+    emptyCell()
   ];
 }
 
-function stmtStatPill(label, value, accent) {
+function stmtPeriodText(stmt, meta = {}) {
+  const periodStart = stmt.periodStart || meta.period?.dateFrom;
+  const periodEnd = stmt.periodEnd || meta.period?.dateTo;
+  const start = periodStart ? fmtDate(periodStart) : null;
+  const end = periodEnd ? fmtDate(periodEnd) : null;
+  if (start && end) return start === end ? start : `${start}  →  ${end}`;
+  if (start) return `من ${start}`;
+  if (end) return `إلى ${end}`;
+  return fmtDate(new Date());
+}
+
+function stmtSpanRow(text, opts = {}) {
+  const pad = STMT_COL_COUNT - 1;
+  return [
+    {
+      text,
+      font: STMT_TEXT_FONT,
+      colSpan: STMT_COL_COUNT,
+      bold: opts.bold !== false,
+      fontSize: opts.fontSize || 13,
+      color: opts.color || STMT.headText,
+      fillColor: opts.fill || STMT.head,
+      alignment: 'center',
+      margin: opts.margin || [10, 9, 10, 9]
+    },
+    ...Array(pad).fill(null).map(() => emptyCell())
+  ];
+}
+
+/** صف عنوان الصندوق + الفترة — شريط أخضر واحد، نص في الوسط */
+function stmtBoxTitleRow(acc, periodText) {
+  const num = acc.num ? String(acc.num) : '—';
+  const name = acc.name1 ? String(acc.name1).trim() : '';
+  const title = name ? `${num} — ${name}` : num;
+  const label = periodText ? `${title}   ·   ${periodText}` : title;
+  return stmtSpanRow(label, {
+    fontSize: STMT_FONT.title,
+    margin: [10, 8, 10, 8]
+  });
+}
+
+/** فاصل رفيع بين صناديق متعددة داخل جدول واحد */
+function stmtAccountGapRow() {
+  const pad = STMT_COL_COUNT - 1;
+  return [
+    {
+      colSpan: STMT_COL_COUNT,
+      canvas: [{
+        type: 'line',
+        x1: 20,
+        y1: 3,
+        x2: STMT_PAGE_WIDTH - 48,
+        y2: 3,
+        lineWidth: 1.5,
+        lineColor: STMT_RED
+      }],
+      margin: [0, 4, 0, 2]
+    },
+    ...Array(pad).fill(null).map(() => emptyCell())
+  ];
+}
+
+/** صفوف جدول كشف حساب واحد (بدون غلاف) */
+function statementTableBody(stmt, meta = {}) {
+  const acc = stmt.account || {};
+  const lines = stmt.lines || [];
+  const periodText = stmtPeriodText(stmt, meta);
+
+  if (lines.length) {
+    return [
+      stmtBoxTitleRow(acc, periodText),
+      stmtHeaderRow(),
+      ...lines.map((row, i) => stmtLineRow(row, i)),
+      stmtTotalsTableRow(stmt),
+      stmtFinalTableRow(stmt)
+    ];
+  }
+
+  return [
+    stmtBoxTitleRow(acc, periodText),
+    stmtHeaderRow(),
+    stmtSpanRow('لا توجد حركات لهذا الحساب في الفترة المحددة', {
+      fontSize: STMT_FONT.notice,
+      bold: true,
+      color: STMT.muted,
+      fill: '#ffffff',
+      margin: [0, 10, 0, 10]
+    }),
+    stmtTotalsTableRow(stmt),
+    stmtFinalTableRow(stmt)
+  ];
+}
+
+/** غلاف جدول كشف الحساب — rtl:true يفرض معالجة موحّدة لكل الصناديق */
+function stmtTableBlock(body, opts = {}) {
   return {
-    stack: [
-      { text: label, fontSize: 7.5, bold: true, color: STMT.muted, alignment: 'center' },
-      {
-        text: value,
-        font: 'Roboto',
-        bold: true,
-        fontSize: 11,
-        color: accent || STMT.ink,
-        alignment: 'center',
-        margin: [0, 4, 0, 0]
-      }
-    ],
-    fillColor: '#ffffff',
-    margin: [5, 8, 5, 8]
+    rtl: true,
+    table: {
+      rtl: true,
+      headerRows: opts.headerRows ?? 2,
+      widths: STMT_WIDTHS,
+      body,
+      dontBreakRows: opts.dontBreakRows !== false
+    },
+    layout: stmtTableLayout()
   };
 }
 
-function statementPdfHeader(acc, periodNote, stats, index = 1, total = 1) {
-  const logo = getLogoImage();
-  const statRows = stats || [];
-  const accountNum = acc.num ? String(acc.num) : '—';
-  const accountName = acc.name1 ? String(acc.name1) : '';
-
-  const headerBand = {
-    table: {
-      widths: ['*', logo ? 44 : 0],
-      body: [[
-        {
-          stack: [
-            { text: COMPANY_NAME, fontSize: 8.5, bold: true, color: '#cbd5e1', alignment: 'right' },
-            {
-              text: 'كشف حساب — صندوق',
-              fontSize: 14,
-              bold: true,
-              color: STMT.headText,
-              alignment: 'right',
-              margin: [0, 3, 0, 0]
-            }
-          ],
-          fillColor: STMT.head,
-          margin: [14, 11, 14, 11]
-        },
-        logo
-          ? { image: logo, width: 30, alignment: 'center', margin: [6, 10, 10, 10], fillColor: STMT.head }
-          : { text: '', border: [false, false, false, false] }
-      ]]
-    },
-    layout: 'noBorders',
-    margin: [0, 0, 0, 0]
+function stmtRedDivider() {
+  return {
+    canvas: [{
+      type: 'line',
+      x1: 14,
+      y1: 0,
+      x2: STMT_PAGE_WIDTH - 28,
+      y2: 0,
+      lineWidth: 2,
+      lineColor: STMT_RED
+    }],
+    margin: [0, 14, 0, 6]
   };
+}
 
-  const accountCard = {
-    table: {
-      widths: ['*', total > 1 ? 52 : 0],
-      body: [[
-        {
-          stack: [
-            {
-              text: [
-                { text: 'حساب ', fontSize: 9, bold: true, color: STMT.muted },
-                { text: accountNum, fontSize: 11, bold: true, color: STMT.ink }
-              ],
-              alignment: 'right'
-            },
-            ...(accountName
-              ? [{ text: accountName, fontSize: 10.5, bold: true, color: STMT.ink, alignment: 'right', margin: [0, 4, 0, 0] }]
-              : []),
-            ...(periodNote
-              ? [{ text: periodNote, fontSize: 8.5, bold: true, color: STMT.muted, alignment: 'right', margin: [0, 5, 0, 0] }]
-              : [])
-          ],
-          fillColor: STMT.surface,
-          margin: [12, 10, 12, 10]
-        },
-        total > 1
-          ? {
-            stack: [
-              { text: 'صفحة', fontSize: 7.5, bold: true, color: STMT.muted, alignment: 'center' },
-              { text: `${index}/${total}`, font: 'Roboto', fontSize: 11, bold: true, color: STMT.accent, alignment: 'center', margin: [0, 3, 0, 0] }
-            ],
-            fillColor: STMT.surface,
-            margin: [6, 10, 10, 10]
-          }
-          : { text: '', border: [false, false, false, false] }
-      ]]
-    },
-    layout: {
-      hLineWidth: () => 0.55,
-      vLineWidth: () => 0.55,
-      hLineColor: () => STMT.lineStrong,
-      vLineColor: () => STMT.lineStrong
-    },
-    margin: [0, 0, 0, 8]
-  };
+function statementBlockContent(stmt, meta = {}) {
+  return stmtTableBlock(statementTableBody(stmt, meta));
+}
 
-  const statsBlock = statRows.length
-    ? {
-      table: {
-        widths: statRows.map(() => '*'),
-        body: [statRows.map(([label, value, accent]) => stmtStatPill(label, value, accent))]
-      },
-      layout: {
-        hLineWidth: () => 0.55,
-        vLineWidth: () => 0.55,
-        hLineColor: () => STMT.lineStrong,
-        vLineColor: () => STMT.lineStrong
-      },
-      margin: [0, 0, 0, 12]
-    }
-    : null;
+function estimateStatementsPageHeight(statements) {
+  const margins = 28;
+  const footer = 16;
+  let body = 0;
+  for (let i = 0; i < statements.length; i += 1) {
+    if (i > 0) body += 8;
+    const lineCount = Math.max(statements[i].lines?.length || 0, 1);
+    body += 44 + 36 + lineCount * 43 + 38 + 42;
+  }
+  return Math.min(Math.ceil((margins + footer + body) * 1.55) + 80, STMT_MAX_PAGE_HEIGHT);
+}
+
+function stmtDocFooterRow() {
+  return stmtSpanRow(COMPANY_NAME, {
+    fontSize: 7,
+    bold: true,
+    color: STMT.muted,
+    fill: '#ffffff',
+    margin: [0, 4, 0, 0]
+  });
+}
+
+function statementsContinuousDoc(statements, meta = {}) {
+  const list = (statements || []).filter(Boolean);
+  if (!list.length) {
+    return {
+      rtl: true,
+      pageSize: { width: STMT_PAGE_WIDTH, height: STMT_PAGE_HEIGHT },
+      pageMargins: [14, 14, 14, 14],
+      content: [{
+        text: 'لا توجد حسابات',
+        fontSize: 10,
+        color: STMT.muted,
+        alignment: 'center',
+        margin: [0, 20, 0, 0]
+      }]
+    };
+  }
+
+  const tableBody = [];
+  list.forEach((stmt, i) => {
+    if (i > 0) tableBody.push(stmtAccountGapRow());
+    tableBody.push(...statementTableBody(stmt, meta));
+  });
+  tableBody.push(stmtDocFooterRow());
+
+  const pageHeight = estimateStatementsPageHeight(list);
+  const tall = Math.max(pageHeight, STMT_PAGE_WIDTH + 80);
 
   return {
-    stack: [headerBand, accountCard, statsBlock].filter(Boolean),
-    margin: [0, 0, 0, 6]
+    rtl: true,
+    defaultStyle: { font: STMT_TEXT_FONT, fontSize: 9, bold: true, color: STMT.ink },
+    // pdfmake-rtl يعكس width/height — نمرّرها معكوسة للحصول على صفحة عمودية طويلة
+    pageSize: { width: tall, height: STMT_PAGE_WIDTH },
+    pageOrientation: 'portrait',
+    pageMargins: [14, 14, 14, 14],
+    content: [stmtTableBlock(tableBody, { dontBreakRows: true, headerRows: 0 })]
   };
 }
 
@@ -734,109 +809,17 @@ async function createPdfBuffer(docDefinition) {
   }
 }
 
-function stmtPdfFooter() {
-  return (currentPage, pageCount) => ({
-    columns: [
-      { text: COMPANY_NAME, fontSize: 8, bold: true, color: STMT.muted, alignment: 'right' },
-      { text: `${currentPage} / ${pageCount}`, font: 'Roboto', fontSize: 8, bold: true, color: STMT.muted, alignment: 'left' }
-    ],
-    margin: [12, 0, 12, 0]
-  });
-}
-
-function statementBaseDoc(content) {
-  return {
-    rtl: true,
-    defaultStyle: { font: 'Cairo', fontSize: 9, bold: true, color: STMT.ink },
-    pageSize: 'A4',
-    pageOrientation: 'portrait',
-    pageMargins: [14, 14, 14, 24],
-    footer: stmtPdfFooter(),
-    content
-  };
-}
-
-function statementBlock(stmt, meta = {}) {
-  const acc = stmt.account || {};
-  const lines = stmt.lines || [];
-  const openingBal = Number(stmt.openingBalance ?? 0);
-  const periodParts = [];
-  const periodStart = stmt.periodStart || meta.period?.dateFrom;
-  const periodEnd = stmt.periodEnd || meta.period?.dateTo;
-  if (periodStart && periodEnd) periodParts.push(`الفترة: ${fmtDate(periodStart)} → ${fmtDate(periodEnd)}`);
-  else if (periodStart) periodParts.push(`من ${fmtDate(periodStart)}`);
-  else if (periodEnd) periodParts.push(`إلى ${fmtDate(periodEnd)}`);
-  if (openingBal) periodParts.push(`رصيد مدور ${fmtNum(Math.abs(openingBal))}`);
-  const periodNote = periodParts.join('   ·   ');
-  const bal = Number(stmt.finalBalance ?? acc.bal ?? 0);
-  const moveCount = lines.filter((l) => !l.isOpening).length;
-  const index = meta.index || 1;
-  const total = meta.total || 1;
-
-  const tableBody = lines.length
-    ? (() => {
-      const body = [stmtHeaderRow(), ...lines.map((row, i) => stmtLineRow(row, i))];
-      body.push(stmtTotalsTableRow(stmt));
-      body.push(stmtFinalTableRow(stmt));
-      return body;
-    })()
-    : null;
-
-  return {
-    stack: [
-      statementPdfHeader(acc, periodNote, [
-        ['إجمالي مدين', fmtNum(stmt.totalDebit), STMT.debit],
-        ['إجمالي دائن', fmtNum(stmt.totalCredit), STMT.credit],
-        ['عدد الحركات', String(moveCount), STMT.ink],
-        ['رصيد الحساب', fmtNum(Math.abs(bal)), STMT.accent]
-      ], index, total),
-      tableBody
-        ? {
-          table: {
-            headerRows: 1,
-            widths: STMT_WIDTHS,
-            body: tableBody,
-            dontBreakRows: false
-          },
-          layout: stmtTableLayout()
-        }
-        : {
-          text: 'لا توجد حركات لهذا الحساب في الفترة المحددة',
-          fontSize: 10,
-          bold: true,
-          color: STMT.muted,
-          alignment: 'center',
-          margin: [0, 16, 0, 0]
-        }
-    ],
-    pageBreak: meta.pageBreak || undefined
-  };
-}
-
-function statementContent(stmt, meta = {}) {
-  return [statementBlock(stmt, meta)];
-}
-
 async function buildStatementPdf(stmt, meta = {}) {
-  return createPdfBuffer(statementBaseDoc(statementContent(stmt, meta)));
+  if (!stmt) {
+    return createPdfBuffer(statementsContinuousDoc([], meta));
+  }
+  return createPdfBuffer(statementsContinuousDoc([stmt], meta));
 }
 
-/** Multi-account statements — each fund/box on its own page, in selection order. */
+/** Multi-account statements — one continuous page, single table, tight gaps. */
 async function buildAccountStatementsPdf(statements = [], meta = {}) {
   const list = (statements || []).filter(Boolean);
-  if (!list.length) {
-    return createPdfBuffer(statementBaseDoc([
-      { text: 'لا توجد حسابات', fontSize: 10, color: STMT.muted, alignment: 'center', margin: [0, 20, 0, 0] }
-    ]));
-  }
-  const total = list.length;
-  const content = list.map((stmt, idx) => statementBlock(stmt, {
-    ...meta,
-    index: idx + 1,
-    total,
-    pageBreak: idx > 0 ? 'before' : undefined
-  }));
-  return createPdfBuffer(statementBaseDoc(content));
+  return createPdfBuffer(statementsContinuousDoc(list, meta));
 }
 
 async function buildInvoicePdf(data) {
