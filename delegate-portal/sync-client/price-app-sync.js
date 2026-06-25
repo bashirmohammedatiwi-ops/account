@@ -36,6 +36,9 @@ const PURCHASE_KINDS = [1, 3];
 
 const UPLOAD_BATCH = 300;
 const QUERY_TIMEOUT_MS = 300000;
+const PURCHASE_LINE_BATCH = 1200;
+const INCREMENTAL_BATCH_LIMIT = 200;
+const MAT_LOOKUP_CHUNK = 400;
 
 async function query(sql, timeoutMs = QUERY_TIMEOUT_MS) {
   const r = await odbcBridge.runQuery({ ...getEdariConnection(), sql, timeoutMs });
@@ -132,56 +135,137 @@ async function fetchAccountNames(accSeqs) {
   return map;
 }
 
-async function fetchPurchaseLines({ incremental = false, syncState = null } = {}) {
-  const kindSql = purchaseKindSql('i');
-  let filterSql = '';
-
-  if (incremental && syncState?.lastSyncAt) {
-    const sinceTs = sqlTimestamp(syncState.lastSyncAt);
-    const lastLineSeq = sqlInt(syncState.lastLineSeq);
-    const parts = [];
-    if (sinceTs) parts.push(`l.DtModified >= ${sinceTs}`);
-    if (lastLineSeq > 0) parts.push(`l.Seq > ${lastLineSeq}`);
-    if (parts.length) filterSql = `AND (${parts.join(' OR ')})`;
+async function fetchMatInfoBySeq(matSeqs) {
+  const map = new Map();
+  const ids = [...new Set((matSeqs || []).map(sqlInt).filter((s) => s > 0))];
+  for (const part of chunk(ids, MAT_LOOKUP_CHUNK)) {
+    if (!part.length) continue;
+    const rows = await query(`
+      SELECT Seq, Barcode, Num, Name1, SellPr4
+      FROM File13n
+      WHERE Seq IN (${part.join(',')})
+    `);
+    for (const row of rows) {
+      map.set(String(sqlInt(row.Seq)), row);
+    }
   }
+  return map;
+}
 
+function attachMatInfo(rows, matMap) {
+  return rows.map((row) => {
+    const mat = matMap.get(String(sqlInt(row.Mat))) || {};
+    return {
+      ...row,
+      Barcode: mat.Barcode ?? row.Barcode,
+      Num: mat.Num ?? row.Num,
+      Name1: mat.Name1 ?? row.Name1,
+      SellPr4: mat.SellPr4 ?? row.SellPr4,
+    };
+  });
+}
+
+/** Hot path: file14n ⋈ File15n only — File13n lookup is batched afterward (JOIN times out on nxServer). */
+async function queryPurchaseLineBatch(extraWhere, afterSeq, limit) {
+  const kindSql = purchaseKindSql('i');
   const baseCols = 'l.Seq AS LineSeq, l.BillSeq, l.BillNo, l.Mat, l.MatName, l.Quant, l.Price';
-  const joinSql = `
-    FROM file14n l
-    INNER JOIN File15n i ON i.Seq = l.BillSeq
-    LEFT JOIN File13n m ON m.Seq = l.Mat
-    WHERE (${kindSql})
-      ${filterSql}
-  `;
+  const topSql = limit > 0 ? `TOP ${limit} ` : '';
+  const cursorSql = afterSeq > 0 ? `AND l.Seq > ${afterSeq}` : '';
+  const extra = String(extraWhere || '').trim();
 
-  const selectWithSum = `${baseCols}, l.Sum`;
+  let rows;
   try {
-    return await query(`
-      SELECT ${selectWithSum},
-        i.Num AS InvNum, i."Date" AS InvDate, i.Two AS AccSeq, i.Kind AS InvKind,
-        m.Barcode, m.Num, m.Name1, m.SellPr4
-      ${joinSql}
+    rows = await query(`
+      SELECT ${topSql}${baseCols}, l."Sum" AS line_sum,
+        i.Num AS InvNum, i."Date" AS InvDate, i.Two AS AccSeq, i.Kind AS InvKind
+      FROM file14n l
+      INNER JOIN File15n i ON i.Seq = l.BillSeq
+      WHERE (${kindSql}) ${extra} ${cursorSql}
       ORDER BY l.Seq ASC
     `);
   } catch {
-    try {
-      return await query(`
-        SELECT l.BillSeq, l.BillNo, l.Mat, l.MatName, l.Quant, l.Price, l.Sum,
-          i.Num AS InvNum, i."Date" AS InvDate, i.Two AS AccSeq, i.Kind AS InvKind,
-          m.Barcode, m.Num, m.Name1, m.SellPr4
-        ${joinSql}
-        ORDER BY l.BillSeq ASC, l.BillNo ASC
-      `);
-    } catch {
-      return await query(`
-        SELECT ${baseCols},
-          i.Num AS InvNum, i."Date" AS InvDate, i.Two AS AccSeq, i.Kind AS InvKind,
-          m.Barcode, m.Num, m.Name1, m.SellPr4
-        ${joinSql}
-        ORDER BY l.BillSeq ASC, l.BillNo ASC
-      `);
-    }
+    rows = await query(`
+      SELECT ${topSql}${baseCols},
+        i.Num AS InvNum, i."Date" AS InvDate, i.Two AS AccSeq, i.Kind AS InvKind
+      FROM file14n l
+      INNER JOIN File15n i ON i.Seq = l.BillSeq
+      WHERE (${kindSql}) ${extra} ${cursorSql}
+      ORDER BY l.Seq ASC
+    `);
   }
+
+  if (!rows.length) return rows;
+  const matMap = await fetchMatInfoBySeq(rows.map((r) => r.Mat));
+  return attachMatInfo(rows, matMap);
+}
+
+function mergePurchaseLineBatch(target, batch, seenSeq) {
+  for (const row of batch) {
+    const seq = sqlInt(row.LineSeq ?? row.Seq);
+    if (seq && seenSeq.has(seq)) continue;
+    if (seq) seenSeq.add(seq);
+    target.push(row);
+  }
+}
+
+async function fetchPurchaseLines({ incremental = false, syncState = null, onProgress = null } = {}) {
+  const rows = [];
+  const seenSeq = new Set();
+
+  const notify = (msg) => {
+    if (typeof onProgress === 'function') onProgress(rows.length, msg);
+  };
+
+  if (incremental && syncState?.lastSyncAt) {
+    const lastLineSeq = sqlInt(syncState.lastLineSeq);
+    const sinceTs = sqlTimestamp(syncState.lastSyncAt);
+
+    if (lastLineSeq > 0) {
+      let cursor = lastLineSeq;
+      let batchNum = 0;
+      notify('جلب بنود المشتريات الجديدة...');
+      while (true) {
+        batchNum += 1;
+        const batch = await queryPurchaseLineBatch('', cursor, PURCHASE_LINE_BATCH);
+        if (!batch.length) break;
+        mergePurchaseLineBatch(rows, batch, seenSeq);
+        notify(`جلب بنود جديدة... ${rows.length}`);
+        const maxSeq = Math.max(...batch.map((r) => sqlInt(r.LineSeq ?? r.Seq)));
+        if (maxSeq <= cursor) break;
+        cursor = maxSeq;
+        if (batch.length < PURCHASE_LINE_BATCH) break;
+        if (batchNum >= INCREMENTAL_BATCH_LIMIT) {
+          throw new Error('تحديثات كثيرة جداً — استخدم «مزامنة كاملة»');
+        }
+      }
+    } else if (sinceTs) {
+      notify('جلب التحديثات من Edari...');
+      mergePurchaseLineBatch(
+        rows,
+        await queryPurchaseLineBatch(`AND l.DtModified >= ${sinceTs}`, 0, PURCHASE_LINE_BATCH),
+        seenSeq,
+      );
+    }
+
+    return rows;
+  }
+
+  notify('جلب حركات المشتريات...');
+  let cursor = 0;
+  let batchNum = 0;
+  while (true) {
+    batchNum += 1;
+    const batch = await queryPurchaseLineBatch('', cursor, PURCHASE_LINE_BATCH);
+    if (!batch.length) break;
+    mergePurchaseLineBatch(rows, batch, seenSeq);
+    notify(`جلب حركات المشتريات... ${rows.length} بند`);
+    const maxSeq = Math.max(...batch.map((r) => sqlInt(r.LineSeq ?? r.Seq)));
+    if (maxSeq <= cursor) break;
+    cursor = maxSeq;
+    if (batch.length < PURCHASE_LINE_BATCH) break;
+    reportProgress(1, 4, Math.min(92, 8 + batchNum), `جلب حركات المشتريات... ${rows.length} بند`);
+  }
+  return rows;
 }
 
 function mapRowsToMovements(rows, accMap) {
@@ -212,7 +296,7 @@ function mapRowsToMovements(rows, accMap) {
 
     const quantity = Number(row.Quant || 0);
     const unitPrice = Number(row.Price || 0);
-    let totalPrice = Number(row.Sum || 0);
+    let totalPrice = Number(row.line_sum ?? row.Sum ?? 0);
     if (!totalPrice && quantity && unitPrice) totalPrice = quantity * unitPrice;
 
     const supplier = accMap.get(String(sqlInt(row.AccSeq))) || '';
@@ -261,12 +345,19 @@ async function fetchPurchaseMovements({ incremental = false, syncState = null } 
   const modeLabel = incremental ? 'جلب التحديثات الجديدة...' : 'جلب كل حركات المشتريات...';
   reportProgress(1, 4, 5, modeLabel);
 
-  const allRows = await fetchPurchaseLines({ incremental, syncState });
+  const allRows = await fetchPurchaseLines({
+    incremental,
+    syncState,
+    onProgress: (count, msg) => {
+      reportProgress(1, 4, Math.min(88, 12 + Math.round(count / 80)), msg || modeLabel);
+    },
+  });
   reportProgress(1, 4, 40, `بنود خام: ${allRows.length}`);
 
   reportProgress(1, 4, 55, 'جلب أسماء الموردين...');
   const accMap = await fetchAccountNames(allRows.map((r) => r.AccSeq));
   const mapped = mapRowsToMovements(allRows, accMap);
+  mapped.matSeqs = [...new Set(allRows.map((r) => sqlInt(r.Mat)).filter((s) => s > 0))];
 
   reportProgress(
     1,
@@ -330,7 +421,27 @@ async function fetchProductCatalog() {
     FROM File13n
     WHERE SubCount = 0
   `);
+  return mapCatalogRows(rows);
+}
 
+/** Incremental sync — only materials touched by new purchase lines (not all 47k+ items). */
+async function fetchProductCatalogForMats(matSeqs) {
+  const ids = [...new Set((matSeqs || []).map(sqlInt).filter((s) => s > 0))];
+  if (!ids.length) return [];
+  const rows = [];
+  for (const part of chunk(ids, 400)) {
+    if (!part.length) continue;
+    const batch = await query(`
+      SELECT Seq, Barcode, Num, Name1, SellPr4, InTot, OutTot
+      FROM File13n
+      WHERE Seq IN (${part.join(',')})
+    `);
+    rows.push(...batch);
+  }
+  return mapCatalogRows(rows);
+}
+
+function mapCatalogRows(rows) {
   const map = new Map();
   for (const row of rows) {
     const barcode = resolveMaterialBarcode(row);
@@ -427,16 +538,22 @@ async function main(options = {}) {
 
   if (!incremental) {
     reportProgress(1, 4, 92, 'جلب مشتريات بدون تفاصيل فواتير...');
-    const aggregate = await fetchAggregatePurchaseMovements();
-    if (aggregate.movements.length) {
-      purchaseData.movements.push(...aggregate.movements);
-      purchaseData.products = mergeProducts(purchaseData.products || [], aggregate.products);
-      purchaseData.aggregateMovements = aggregate.count;
+    try {
+      const aggregate = await fetchAggregatePurchaseMovements();
+      if (aggregate.movements.length) {
+        purchaseData.movements.push(...aggregate.movements);
+        purchaseData.products = mergeProducts(purchaseData.products || [], aggregate.products);
+        purchaseData.aggregateMovements = aggregate.count;
+      }
+    } catch (err) {
+      console.error(`تحذير: تعذر جلب مشتريات مجمّعة: ${err.message || err}`);
     }
   }
 
-  reportProgress(2, 4, 0, 'قراءة الأسعار والرصيد...');
-  const catalogProducts = await fetchProductCatalog();
+  reportProgress(2, 4, 0, incremental ? 'تحديث أسعار المواد المتأثرة...' : 'قراءة الأسعار والرصيد...');
+  const catalogProducts = incremental
+    ? await fetchProductCatalogForMats(purchaseData.matSeqs)
+    : await fetchProductCatalog();
   const products = mergeProducts(purchaseData.products, catalogProducts);
   reportProgress(2, 4, 100, `منتجات: ${products.length}`);
 
@@ -512,6 +629,7 @@ module.exports = {
   fetchPurchaseMovements,
   fetchAggregatePurchaseMovements,
   fetchProductCatalog,
+  fetchProductCatalogForMats,
   loadSyncState,
   saveSyncState,
 };

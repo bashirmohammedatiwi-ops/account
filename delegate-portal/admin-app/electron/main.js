@@ -900,6 +900,7 @@ ipcMain.handle('run-background-sync-now', async () => {
 });
 
 let activePriceSyncPromise = null;
+const PRICE_SYNC_TIMEOUT_MS = 20 * 60 * 1000;
 
 function runPriceAppSyncScript({ serverUrl, syncKey, mode } = {}) {
   if (activePriceSyncPromise) return activePriceSyncPromise;
@@ -910,6 +911,7 @@ function runPriceAppSyncScript({ serverUrl, syncKey, mode } = {}) {
     const nodeBin = getNodeBin();
     let stdout = '';
     let stderr = '';
+    let settled = false;
     const syncTarget = String(serverUrl || 'http://187.124.23.65:5000').replace(/\/$/, '');
     const syncMode = mode === 'full' ? 'full' : 'incremental';
     const syncStateFile = path.join(app.getPath('userData'), 'price-sync-state.json');
@@ -927,6 +929,21 @@ function runPriceAppSyncScript({ serverUrl, syncKey, mode } = {}) {
       }),
       windowsHide: true,
     });
+
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      activePriceSyncPromise = null;
+      try { child.kill('SIGTERM'); } catch { /* ignore */ }
+      reject(new Error('انتهت مهلة مزامنة الأسعار (20 دقيقة) — جرّب «مزامنة كاملة» أو تحقق أن EdariNX يعمل'));
+    }, PRICE_SYNC_TIMEOUT_MS);
+
+    const finish = (fn) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      fn();
+    };
 
     child.stdout.on('data', (d) => {
       const text = d.toString();
@@ -947,36 +964,40 @@ function runPriceAppSyncScript({ serverUrl, syncKey, mode } = {}) {
     });
 
     child.on('error', (err) => {
-      activePriceSyncPromise = null;
-      reject(err);
+      finish(() => {
+        activePriceSyncPromise = null;
+        reject(err);
+      });
     });
 
     child.on('close', (code) => {
-      activePriceSyncPromise = null;
-      if (code !== 0) {
-        const errFromStderr = stderr
-          .trim()
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter(Boolean)
-          .pop();
-        const errFromStdout = stdout
-          .trim()
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter((line) => line && !line.startsWith('@PROGRESS|'))
-          .pop();
-        reject(new Error(errFromStderr || errFromStdout || 'فشلت مزامنة الأسعار'));
-        return;
-      }
-      const jsonLine = stdout.split(/\r?\n/).reverse().find((line) => line.startsWith('@SYNC_RESULT|'));
-      if (jsonLine) {
-        try {
-          resolve(JSON.parse(jsonLine.slice('@SYNC_RESULT|'.length)));
+      finish(() => {
+        activePriceSyncPromise = null;
+        if (code !== 0) {
+          const errFromStderr = stderr
+            .trim()
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .pop();
+          const errFromStdout = stdout
+            .trim()
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter((line) => line && !line.startsWith('@PROGRESS|'))
+            .pop();
+          reject(new Error(errFromStderr || errFromStdout || 'فشلت مزامنة الأسعار'));
           return;
-        } catch { /* fall through */ }
-      }
-      resolve({ ok: true });
+        }
+        const jsonLine = stdout.split(/\r?\n/).reverse().find((line) => line.startsWith('@SYNC_RESULT|'));
+        if (jsonLine) {
+          try {
+            resolve(JSON.parse(jsonLine.slice('@SYNC_RESULT|'.length)));
+            return;
+          } catch { /* fall through */ }
+        }
+        resolve({ ok: true });
+      });
     });
   });
 
