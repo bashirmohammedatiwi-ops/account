@@ -15,6 +15,43 @@ function getChildren(parentSeq) {
   ).all(String(parentSeq));
 }
 
+/** كل الحسابات النهائية (بدون فروع) تحت شجرة أو مجلد */
+function getLeafDescendants(rootSeq) {
+  const leaves = [];
+  const queue = [String(rootSeq)];
+  while (queue.length) {
+    const parent = queue.shift();
+    const kids = getChildren(parent);
+    for (const kid of kids) {
+      if (Number(kid.sub_count) > 0) {
+        queue.push(String(kid.seq));
+      } else {
+        leaves.push(kid);
+      }
+    }
+  }
+  return leaves.sort((a, b) => String(a.num).localeCompare(String(b.num), 'ar'));
+}
+
+/** مسار المجلدات بين الشجرة والزبون — مثل: الصليخ */
+function getGroupPath(leafSeq, rootSeq) {
+  const parts = [];
+  let current = String(leafSeq);
+  const root = String(rootSeq);
+  const seen = new Set();
+  while (current && current !== root && !seen.has(current)) {
+    seen.add(current);
+    const row = db.prepare('SELECT master_seq FROM accounts WHERE seq = ?').get(current);
+    if (!row) break;
+    const master = String(row.master_seq || '0');
+    if (!master || master === '0' || master === root) break;
+    const parent = db.prepare('SELECT name1 FROM accounts WHERE seq = ?').get(master);
+    if (parent?.name1) parts.unshift(parent.name1);
+    current = master;
+  }
+  return parts.join(' / ');
+}
+
 function getDescendantSeqs(rootSeq) {
   const all = [];
   const queue = [String(rootSeq)];
@@ -504,6 +541,8 @@ function getSyncStatus() {
 
 module.exports = {
   getChildren,
+  getLeafDescendants,
+  getGroupPath,
   getDescendantSeqs,
   agentAllowedSeqs,
   canAgentAccess,
