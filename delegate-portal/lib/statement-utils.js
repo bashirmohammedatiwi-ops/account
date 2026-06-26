@@ -550,19 +550,39 @@ function resolvePeriodOpeningBalance(account, allRows, dateFrom, dateTo) {
 /**
  * نافذة الكشف التراكمي — تطابق النظام الإداري (Edari) تماماً:
  *
- * يعرض Edari كشف الحساب بكل حركاته من الصفر دون فلترة ودون سطر "رصيد مدور".
- * الرصيد الجاري يُبنى تراكمياً من أول حركة، والمجموع النهائي يساوي الرصيد الحالي.
+ * في Edari قد يحمل الحساب رصيداً افتتاحياً مُسجَّلاً ضمن Tot1/Tot2 (الإجمالي
+ * التراكمي مدين/دائن) دون أن يأتي كسطر حركة في File12n. لذلك الرصيد الافتتاحي
+ * الصحيح = (الإجمالي التراكمي) − (مجموع الحركات المزامَنة) لكل جانب.
  *
- * لذلك: لا نفلتر الحركات بـ FixDate، ولا نُضيف رصيداً افتتاحياً مصطنعاً.
- * يبقى رصيد افتتاحي فقط إذا كان مجموع الحركات لا يطابق الرصيد الحالي
- * (أي توجد حركات سابقة غير مزامَنة) — عندها نُكمل الفرق كي يبقى المجموع صحيحاً.
+ * مصدر الحقيقة بالترتيب:
+ *   1) Tot1/Tot2 (الأدق — يطابق ترويسة Edari)
+ *   2) Bal (احتياطي إذا غابت Tot1/Tot2)
+ *
+ * هذا يضمن أن: المجموع النهائي للكشف = Tot2 − Tot1 = الرصيد الحقيقي،
+ * وأن إجمالي المدين/الدائن في التذييل يطابق Edari بالضبط.
  */
 function resolveCumulativeStatementWindow(account, rows = []) {
-  const accBal = resolveAccountNetBalance(account);
   const movementRows = rows;
 
-  // الفرق بين الرصيد الفعلي ومجموع الحركات المزامَنة (عادةً صفر)
-  const openingBalance = accBal - netMovementAmount(movementRows);
+  const tot1 = parseAmount(account?.tot1 ?? account?.Tot1); // إجمالي مدين تراكمي
+  const tot2 = parseAmount(account?.tot2 ?? account?.Tot2); // إجمالي دائن تراكمي
+
+  const movDebit = sumMovementAmount(movementRows, 'debit');
+  const movCredit = sumMovementAmount(movementRows, 'credit');
+
+  let openingBalance;
+
+  if (tot1 > 0 || tot2 > 0) {
+    // رصيد افتتاحي مدين = ما في Tot1 زيادةً عن حركات المدين المزامَنة
+    const openingDebit = Math.max(0, tot1 - movDebit);
+    const openingCredit = Math.max(0, tot2 - movCredit);
+    // الافتتاح كرصيد: دائن موجب، مدين سالب
+    openingBalance = openingCredit - openingDebit;
+  } else {
+    // احتياطي: الرصيد الحالي ناقص صافي الحركات
+    const accBal = resolveAccountNetBalance(account);
+    openingBalance = accBal - netMovementAmount(movementRows);
+  }
 
   let openingNote = '';
   if (Math.abs(openingBalance) >= 1) {
