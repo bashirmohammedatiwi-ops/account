@@ -108,7 +108,27 @@ function migrateSchema() {
   }
   migrateInvoiceLinesUniqueKey();
   migrateInvoiceDatesToIso();
+  migrateJournalDatesToIso();
   require('./commerce-schema').migrateCommerceSchema(db);
+}
+
+function migrateJournalDatesToIso() {
+  const { normalizeEdariDateIso } = require('./date-utils');
+  const rows = db.prepare(`
+    SELECT seq, acc_seq, tx_date FROM journal
+    WHERE tx_date LIKE '%/%' OR tx_date LIKE '%-%-% %:%'
+  `).all();
+  if (!rows.length) return;
+  const upd = db.prepare('UPDATE journal SET tx_date = ? WHERE seq = ? AND acc_seq = ?');
+  const tx = db.transaction(() => {
+    for (const r of rows) {
+      const norm = normalizeEdariDateIso(r.tx_date);
+      if (norm && norm !== String(r.tx_date).slice(0, 10)) {
+        upd.run(norm, r.seq, r.acc_seq);
+      }
+    }
+  });
+  tx();
 }
 
 function migrateInvoiceDatesToIso() {

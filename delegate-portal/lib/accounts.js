@@ -148,13 +148,15 @@ function getStatementForAccount(accSeq) {
   const { totalDebit, totalCredit } = resolveStatementTotals({
     lines: stmt.lines,
     stmt,
-    account
+    account,
+    preferLineTotals: true
   });
   const finalBalance = resolveFinalBalance({
     accountBal: account.bal,
     totalDebit,
     totalCredit,
-    stmtFinalBalance: stmt.finalBalance
+    stmtFinalBalance: stmt.finalBalance,
+    preferLineBalance: true
   });
   const debtAmount = resolveDebtDisplayAmount({
     finalBalance,
@@ -271,7 +273,8 @@ function mapJournalRow(j) {
   return {
     seq: String(j.Seq ?? j.seq).replace(/[^0-9]/g, ''),
     acc_seq: String(j.Acc ?? j.acc_seq ?? '').replace(/[^0-9]/g, ''),
-    tx_date: j.Date ?? j.tx_date ?? j.DtCreated ?? '',
+    tx_date: normalizeEdariDateIso(j.Date ?? j.tx_date ?? j.DtCreated ?? '')
+      || String(j.Date ?? j.tx_date ?? j.DtCreated ?? '').trim(),
     am: Number(j.Am ?? j.am ?? 0),
     is_debit: dept === 'True' || dept === true || dept === 1 ? 1 : 0,
     exp1: String(j.Exp1 ?? j.exp1 ?? j.Remarks ?? j.remarks ?? '').trim(),

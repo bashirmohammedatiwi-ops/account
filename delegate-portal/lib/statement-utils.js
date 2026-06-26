@@ -29,19 +29,28 @@ function parseEdariDate(value) {
   const raw = String(value || '').trim().replace(' 00:00:00', '');
   if (!raw || raw.startsWith('12/30/1899')) return null;
 
+  // ISO YYYY-MM-DD
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    const d = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+
+  // DD/MM/YYYY — تنسيق Edari/العراق (يجب قبل new Date() التي تفسر MM/DD)
+  const slash = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (slash) {
+    const day = Number(slash[1]);
+    const month = Number(slash[2]);
+    const year = Number(slash[3]);
+    if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+      const d = new Date(year, month - 1, day);
+      if (!Number.isNaN(d.getTime())) return d;
+    }
+  }
+
   let d = new Date(raw);
   if (!Number.isNaN(d.getTime())) return d;
 
-  const parts = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-  if (parts) {
-    const first = Number(parts[1]);
-    const second = Number(parts[2]);
-    const year = Number(parts[3]);
-    if (first > 12) d = new Date(year, second - 1, first);
-    else if (second > 12) d = new Date(year, first - 1, second);
-    else d = new Date(year, second - 1, first);
-    if (!Number.isNaN(d.getTime())) return d;
-  }
   return null;
 }
 
@@ -271,11 +280,18 @@ function sumLineAmounts(lines, field) {
 }
 
 /** إجماليات الكشف — Tot1/Tot2 من Edari (تشمل رصيد مدور) أو مجموع الأسطر */
-function resolveStatementTotals({ lines = [], stmt = {}, account = {} } = {}) {
+function resolveStatementTotals({ lines = [], stmt = {}, account = {}, preferLineTotals = false } = {}) {
   const lineDebit = sumLineAmounts(lines, 'debit');
   const lineCredit = sumLineAmounts(lines, 'credit');
   const edariDebit = parseAmount(account.tot1);
   const edariCredit = parseAmount(account.tot2);
+
+  if (preferLineTotals || lineDebit > 0 || lineCredit > 0) {
+    return {
+      totalDebit: lineDebit || parseAmount(stmt.totalDebit),
+      totalCredit: lineCredit || parseAmount(stmt.totalCredit)
+    };
+  }
 
   if (edariDebit > 0) {
     return {
@@ -290,14 +306,17 @@ function resolveStatementTotals({ lines = [], stmt = {}, account = {} } = {}) {
   };
 }
 
-function resolveFinalBalance({ accountBal, totalDebit, totalCredit, stmtFinalBalance }) {
+function resolveFinalBalance({ accountBal, totalDebit, totalCredit, stmtFinalBalance, preferLineBalance = false }) {
+  const stmt = parseAmount(stmtFinalBalance);
+  if (preferLineBalance && stmt !== 0) return stmt;
+
   const net = parseAmount(totalDebit) - parseAmount(totalCredit);
   const fromTotals = net > 0 ? -net : (net < 0 ? Math.abs(net) : 0);
   const acc = parseAmount(accountBal);
-  const stmt = parseAmount(stmtFinalBalance);
 
   if (acc !== 0 && Math.abs(Math.abs(acc) - Math.abs(fromTotals)) <= 1) return acc;
   if (stmt !== 0 && Math.abs(Math.abs(stmt) - Math.abs(fromTotals)) <= 1) return stmt;
+  if (preferLineBalance) return stmt;
   return fromTotals;
 }
 
