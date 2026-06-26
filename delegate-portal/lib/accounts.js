@@ -91,12 +91,52 @@ function getAssignableTrees() {
   `).all();
 }
 
+/**
+ * حركات الحساب — تشمل حركات كل الأحفاد إذا كان حساباً أباً (sub_count > 0)،
+ * تماماً مثل كشف الحساب في Edari الذي يجمّع حركات الفروع تحت الأب.
+ * للزبون النهائي (sub_count = 0) تُرجَع حركاته فقط.
+ */
+function getAccountJournalRows(account) {
+  const isParent = Number(account.sub_count) > 0;
+  if (!isParent) {
+    return db.prepare(
+      'SELECT * FROM journal WHERE acc_seq = ? ORDER BY tx_date, seq'
+    ).all(String(account.seq));
+  }
+
+  const seqs = getDescendantSeqs(account.seq);
+  if (seqs.length <= 1) {
+    return db.prepare(
+      'SELECT * FROM journal WHERE acc_seq = ? ORDER BY tx_date, seq'
+    ).all(String(account.seq));
+  }
+
+  const placeholders = seqs.map(() => '?').join(',');
+  const nameBySeq = new Map();
+  for (const s of seqs) {
+    const a = db.prepare('SELECT name1 FROM accounts WHERE seq = ?').get(String(s));
+    if (a?.name1) nameBySeq.set(String(s), a.name1);
+  }
+  const rows = db.prepare(
+    `SELECT * FROM journal WHERE acc_seq IN (${placeholders}) ORDER BY tx_date, seq`
+  ).all(...seqs);
+
+  // وسم كل حركة بالفرع المصدر (يظهر في عمود الفرع بالكشف)
+  for (const row of rows) {
+    if (String(row.acc_seq) !== String(account.seq)) {
+      const branchName = nameBySeq.get(String(row.acc_seq));
+      if (branchName && !String(row.exp2 || '').trim()) {
+        row.exp2 = branchName;
+      }
+    }
+  }
+  return rows;
+}
+
 function getStatementForAccount(accSeq) {
   const account = db.prepare('SELECT * FROM accounts WHERE seq = ?').get(String(accSeq));
   if (!account) return null;
-  const rows = db.prepare(
-    'SELECT * FROM journal WHERE acc_seq = ? ORDER BY tx_date, seq'
-  ).all(String(accSeq));
+  const rows = getAccountJournalRows(account);
 
   const {
     buildStatementLines,

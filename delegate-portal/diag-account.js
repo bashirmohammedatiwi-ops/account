@@ -53,10 +53,45 @@ console.log('Tot1 (مدين Edari):', account.tot1, '| Tot2 (دائن Edari):', 
 console.log('FixDate:', account.fix_date, '| FixBal:', account.fix_bal);
 console.log('last_match_seq:', account.last_match_seq, '| last_match_date:', account.last_match_date);
 
-const rows = db.prepare('SELECT * FROM journal WHERE acc_seq = ? ORDER BY tx_date, seq').all(String(account.seq));
+// كشف الفروع/الأحفاد
+function descendants(rootSeq) {
+  const all = [];
+  const queue = [String(rootSeq)];
+  while (queue.length) {
+    const s = queue.shift();
+    all.push(s);
+    const kids = db.prepare('SELECT seq FROM accounts WHERE master_seq = ?').all(s);
+    for (const k of kids) queue.push(String(k.seq));
+  }
+  return all;
+}
+
+const isParent = Number(account.sub_count) > 0;
+const allSeqs = descendants(account.seq);
+
+console.log('\n═══════════ الشجرة ═══════════');
+console.log('هل الحساب أب (sub_count>0)؟', isParent ? 'نعم ⚠️' : 'لا (زبون نهائي)');
+console.log('عدد الأحفاد (شامل نفسه):', allSeqs.length);
+if (allSeqs.length > 1) {
+  console.log('الفروع:');
+  for (const s of allSeqs) {
+    const a = db.prepare('SELECT seq, num, name1, bal, sub_count FROM accounts WHERE seq = ?').get(s);
+    const cnt = db.prepare('SELECT COUNT(*) c FROM journal WHERE acc_seq = ?').get(s).c;
+    if (a) console.log(`  seq=${a.seq} num=${a.num} | ${a.name1} | bal=${a.bal} | حركات=${cnt}`);
+  }
+}
+
+// حركات الحساب وحده
+const ownRows = db.prepare('SELECT * FROM journal WHERE acc_seq = ? ORDER BY tx_date, seq').all(String(account.seq));
+// حركات شاملة الأحفاد
+const ph = allSeqs.map(() => '?').join(',');
+const allRows = db.prepare(`SELECT * FROM journal WHERE acc_seq IN (${ph}) ORDER BY tx_date, seq`).all(...allSeqs);
+const rows = isParent ? allRows : ownRows;
 
 console.log('\n═══════════ الحركات ═══════════');
-console.log('عدد الحركات في DB:', rows.length);
+console.log('حركات الحساب وحده:', ownRows.length);
+console.log('حركات شاملة الفروع:', allRows.length);
+console.log('المستخدمة في الحساب:', rows.length);
 
 let sumDebit = 0;
 let sumCredit = 0;
