@@ -320,16 +320,17 @@ function resolveFinalBalance({ accountBal, totalDebit, totalCredit, stmtFinalBal
   return fromTotals;
 }
 
-function buildOpeningLine(openingBalance, cutoff) {
+function buildOpeningLine(openingBalance, cutoff, options = {}) {
   const balance = parseAmount(openingBalance);
   const debit = balance < 0 ? Math.abs(balance) : 0;
   const credit = balance > 0 ? balance : 0;
   if (!debit && !credit) return null;
+  const description = String(options.note || options.description || '').trim() || 'رصيد مدور';
   return {
     seq: null,
     debit,
     credit,
-    description: 'رصيد مدور',
+    description,
     date: '',
     billNum: null,
     billSeq: null,
@@ -546,6 +547,47 @@ function resolvePeriodOpeningBalance(account, allRows, dateFrom, dateTo) {
   return balanceAtPeriodStartFromFix(allRows, fixBal, fixDayEnd, periodStart);
 }
 
+/**
+ * نافذة الكشف التراكمي — مثل Edari:
+ * FixDate+FixBal → رصيد مدور (الديون السابقة) ثم حركات من FixDate فصاعداً.
+ * بدون تثبيت → رصيد ضمني إذا Bal لا يساوي مجموع الحركات.
+ */
+function resolveCumulativeStatementWindow(account, rows = []) {
+  const fixBalRaw = parseAmount(account?.fix_bal ?? account?.fixBal);
+  const fixDateRaw = String(account?.fix_date ?? account?.fixDate ?? '').trim();
+  const fixDateValid = isValidFixDate(fixDateRaw);
+  const accBal = resolveAccountNetBalance(account);
+  const impliedOpening = accBal - netMovementAmount(rows);
+
+  let openingBalance = 0;
+  let movementRows = rows;
+  let openingNote = '';
+  let periodCutoff = null;
+
+  if (fixDateValid) {
+    periodCutoff = { date: fixDateRaw, seq: '', source: 'fix_date' };
+    movementRows = rows.filter((row) => isOnOrAfterPeriodStart(row, periodCutoff));
+
+    if (fixBalRaw !== 0) {
+      openingBalance = normalizeCarriedBalance(fixBalRaw, account, { fromFixBal: true });
+      openingNote = `رصيد مدور · أرصدة سابقة حتى ${fixDateRaw}`;
+    } else {
+      openingBalance = computeBalanceThroughCutoff(rows, periodCutoff);
+      if (openingBalance !== 0) {
+        openingNote = `رصيد مدور · حتى ${fixDateRaw}`;
+      }
+    }
+  } else if (Math.abs(impliedOpening) >= 1) {
+    openingBalance = impliedOpening;
+    openingNote = 'رصيد مدور · أرصدة سابقة';
+  } else if (fixBalRaw !== 0) {
+    openingBalance = normalizeCarriedBalance(fixBalRaw, account, { fromFixBal: true });
+    openingNote = 'رصيد مدور';
+  }
+
+  return { openingBalance, movementRows, periodCutoff, openingNote };
+}
+
 module.exports = {
   parseAmount,
   parseJournalAmount,
@@ -566,6 +608,7 @@ module.exports = {
   computeOpeningBalance,
   resolveOpeningBalance,
   resolvePeriodOpeningBalance,
+  resolveCumulativeStatementWindow,
   buildJournalDescription,
   resolveStatementPeriod,
   isBeforePeriodStart,

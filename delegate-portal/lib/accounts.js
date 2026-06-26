@@ -106,38 +106,25 @@ function getStatementForAccount(accSeq) {
     resolveStatementTotals,
     resolveFinalBalance,
     buildOpeningLine,
-    isValidFixDate,
     resolveStatementPeriod,
-    parseAmount,
-    isDebitRow,
-    normalizeCarriedBalance
+    resolveCumulativeStatementWindow
   } = require('./statement-utils');
   const { resolveLastMatchCutoff, hasMatchCutoff } = require('./reconciliation-utils');
 
   const cutoff = resolveLastMatchCutoff(account, rows);
   const matchAvailable = hasMatchCutoff(account, rows);
 
-  // Edari: كل حركات الحساب — لا فلترة FixDate؛ رصيد مدور فقط عند FixBal وعدم وجود مدين
-  const filteredRows = rows;
-  const periodCutoff = isValidFixDate(account.fix_date)
-    ? { date: account.fix_date, seq: '', source: 'fix_date' }
-    : null;
-
-  const hasDebitMovements = rows.some((row) => {
-    const am = parseAmount(row.am);
-    return am > 0 && isDebitRow(row);
-  });
-
-  let openingBalance = 0;
-  const fixBal = parseAmount(account.fix_bal);
-  if (!hasDebitMovements && fixBal !== 0) {
-    openingBalance = normalizeCarriedBalance(fixBal, account);
-  }
+  const {
+    openingBalance,
+    movementRows: filteredRows,
+    periodCutoff,
+    openingNote
+  } = resolveCumulativeStatementWindow(account, rows);
 
   const stmt = buildStatementLines(filteredRows, { openingBalance });
 
   const openingLine = openingBalance !== 0
-    ? buildOpeningLine(openingBalance, periodCutoff)
+    ? buildOpeningLine(openingBalance, periodCutoff, { note: openingNote })
     : null;
   if (openingLine) {
     stmt.lines.unshift(openingLine);
