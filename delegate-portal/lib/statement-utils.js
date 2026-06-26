@@ -548,41 +548,38 @@ function resolvePeriodOpeningBalance(account, allRows, dateFrom, dateTo) {
 }
 
 /**
- * نافذة الكشف التراكمي — مثل Edari:
- * FixDate+FixBal → رصيد مدور (الديون السابقة) ثم حركات من FixDate فصاعداً.
- * بدون تثبيت → رصيد ضمني إذا Bal لا يساوي مجموع الحركات.
+ * نافذة الكشف التراكمي.
+ *
+ * مبدأ أساسي: الرصيد الحالي (Bal) من Edari هو المصدر الموثوق.
+ * رصيد الافتتاح يُشتق دائماً من المعادلة المحاسبية:
+ *   رصيد الافتتاح = الرصيد الحالي − صافي حركات الفترة المعروضة
+ * هذا يضمن أن: مجموع الكشف (افتتاح + حركات) = الرصيد الحالي دائماً،
+ * بغضّ النظر عن قيمة FixBal المخزّنة (قد تكون قديمة أو بإشارة خاطئة).
+ *
+ * FixDate يُستخدم فقط لتحديد أي الحركات تظهر كأسطر منفصلة؛ ما قبله
+ * يُجمَّع في سطر "رصيد مدور".
  */
 function resolveCumulativeStatementWindow(account, rows = []) {
-  const fixBalRaw = parseAmount(account?.fix_bal ?? account?.fixBal);
   const fixDateRaw = String(account?.fix_date ?? account?.fixDate ?? '').trim();
   const fixDateValid = isValidFixDate(fixDateRaw);
   const accBal = resolveAccountNetBalance(account);
-  const impliedOpening = accBal - netMovementAmount(rows);
 
-  let openingBalance = 0;
   let movementRows = rows;
-  let openingNote = '';
   let periodCutoff = null;
 
   if (fixDateValid) {
     periodCutoff = { date: fixDateRaw, seq: '', source: 'fix_date' };
     movementRows = rows.filter((row) => isOnOrAfterPeriodStart(row, periodCutoff));
+  }
 
-    if (fixBalRaw !== 0) {
-      openingBalance = normalizeCarriedBalance(fixBalRaw, account, { fromFixBal: true });
-      openingNote = `رصيد مدور · أرصدة سابقة حتى ${fixDateRaw}`;
-    } else {
-      openingBalance = computeBalanceThroughCutoff(rows, periodCutoff);
-      if (openingBalance !== 0) {
-        openingNote = `رصيد مدور · حتى ${fixDateRaw}`;
-      }
-    }
-  } else if (Math.abs(impliedOpening) >= 1) {
-    openingBalance = impliedOpening;
-    openingNote = 'رصيد مدور · أرصدة سابقة';
-  } else if (fixBalRaw !== 0) {
-    openingBalance = normalizeCarriedBalance(fixBalRaw, account, { fromFixBal: true });
-    openingNote = 'رصيد مدور';
+  // رصيد الافتتاح = الرصيد الحالي − صافي الحركات المعروضة (يطابق الرصيد دائماً)
+  const openingBalance = accBal - netMovementAmount(movementRows);
+
+  let openingNote = '';
+  if (Math.abs(openingBalance) >= 1) {
+    openingNote = fixDateValid
+      ? `رصيد مدور · أرصدة سابقة حتى ${fixDateRaw}`
+      : 'رصيد مدور · أرصدة سابقة';
   }
 
   return { openingBalance, movementRows, periodCutoff, openingNote };
