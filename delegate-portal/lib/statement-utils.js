@@ -548,41 +548,28 @@ function resolvePeriodOpeningBalance(account, allRows, dateFrom, dateTo) {
 }
 
 /**
- * نافذة الكشف التراكمي.
+ * نافذة الكشف التراكمي — تطابق النظام الإداري (Edari) تماماً:
  *
- * مبدأ أساسي: الرصيد الحالي (Bal) من Edari هو المصدر الموثوق.
- * رصيد الافتتاح يُشتق دائماً من المعادلة المحاسبية:
- *   رصيد الافتتاح = الرصيد الحالي − صافي حركات الفترة المعروضة
- * هذا يضمن أن: مجموع الكشف (افتتاح + حركات) = الرصيد الحالي دائماً،
- * بغضّ النظر عن قيمة FixBal المخزّنة (قد تكون قديمة أو بإشارة خاطئة).
+ * يعرض Edari كشف الحساب بكل حركاته من الصفر دون فلترة ودون سطر "رصيد مدور".
+ * الرصيد الجاري يُبنى تراكمياً من أول حركة، والمجموع النهائي يساوي الرصيد الحالي.
  *
- * FixDate يُستخدم فقط لتحديد أي الحركات تظهر كأسطر منفصلة؛ ما قبله
- * يُجمَّع في سطر "رصيد مدور".
+ * لذلك: لا نفلتر الحركات بـ FixDate، ولا نُضيف رصيداً افتتاحياً مصطنعاً.
+ * يبقى رصيد افتتاحي فقط إذا كان مجموع الحركات لا يطابق الرصيد الحالي
+ * (أي توجد حركات سابقة غير مزامَنة) — عندها نُكمل الفرق كي يبقى المجموع صحيحاً.
  */
 function resolveCumulativeStatementWindow(account, rows = []) {
-  const fixDateRaw = String(account?.fix_date ?? account?.fixDate ?? '').trim();
-  const fixDateValid = isValidFixDate(fixDateRaw);
   const accBal = resolveAccountNetBalance(account);
+  const movementRows = rows;
 
-  let movementRows = rows;
-  let periodCutoff = null;
-
-  if (fixDateValid) {
-    periodCutoff = { date: fixDateRaw, seq: '', source: 'fix_date' };
-    movementRows = rows.filter((row) => isOnOrAfterPeriodStart(row, periodCutoff));
-  }
-
-  // رصيد الافتتاح = الرصيد الحالي − صافي الحركات المعروضة (يطابق الرصيد دائماً)
+  // الفرق بين الرصيد الفعلي ومجموع الحركات المزامَنة (عادةً صفر)
   const openingBalance = accBal - netMovementAmount(movementRows);
 
   let openingNote = '';
   if (Math.abs(openingBalance) >= 1) {
-    openingNote = fixDateValid
-      ? `رصيد مدور · أرصدة سابقة حتى ${fixDateRaw}`
-      : 'رصيد مدور · أرصدة سابقة';
+    openingNote = 'رصيد مدور · أرصدة سابقة';
   }
 
-  return { openingBalance, movementRows, periodCutoff, openingNote };
+  return { openingBalance, movementRows, periodCutoff: null, openingNote };
 }
 
 module.exports = {
