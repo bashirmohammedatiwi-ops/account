@@ -13,7 +13,7 @@ const { debtStatusFromBalance, balanceSummaryLabel } = require('../lib/statement
 const { getPublicBaseUrl } = require('../lib/public-url');
 const { runLocalSync, listEdariTrees, listEdariMaterialTrees, queryEdariSalesReport } = require('../lib/sync-runner');
 const { queryAdminSalesReport, listReportTrees, listSalesBranches, parseTreeSeqList } = require('../lib/admin-sales-report');
-const { buildTreeSalesReportPdf } = require('../lib/pdf-export');
+const { buildTreeSalesReportPdf, buildTreeSalesReportSummaryPdf } = require('../lib/pdf-export');
 
 const router = express.Router();
 
@@ -250,6 +250,9 @@ router.get('/reports/sales', async (req, res) => {
 
 router.get('/reports/sales.pdf', async (req, res) => {
   const params = readSalesReportQuery(req);
+  const summaryOnly = String(req.query.summary || req.query.summaryOnly || '') === '1';
+  const buildPdf = summaryOnly ? buildTreeSalesReportSummaryPdf : buildTreeSalesReportPdf;
+  const prefix = summaryOnly ? 'sales-trees-summary' : 'sales-trees';
   try {
     const nodeCount = db.prepare('SELECT COUNT(*) AS c FROM edari_material_nodes').get()?.c || 0;
     let report;
@@ -258,20 +261,20 @@ router.get('/reports/sales.pdf', async (req, res) => {
     } else {
       report = await queryEdariSalesReport(params);
     }
-    const buffer = await buildTreeSalesReportPdf(report);
+    const buffer = await buildPdf(report);
     const from = report.period?.dateFrom || 'from';
     const to = report.period?.dateTo || 'to';
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="sales-trees-${from}_${to}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${prefix}-${from}_${to}.pdf"`);
     res.send(buffer);
   } catch (err) {
     try {
       const report = await queryEdariSalesReport(params);
-      const buffer = await buildTreeSalesReportPdf(report);
+      const buffer = await buildPdf(report);
       const from = report.period?.dateFrom || 'from';
       const to = report.period?.dateTo || 'to';
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="sales-trees-${from}_${to}.pdf"`);
+      res.setHeader('Content-Disposition', `attachment; filename="${prefix}-${from}_${to}.pdf"`);
       return res.send(buffer);
     } catch (edariErr) {
       res.status(400).json({ ok: false, error: edariErr.message || err.message || 'فشل تصدير PDF' });

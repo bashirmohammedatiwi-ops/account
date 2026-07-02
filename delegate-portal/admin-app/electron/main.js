@@ -769,14 +769,17 @@ ipcMain.handle('export-edari-sales-report-pdf', async (_e, params = {}) => {
     const report = params.report || await queryEdariSalesReportSerialized(params);
     const pdfPath = path.join(getPortalDir(), 'lib', 'pdf-export.js');
     delete require.cache[require.resolve(pdfPath)];
-    const { buildTreeSalesReportPdf } = require(pdfPath);
-    const buffer = await buildTreeSalesReportPdf(report);
+    const { buildTreeSalesReportPdf, buildTreeSalesReportSummaryPdf } = require(pdfPath);
+    const summaryOnly = Boolean(params.summaryOnly);
+    const buildPdf = summaryOnly ? buildTreeSalesReportSummaryPdf : buildTreeSalesReportPdf;
+    const buffer = await buildPdf(report);
     const from = report.period?.dateFrom || 'from';
     const to = report.period?.dateTo || 'to';
+    const prefix = summaryOnly ? 'sales-trees-summary' : 'sales-trees';
     return {
       ok: true,
       data: buffer.toString('base64'),
-      filename: `sales-trees-${from}_${to}.pdf`
+      filename: `${prefix}-${from}_${to}.pdf`
     };
   } catch (err) {
     return { ok: false, error: err.message || 'فشل تصدير PDF من Edari' };

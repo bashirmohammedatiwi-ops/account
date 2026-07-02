@@ -23,7 +23,8 @@ const {
   startOfCalendarDay,
   parseEdariDate,
   journalSortKey,
-  resolvePeriodOpeningBalance
+  resolvePeriodOpeningBalance,
+  rowsInDateRange
 } = require('../lib/statement-utils');
 
 const JOURNAL_CHUNK = 80;
@@ -169,15 +170,7 @@ function parseIsoDate(value) {
 }
 
 function filterRowsInDateRange(rows, dateFrom, dateTo) {
-  const start = startOfCalendarDay(dateFrom);
-  const endDate = parseIsoDate(dateTo);
-  if (start == null || !endDate) return [];
-  endDate.setHours(23, 59, 59, 999);
-  const end = endDate.getTime();
-  return rows.filter((row) => {
-    const t = journalSortKey(row).t;
-    return t >= start && t <= end;
-  });
+  return rowsInDateRange(rows, dateFrom, dateTo);
 }
 
 /**

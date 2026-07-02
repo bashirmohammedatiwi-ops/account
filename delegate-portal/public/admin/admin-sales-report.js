@@ -854,19 +854,21 @@ async function runSalesReportPreview() {
   }
 }
 
-async function exportSalesReportPdf() {
+async function exportSalesReportPdf({ summaryOnly = false } = {}) {
   const filters = readSalesReportFilters();
   if (!filters.treeSeqs.length) return showToast('اختر شجرة مواد واحدة على الأقل (مثل 086)', 'err');
   if (!filters.dateFrom || !filters.dateTo) return showToast('حدد تاريخ البداية والنهاية', 'err');
 
-  const btn = document.getElementById('btnSalesReportPdf');
+  const btnId = summaryOnly ? 'btnSalesReportSummaryPdf' : 'btnSalesReportPdf';
+  const btn = document.getElementById(btnId);
   if (btn) btn.disabled = true;
-  startTopLoading('جاري تصدير PDF…');
+  startTopLoading(summaryOnly ? 'جاري تصدير PDF ملخص…' : 'جاري تصدير PDF…');
+  const filePrefix = summaryOnly ? 'sales-trees-summary' : 'sales-trees';
   try {
     if (window.edariDesktop?.exportEdariSalesReportPdf) {
       const payload = sameSalesReportFilters(filters)
-        ? { report: salesReport.lastReport }
-        : filters;
+        ? { report: salesReport.lastReport, summaryOnly }
+        : { ...filters, summaryOnly };
       const data = await window.edariDesktop.exportEdariSalesReportPdf(payload);
       if (!data?.ok) throw new Error(data?.error || 'فشل تصدير PDF');
       if (!data.data) throw new Error('ملف PDF فارغ');
@@ -874,16 +876,18 @@ async function exportSalesReportPdf() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = data.filename || `sales-trees-${filters.dateFrom}_${filters.dateTo}.pdf`;
+      link.download = data.filename || `${filePrefix}-${filters.dateFrom}_${filters.dateTo}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-      showToast('تم تنزيل PDF');
+      showToast(summaryOnly ? 'تم تنزيل PDF الملخص' : 'تم تنزيل PDF');
       return;
     }
 
-    const res = await fetch(`${getApiBase()}/api/admin/reports/sales.pdf?${salesReportQueryString(filters)}`);
+    const qs = salesReportQueryString(filters);
+    const summaryQs = summaryOnly ? `${qs}&summary=1` : qs;
+    const res = await fetch(`${getApiBase()}/api/admin/reports/sales.pdf?${summaryQs}`);
     const contentType = String(res.headers.get('content-type') || '').toLowerCase();
     if (!res.ok) {
       let message = `فشل تصدير PDF (${res.status})`;
@@ -898,12 +902,12 @@ async function exportSalesReportPdf() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `sales-trees-${filters.dateFrom}_${filters.dateTo}.pdf`;
+    link.download = `${filePrefix}-${filters.dateFrom}_${filters.dateTo}.pdf`;
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-    showToast('تم تنزيل PDF');
+    showToast(summaryOnly ? 'تم تنزيل PDF الملخص' : 'تم تنزيل PDF');
   } catch (err) {
     showToast(err.message, 'err');
   } finally {
@@ -981,6 +985,9 @@ function initSalesReportPage() {
   });
   document.getElementById('btnSalesReportPdf')?.addEventListener('click', () => {
     void exportSalesReportPdf();
+  });
+  document.getElementById('btnSalesReportSummaryPdf')?.addEventListener('click', () => {
+    void exportSalesReportPdf({ summaryOnly: true });
   });
 
   document.addEventListener('keydown', (e) => {

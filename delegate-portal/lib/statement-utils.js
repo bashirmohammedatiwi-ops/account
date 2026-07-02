@@ -25,24 +25,75 @@ function isDebitRow(row) {
   return row.is_debit === 1 || row.is_debit === true || row.Dept === 'True' || row.Dept === true;
 }
 
-function parseEdariDate(value) {
+function buildLocalDate(year, month, day) {
+  const d = new Date(year, month - 1, day);
+  if (Number.isNaN(d.getTime())) return null;
+  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+  return d;
+}
+
+function parseSlashDateParts(raw) {
+  const parts = String(raw || '').trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (!parts) return null;
+  return { a: Number(parts[1]), b: Number(parts[2]), y: Number(parts[3]) };
+}
+
+/** Edari slash dates = DD/MM/YYYY (يوم/شهر/سنة) — لا MM/DD الأمريكية. */
+function parseEdariSlashDate(raw) {
+  const slash = parseSlashDateParts(raw);
+  if (!slash) return null;
+  const { a, b, y } = slash;
+  let day;
+  let month;
+  if (a > 12) {
+    day = a;
+    month = b;
+  } else if (b > 12) {
+    day = b;
+    month = a;
+  } else {
+    day = a;
+    month = b;
+  }
+  return buildLocalDate(y, month, day);
+}
+
+function edariCalendarDayStart(value) {
   const raw = String(value || '').trim().replace(' 00:00:00', '');
   if (!raw || raw.startsWith('12/30/1899')) return null;
 
-  let d = new Date(raw);
-  if (!Number.isNaN(d.getTime())) return d;
-
-  const parts = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-  if (parts) {
-    const first = Number(parts[1]);
-    const second = Number(parts[2]);
-    const year = Number(parts[3]);
-    if (first > 12) d = new Date(year, second - 1, first);
-    else if (second > 12) d = new Date(year, first - 1, second);
-    else d = new Date(year, second - 1, first);
-    if (!Number.isNaN(d.getTime())) return d;
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    const d = buildLocalDate(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+    if (!d) return null;
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
   }
-  return null;
+
+  const slash = parseEdariSlashDate(raw);
+  if (slash) {
+    slash.setHours(0, 0, 0, 0);
+    return slash.getTime();
+  }
+
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function parseEdariDate(value) {
+  const t = edariCalendarDayStart(value);
+  if (t == null) return null;
+  const d = new Date(t);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function rowMatchesCalendarRange(row, rangeStart, rangeEnd) {
+  const raw = row?.tx_date ?? row?.Date ?? row?.date ?? '';
+  const dayStart = edariCalendarDayStart(raw);
+  if (dayStart == null) return false;
+  return dayStart >= rangeStart && dayStart <= rangeEnd;
 }
 
 function journalSortKey(row) {
@@ -416,10 +467,7 @@ function rowsInDateRange(rows, dateFrom, dateTo) {
   const start = startOfCalendarDay(dateFrom);
   const end = endOfCalendarDay(dateTo || dateFrom);
   if (start == null || !end) return [];
-  return (rows || []).filter((row) => {
-    const t = journalSortKey(row).t;
-    return t >= start && t <= end;
-  });
+  return (rows || []).filter((row) => rowMatchesCalendarRange(row, start, end));
 }
 
 function rowsAfterDate(rows, dateTo) {
@@ -558,6 +606,9 @@ module.exports = {
   resolveAccountNetBalance,
   netMovementAmount,
   parseEdariDate,
+  edariCalendarDayStart,
+  rowMatchesCalendarRange,
+  rowsInDateRange,
   isValidFixDate,
   sortJournalRowsAsc,
   sortJournalRowsDesc,

@@ -148,8 +148,9 @@ function fmtNum(v, digits = 0) {
 
 function fmtDate(v) {
   if (!v) return '—';
-  const d = new Date(String(v).replace(' 00:00:00', ''));
-  if (Number.isNaN(d.getTime())) return String(v).slice(0, 10);
+  const { parseEdariDate } = require('./statement-utils');
+  const d = parseEdariDate(String(v).replace(' 00:00:00', ''));
+  if (!d || Number.isNaN(d.getTime())) return String(v).slice(0, 10);
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
@@ -1571,12 +1572,15 @@ function salesOverviewSection(report) {
   };
 }
 
-function salesReportPdfHeader(report) {
+function salesReportPdfHeader(report, options = {}) {
   const logo = getLogoImage();
   const period = report.period || {};
   const periodText = period.dateFrom && period.dateTo
     ? `${fmtDate(period.dateFrom)}  —  ${fmtDate(period.dateTo)}`
     : '';
+  const reportTitle = options.summaryOnly
+    ? 'تقرير مبيعات — ملخص شجرات المواد'
+    : 'تقرير مبيعات — شجرات المواد';
   const headerBand = {
     table: {
       widths: ['*', logo ? 44 : 0],
@@ -1585,7 +1589,7 @@ function salesReportPdfHeader(report) {
           stack: [
             { text: COMPANY_NAME, fontSize: 8.5, bold: true, color: '#cbd5e1', alignment: 'right' },
             {
-              text: 'تقرير مبيعات — شجرات المواد',
+              text: reportTitle,
               fontSize: 14,
               bold: true,
               color: SALES.headText,
@@ -1736,12 +1740,22 @@ function estimateSalesReportHeight(report) {
   return Math.ceil(Math.max(h * 1.15 + 90, SALES_PAGE_HEIGHT));
 }
 
-function buildSalesReportContent(report) {
+function estimateSalesReportSummaryHeight(report) {
+  const sections = report.sections || [];
+  let h = 36 + 340 + 110;
+  if (sections.length) h += 50 + sections.length * 46 + 50;
+  h += 24;
+  return Math.ceil(Math.max(h * 1.15 + 90, SALES_PAGE_HEIGHT));
+}
+
+function buildSalesReportContent(report, options = {}) {
   const content = [
-    salesReportPdfHeader(report),
+    salesReportPdfHeader(report, options),
     salesGrandSummaryBlock(report),
     salesTreesSummaryBlock(report)
   ].filter(Boolean);
+
+  if (options.summaryOnly) return content;
 
   const sections = report.sections || [];
   if (sections.length) {
@@ -1783,9 +1797,11 @@ function salesReportDocDefinition(content, pageSize) {
   };
 }
 
-async function createSingleLongPagePdf(report) {
-  const content = buildSalesReportContent(report);
-  const pageHeight = estimateSalesReportHeight(report);
+async function createSingleLongPagePdf(report, options = {}) {
+  const content = buildSalesReportContent(report, options);
+  const pageHeight = options.summaryOnly
+    ? estimateSalesReportSummaryHeight(report)
+    : estimateSalesReportHeight(report);
   return createPdfBuffer(salesReportDocDefinition(content, {
     width: SALES_PAGE_WIDTH,
     height: pageHeight
@@ -1796,12 +1812,17 @@ async function buildTreeSalesReportPdf(report) {
   return createSingleLongPagePdf(report);
 }
 
+async function buildTreeSalesReportSummaryPdf(report) {
+  return createSingleLongPagePdf(report, { summaryOnly: true });
+}
+
 module.exports = {
   buildStatementPdf,
   buildAccountStatementsPdf,
   buildInvoicePdf,
   buildOrderPdf,
   buildTreeSalesReportPdf,
+  buildTreeSalesReportSummaryPdf,
   orderToExportData,
   COMPANY_NAME
 };
