@@ -5,6 +5,8 @@ const { signAgent, authAgent } = require('../lib/auth');
 const {
   canAgentAccess,
   getChildren,
+  getLeafDescendants,
+  getGroupPath,
   getStatementForAccount,
   agentAllowedSeqs
 } = require('../lib/accounts');
@@ -29,6 +31,25 @@ router.get('/me', authAgent, (req, res) => {
   res.json({ ok: true, agent: { id: req.agent.id, name: req.agent.name, username: req.agent.username } });
 });
 
+function mapBranchAccount(c, { rootSeq = '', includeGroupPath = false } = {}) {
+  return {
+    seq: c.seq,
+    num: c.num,
+    name1: c.name1,
+    name2: c.name2,
+    address: c.address,
+    remarks: c.remarks,
+    bal: c.bal,
+    tot1: c.tot1,
+    tot2: c.tot2,
+    subCount: c.sub_count,
+    groupPath: includeGroupPath && rootSeq ? getGroupPath(c.seq, rootSeq) : '',
+    debtAmount: resolveDebtFromAccount(c),
+    debtStatus: debtStatusFromBalance(c.bal),
+    summary: balanceSummaryLabel(c.bal)
+  };
+}
+
 router.get('/trees', authAgent, (req, res) => {
   const roots = db.prepare(`
     SELECT at.account_seq AS seq FROM agent_trees at WHERE at.agent_id = ?
@@ -40,6 +61,7 @@ router.get('/trees', authAgent, (req, res) => {
     const childCount = db.prepare(
       'SELECT COUNT(*) AS c FROM accounts WHERE master_seq = ?'
     ).get(r.seq).c;
+    const leafChildren = getLeafDescendants(r.seq).length;
     return {
       seq: acc.seq,
       num: acc.num,
@@ -47,6 +69,7 @@ router.get('/trees', authAgent, (req, res) => {
       bal: acc.bal,
       subCount: acc.sub_count,
       directChildren: childCount,
+      leafChildren,
       debtStatus: debtStatusFromBalance(acc.bal)
     };
   }).filter(Boolean);
@@ -74,21 +97,15 @@ router.get('/accounts/:seq/children', authAgent, (req, res) => {
   if (!canAgentAccess(req.agent.id, req.params.seq)) {
     return res.status(403).json({ ok: false, error: 'لا تملك صلاحية هذا الحساب' });
   }
-  const children = getChildren(req.params.seq).map((c) => ({
-    seq: c.seq,
-    num: c.num,
-    name1: c.name1,
-    name2: c.name2,
-    address: c.address,
-    bal: c.bal,
-    tot1: c.tot1,
-    tot2: c.tot2,
-    subCount: c.sub_count,
-    debtAmount: resolveDebtFromAccount(c),
-    debtStatus: debtStatusFromBalance(c.bal),
-    summary: balanceSummaryLabel(c.bal)
+  const rootSeq = String(req.params.seq);
+  const view = String(req.query.view || '').trim().toLowerCase();
+  const useLeaves = view === 'leaves';
+  const rows = useLeaves ? getLeafDescendants(rootSeq) : getChildren(rootSeq);
+  const children = rows.map((c) => mapBranchAccount(c, {
+    rootSeq,
+    includeGroupPath: useLeaves
   }));
-  res.json({ ok: true, children });
+  res.json({ ok: true, children, view: useLeaves ? 'leaves' : 'direct' });
 });
 
 router.get('/accounts/:seq/statement.pdf', authAgent, async (req, res) => {
@@ -187,15 +204,25 @@ router.get('/search', authAgent, (req, res) => {
   if (!q) return res.json({ ok: true, results: [] });
 
   const allowed = agentAllowedSeqs(req.agent.id);
-  const results = db.prepare(`
-    SELECT seq, num, name1, bal, master_seq FROM accounts
-    WHERE (num LIKE ? OR name1 LIKE ?)
-    ORDER BY num LIMIT 50
-  `).all(`%${q}%`, `%${q}%`).filter((r) => allowed.has(String(r.seq)));
+  const qDigits = q.replace(/\D/g, '');
+  const like = `%${q}%`;
+  const rows = db.prepare(`
+    SELECT seq, num, name1, name2, address, remarks, bal, master_seq, sub_count FROM accounts
+    WHERE (num LIKE ? OR name1 LIKE ? OR name2 LIKE ? OR address LIKE ? OR remarks LIKE ?)
+    ORDER BY sub_count ASC, num LIMIT 80
+  `).all(like, like, like, like, like).filter((r) => {
+    if (!allowed.has(String(r.seq))) return false;
+    if (qDigits.length >= 4) {
+      const hay = `${r.name1 || ''}${r.name2 || ''}${r.address || ''}${r.remarks || ''}${r.num || ''}`.replace(/\D/g, '');
+      if (hay.includes(qDigits)) return true;
+    }
+    const hayText = `${r.name1 || ''} ${r.name2 || ''} ${r.address || ''} ${r.remarks || ''} ${r.num || ''}`.toLowerCase();
+    return hayText.includes(q.toLowerCase());
+  });
 
   res.json({
     ok: true,
-    results: results.map((r) => ({
+    results: rows.slice(0, 50).map((r) => ({
       ...r,
       debtStatus: debtStatusFromBalance(r.bal)
     }))

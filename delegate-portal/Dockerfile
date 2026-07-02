@@ -10,6 +10,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY server.js ./
+COPY diag-account.js ./
 COPY lib ./lib
 COPY routes ./routes
 COPY public ./public

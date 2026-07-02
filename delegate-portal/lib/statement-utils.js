@@ -322,11 +322,18 @@ function sumLineAmounts(lines, field) {
 }
 
 /** إجماليات الكشف — Tot1/Tot2 من Edari (تشمل رصيد مدور) أو مجموع الأسطر */
-function resolveStatementTotals({ lines = [], stmt = {}, account = {} } = {}) {
+function resolveStatementTotals({ lines = [], stmt = {}, account = {}, preferLineTotals = false } = {}) {
   const lineDebit = sumLineAmounts(lines, 'debit');
   const lineCredit = sumLineAmounts(lines, 'credit');
   const edariDebit = parseAmount(account.tot1);
   const edariCredit = parseAmount(account.tot2);
+
+  if (preferLineTotals || lineDebit > 0 || lineCredit > 0) {
+    return {
+      totalDebit: lineDebit || parseAmount(stmt.totalDebit),
+      totalCredit: lineCredit || parseAmount(stmt.totalCredit)
+    };
+  }
 
   if (edariDebit > 0) {
     return {
@@ -341,27 +348,31 @@ function resolveStatementTotals({ lines = [], stmt = {}, account = {} } = {}) {
   };
 }
 
-function resolveFinalBalance({ accountBal, totalDebit, totalCredit, stmtFinalBalance }) {
+function resolveFinalBalance({ accountBal, totalDebit, totalCredit, stmtFinalBalance, preferLineBalance = false }) {
+  const stmt = parseAmount(stmtFinalBalance);
+  if (preferLineBalance && stmt !== 0) return stmt;
+
   const net = parseAmount(totalDebit) - parseAmount(totalCredit);
   const fromTotals = net > 0 ? -net : (net < 0 ? Math.abs(net) : 0);
   const acc = parseAmount(accountBal);
-  const stmt = parseAmount(stmtFinalBalance);
 
   if (acc !== 0 && Math.abs(Math.abs(acc) - Math.abs(fromTotals)) <= 1) return acc;
   if (stmt !== 0 && Math.abs(Math.abs(stmt) - Math.abs(fromTotals)) <= 1) return stmt;
+  if (preferLineBalance) return stmt;
   return fromTotals;
 }
 
-function buildOpeningLine(openingBalance, cutoff) {
+function buildOpeningLine(openingBalance, cutoff, options = {}) {
   const balance = parseAmount(openingBalance);
   const debit = balance < 0 ? Math.abs(balance) : 0;
   const credit = balance > 0 ? balance : 0;
   if (!debit && !credit) return null;
+  const description = String(options.note || options.description || '').trim() || 'رصيد مدور';
   return {
     seq: null,
     debit,
     credit,
-    description: 'رصيد مدور',
+    description,
     date: '',
     billNum: null,
     billSeq: null,
@@ -575,6 +586,51 @@ function resolvePeriodOpeningBalance(account, allRows, dateFrom, dateTo) {
   return balanceAtPeriodStartFromFix(allRows, fixBal, fixDayEnd, periodStart);
 }
 
+/**
+ * نافذة الكشف التراكمي — تطابق النظام الإداري (Edari) تماماً:
+ *
+ * في Edari قد يحمل الحساب رصيداً افتتاحياً مُسجَّلاً ضمن Tot1/Tot2 (الإجمالي
+ * التراكمي مدين/دائن) دون أن يأتي كسطر حركة في File12n. لذلك الرصيد الافتتاحي
+ * الصحيح = (الإجمالي التراكمي) − (مجموع الحركات المزامَنة) لكل جانب.
+ *
+ * مصدر الحقيقة بالترتيب:
+ *   1) Tot1/Tot2 (الأدق — يطابق ترويسة Edari)
+ *   2) Bal (احتياطي إذا غابت Tot1/Tot2)
+ *
+ * هذا يضمن أن: المجموع النهائي للكشف = Tot2 − Tot1 = الرصيد الحقيقي،
+ * وأن إجمالي المدين/الدائن في التذييل يطابق Edari بالضبط.
+ */
+function resolveCumulativeStatementWindow(account, rows = []) {
+  const movementRows = rows;
+
+  const tot1 = parseAmount(account?.tot1 ?? account?.Tot1); // إجمالي مدين تراكمي
+  const tot2 = parseAmount(account?.tot2 ?? account?.Tot2); // إجمالي دائن تراكمي
+
+  const movDebit = sumMovementAmount(movementRows, 'debit');
+  const movCredit = sumMovementAmount(movementRows, 'credit');
+
+  let openingBalance;
+
+  if (tot1 > 0 || tot2 > 0) {
+    // رصيد افتتاحي مدين = ما في Tot1 زيادةً عن حركات المدين المزامَنة
+    const openingDebit = Math.max(0, tot1 - movDebit);
+    const openingCredit = Math.max(0, tot2 - movCredit);
+    // الافتتاح كرصيد: دائن موجب، مدين سالب
+    openingBalance = openingCredit - openingDebit;
+  } else {
+    // احتياطي: الرصيد الحالي ناقص صافي الحركات
+    const accBal = resolveAccountNetBalance(account);
+    openingBalance = accBal - netMovementAmount(movementRows);
+  }
+
+  let openingNote = '';
+  if (Math.abs(openingBalance) >= 1) {
+    openingNote = 'رصيد مدور · أرصدة سابقة';
+  }
+
+  return { openingBalance, movementRows, periodCutoff: null, openingNote };
+}
+
 module.exports = {
   parseAmount,
   parseJournalAmount,
@@ -595,6 +651,7 @@ module.exports = {
   computeOpeningBalance,
   resolveOpeningBalance,
   resolvePeriodOpeningBalance,
+  resolveCumulativeStatementWindow,
   buildJournalDescription,
   resolveStatementPeriod,
   isBeforePeriodStart,

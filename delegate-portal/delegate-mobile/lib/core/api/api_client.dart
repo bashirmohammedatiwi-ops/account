@@ -88,8 +88,10 @@ class ApiClient {
         .toList();
   }
 
-  Future<List<BranchAccount>> getChildren(String seq) async {
-    final data = await _json('GET', '/accounts/$seq/children');
+  Future<List<BranchAccount>> getChildren(String seq, {bool leaves = true}) async {
+    final data = await _json('GET', '/accounts/$seq/children', query: {
+      if (leaves) 'view': 'leaves',
+    });
     return (data['children'] as List)
         .map((e) => BranchAccount.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();

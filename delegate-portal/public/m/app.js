@@ -13,7 +13,9 @@ const state = {
   invoiceFromScreen: null,
   lastStatement: null,
   branchFilter: 'all',
-  branchSearch: ''
+  branchSearch: '',
+  branchNavStack: [],
+  branchNavTitle: ''
 };
 
 function esc(v) {
@@ -685,6 +687,7 @@ function goToScreen(name) {
 function renderTreeContext() {
   const el = document.getElementById('treeContext');
   const tree = state.selectedTree;
+  const displayName = state.branchNavTitle || tree?.name1 || '—';
   if (!tree?.seq) {
     el.classList.add('hidden');
     el.innerHTML = '';
@@ -698,7 +701,7 @@ function renderTreeContext() {
       <div class="bc-tree-badge">${ICONS.tree}</div>
       <div class="bc-tree-info">
         <p class="bc-tree-kicker">${esc(tree.num || '—')}</p>
-        <h2 class="bc-tree-name">${esc(tree.name1 || '—')}</h2>
+        <h2 class="bc-tree-name">${esc(displayName)}</h2>
         <p class="bc-tree-sub">${count ? `${fmtNumAlways(count)} حساب · ${fmtNumAlways(s.withDebt)} مدين` : 'لا توجد حسابات'}</p>
       </div>
       <div class="bc-tree-debt">
@@ -708,16 +711,39 @@ function renderTreeContext() {
     </div>`;
 }
 
+function branchSearchHaystack(b) {
+  return [b.name1, b.name2, b.num, b.address, b.remarks, b.groupPath]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+function branchMatchesSearch(b, q) {
+  if (!q) return true;
+  if (branchSearchHaystack(b).includes(q)) return true;
+  const qDigits = q.replace(/\D/g, '');
+  if (qDigits.length >= 4) {
+    return branchSearchHaystack(b).replace(/\D/g, '').includes(qDigits);
+  }
+  return false;
+}
+
+function branchSubtitle(b) {
+  const parts = [];
+  if (b.groupPath) parts.push(String(b.groupPath));
+  const address = String(b.address || b.remarks || '').trim();
+  if (address) parts.push(address);
+  return parts.join(' · ');
+}
+
 function filterBranches(list) {
   const q = state.branchSearch.trim().toLowerCase();
   return list.filter((b) => {
-    const name = String(b.name1 || '').toLowerCase();
-    const num = String(b.num || '');
-    if (q && !name.includes(q) && !num.includes(q)) return false;
+    if (!branchMatchesSearch(b, q)) return false;
     const bal = Number(b.bal || 0);
     const debt = resolveBranchDebtAmount(b);
     if (state.branchFilter === 'debit' && debt <= 0) return false;
-    if (state.branchFilter === 'credit' && bal <= 0) return false;
+    if (state.branchFilter === 'credit' && !(bal > 0 && debt <= 0)) return false;
     return true;
   });
 }
@@ -743,7 +769,7 @@ function renderTrees() {
   if (!state.trees.length) {
     setSectionMeta('treesMeta', 'لا توجد شجرات معيّنة — تواصل مع الإدارة');
   } else {
-    const customers = state.trees.reduce((s, t) => s + (Number(t.directChildren) || 0), 0);
+    const customers = state.trees.reduce((s, t) => s + (Number(t.leafChildren ?? t.directChildren) || 0), 0);
     setSectionMeta('treesMeta', `${state.trees.length} شجرة · ${fmtNumAlways(customers)} زبون`);
   }
 
@@ -761,7 +787,7 @@ function renderTrees() {
       </div>
       <h4 class="ed-card-title">${esc(t.name1 || '—')}</h4>
       <div class="ed-card-meta">
-        <span class="ed-meta-item">${fmtNumAlways(t.directChildren || 0)} حساب فرعي</span>
+        <span class="ed-meta-item">${fmtNumAlways(t.leafChildren ?? t.directChildren ?? 0)} زبون</span>
       </div>
       <div class="ed-card-foot">
         <span>استعراض الزبائن</span>
@@ -814,6 +840,8 @@ function renderBranches() {
   list.innerHTML = filtered.map((b, i) => {
     const debt = branchDebtMeta(b);
     const initial = branchInitial(b.name1);
+    const subtitle = branchSubtitle(b);
+    const isFolder = Number(b.subCount) > 0;
     return `
     <button type="button" class="bc-card bc-card-${debt.cls}" data-seq="${esc(b.seq)}" style="--i:${Math.min(i, 8)}" role="listitem">
       <div class="bc-card-inner">
@@ -821,16 +849,17 @@ function renderBranches() {
           <span class="bc-avatar" aria-hidden="true">${esc(initial)}</span>
           <div class="bc-head-text">
             <h4 class="bc-branch-name">${esc(b.name1 || '—')}</h4>
-            <span class="bc-pill bc-pill-${debt.statusCls}">${esc(debt.statusLabel)}</span>
+            ${subtitle ? `<p class="bc-branch-sub">${esc(subtitle)}</p>` : ''}
+            <span class="bc-pill bc-pill-${debt.statusCls}">${esc(isFolder ? 'مجموعة' : debt.statusLabel)}</span>
           </div>
         </div>
         <div class="bc-debt-block">
-          <span class="bc-debt-label">الديون</span>
-          <span class="bc-debt-amount" dir="ltr">${esc(debt.amount)}</span>
+          <span class="bc-debt-label">${isFolder ? 'فرعي' : 'الديون'}</span>
+          <span class="bc-debt-amount" dir="ltr">${esc(isFolder ? fmtNumAlways(b.subCount) : debt.amount)}</span>
         </div>
       </div>
       <div class="bc-card-foot">
-        <span>عرض كشف الحساب</span>
+        <span>${isFolder ? 'عرض الفروع' : 'عرض كشف الحساب'}</span>
         <span class="bc-card-arrow">${ICONS.chevron}</span>
       </div>
     </button>`;
@@ -841,16 +870,45 @@ function renderBranches() {
   });
 }
 
+async function loadBranchList(seq, { view = 'leaves', pushNav = false } = {}) {
+  if (pushNav && state.branches.length) {
+    state.branchNavStack.push({
+      tree: state.selectedTree,
+      branches: state.branches,
+      title: state.branchNavTitle || state.selectedTree?.name1 || ''
+    });
+  }
+  const qs = view === 'leaves' ? '?view=leaves' : '';
+  const data = await api(`/accounts/${encodeURIComponent(seq)}/children${qs}`);
+  state.branches = data.children || [];
+  renderBranches();
+}
+
 async function openTree(seq) {
   state.selectedTree = state.trees.find((t) => String(t.seq) === String(seq)) || { seq };
   state.selectedBranch = null;
+  state.branchNavStack = [];
+  state.branchNavTitle = state.selectedTree.name1 || '';
   resetBranchFilters();
   setOverlay(true);
 
   try {
-    const data = await api(`/accounts/${encodeURIComponent(seq)}/children`);
-    state.branches = data.children || [];
-    renderBranches();
+    await loadBranchList(seq, { view: 'leaves' });
+    goToScreen('branches');
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    setOverlay(false);
+  }
+}
+
+async function openBranchFolder(seq, branch) {
+  resetBranchFilters();
+  setOverlay(true);
+  try {
+    state.branchNavTitle = branch?.name1 || '—';
+    await loadBranchList(seq, { view: 'direct', pushNav: true });
+    state.selectedTree = { seq, name1: branch?.name1 || '—', num: branch?.num || '' };
     goToScreen('branches');
   } catch (e) {
     alert(e.message);
@@ -860,7 +918,12 @@ async function openTree(seq) {
 }
 
 async function openBranch(seq) {
-  state.selectedBranch = state.branches.find((b) => String(b.seq) === String(seq)) || { seq };
+  const branch = state.branches.find((b) => String(b.seq) === String(seq)) || { seq };
+  if (Number(branch.subCount) > 0) {
+    await openBranchFolder(seq, branch);
+    return;
+  }
+  state.selectedBranch = branch;
   goToScreen('statement');
   await loadStatement(seq);
 }
@@ -1154,8 +1217,17 @@ function goBack() {
   } else if (state.screen === 'statement') {
     goToScreen('branches');
   } else if (state.screen === 'branches') {
+    if (state.branchNavStack.length) {
+      const prev = state.branchNavStack.pop();
+      state.selectedTree = prev.tree;
+      state.branches = prev.branches;
+      state.branchNavTitle = prev.title || '';
+      renderBranches();
+      return;
+    }
     state.selectedTree = null;
     state.branches = [];
+    state.branchNavTitle = '';
     goToScreen('trees');
   } else if (state.screen === 'trees') {
     goToScreen('home');
@@ -1190,7 +1262,18 @@ async function refresh() {
   } else if (state.screen === 'statement' && state.selectedBranch) {
     await openBranch(state.selectedBranch.seq);
   } else if (state.screen === 'branches' && state.selectedTree) {
-    await openTree(state.selectedTree.seq);
+    setOverlay(true);
+    try {
+      if (state.branchNavStack.length) {
+        await loadBranchList(state.selectedTree.seq, { view: 'direct' });
+      } else {
+        await openTree(state.selectedTree.seq);
+      }
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setOverlay(false);
+    }
   } else {
     await loadTrees();
   }

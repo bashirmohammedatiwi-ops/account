@@ -15,6 +15,43 @@ function getChildren(parentSeq) {
   ).all(String(parentSeq));
 }
 
+/** كل الحسابات النهائية (بدون فروع) تحت شجرة أو مجلد */
+function getLeafDescendants(rootSeq) {
+  const leaves = [];
+  const queue = [String(rootSeq)];
+  while (queue.length) {
+    const parent = queue.shift();
+    const kids = getChildren(parent);
+    for (const kid of kids) {
+      if (Number(kid.sub_count) > 0) {
+        queue.push(String(kid.seq));
+      } else {
+        leaves.push(kid);
+      }
+    }
+  }
+  return leaves.sort((a, b) => String(a.num).localeCompare(String(b.num), 'ar'));
+}
+
+/** مسار المجلدات بين الشجرة والزبون — مثل: الصليخ */
+function getGroupPath(leafSeq, rootSeq) {
+  const parts = [];
+  let current = String(leafSeq);
+  const root = String(rootSeq);
+  const seen = new Set();
+  while (current && current !== root && !seen.has(current)) {
+    seen.add(current);
+    const row = db.prepare('SELECT master_seq FROM accounts WHERE seq = ?').get(current);
+    if (!row) break;
+    const master = String(row.master_seq || '0');
+    if (!master || master === '0' || master === root) break;
+    const parent = db.prepare('SELECT name1 FROM accounts WHERE seq = ?').get(master);
+    if (parent?.name1) parts.unshift(parent.name1);
+    current = master;
+  }
+  return parts.join(' / ');
+}
+
 function getDescendantSeqs(rootSeq) {
   const all = [];
   const queue = [String(rootSeq)];
@@ -54,12 +91,52 @@ function getAssignableTrees() {
   `).all();
 }
 
+/**
+ * حركات الحساب — تشمل حركات كل الأحفاد إذا كان حساباً أباً (sub_count > 0)،
+ * تماماً مثل كشف الحساب في Edari الذي يجمّع حركات الفروع تحت الأب.
+ * للزبون النهائي (sub_count = 0) تُرجَع حركاته فقط.
+ */
+function getAccountJournalRows(account) {
+  const isParent = Number(account.sub_count) > 0;
+  if (!isParent) {
+    return db.prepare(
+      'SELECT * FROM journal WHERE acc_seq = ? ORDER BY tx_date, seq'
+    ).all(String(account.seq));
+  }
+
+  const seqs = getDescendantSeqs(account.seq);
+  if (seqs.length <= 1) {
+    return db.prepare(
+      'SELECT * FROM journal WHERE acc_seq = ? ORDER BY tx_date, seq'
+    ).all(String(account.seq));
+  }
+
+  const placeholders = seqs.map(() => '?').join(',');
+  const nameBySeq = new Map();
+  for (const s of seqs) {
+    const a = db.prepare('SELECT name1 FROM accounts WHERE seq = ?').get(String(s));
+    if (a?.name1) nameBySeq.set(String(s), a.name1);
+  }
+  const rows = db.prepare(
+    `SELECT * FROM journal WHERE acc_seq IN (${placeholders}) ORDER BY tx_date, seq`
+  ).all(...seqs);
+
+  // وسم كل حركة بالفرع المصدر (يظهر في عمود الفرع بالكشف)
+  for (const row of rows) {
+    if (String(row.acc_seq) !== String(account.seq)) {
+      const branchName = nameBySeq.get(String(row.acc_seq));
+      if (branchName && !String(row.exp2 || '').trim()) {
+        row.exp2 = branchName;
+      }
+    }
+  }
+  return rows;
+}
+
 function getStatementForAccount(accSeq) {
   const account = db.prepare('SELECT * FROM accounts WHERE seq = ?').get(String(accSeq));
   if (!account) return null;
-  const rows = db.prepare(
-    'SELECT * FROM journal WHERE acc_seq = ? ORDER BY tx_date, seq'
-  ).all(String(accSeq));
+  const rows = getAccountJournalRows(account);
 
   const {
     buildStatementLines,
@@ -69,38 +146,25 @@ function getStatementForAccount(accSeq) {
     resolveStatementTotals,
     resolveFinalBalance,
     buildOpeningLine,
-    isValidFixDate,
     resolveStatementPeriod,
-    parseAmount,
-    isDebitRow,
-    normalizeCarriedBalance
+    resolveCumulativeStatementWindow
   } = require('./statement-utils');
   const { resolveLastMatchCutoff, hasMatchCutoff } = require('./reconciliation-utils');
 
   const cutoff = resolveLastMatchCutoff(account, rows);
   const matchAvailable = hasMatchCutoff(account, rows);
 
-  // Edari: كل حركات الحساب — لا فلترة FixDate؛ رصيد مدور فقط عند FixBal وعدم وجود مدين
-  const filteredRows = rows;
-  const periodCutoff = isValidFixDate(account.fix_date)
-    ? { date: account.fix_date, seq: '', source: 'fix_date' }
-    : null;
-
-  const hasDebitMovements = rows.some((row) => {
-    const am = parseAmount(row.am);
-    return am > 0 && isDebitRow(row);
-  });
-
-  let openingBalance = 0;
-  const fixBal = parseAmount(account.fix_bal);
-  if (!hasDebitMovements && fixBal !== 0) {
-    openingBalance = normalizeCarriedBalance(fixBal, account);
-  }
+  const {
+    openingBalance,
+    movementRows: filteredRows,
+    periodCutoff,
+    openingNote
+  } = resolveCumulativeStatementWindow(account, rows);
 
   const stmt = buildStatementLines(filteredRows, { openingBalance });
 
   const openingLine = openingBalance !== 0
-    ? buildOpeningLine(openingBalance, periodCutoff)
+    ? buildOpeningLine(openingBalance, periodCutoff, { note: openingNote })
     : null;
   if (openingLine) {
     stmt.lines.unshift(openingLine);
@@ -111,13 +175,15 @@ function getStatementForAccount(accSeq) {
   const { totalDebit, totalCredit } = resolveStatementTotals({
     lines: stmt.lines,
     stmt,
-    account
+    account,
+    preferLineTotals: true
   });
   const finalBalance = resolveFinalBalance({
     accountBal: account.bal,
     totalDebit,
     totalCredit,
-    stmtFinalBalance: stmt.finalBalance
+    stmtFinalBalance: stmt.finalBalance,
+    preferLineBalance: true
   });
   const debtAmount = resolveDebtDisplayAmount({
     finalBalance,
@@ -234,7 +300,8 @@ function mapJournalRow(j) {
   return {
     seq: String(j.Seq ?? j.seq).replace(/[^0-9]/g, ''),
     acc_seq: String(j.Acc ?? j.acc_seq ?? '').replace(/[^0-9]/g, ''),
-    tx_date: j.Date ?? j.tx_date ?? j.DtCreated ?? '',
+    tx_date: normalizeEdariDateIso(j.Date ?? j.tx_date ?? j.DtCreated ?? '')
+      || String(j.Date ?? j.tx_date ?? j.DtCreated ?? '').trim(),
     am: Number(j.Am ?? j.am ?? 0),
     is_debit: dept === 'True' || dept === true || dept === 1 ? 1 : 0,
     exp1: String(j.Exp1 ?? j.exp1 ?? j.Remarks ?? j.remarks ?? '').trim(),
@@ -504,6 +571,8 @@ function getSyncStatus() {
 
 module.exports = {
   getChildren,
+  getLeafDescendants,
+  getGroupPath,
   getDescendantSeqs,
   agentAllowedSeqs,
   canAgentAccess,
