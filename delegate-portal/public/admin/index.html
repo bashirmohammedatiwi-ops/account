@@ -503,7 +503,8 @@
           <div class="sync-hero panel panel-accent">
             <div class="sync-hero-text">
               <h2>مزامنة الأسعار — تطبيق الويب</h2>
-              <p>رفع حركة المشتريات لكل منتج (مصدر، فاتورة، كمية، سعر، تاريخ) وسعر المستهلك الحالي إلى سيرفر الأسعار.</p>
+              <p>من Edari: أسماء المواد، الرصيد، وحركات المشتريات. الأسعار (أصلي / خصم / نهائي) تأتي من POS فقط عبر pos-sync-desktop.</p>
+              <p class="muted">واجهة الأسعار: <a href="/prices/" target="_blank" rel="noopener">/prices/</a></p>
               <p class="muted" id="priceSyncLastResult">—</p>
             </div>
             <div class="sync-hero-actions">
@@ -529,9 +530,9 @@
               </div>
               <div class="form-stack">
                 <ul class="simple-list">
-                  <li>تُرفع حركات المشتريات من فواتير Edari Kind=1 (مثل تقرير «حركة مواد — مشتريات»)</li>
-                  <li>أول مزامنة: كل البيانات بدون اختيار تاريخ</li>
-                  <li>بعدها: «تحديث الأسعار» يرفع الحركات الجديدة أو المعدّلة فقط</li>
+                  <li>Edari: حركات مشتريات Kind=1/3، أسماء المواد، الرصيد (InTot − OutTot)</li>
+                  <li>POS (pos-sync-desktop): SellPr4 أصلي، offer_details.discount، SellPr5 نهائي</li>
+                  <li>أول مزامنة Edari: كل البيانات — بعدها تحديثات جزئية فقط</li>
                 </ul>
                 <p class="field-hint" id="priceSyncModeHint">—</p>
               </div>
@@ -559,10 +560,9 @@
               <section class="panel">
                 <h2 class="panel-title">ماذا يُرفع؟</h2>
                 <ul class="simple-list">
-                  <li>حركة مشتريات كل مادة حسب الباركود</li>
-                  <li>المصدر (الطرف الثاني) ورقم الفاتورة</li>
-                  <li>الكمية وسعر الوحدة والإجمالي والتاريخ</li>
-                  <li>سعر المستهلك الحالي (SellPr4) والرصيد النهائي (InTot − OutTot)</li>
+                  <li>حركة مشتريات كل مادة (مورد، فاتورة، كمية، سعر شراء، تاريخ)</li>
+                  <li>اسم المادة والرصيد من Edari</li>
+                  <li>لا يُرفع SellPr4 — الأسعار من POS فقط</li>
                 </ul>
               </section>
 

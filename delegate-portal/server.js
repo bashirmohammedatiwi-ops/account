@@ -11,6 +11,7 @@ const mobileRoutes = require('./routes/mobile');
 const delegateRoutes = require('./routes/delegate');
 const commerceAdminRoutes = require('./routes/commerce-admin');
 const commerceMobileRoutes = require('./routes/commerce-mobile');
+const priceAppRoutes = require('./routes/price-app');
 const { UPLOAD_ROOT } = require('./lib/products');
 
 const app = express();
@@ -34,6 +35,7 @@ app.use('/api/sync', syncRoutes);
 app.use('/api/mobile', mobileRoutes);
 app.use('/api/mobile', commerceMobileRoutes);
 app.use('/api/delegate', delegateRoutes);
+app.use(priceAppRoutes);
 
 app.use('/uploads', express.static(UPLOAD_ROOT, { maxAge: '7d' }));
 

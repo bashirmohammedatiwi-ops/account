@@ -1421,20 +1421,7 @@ function aggregateReportCategories(report) {
   return out;
 }
 
-const KPI_CARD_W = 136;
-const KPI_CARD_H = 140;
 const KPI_CARD_GAP = 8;
-const KPI_CARD_RADIUS = 16;
-
-function roundedRectCanvas(w, h, r, color) {
-  return {
-    canvas: [
-      { type: 'rect', x: 0, y: 0, w, h, r, color }
-    ],
-    width: w,
-    height: h
-  };
-}
 
 function reportLineCount(report) {
   const grand = report.grandSummary?.lineCount;
@@ -1454,11 +1441,9 @@ function salesKpiValueFontSize(value) {
 function salesKpiCard(label, value, sub, color) {
   const valueFont = salesKpiValueFontSize(value);
   return {
-    width: KPI_CARD_W,
-    stack: [
-      roundedRectCanvas(KPI_CARD_W, KPI_CARD_H, KPI_CARD_RADIUS, color),
-      {
-        margin: [10, -KPI_CARD_H + 18, 10, 0],
+    table: {
+      widths: ['*'],
+      body: [[{
         stack: [
           {
             text: label,
@@ -1475,7 +1460,7 @@ function salesKpiCard(label, value, sub, color) {
             color: '#ffffff',
             alignment: 'right',
             noWrap: true,
-            margin: [0, 12, 0, 0]
+            margin: [0, 10, 0, 0]
           },
           {
             text: sub,
@@ -1483,11 +1468,14 @@ function salesKpiCard(label, value, sub, color) {
             bold: true,
             color: '#f8fafc',
             alignment: 'right',
-            margin: [0, 10, 0, 0]
+            margin: [0, 8, 0, 0]
           }
-        ]
-      }
-    ]
+        ],
+        fillColor: color,
+        margin: [8, 12, 8, 12]
+      }]]
+    },
+    layout: 'noBorders'
   };
 }
 
@@ -1523,14 +1511,11 @@ function salesKpiStatsBlock(report, cats) {
     )
   ];
 
-  const row = [];
-  cards.forEach((card, index) => {
-    if (index > 0) row.push({ width: KPI_CARD_GAP, text: '' });
-    row.push(card);
-  });
+  const row = cards.map((card) => ({ width: '*', ...card }));
 
   return {
     columns: row,
+    columnGap: KPI_CARD_GAP,
     margin: [0, 0, 0, 18]
   };
 }
@@ -1610,23 +1595,22 @@ function salesReportPdfHeader(report, options = {}) {
   };
 
   const infoStrip = periodText ? {
-    stack: [
-      {
-        ...roundedRectCanvas(555, 58, 14, '#f8fafc'),
-        alignment: 'center'
-      },
-      {
-        margin: [0, -50, 0, 0],
+    table: {
+      widths: ['*'],
+      body: [[{
         stack: [
           { text: 'الفترة', fontSize: 10, bold: true, color: SALES.muted, alignment: 'center', margin: [0, 0, 0, 5] },
           { text: periodText, fontSize: 15, bold: true, color: SALES.head, alignment: 'center' }
-        ]
-      }
-    ],
+        ],
+        fillColor: '#f8fafc',
+        margin: [12, 10, 12, 10]
+      }]]
+    },
+    layout: 'noBorders',
     margin: [0, 0, 0, 14]
   } : null;
 
-  return { stack: [headerBand, ...(infoStrip ? [infoStrip] : [])] };
+  return { stack: [headerBand, ...(infoStrip ? [infoStrip] : [])], margin: [0, 6, 0, 0] };
 }
 
 function treeSummaryMetrics(section) {
@@ -1723,29 +1707,29 @@ const SALES_PAGE_HEIGHT = 841.89;
 
 function estimateSalesReportHeight(report) {
   const sections = report.sections || [];
-  let h = 36;
-  h += 340;
-  h += 110;
-  if (sections.length) h += 50 + sections.length * 46 + 50;
+  let h = 80; // رأس + فترة
+  h += 200; // بطاقات KPI
+  h += 220; // الملخص الإجمالي
+  if (sections.length) h += 60 + sections.length * 48 + 56; // ملخص الشجرات
   if (sections.length) h += 28;
   sections.forEach((section, index) => {
     if (index > 0) h += 16;
-    h += 46;
+    h += 52;
     const lineCount = section.lines?.length || 0;
-    h += Math.max(lineCount, 1) * 20;
-    if (lineCount) h += 26;
-    h += 10;
+    h += Math.max(lineCount, 1) * 22;
+    if (lineCount) h += 28;
+    h += 12;
   });
-  h += 24;
-  return Math.ceil(Math.max(h * 1.15 + 90, SALES_PAGE_HEIGHT));
+  h += 40;
+  return Math.ceil(Math.max(h * 1.2 + 100, SALES_PAGE_HEIGHT));
 }
 
 function estimateSalesReportSummaryHeight(report) {
   const sections = report.sections || [];
-  let h = 36 + 340 + 110;
-  if (sections.length) h += 50 + sections.length * 46 + 50;
-  h += 24;
-  return Math.ceil(Math.max(h * 1.15 + 90, SALES_PAGE_HEIGHT));
+  let h = 80 + 200 + 220;
+  if (sections.length) h += 60 + sections.length * 48 + 56;
+  h += 40;
+  return Math.ceil(Math.max(h * 1.2 + 100, SALES_PAGE_HEIGHT));
 }
 
 function buildSalesReportContent(report, options = {}) {
@@ -1784,7 +1768,7 @@ function salesReportDocDefinition(content, pageSize) {
     defaultStyle: { font: 'Cairo', fontSize: 8, bold: false, color: SALES.ink },
     pageSize,
     pageOrientation: 'portrait',
-    pageMargins: [14, 14, 14, 22],
+    pageMargins: [14, 24, 14, 22],
     styles: STYLES,
     footer: () => ({
       text: COMPANY_NAME,
@@ -1802,9 +1786,11 @@ async function createSingleLongPagePdf(report, options = {}) {
   const pageHeight = options.summaryOnly
     ? estimateSalesReportSummaryHeight(report)
     : estimateSalesReportHeight(report);
+  const tall = Math.max(pageHeight, SALES_PAGE_WIDTH + 80);
+  // pdfmake-rtl يعكس width/height — نمرّرها معكوسة للحصول على صفحة عمودية طويلة (مثل كشف الحساب)
   return createPdfBuffer(salesReportDocDefinition(content, {
-    width: SALES_PAGE_WIDTH,
-    height: pageHeight
+    width: tall,
+    height: SALES_PAGE_WIDTH
   }));
 }
 

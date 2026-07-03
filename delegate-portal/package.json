@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "price-app": "node price-app-server.js",
     "sync": "node sync-client/sync.js",
     "init-db": "node scripts/init-db.js",
     "extract-logo": "node scripts/extract-logo.js",

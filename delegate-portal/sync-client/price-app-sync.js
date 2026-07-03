@@ -1,5 +1,6 @@
 /**
- * Sync Edari purchase movements + consumer prices + stock balance to price-app server.
+ * Sync Edari purchase movements + stock balance + product names to price-app server.
+ * Prices come from POS only — consumer_price (SellPr4) is NOT uploaded.
  *
  * In this Edari install, supplier purchases are File15n.Kind = 1 (matches
  * «حركة مواد — مشتريات»). Stock balance = File13n.InTot - File13n.OutTot.
@@ -302,7 +303,6 @@ function mapRowsToMovements(rows, accMap) {
     const supplier = accMap.get(String(sqlInt(row.AccSeq))) || '';
     const date = normalizeEdariDateIso(row.InvDate);
     const name = String(row.Name1 || row.MatName || '').trim();
-    const consumerPrice = Number(row.SellPr4 || 0);
 
     billSeqs.add(String(row.BillSeq));
 
@@ -318,15 +318,10 @@ function mapRowsToMovements(rows, accMap) {
     });
 
     if (!productMap.has(barcode)) {
-      productMap.set(barcode, {
-        barcode,
-        name,
-        consumer_price: consumerPrice > 0 ? consumerPrice : null,
-      });
+      productMap.set(barcode, { barcode, name });
     } else {
       const existing = productMap.get(barcode);
       if (name) existing.name = name;
-      if (consumerPrice > 0) existing.consumer_price = consumerPrice;
     }
   }
 
@@ -392,7 +387,6 @@ async function fetchAggregatePurchaseMovements() {
     if (qty <= 0) continue;
     const total = Number(row.PurchaseAm || 0);
     const unit = total > 0 ? total / qty : 0;
-    const consumerPrice = Number(row.SellPr4 || 0);
 
     movements.push({
       barcode,
@@ -408,7 +402,6 @@ async function fetchAggregatePurchaseMovements() {
     products.push({
       barcode,
       name: String(row.Name1 || '').trim(),
-      consumer_price: consumerPrice > 0 ? consumerPrice : null,
     });
   }
 
@@ -446,11 +439,9 @@ function mapCatalogRows(rows) {
   for (const row of rows) {
     const barcode = resolveMaterialBarcode(row);
     if (!barcode) continue;
-    const sellPr4 = Number(row.SellPr4 || 0);
     map.set(barcode, {
       barcode,
       name: String(row.Name1 || '').trim(),
-      consumer_price: sellPr4 > 0 ? sellPr4 : null,
       stock_balance: edariStockQty(row.InTot, row.OutTot),
     });
   }
@@ -468,7 +459,6 @@ function mergeProducts(primary = [], extra = []) {
       continue;
     }
     if (p.name) existing.name = p.name;
-    if (p.consumer_price > 0) existing.consumer_price = p.consumer_price;
     if (p.stock_balance != null && Number.isFinite(Number(p.stock_balance))) {
       existing.stock_balance = Number(p.stock_balance);
     }
