@@ -206,7 +206,7 @@ function rowToSyncItem(row) {
     discountValue: pricing.discountValue,
     discountType: pricing.discountType,
     stock: Math.max(0, Math.round(row.quantity || 0)),
-    offerName: pricing.offerName || undefined,
+    offerName: pricing.offerName || row.offerName || undefined,
   };
 }
 
