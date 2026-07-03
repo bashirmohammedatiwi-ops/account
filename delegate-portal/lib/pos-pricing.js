@@ -1,5 +1,5 @@
 /**
- * POS pricing — same logic as bashir-programing/api/server.js and pos-sync-desktop.
+ * POS pricing — same logic as price_app and pos-sync-desktop.
  * discount column = offer_details.discount; discount_type 0 = percentage.
  */
 
@@ -7,69 +7,163 @@ function round1(n) {
   return Math.round(Number(n) * 10) / 10;
 }
 
-function computePricing(row) {
-  const original = Math.round(Number(row.originalPrice) || 0);
-  const storedFinal = Math.round(Number(row.storedFinalPrice) || 0);
-  const discountValue = row.discountValue != null ? Number(row.discountValue) : null;
-  const discountType = row.discountType != null ? Number(row.discountType) : 0;
+function positivePrice(n) {
+  const v = Math.round(Number(n) || 0);
+  return v > 0 ? v : null;
+}
 
-  let hasOffer = false;
-  let finalPrice = original;
-  let discountPercent = null;
-  const offerName = row.offerName?.trim() || null;
+function deriveOriginalFromFinal(finalPrice, discountPercent, discountValue, discountType) {
+  const final = positivePrice(finalPrice);
+  if (!final) return null;
 
-  if (discountValue != null && discountValue > 0) {
-    hasOffer = true;
-    if (storedFinal > 0 && storedFinal < original) {
-      finalPrice = storedFinal;
-      discountPercent = original > 0 ? round1((1 - finalPrice / original) * 100) : 0;
-    } else if (discountType === 0) {
-      discountPercent = discountValue;
-      finalPrice = Math.round(original * (1 - discountValue / 100));
-    } else {
-      finalPrice = Math.max(0, Math.round(original - discountValue));
-      discountPercent = original > 0 ? round1((discountValue / original) * 100) : 0;
-    }
+  let pct = discountPercent != null && Number(discountPercent) > 0
+    ? round1(Number(discountPercent))
+    : null;
+  if ((pct == null || pct <= 0) && discountValue != null && Number(discountValue) > 0 && Number(discountType ?? 0) === 0) {
+    pct = round1(Number(discountValue));
   }
+  if (pct != null && pct > 0 && pct < 100) {
+    return Math.round(final / (1 - pct / 100));
+  }
+  return null;
+}
+
+function deriveDiscountFromPrices(original, final) {
+  if (original == null || final == null || original <= 0 || final <= 0 || final >= original) return null;
+  return round1((1 - final / original) * 100);
+}
+
+function finalizePricing({
+  originalPrice,
+  finalPrice,
+  discountPercent,
+  discountValue,
+  discountType,
+  offerName,
+}) {
+  let original = positivePrice(originalPrice);
+  let final = positivePrice(finalPrice);
+  let pct = discountPercent != null && Number(discountPercent) > 0
+    ? round1(Number(discountPercent))
+    : null;
+  const dVal = discountValue != null && Number(discountValue) > 0 ? Number(discountValue) : null;
+  const dType = discountType != null ? Number(discountType) : 0;
+
+  if ((pct == null || pct <= 0) && dVal != null && dType === 0) {
+    pct = round1(dVal);
+  }
+
+  if ((original == null || original <= 0) && final != null && pct != null && pct > 0) {
+    original = deriveOriginalFromFinal(final, pct, dVal, dType);
+  }
+
+  if ((pct == null || pct <= 0) && original != null && final != null && final < original) {
+    pct = deriveDiscountFromPrices(original, final);
+  }
+
+  if (final == null && original != null && pct != null && pct > 0 && pct < 100) {
+    final = Math.round(original * (1 - pct / 100));
+  }
+
+  if (final == null && original != null) final = original;
+  if (original == null && final != null && (pct == null || pct <= 0)) original = final;
+
+  const hasOffer = pct != null && pct > 0 && original != null && final != null && final < original;
 
   return {
     originalPrice: original,
-    finalPrice: hasOffer ? finalPrice : original,
-    discountPercent: hasOffer ? discountPercent : null,
-    discountValue: hasOffer ? discountValue : null,
-    discountType: hasOffer ? discountType : null,
+    finalPrice: hasOffer ? final : (final ?? original),
+    discountPercent: hasOffer ? pct : null,
+    discountValue: hasOffer ? (dType === 0 ? (dVal ?? pct) : dVal) : null,
+    discountType: hasOffer ? dType : null,
     hasOffer,
-    offerName,
+    offerName: hasOffer && offerName ? String(offerName).trim() || null : null,
   };
 }
 
-/** Normalize POS sync item (pos-sync-desktop payload). */
+function computePricing(row) {
+  const original = Math.round(Number(row.originalPrice) || 0);
+  const storedFinal = Math.round(Number(row.storedFinalPrice ?? row.price) || 0);
+  const discountValue = row.discountValue != null ? Number(row.discountValue) : null;
+  const discountType = row.discountType != null ? Number(row.discountType) : 0;
+
+  if (discountValue != null && discountValue > 0) {
+    let orig = original;
+    if (orig <= 0 && storedFinal > 0 && discountType === 0) {
+      orig = Math.round(storedFinal / (1 - discountValue / 100));
+    }
+    return finalizePricing({
+      originalPrice: orig,
+      finalPrice: storedFinal > 0 && storedFinal < orig ? storedFinal : undefined,
+      discountValue,
+      discountType,
+      offerName: row.offerName,
+    });
+  }
+
+  return finalizePricing({
+    originalPrice: original,
+    finalPrice: storedFinal || original,
+    offerName: row.offerName,
+  });
+}
+
 function pricingFromSyncItem(item) {
+  const discountValueRaw = item.discountValue != null ? Number(item.discountValue) : null;
+  const discountType = item.discountType != null ? Number(item.discountType) : 0;
+
+  if (discountValueRaw != null && discountValueRaw > 0) {
+    return computePricing({
+      originalPrice: item.originalPrice,
+      storedFinalPrice: item.price,
+      discountValue: discountValueRaw,
+      discountType,
+      offerName: item.offerName,
+    });
+  }
+
   const original = Math.round(Number(item.originalPrice) || 0);
   const price = Math.round(Number(item.price) || 0);
   const discountPercentRaw = item.discountPercent != null ? Number(item.discountPercent) : null;
 
-  let discountPercent = null;
-  let discountValue = null;
-  let discountType = null;
-
-  if (discountPercentRaw != null && discountPercentRaw > 0) {
-    discountPercent = round1(discountPercentRaw);
-    discountType = 0;
-    discountValue = discountPercent;
-  } else if (original > 0 && price > 0 && price < original) {
-    discountPercent = round1((1 - price / original) * 100);
-  }
-
-  return {
-    originalPrice: original,
-    finalPrice: price > 0 ? price : original,
-    discountPercent,
-    discountValue,
-    discountType,
-    hasOffer: discountPercent != null && discountPercent > 0,
-    offerName: item.offerName?.trim() || null,
-  };
+  return finalizePricing({
+    originalPrice: original > 0 ? original : null,
+    finalPrice: price > 0 ? price : null,
+    discountPercent: discountPercentRaw != null && discountPercentRaw > 0 ? discountPercentRaw : null,
+    discountValue: discountPercentRaw != null && discountPercentRaw > 0 ? discountPercentRaw : null,
+    discountType: discountPercentRaw != null && discountPercentRaw > 0 ? 0 : null,
+    offerName: item.offerName,
+  });
 }
 
-module.exports = { computePricing, pricingFromSyncItem, round1 };
+function resolveStoredPricing(row) {
+  const hasPosSync = row.pos_synced_at != null && String(row.pos_synced_at).trim() !== '';
+  if (!hasPosSync) {
+    return {
+      originalPrice: null,
+      finalPrice: null,
+      discountPercent: null,
+      discountValue: null,
+      discountType: null,
+      hasOffer: false,
+      offerName: null,
+    };
+  }
+
+  return finalizePricing({
+    originalPrice: row.original_price,
+    finalPrice: row.final_price ?? row.consumer_price,
+    discountPercent: row.discount_percent,
+    discountValue: row.discount_value,
+    discountType: row.discount_type,
+    offerName: row.offer_name,
+  });
+}
+
+module.exports = {
+  computePricing,
+  pricingFromSyncItem,
+  resolveStoredPricing,
+  finalizePricing,
+  round1,
+};

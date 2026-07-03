@@ -1610,7 +1610,38 @@ function salesReportPdfHeader(report, options = {}) {
     margin: [0, 0, 0, 14]
   } : null;
 
-  return { stack: [headerBand, ...(infoStrip ? [infoStrip] : [])], margin: [0, 6, 0, 0] };
+  return { stack: [headerBand, ...(infoStrip ? [infoStrip] : [])], margin: [0, 0, 0, 0] };
+}
+
+/** رأس مختصر يتكرر أعلى الصفحات التالية عند انقسام التقرير */
+function salesReportContinuationHeader(report, options = {}) {
+  const period = report.period || {};
+  const periodText = period.dateFrom && period.dateTo
+    ? `${fmtDate(period.dateFrom)} — ${fmtDate(period.dateTo)}`
+    : '';
+  const kind = options.summaryOnly ? 'ملخص شجرات المواد' : 'تفاصيل شجرات المواد';
+  return {
+    table: {
+      widths: ['*'],
+      body: [[{
+        stack: [
+          { text: COMPANY_NAME, fontSize: 8, bold: true, color: '#cbd5e1', alignment: 'right' },
+          {
+            text: [kind, periodText ? ` · ${periodText}` : ''].join(''),
+            fontSize: 9,
+            bold: true,
+            color: '#ffffff',
+            alignment: 'right',
+            margin: [0, 2, 0, 0]
+          }
+        ],
+        fillColor: SALES.head,
+        margin: [12, 8, 12, 8]
+      }]]
+    },
+    layout: 'noBorders',
+    margin: [0, 0, 0, 8]
+  };
 }
 
 function treeSummaryMetrics(section) {
@@ -1704,40 +1735,55 @@ function salesTreesSummaryBlock(report) {
 
 const SALES_PAGE_WIDTH = 595.28;
 const SALES_PAGE_HEIGHT = 841.89;
+/** pdfmake حد أقصى تقريبي لارتفاع الصفحة (نقطة) */
+const SALES_MAX_PAGE_HEIGHT = 14000;
 
 function estimateSalesReportHeight(report) {
   const sections = report.sections || [];
-  let h = 80; // رأس + فترة
-  h += 200; // بطاقات KPI
-  h += 220; // الملخص الإجمالي
-  if (sections.length) h += 60 + sections.length * 48 + 56; // ملخص الشجرات
-  if (sections.length) h += 28;
+  const margins = 64;
+  const footer = 24;
+  let body = 0;
+  body += 110; // رأس + شريط الفترة
+  body += 320; // بطاقات KPI (خط كبير)
+  body += 300; // الملخص الإجمالي
+  if (sections.length) body += 70 + sections.length * 54 + 64; // ملخص الشجرات
+  if (sections.length) body += 44; // فاصل + عنوان التفاصيل
   sections.forEach((section, index) => {
-    if (index > 0) h += 16;
-    h += 52;
+    if (index > 0) body += 22;
+    body += 56; // عنوان الشجرة + رأس الأعمدة
     const lineCount = section.lines?.length || 0;
-    h += Math.max(lineCount, 1) * 22;
-    if (lineCount) h += 28;
-    h += 12;
+    body += Math.max(lineCount, 1) * 30;
+    if (lineCount) body += 34;
+    body += 14;
   });
-  h += 40;
-  return Math.ceil(Math.max(h * 1.2 + 100, SALES_PAGE_HEIGHT));
+  return Math.min(
+    Math.ceil((margins + footer + body) * 1.55 + 160),
+    SALES_MAX_PAGE_HEIGHT
+  );
 }
 
 function estimateSalesReportSummaryHeight(report) {
   const sections = report.sections || [];
-  let h = 80 + 200 + 220;
-  if (sections.length) h += 60 + sections.length * 48 + 56;
-  h += 40;
-  return Math.ceil(Math.max(h * 1.2 + 100, SALES_PAGE_HEIGHT));
+  const margins = 64;
+  const footer = 24;
+  let body = 110 + 320 + 300;
+  if (sections.length) body += 70 + sections.length * 54 + 64;
+  return Math.min(
+    Math.ceil((margins + footer + body) * 1.55 + 160),
+    SALES_MAX_PAGE_HEIGHT
+  );
 }
 
 function buildSalesReportContent(report, options = {}) {
-  const content = [
+  const preamble = [
     salesReportPdfHeader(report, options),
     salesGrandSummaryBlock(report),
     salesTreesSummaryBlock(report)
   ].filter(Boolean);
+
+  const content = preamble.length
+    ? [{ unbreakable: true, stack: preamble, margin: [0, 0, 0, 0] }]
+    : [];
 
   if (options.summaryOnly) return content;
 
@@ -1762,14 +1808,17 @@ function buildSalesReportContent(report, options = {}) {
   return content;
 }
 
-function salesReportDocDefinition(content, pageSize) {
+function salesReportDocDefinition(content, pageSize, report, options = {}) {
   return {
     rtl: true,
     defaultStyle: { font: 'Cairo', fontSize: 8, bold: false, color: SALES.ink },
     pageSize,
     pageOrientation: 'portrait',
-    pageMargins: [14, 24, 14, 22],
+    pageMargins: [14, 42, 14, 26],
     styles: STYLES,
+    header: (currentPage) => (
+      currentPage > 1 ? salesReportContinuationHeader(report, options) : null
+    ),
     footer: () => ({
       text: COMPANY_NAME,
       fontSize: 7,
@@ -1786,12 +1835,12 @@ async function createSingleLongPagePdf(report, options = {}) {
   const pageHeight = options.summaryOnly
     ? estimateSalesReportSummaryHeight(report)
     : estimateSalesReportHeight(report);
-  const tall = Math.max(pageHeight, SALES_PAGE_WIDTH + 80);
+  const tall = Math.max(pageHeight, SALES_PAGE_HEIGHT + 120);
   // pdfmake-rtl يعكس width/height — نمرّرها معكوسة للحصول على صفحة عمودية طويلة (مثل كشف الحساب)
   return createPdfBuffer(salesReportDocDefinition(content, {
     width: tall,
     height: SALES_PAGE_WIDTH
-  }));
+  }, report, options));
 }
 
 async function buildTreeSalesReportPdf(report) {

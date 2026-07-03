@@ -503,8 +503,8 @@
           <div class="sync-hero panel panel-accent">
             <div class="sync-hero-text">
               <h2>مزامنة الأسعار — تطبيق الويب</h2>
-              <p>من Edari: أسماء المواد، الرصيد، وحركات المشتريات. الأسعار (أصلي / خصم / نهائي) تأتي من POS فقط عبر pos-sync-desktop.</p>
-              <p class="muted">واجهة الأسعار: <a href="/prices/" target="_blank" rel="noopener">/prices/</a></p>
+              <p>من Edari: أسماء المواد، الرصيد، وحركات المشتريات. من POS: السعر الأصلي، نسبة الخصم، والسعر النهائي — تُرفع تلقائياً عند «تحديث الأسعار» أو «إعادة مزامنة كاملة».</p>
+              <p class="muted">واجهة الأسعار: <a href="https://demaalhayaadelivery.online/price/" target="_blank" rel="noopener">demaalhayaadelivery.online/price/</a></p>
               <p class="muted" id="priceSyncLastResult">—</p>
             </div>
             <div class="sync-hero-actions">
@@ -531,7 +531,8 @@
               <div class="form-stack">
                 <ul class="simple-list">
                   <li>Edari: حركات مشتريات Kind=1/3، أسماء المواد، الرصيد (InTot − OutTot)</li>
-                  <li>POS (pos-sync-desktop): SellPr4 أصلي، offer_details.discount، SellPr5 نهائي</li>
+                  <li>POS (SQL Server): SellPr4 أصلي، offer_details.discount، SellPr5 نهائي</li>
+                  <li>زر التحديث يرفع Edari ثم أسعار POS إلى الويب في خطوة واحدة</li>
                   <li>أول مزامنة Edari: كل البيانات — بعدها تحديثات جزئية فقط</li>
                 </ul>
                 <p class="field-hint" id="priceSyncModeHint">—</p>
@@ -547,7 +548,7 @@
                 <div class="form-stack">
                   <label class="field">
                     <span>عنوان API</span>
-                    <input type="text" id="priceAppServerUrl" dir="ltr" value="http://187.124.23.65:5000" placeholder="https://demaalhayaadelivery.online/price-api">
+                    <input type="text" id="priceAppServerUrl" dir="ltr" value="https://demaalhayaadelivery.online/price-api" placeholder="https://demaalhayaadelivery.online/price-api">
                   </label>
                   <label class="field">
                     <span>مفتاح المزامنة (اختياري)</span>
@@ -558,11 +559,36 @@
               </section>
 
               <section class="panel">
+                <div class="panel-head">
+                  <h2 class="panel-title">قاعدة POS (SQL Server)</h2>
+                </div>
+                <div class="form-stack">
+                  <label class="field">
+                    <span>السيرفر</span>
+                    <input type="text" id="posSqlServer" dir="ltr" value="localhost\FOTSQLSERVER" placeholder="localhost\FOTSQLSERVER">
+                  </label>
+                  <label class="field">
+                    <span>قاعدة البيانات</span>
+                    <input type="text" id="posSqlDatabase" dir="ltr" value="HAYAT2025.mdf" placeholder="HAYAT2025.mdf">
+                  </label>
+                  <label class="field">
+                    <span>مستخدم SQL (اتركه فارغاً لـ Windows Auth)</span>
+                    <input type="text" id="posSqlUser" dir="ltr" autocomplete="off" placeholder="">
+                  </label>
+                  <label class="field">
+                    <span>كلمة مرور SQL</span>
+                    <input type="password" id="posSqlPassword" dir="ltr" autocomplete="off" placeholder="">
+                  </label>
+                  <p class="field-hint">يجب أن يكون sqlcmd متاحاً على هذا الجهاز (SQL Server Tools).</p>
+                </div>
+              </section>
+
+              <section class="panel">
                 <h2 class="panel-title">ماذا يُرفع؟</h2>
                 <ul class="simple-list">
                   <li>حركة مشتريات كل مادة (مورد، فاتورة، كمية، سعر شراء، تاريخ)</li>
                   <li>اسم المادة والرصيد من Edari</li>
-                  <li>لا يُرفع SellPr4 — الأسعار من POS فقط</li>
+                  <li>السعر الأصلي، نسبة الخصم، والسعر النهائي من POS</li>
                 </ul>
               </section>
 
@@ -955,6 +981,6 @@
   <script src="admin-commerce.js?v=20260613orderinv"></script>
   <script src="admin-sales-report.js?v=20260615stable"></script>
   <script src="admin-account-statements.js?v=20260615kpi"></script>
-  <script src="admin-price-sync.js?v=20260617"></script>
+  <script src="admin-price-sync.js?v=20260703"></script>
 </body>
 </html>

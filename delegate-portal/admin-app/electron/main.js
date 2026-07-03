@@ -905,7 +905,7 @@ ipcMain.handle('run-background-sync-now', async () => {
 let activePriceSyncPromise = null;
 const PRICE_SYNC_TIMEOUT_MS = 20 * 60 * 1000;
 
-function runPriceAppSyncScript({ serverUrl, syncKey, mode } = {}) {
+function runPriceAppSyncScript({ serverUrl, syncKey, mode, posSqlServer, posSqlDatabase, posSqlUser, posSqlPassword } = {}) {
   if (activePriceSyncPromise) return activePriceSyncPromise;
 
   activePriceSyncPromise = new Promise((resolve, reject) => {
@@ -915,7 +915,7 @@ function runPriceAppSyncScript({ serverUrl, syncKey, mode } = {}) {
     let stdout = '';
     let stderr = '';
     let settled = false;
-    const syncTarget = String(serverUrl || 'http://187.124.23.65:5000').replace(/\/$/, '');
+    const syncTarget = String(serverUrl || 'https://demaalhayaadelivery.online/price-api').replace(/\/$/, '');
     const syncMode = mode === 'full' ? 'full' : 'incremental';
     const syncStateFile = path.join(app.getPath('userData'), 'price-sync-state.json');
 
@@ -929,6 +929,10 @@ function runPriceAppSyncScript({ serverUrl, syncKey, mode } = {}) {
         PRICE_APP_SERVER: syncTarget,
         PRICE_SYNC_KEY: syncKey || '',
         PRICE_SYNC_STATE_FILE: syncStateFile,
+        POS_SQL_SERVER: posSqlServer || process.env.POS_SQL_SERVER || '',
+        POS_SQL_DATABASE: posSqlDatabase || process.env.POS_SQL_DATABASE || '',
+        POS_SQL_USER: posSqlUser || process.env.POS_SQL_USER || '',
+        POS_SQL_PASSWORD: posSqlPassword || process.env.POS_SQL_PASSWORD || '',
       }),
       windowsHide: true,
     });

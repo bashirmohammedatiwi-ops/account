@@ -13,6 +13,7 @@ const NODE_OUT = path.join(OUT, 'node');
 
 const PORTAL_COPY = [
   'server.js',
+  'price-app-server.js',
   'package.json',
   'package-lock.json',
   'lib',

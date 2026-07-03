@@ -1,5 +1,5 @@
 const db = require('./db');
-const { computePricing, pricingFromSyncItem } = require('./pos-pricing');
+const { computePricing, pricingFromSyncItem, resolveStoredPricing } = require('./pos-pricing');
 
 function initPriceCatalogSchema() {
   db.exec(`
@@ -158,7 +158,7 @@ function upsertPosItems(items = []) {
       const barcode = normalizeBarcode(item.barcode);
       if (!barcode) continue;
       let pricing;
-      if (item.discountValue != null || item.discountType != null) {
+      if (item.discountValue != null && Number(item.discountValue) > 0) {
         pricing = computePricing({
           originalPrice: item.originalPrice,
           storedFinalPrice: item.price,
@@ -280,11 +280,39 @@ function listProducts({ page = 1, limit = 50, search = '', offersOnly = false } 
     LIMIT @limit OFFSET @offset
   `).all(params);
 
-  const products = rows.map((r) => ({
-    ...r,
-    hasOffer: r.discountPercent != null && r.discountPercent > 0,
-    quantity: r.posStock ?? r.stockBalance ?? 0,
-  }));
+  const products = rows.map((r) => {
+    const hasPos = r.posSyncedAt != null && String(r.posSyncedAt).trim() !== '';
+    const pricing = hasPos
+      ? resolveStoredPricing({
+          original_price: r.originalPrice,
+          final_price: r.finalPrice,
+          discount_percent: r.discountPercent,
+          discount_value: r.discountValue,
+          discount_type: r.discountType,
+          offer_name: r.offerName,
+          pos_synced_at: r.posSyncedAt,
+        })
+      : {
+          originalPrice: null,
+          finalPrice: null,
+          discountPercent: null,
+          discountValue: null,
+          discountType: null,
+          offerName: null,
+          hasOffer: false,
+        };
+    return {
+      ...r,
+      originalPrice: pricing.originalPrice,
+      finalPrice: pricing.finalPrice,
+      discountPercent: pricing.discountPercent,
+      discountValue: pricing.discountValue,
+      discountType: pricing.discountType,
+      offerName: pricing.offerName || r.offerName,
+      hasOffer: pricing.hasOffer,
+      quantity: r.posStock ?? r.stockBalance ?? 0,
+    };
+  });
 
   return {
     products,

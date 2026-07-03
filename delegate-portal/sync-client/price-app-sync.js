@@ -1,12 +1,13 @@
 /**
- * Sync Edari purchase movements + stock balance + product names to price-app server.
- * Prices come from POS only — consumer_price (SellPr4) is NOT uploaded.
+ * Sync Edari purchase movements + stock balance + product names + POS prices to price-app server.
+ * Edari: names, stock, purchase movements. POS (SQL Server): original/discount/final prices.
  *
  * In this Edari install, supplier purchases are File15n.Kind = 1 (matches
  * «حركة مواد — مشتريات»). Stock balance = File13n.InTot - File13n.OutTot.
  *
  * Usage:
  *   node sync-client/price-app-sync.js --server URL [--full|--incremental] [--key KEY]
+ *   POS SQL via env: POS_SQL_SERVER, POS_SQL_DATABASE, POS_SQL_USER, POS_SQL_PASSWORD
  */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
@@ -17,10 +18,11 @@ const edariRoot = process.env.EDARI_READER_ROOT
 const odbcBridge = require(path.join(edariRoot, 'lib', 'odbc-bridge'));
 const { getEdariConnection } = require('./edari-connection');
 const { normalizeEdariDateIso } = require('../lib/date-utils');
+const { syncPosPricing } = require('./pos-pricing-sync');
 
 const SERVER = process.argv.includes('--server')
   ? process.argv[process.argv.indexOf('--server') + 1]
-  : (process.env.PRICE_APP_SERVER || 'http://187.124.23.65:5000');
+  : (process.env.PRICE_APP_SERVER || 'https://demaalhayaadelivery.online/price-api');
 
 const SYNC_KEY = process.argv.includes('--key')
   ? process.argv[process.argv.indexOf('--key') + 1]
@@ -510,6 +512,20 @@ async function uploadAll(serverUrl, syncKey, products, movements) {
   return { productsUpserted, consumerPricesUpdated, stockBalancesUpdated, movementsUpserted };
 }
 
+async function runPosPricingUpload(serverUrl, syncKey, options = {}) {
+  return syncPosPricing({
+    serverUrl,
+    syncKey,
+    posConfig: {
+      server: options.posSqlServer,
+      database: options.posSqlDatabase,
+      user: options.posSqlUser,
+      password: options.posSqlPassword,
+    },
+    onProgress: (pct, msg) => reportProgress(4, 4, pct, msg),
+  });
+}
+
 async function main(options = {}) {
   const serverUrl = String(options.serverUrl || SERVER || '').trim().replace(/\/$/, '');
   const syncKey = String(options.syncKey ?? SYNC_KEY ?? '').trim();
@@ -548,8 +564,19 @@ async function main(options = {}) {
   reportProgress(2, 4, 100, `منتجات: ${products.length}`);
 
   if (!purchaseData.movements.length && !products.length) {
+    reportProgress(3, 4, 100, 'لا تحديثات Edari — الانتقال إلى POS...');
+    let posResult = { posSynced: 0, posFailed: 0, posOffers: 0 };
+    try {
+      posResult = await runPosPricingUpload(serverUrl, syncKey, options);
+      console.log(`✓ POS: ${posResult.posSynced} منتج (${posResult.posOffers || 0} بعرض)`);
+    } catch (err) {
+      posResult.posError = err.message || String(err);
+      console.error(`تحذير POS: ${posResult.posError}`);
+    }
+
     const summary = {
       ok: true,
+      posOk: !posResult.posError,
       mode: incremental ? 'incremental' : 'full',
       bills: 0,
       rawLines: 0,
@@ -559,15 +586,26 @@ async function main(options = {}) {
       consumerPricesUpdated: 0,
       stockBalancesUpdated: 0,
       movementsUpserted: 0,
-      message: 'لا توجد تحديثات جديدة',
+      ...posResult,
+      message: posResult.posError
+        ? `Edari: لا تحديثات — تحذير POS: ${posResult.posError}`
+        : `Edari: لا تحديثات — POS: ${posResult.posSynced} سعر (${posResult.posOffers || 0} عرض)`,
     };
-    console.log('✓ لا توجد تحديثات جديدة');
     console.log(`@SYNC_RESULT|${JSON.stringify(summary)}`);
     return summary;
   }
 
-  reportProgress(3, 4, 0, 'رفع البيانات إلى سيرفر الأسعار...');
+  reportProgress(3, 4, 0, 'رفع بيانات Edari إلى سيرفر الأسعار...');
   const uploadResult = await uploadAll(serverUrl, syncKey, products, purchaseData.movements);
+
+  let posResult = { posSynced: 0, posFailed: 0, posOffers: 0 };
+  try {
+    posResult = await runPosPricingUpload(serverUrl, syncKey, options);
+    console.log(`✓ POS: ${posResult.posSynced} منتج (${posResult.posOffers || 0} بعرض)`);
+  } catch (err) {
+    posResult.posError = err.message || String(err);
+    console.error(`تحذير POS: ${posResult.posError}`);
+  }
 
   const now = new Date().toISOString();
   const nextState = {
@@ -587,6 +625,7 @@ async function main(options = {}) {
 
   const summary = {
     ok: true,
+    posOk: !posResult.posError,
     mode: incremental ? 'incremental' : 'full',
     bills: purchaseData.bills || 0,
     rawLines: purchaseData.rawLines || 0,
@@ -596,10 +635,14 @@ async function main(options = {}) {
     products: products.length,
     movements: purchaseData.movements.length,
     ...uploadResult,
+    ...posResult,
+    message: posResult.posError
+      ? `Edari: ${uploadResult.productsUpserted || 0} منتج، ${uploadResult.movementsUpserted || 0} حركة — تحذير POS: ${posResult.posError}`
+      : `Edari: ${uploadResult.productsUpserted || 0} منتج، ${uploadResult.movementsUpserted || 0} حركة | POS: ${posResult.posSynced || 0} سعر (${posResult.posOffers || 0} عرض)`,
   };
 
   console.log(
-    `✓ ${incremental ? 'تحديث' : 'مزامنة كاملة'}: ${summary.productsUpserted} منتج، ${summary.movementsUpserted} حركة، ${summary.stockBalancesUpdated} رصيد (${summary.bills} فاتورة)`,
+    `✓ ${incremental ? 'تحديث' : 'مزامنة كاملة'}: Edari ${summary.productsUpserted} منتج، ${summary.movementsUpserted} حركة | POS ${summary.posSynced || 0} سعر (${summary.posOffers || 0} عرض)`,
   );
   console.log(`@SYNC_RESULT|${JSON.stringify(summary)}`);
   return summary;
@@ -622,4 +665,5 @@ module.exports = {
   fetchProductCatalogForMats,
   loadSyncState,
   saveSyncState,
+  runPosPricingUpload,
 };
