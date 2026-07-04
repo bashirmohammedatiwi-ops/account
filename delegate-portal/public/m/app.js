@@ -985,7 +985,6 @@ function renderStatement(data) {
     ? `رصيد مدور ${fmtNumAlways(openingBal < 0 ? Math.abs(openingBal) : openingBal)}`
     : '';
   const periodNote = formatStatementPeriod(data, acc, openingNote);
-  const showBranchCol = lines.some((line) => line.branch2);
 
   renderDebtField(data.debtAmount ?? 0);
 
@@ -1016,7 +1015,7 @@ function renderStatement(data) {
     document.getElementById('stmtTableSection').classList.remove('hidden');
     const moveCount = lines.filter((line) => !line.isOpening).length;
     document.getElementById('stmtLineCount').textContent = `${moveCount} حركة`;
-    const detailColspan = showBranchCol ? 3 : 2;
+    const detailColspan = 2;
     const rows = lines.map((r) => {
       const showInvoiceBtn = isInvoiceLine(r) && !r.isOpening;
       const invoiceLookup = showInvoiceBtn ? invoiceLookupFor(r, branch.seq) : null;
@@ -1035,7 +1034,6 @@ function renderStatement(data) {
         ${amtTd(r.debit, 'debit')}
         ${amtTd(r.credit, 'credit')}
         <td class="col-desc"><span class="stmt-desc-text">${esc(r.description) || '—'}</span></td>
-        ${showBranchCol ? `<td class="col-branch">${esc(r.branch2 || '')}</td>` : ''}
         <td class="col-date">${r.isOpening ? '' : (r.date ? fmtDate(r.date) : '')}</td>
         <td class="num col-balance ${balanceClassFor(r.balance)}" dir="ltr">${fmtEdariRunningBalance(r.balance, r.isOpening)}</td>
         <td class="col-act">${actions}</td>
@@ -1051,7 +1049,6 @@ function renderStatement(data) {
               <th class="col-amt col-debit">مدين</th>
               <th class="col-amt col-credit">دائن</th>
               <th class="col-desc">البيان</th>
-              ${showBranchCol ? '<th class="col-branch">الفرع 2</th>' : ''}
               <th class="col-date">التاريخ</th>
               <th class="col-amt col-balance">حركة الرصيد</th>
               <th class="col-act">إجراءات</th>
