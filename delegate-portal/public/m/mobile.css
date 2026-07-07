@@ -17,14 +17,30 @@
 
   .header-center h1 {
     font-size: 0.92rem;
-  }
-
-  .ed-header-kicker {
-    display: none;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
   .breadcrumb {
     font-size: 0.68rem;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .ed-header-kicker {
+    display: none;
   }
 
   .back-btn,
@@ -184,8 +200,114 @@
 
   /* Statement — card layout instead of wide table */
   #screen-statement {
+    padding: 8px 10px calc(12px + var(--safe-bottom, 0px));
     overflow-y: auto;
+    overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
+  }
+
+  #screen-statement .export-bar {
+    margin-bottom: 8px;
+  }
+
+  .stmt-debt-field {
+    margin-bottom: 10px;
+    padding: 12px 14px;
+    border-radius: 14px;
+  }
+
+  .debt-field-value {
+    font-size: 1.45rem;
+  }
+
+  .doc-panel {
+    border-radius: 14px;
+    padding: 12px 12px 10px;
+    margin-bottom: 10px;
+  }
+
+  .doc-title {
+    font-size: 0.95rem;
+    line-height: 1.4;
+    white-space: normal;
+  }
+
+  .doc-period-line {
+    font-size: 0.68rem;
+    margin-top: 6px;
+  }
+
+  .stmt-account-meta {
+    margin: 6px 0 4px;
+  }
+
+  .stmt-meta-line {
+    font-size: 0.74rem;
+  }
+
+  .stmt-summary-mobile {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin: 10px 0 4px;
+  }
+
+  .stmt-stat-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    background: var(--surface-alt, #f8fafc);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    min-height: 64px;
+    justify-content: center;
+  }
+
+  .stmt-stat-card.stmt-stat-balance {
+    grid-column: 1 / -1;
+    background: #fff;
+    border-color: #cbd5e1;
+  }
+
+  .stmt-stat-label {
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: var(--muted);
+  }
+
+  .stmt-stat-value {
+    font-size: 1.02rem;
+    font-weight: 800;
+    line-height: 1.2;
+    text-align: left;
+  }
+
+  .stmt-stat-value.debit {
+    color: var(--danger);
+  }
+
+  .stmt-stat-value.credit {
+    color: var(--success);
+  }
+
+  .stmt-meta-desktop {
+    display: none !important;
+  }
+
+  .stmt-table-section .section-head {
+    margin: 4px 0 10px;
+    padding: 0;
+  }
+
+  .stmt-table-section .section-head h3 {
+    font-size: 0.92rem;
+  }
+
+  .section-count {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--muted);
   }
 
   .export-bar {
@@ -196,10 +318,13 @@
     width: 100%;
     justify-content: center;
     min-height: 44px;
+    font-size: 0.88rem;
   }
 
   .stmt-table-wrap {
     overflow: visible;
+    margin: 0;
+    padding: 0;
   }
 
   .data-table.stmt-table {
@@ -218,9 +343,16 @@
   }
 
   .data-table.stmt-table tbody tr {
-    display: block;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "desc desc"
+      "debit credit"
+      "date bal"
+      "act act";
+    gap: 8px 10px;
     margin-bottom: 10px;
-    padding: 10px 12px;
+    padding: 12px 14px;
     border: 1px solid var(--border);
     border-radius: 14px;
     background: #fff;
@@ -231,6 +363,9 @@
   .data-table.stmt-table tbody tr.row-opening {
     background: #eff6ff;
     border-color: #bfdbfe;
+    grid-template-areas:
+      "desc desc"
+      "bal bal";
   }
 
   .data-table.stmt-table tbody tr.row-recon {
@@ -242,8 +377,8 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 10px;
-    padding: 5px 0;
+    gap: 8px;
+    padding: 0;
     border: none;
     min-width: 0;
     max-width: none;
@@ -253,48 +388,120 @@
 
   .data-table.stmt-table tbody td::before {
     content: attr(data-label);
-    font-size: 0.68rem;
+    font-size: 0.65rem;
     font-weight: 800;
     color: var(--muted);
     flex-shrink: 0;
   }
 
   .data-table.stmt-table tbody td.col-desc {
+    grid-area: desc;
     flex-direction: column;
     align-items: stretch;
-    gap: 4px;
-    padding-bottom: 8px;
-    border-bottom: 1px dashed var(--border);
-    margin-bottom: 4px;
+    gap: 0;
+    padding-bottom: 10px;
+    margin-bottom: 2px;
+    border-bottom: 1px solid var(--border);
   }
 
   .data-table.stmt-table tbody td.col-desc::before {
-    margin-bottom: 2px;
+    display: none;
+  }
+
+  .data-table.stmt-table tbody td.col-desc .stmt-desc-text {
+    font-size: 0.9rem;
+    font-weight: 800;
+    line-height: 1.45;
+    color: var(--text);
+  }
+
+  .data-table.stmt-table tbody td.col-debit {
+    grid-area: debit;
+  }
+
+  .data-table.stmt-table tbody td.col-credit {
+    grid-area: credit;
+  }
+
+  .data-table.stmt-table tbody td.col-date {
+    grid-area: date;
+  }
+
+  .data-table.stmt-table tbody td.col-balance {
+    grid-area: bal;
+  }
+
+  .data-table.stmt-table tbody td.col-act {
+    grid-area: act;
+    flex-direction: column;
+    align-items: stretch;
+    padding-top: 4px;
+    border-top: 1px dashed var(--border);
+    margin-top: 2px;
+  }
+
+  .data-table.stmt-table tbody td.col-amt {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    background: var(--surface-alt, #f8fafc);
+    border-radius: 10px;
+    padding: 8px 10px !important;
+  }
+
+  .data-table.stmt-table tbody td.col-amt::before {
+    font-size: 0.62rem;
+    letter-spacing: 0.02em;
+  }
+
+  .data-table.stmt-table tbody td.col-amt.empty {
+    display: none;
+  }
+
+  .data-table.stmt-table tbody td.col-date:empty {
+    display: none;
+  }
+
+  .data-table.stmt-table tbody td.col-date,
+  .data-table.stmt-table tbody td.col-balance {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    background: var(--surface-alt, #f8fafc);
+    border-radius: 10px;
+    padding: 8px 10px !important;
+  }
+
+  .data-table.stmt-table tbody td.col-date::before,
+  .data-table.stmt-table tbody td.col-balance::before {
+    font-size: 0.62rem;
   }
 
   .data-table.stmt-table tbody td.col-act::before {
     content: 'إجراءات';
-  }
-
-  .data-table.stmt-table tbody td.empty:not(.col-desc) {
-    display: none;
+    margin-bottom: 4px;
   }
 
   .data-table.stmt-table tbody td.col-act .tbl-actions {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
     width: 100%;
-    justify-content: flex-end;
   }
 
   .data-table.stmt-table tbody .tbl-btn {
-    min-height: 40px;
-    min-width: 56px;
-    padding: 8px 12px;
+    flex: 1;
+    min-height: 44px;
+    min-width: 0;
+    padding: 10px 12px;
+    font-size: 0.85rem;
+    font-weight: 800;
   }
 
   .data-table.stmt-table tfoot tr {
     display: block;
     margin-top: 12px;
-    padding: 12px;
+    padding: 12px 14px;
     border-radius: 14px;
     background: var(--surface-alt);
     border: 1px solid var(--border);
@@ -304,6 +511,7 @@
   .data-table.stmt-table tfoot td {
     display: flex;
     justify-content: space-between;
+    align-items: center;
     padding: 6px 0;
     border: none;
     background: transparent !important;
@@ -331,26 +539,6 @@
 
   .data-table.stmt-table tfoot td:empty {
     display: none;
-  }
-
-  .doc-panel {
-    border-radius: 14px;
-  }
-
-  .stmt-meta-table {
-    display: block;
-  }
-
-  .stmt-meta-table tr {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .stmt-meta-table th,
-  .stmt-meta-table td {
-    font-size: 0.68rem !important;
-    padding: 4px 6px !important;
   }
 
   /* Invoice tables — keep horizontal scroll but tighter */

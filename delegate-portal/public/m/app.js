@@ -147,8 +147,9 @@ function balanceClassFor(bal) {
 function amtTd(val, cls, label) {
   const n = Number(val);
   const labelAttr = label ? ` data-label="${esc(label)}"` : '';
-  if (!n) return `<td class="num empty"${labelAttr}>—</td>`;
-  return `<td class="num ${cls || ''}" dir="ltr"${labelAttr}>${fmtNumAlways(n)}</td>`;
+  const colCls = cls ? ` col-amt col-${cls}` : '';
+  if (!n) return `<td class="num empty${colCls}"${labelAttr}>—</td>`;
+  return `<td class="num ${cls || ''}${colCls}" dir="ltr"${labelAttr}>${fmtNumAlways(n)}</td>`;
 }
 
 function moneyTd(val, cls) {
@@ -953,16 +954,6 @@ async function loadStatement(seq) {
   }
 }
 
-function formatStatementAccountTitle(acc) {
-  const num = String(acc?.num || '').trim();
-  const name = [acc?.name1, acc?.name2].filter(Boolean).join(' - ').trim() || '—';
-  const address = String(acc?.address || '').trim();
-  let title = name;
-  if (num) title = `${title} / ${num}`;
-  if (address) title += ` · العنوان: ${address}`;
-  return title;
-}
-
 function formatStatementPeriod(data, acc, openingNote = '') {
   const start = data?.periodStart || acc?.fixDate;
   const end = data?.periodEnd;
@@ -989,16 +980,50 @@ function renderStatement(data) {
 
   renderDebtField(data.debtAmount ?? 0);
 
+  const accName = [acc?.name1, acc?.name2].filter(Boolean).join(' - ').trim() || '—';
+  const accNum = String(acc?.num || '').trim();
+  const accAddress = String(acc?.address || '').trim();
+  const accMetaBits = [
+    accNum ? `رقم ${accNum}` : '',
+    accAddress
+  ].filter(Boolean);
+
+  if (state.screen === 'statement') {
+    const titleEl = document.getElementById('screenTitle');
+    const crumbEl = document.getElementById('breadcrumb');
+    if (titleEl) titleEl.textContent = accName;
+    if (crumbEl) crumbEl.textContent = accNum ? `كشف حساب · ${accNum}` : 'كشف حساب';
+  }
+
   document.getElementById('stmtHero').innerHTML = `
     <div class="doc-panel">
       <div class="doc-head-row">
         <div class="doc-head-main">
           <span class="doc-label">كشف حساب</span>
-          <strong class="doc-title">${esc(formatStatementAccountTitle(acc))}</strong>
-          <span class="doc-meta-line">${esc(periodNote)}</span>
+          <strong class="doc-title">${esc(accName)}</strong>
+          ${accMetaBits.length ? `<div class="stmt-account-meta">${accMetaBits.map((bit) => `<span class="stmt-meta-line">${esc(bit)}</span>`).join('')}</div>` : ''}
+          <span class="doc-meta-line doc-period-line">${esc(periodNote)}</span>
         </div>
       </div>
-      <table class="doc-meta-table stmt-meta-table">
+      <div class="stmt-summary-mobile" aria-label="ملخص الكشف">
+        <div class="stmt-stat-card stmt-stat-debit">
+          <span class="stmt-stat-label">إجمالي مدين</span>
+          <span class="stmt-stat-value debit" dir="ltr">${fmtNumAlways(totalDebit)}</span>
+        </div>
+        <div class="stmt-stat-card stmt-stat-credit">
+          <span class="stmt-stat-label">إجمالي دائن</span>
+          <span class="stmt-stat-value credit" dir="ltr">${fmtNumAlways(totalCredit)}</span>
+        </div>
+        <div class="stmt-stat-card stmt-stat-count">
+          <span class="stmt-stat-label">عدد الحركات</span>
+          <span class="stmt-stat-value" dir="ltr">${lines.length}</span>
+        </div>
+        <div class="stmt-stat-card stmt-stat-balance">
+          <span class="stmt-stat-label">رصيد الحساب</span>
+          <span class="stmt-stat-value ${balanceClassFor(currentBal)}" dir="ltr">${fmtBalanceDisplay(currentBal)}</span>
+        </div>
+      </div>
+      <table class="doc-meta-table stmt-meta-table stmt-meta-desktop">
         <tbody>
           <tr>
             <th>إجمالي مدين</th><td class="debit" dir="ltr">${fmtNumAlways(totalDebit)}</td>

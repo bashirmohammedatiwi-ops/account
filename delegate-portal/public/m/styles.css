@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   --bg: #eef1f5;
   --surface: #ffffff;
   --surface-muted: #f8fafc;
@@ -1523,6 +1523,28 @@ body,
 }
 
 .stmt-stats { display: none; }
+
+.stmt-summary-mobile { display: none; }
+
+.stmt-account-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 4px 0 6px;
+}
+
+.stmt-meta-line {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text-muted, #64748b);
+}
+
+.doc-period-line {
+  white-space: normal;
+  line-height: 1.5;
+}
 
 .stmt-table-section { margin-bottom: 8px; }
 
