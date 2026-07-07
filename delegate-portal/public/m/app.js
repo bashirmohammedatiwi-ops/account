@@ -144,10 +144,11 @@ function balanceClassFor(bal) {
   return n < 0 ? 'debit' : 'credit';
 }
 
-function amtTd(val, cls) {
+function amtTd(val, cls, label) {
   const n = Number(val);
-  if (!n) return '<td class="num empty">—</td>';
-  return `<td class="num ${cls || ''}" dir="ltr">${fmtNumAlways(n)}</td>`;
+  const labelAttr = label ? ` data-label="${esc(label)}"` : '';
+  if (!n) return `<td class="num empty"${labelAttr}>—</td>`;
+  return `<td class="num ${cls || ''}" dir="ltr"${labelAttr}>${fmtNumAlways(n)}</td>`;
 }
 
 function moneyTd(val, cls) {
@@ -1015,7 +1016,6 @@ function renderStatement(data) {
     document.getElementById('stmtTableSection').classList.remove('hidden');
     const moveCount = lines.filter((line) => !line.isOpening).length;
     document.getElementById('stmtLineCount').textContent = `${moveCount} حركة`;
-    const detailColspan = 2;
     const rows = lines.map((r) => {
       const showInvoiceBtn = isInvoiceLine(r) && !r.isOpening;
       const invoiceLookup = showInvoiceBtn ? invoiceLookupFor(r, branch.seq) : null;
@@ -1031,12 +1031,12 @@ function renderStatement(data) {
           </div>`
         : '<span class="num empty">—</span>';
       return `<tr class="${rowClass}">
-        ${amtTd(r.debit, 'debit')}
-        ${amtTd(r.credit, 'credit')}
-        <td class="col-desc"><span class="stmt-desc-text">${esc(r.description) || '—'}</span></td>
-        <td class="col-date">${r.isOpening ? '' : (r.date ? fmtDate(r.date) : '')}</td>
-        <td class="num col-balance ${balanceClassFor(r.balance)}" dir="ltr">${fmtEdariRunningBalance(r.balance, r.isOpening)}</td>
-        <td class="col-act">${actions}</td>
+        ${amtTd(r.debit, 'debit', 'مدين')}
+        ${amtTd(r.credit, 'credit', 'دائن')}
+        <td class="col-desc" data-label="البيان"><span class="stmt-desc-text">${esc(r.description) || '—'}</span></td>
+        <td class="col-date" data-label="التاريخ">${r.isOpening ? '' : (r.date ? fmtDate(r.date) : '')}</td>
+        <td class="num col-balance ${balanceClassFor(r.balance)}" dir="ltr" data-label="حركة الرصيد">${fmtEdariRunningBalance(r.balance, r.isOpening)}</td>
+        <td class="col-act" data-label="إجراءات">${actions}</td>
       </tr>`;
     }).join('');
 
@@ -1057,17 +1057,17 @@ function renderStatement(data) {
           <tbody>${rows}</tbody>
           <tfoot>
             <tr class="row-total">
-              <td class="num debit" dir="ltr">${fmtNumAlways(totalDebit)}</td>
-              <td class="num credit" dir="ltr">${fmtNumAlways(totalCredit)}</td>
-              <td colspan="${detailColspan}" class="total-label"><strong>المجموع</strong></td>
+              <td class="num debit" dir="ltr" data-label="إجمالي مدين">${fmtNumAlways(totalDebit)}</td>
+              <td class="num credit" dir="ltr" data-label="إجمالي دائن">${fmtNumAlways(totalCredit)}</td>
+              <td colspan="2" class="total-label"><strong>المجموع</strong></td>
               <td></td>
               <td></td>
             </tr>
             <tr class="row-final">
-              <td class="num debit" dir="ltr">${summary.side === 'debit' ? fmtNumAlways(summary.amount) : ''}</td>
-              <td class="num credit" dir="ltr">${summary.side === 'credit' ? fmtNumAlways(summary.amount) : ''}</td>
-              <td colspan="${detailColspan}" class="total-label"><strong>${esc(summary.label)}</strong></td>
-              <td class="num col-balance" dir="ltr">${fmtEdariRunningBalance(currentBal)}</td>
+              <td class="num debit" dir="ltr" data-label="مدين">${summary.side === 'debit' ? fmtNumAlways(summary.amount) : ''}</td>
+              <td class="num credit" dir="ltr" data-label="دائن">${summary.side === 'credit' ? fmtNumAlways(summary.amount) : ''}</td>
+              <td colspan="2" class="total-label"><strong>${esc(summary.label)}</strong></td>
+              <td class="num col-balance" dir="ltr" data-label="الرصيد">${fmtEdariRunningBalance(currentBal)}</td>
               <td></td>
             </tr>
           </tfoot>

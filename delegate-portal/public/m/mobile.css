@@ -1,0 +1,430 @@
+/* ── Delegate web — phone-first overrides (≤599px) ── */
+
+@media (max-width: 599px) {
+  .screen {
+    padding: 10px 12px calc(10px + var(--safe-bottom, 0px));
+  }
+
+  .screen-shell {
+    gap: 10px;
+  }
+
+  /* Header */
+  .header-row {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .header-center h1 {
+    font-size: 0.92rem;
+  }
+
+  .ed-header-kicker {
+    display: none;
+  }
+
+  .breadcrumb {
+    font-size: 0.68rem;
+  }
+
+  .back-btn,
+  .icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* Toolbar */
+  .search-bar {
+    padding: 8px 12px 4px;
+  }
+
+  .search-bar input {
+    font-size: 16px; /* prevents iOS zoom on focus */
+    padding: 12px 40px 12px 12px;
+  }
+
+  .filter-bar {
+    padding: 4px 12px 8px;
+  }
+
+  .filter-chip {
+    min-height: 44px;
+    padding: 10px 14px;
+    font-size: 0.82rem;
+  }
+
+  /* Home */
+  .home-page {
+    align-items: flex-start;
+    justify-content: flex-start;
+    min-height: auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 12px 12px calc(16px + var(--safe-bottom, 0px));
+  }
+
+  .home-page-inner {
+    max-width: none;
+    gap: 20px;
+  }
+
+  .home-hero-card {
+    padding: 16px 14px;
+    border-radius: 18px;
+  }
+
+  .home-avatar-ring {
+    width: 56px;
+    height: 56px;
+  }
+
+  .home-avatar {
+    font-size: 1.2rem;
+  }
+
+  .home-hero-title {
+    font-size: 1.05rem;
+  }
+
+  .home-apps-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    max-width: none;
+    width: 100%;
+  }
+
+  .home-app-tile {
+    max-width: none;
+    width: 100%;
+    padding: 14px 10px 12px;
+    border-radius: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .home-app-icon-wrap {
+    width: 64px;
+    height: 64px;
+  }
+
+  .home-app-name {
+    font-size: 0.8rem;
+    line-height: 1.3;
+  }
+
+  .home-app-hint {
+    font-size: 0.65rem;
+    line-height: 1.35;
+  }
+
+  .home-stats-bar {
+    width: 100%;
+  }
+
+  /* Trees — hide duplicate sidebar, full-width list */
+  #screen-trees .ed-panel-home {
+    display: none;
+  }
+
+  #screen-trees .ed-layout-home {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  #screen-trees .ed-main-col {
+    min-height: 0;
+  }
+
+  .ed-grid-trees,
+  .ed-grid-branches {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .ed-card-tree,
+  .ed-card {
+    min-height: auto;
+  }
+
+  /* Branches */
+  .bc-tree-top {
+    flex-wrap: wrap;
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .bc-tree-name {
+    white-space: normal;
+    font-size: 0.95rem;
+  }
+
+  .bc-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+
+  .bc-stat {
+    padding: 10px 6px;
+  }
+
+  .bc-list-wrap {
+    padding: 0 12px 12px;
+  }
+
+  .bc-card {
+    min-height: auto;
+  }
+
+  .bc-card-inner {
+    padding: 12px;
+  }
+
+  /* Statement — card layout instead of wide table */
+  #screen-statement {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .export-bar {
+    padding: 0 0 8px;
+  }
+
+  .btn-export-pdf {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  .stmt-table-wrap {
+    overflow: visible;
+  }
+
+  .data-table.stmt-table {
+    min-width: 0;
+    display: block;
+    border: none;
+  }
+
+  .data-table.stmt-table thead {
+    display: none;
+  }
+
+  .data-table.stmt-table tbody,
+  .data-table.stmt-table tfoot {
+    display: block;
+  }
+
+  .data-table.stmt-table tbody tr {
+    display: block;
+    margin-bottom: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    height: auto;
+  }
+
+  .data-table.stmt-table tbody tr.row-opening {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+  }
+
+  .data-table.stmt-table tbody tr.row-recon {
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+  }
+
+  .data-table.stmt-table tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 5px 0;
+    border: none;
+    min-width: 0;
+    max-width: none;
+    height: auto;
+    text-align: left;
+  }
+
+  .data-table.stmt-table tbody td::before {
+    content: attr(data-label);
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  .data-table.stmt-table tbody td.col-desc {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed var(--border);
+    margin-bottom: 4px;
+  }
+
+  .data-table.stmt-table tbody td.col-desc::before {
+    margin-bottom: 2px;
+  }
+
+  .data-table.stmt-table tbody td.col-act::before {
+    content: 'إجراءات';
+  }
+
+  .data-table.stmt-table tbody td.empty:not(.col-desc) {
+    display: none;
+  }
+
+  .data-table.stmt-table tbody td.col-act .tbl-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .data-table.stmt-table tbody .tbl-btn {
+    min-height: 40px;
+    min-width: 56px;
+    padding: 8px 12px;
+  }
+
+  .data-table.stmt-table tfoot tr {
+    display: block;
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 14px;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    height: auto;
+  }
+
+  .data-table.stmt-table tfoot td {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border: none;
+    background: transparent !important;
+    height: auto;
+  }
+
+  .data-table.stmt-table tfoot td::before {
+    content: attr(data-label);
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: var(--muted);
+  }
+
+  .data-table.stmt-table tfoot td.total-label {
+    flex-direction: column;
+    align-items: stretch;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    margin-top: 4px;
+  }
+
+  .data-table.stmt-table tfoot td.total-label::before {
+    display: none;
+  }
+
+  .data-table.stmt-table tfoot td:empty {
+    display: none;
+  }
+
+  .doc-panel {
+    border-radius: 14px;
+  }
+
+  .stmt-meta-table {
+    display: block;
+  }
+
+  .stmt-meta-table tr {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .stmt-meta-table th,
+  .stmt-meta-table td {
+    font-size: 0.68rem !important;
+    padding: 4px 6px !important;
+  }
+
+  /* Invoice tables — keep horizontal scroll but tighter */
+  .table-scroll {
+    margin: 0 -4px;
+    padding: 0 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .data-table.inv-table {
+    min-width: 520px;
+    font-size: 0.72rem;
+  }
+
+  /* Login */
+  .login-screen {
+    padding: 16px 12px;
+    align-items: flex-start;
+  }
+
+  .login-card {
+    padding: 24px 18px;
+    border-radius: 18px;
+  }
+
+  .login-card input {
+    font-size: 16px;
+    min-height: 48px;
+  }
+
+  .btn.primary.full {
+    min-height: 48px;
+  }
+
+  /* Reports */
+  .rpt-wrap {
+    padding: 12px;
+  }
+
+  .rpt-form {
+    padding: 14px 12px;
+  }
+
+  /* Commerce shop tabs */
+  .shop-edari-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .shop-edari-tab {
+    min-height: 44px;
+    flex-shrink: 0;
+  }
+}
+
+/* Very small phones */
+@media (max-width: 360px) {
+  .home-apps-grid {
+    gap: 8px;
+  }
+
+  .home-app-icon-wrap {
+    width: 56px;
+    height: 56px;
+  }
+
+  .home-app-name {
+    font-size: 0.74rem;
+  }
+
+  .bc-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Tablet+ keeps existing iPad layout — no changes above 600px */
