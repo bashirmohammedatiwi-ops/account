@@ -50,6 +50,7 @@ const {
   listOrders,
   loadOrder,
   setOrderStatus,
+  deleteOrderByAdmin,
   orderStats
 } = require('../lib/orders');
 const { buildInvoicePdf, buildOrderPdf } = require('../lib/pdf-export');
@@ -495,6 +496,16 @@ router.patch('/orders/:id/status', (req, res) => {
     });
     if (!order) return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
     res.json({ ok: true, order });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.delete('/orders/:id', (req, res) => {
+  try {
+    const result = deleteOrderByAdmin(Number(req.params.id));
+    if (!result) return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
+    res.json({ ok: true, ...result });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }

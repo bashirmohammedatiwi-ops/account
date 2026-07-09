@@ -2180,6 +2180,13 @@ tfoot .final { background: var(--primary-light); font-weight: 700; }
   flex-wrap: wrap;
 }
 
+.orders-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
 .order-invoice-wrap {
   display: flex;
   flex-direction: column;

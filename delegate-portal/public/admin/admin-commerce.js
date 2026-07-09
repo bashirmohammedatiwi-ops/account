@@ -1797,16 +1797,53 @@ async function loadOrdersPage() {
       <td dir="ltr">${esc(o.orderNo)}</td>
       <td>${esc(o.agentName)}</td>
       <td>${esc(o.customerName || '—')}</td>
-      <td><span class="badge pending">${esc(o.statusLabel)}</span></td>
+      <td><span class="badge ${orderStatusBadgeClass(o.status)}">${esc(o.statusLabel)}</span></td>
       <td dir="ltr">${o.lines?.length || 0}</td>
       <td dir="ltr">${fmtMoney(o.totalAmount)}</td>
       <td>${esc(o.submittedAt || o.createdAt || '—')}</td>
-      <td><button type="button" class="btn btn-soft btn-sm" data-order-id="${o.id}">عرض</button></td>
+      <td class="orders-row-actions">
+        <button type="button" class="btn btn-soft btn-sm" data-order-id="${o.id}">عرض</button>
+        <button type="button" class="btn btn-danger btn-sm" data-order-delete="${o.id}" data-order-no="${esc(o.orderNo)}" title="حذف الطلب">حذف</button>
+      </td>
     </tr>`).join('') || '<tr><td colspan="8">لا توجد طلبات</td></tr>';
 
   document.querySelectorAll('[data-order-id]').forEach((btn) => {
     btn.addEventListener('click', () => openOrderDetail(Number(btn.dataset.orderId)));
   });
+  document.querySelectorAll('[data-order-delete]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      void deleteOrderById(Number(btn.dataset.orderDelete), btn.dataset.orderNo || '');
+    });
+  });
+}
+
+function orderStatusBadgeClass(status) {
+  return ({
+    draft: 'muted-badge',
+    submitted: 'pending',
+    under_review: 'warn',
+    approved: 'ok',
+    rejected: 'off',
+    processing: 'pending',
+    delivered: 'ok',
+    cancelled: 'muted-badge'
+  })[status] || 'pending';
+}
+
+async function deleteOrderById(id, orderNo = '') {
+  const label = orderNo ? `الطلب ${orderNo}` : 'هذا الطلب';
+  if (!confirm(`حذف ${label} نهائياً؟\nلا يمكن التراجع عن هذا الإجراء.`)) return;
+  try {
+    await commerceApi(`/orders/${id}`, { method: 'DELETE' });
+    showToast('تم حذف الطلب');
+    if (commerce.selectedOrder?.id === id) {
+      commerce.selectedOrder = null;
+      document.getElementById('orderDetailPanel')?.classList.add('hidden');
+    }
+    await loadOrdersPage();
+  } catch (err) {
+    showToast(err.message || 'تعذّر حذف الطلب', 'err');
+  }
 }
 
 async function openOrderDetail(id) {
@@ -1824,6 +1861,7 @@ async function openOrderDetail(id) {
       <div class="btn-row order-detail-actions no-print">
         <button type="button" class="btn btn-soft btn-sm" id="btnPrintOrder">طباعة</button>
         <button type="button" class="btn btn-primary btn-sm" id="btnExportOrderPdf">تصدير PDF</button>
+        <button type="button" class="btn btn-danger btn-sm" id="btnDeleteOrder">حذف الطلب</button>
         <button type="button" class="btn btn-soft btn-sm" id="btnCloseOrderDetail">إغلاق</button>
       </div>
     </div>
@@ -1831,7 +1869,7 @@ async function openOrderDetail(id) {
       ${renderOrderInvoiceDocument(o)}
     </div>
     <div class="order-meta-bar no-print">
-      <span class="badge pending">${esc(o.statusLabel)}</span>
+      <span class="badge ${orderStatusBadgeClass(o.status)}">${esc(o.statusLabel)}</span>
       <span class="muted">${esc(o.submittedAt || o.createdAt || '—')}</span>
     </div>
     <div class="btn-row order-status-actions no-print" style="margin-top:12px">
@@ -1840,6 +1878,7 @@ async function openOrderDetail(id) {
       <button type="button" class="btn btn-danger btn-sm" data-status="rejected">رفض</button>
       <button type="button" class="btn btn-soft btn-sm" data-status="processing">تنفيذ</button>
       <button type="button" class="btn btn-soft btn-sm" data-status="delivered">تم التسليم</button>
+      <button type="button" class="btn btn-soft btn-sm" data-status="cancelled">إلغاء</button>
     </div>`;
 
   document.getElementById('btnCloseOrderDetail')?.addEventListener('click', () => {
@@ -1855,16 +1894,23 @@ async function openOrderDetail(id) {
       showToast(err.message, 'err');
     }
   });
+  document.getElementById('btnDeleteOrder')?.addEventListener('click', () => {
+    void deleteOrderById(o.id, o.orderNo);
+  });
   panel.querySelectorAll('[data-status]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const note = btn.dataset.status === 'rejected' ? prompt('سبب الرفض:') : '';
       if (btn.dataset.status === 'rejected' && note == null) return;
-      await commerceApi(`/orders/${id}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: btn.dataset.status, note: note || '' })
-      });
-      await loadOrdersPage();
-      await openOrderDetail(id);
+      try {
+        await commerceApi(`/orders/${id}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: btn.dataset.status, note: note || '' })
+        });
+        await loadOrdersPage();
+        await openOrderDetail(id);
+      } catch (err) {
+        showToast(err.message || 'تعذّر تحديث الحالة', 'err');
+      }
     });
   });
   panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });

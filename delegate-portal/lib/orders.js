@@ -298,13 +298,24 @@ function deleteOrderByAgent(orderId, agentId) {
     throw new Error(`لا يمكن حذف الطلب وهو «${statusLabel(row.status)}»`);
   }
 
+  return hardDeleteOrder(orderId, row.status);
+}
+
+function hardDeleteOrder(orderId, previousStatus) {
   const tx = db.transaction(() => {
     db.prepare('DELETE FROM order_events WHERE order_id = ?').run(orderId);
     db.prepare('DELETE FROM order_lines WHERE order_id = ?').run(orderId);
     db.prepare('DELETE FROM orders WHERE id = ?').run(orderId);
   });
   tx();
-  return { deleted: true, id: orderId, previousStatus: row.status };
+  return { deleted: true, id: orderId, previousStatus };
+}
+
+/** Admin hard-deletes any purchase order. */
+function deleteOrderByAdmin(orderId) {
+  const row = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+  if (!row) return null;
+  return hardDeleteOrder(orderId, row.status);
 }
 
 module.exports = {
@@ -316,6 +327,7 @@ module.exports = {
   submitOrder,
   setOrderStatus,
   deleteOrderByAgent,
+  deleteOrderByAdmin,
   listOrders,
   orderStats
 };
