@@ -151,22 +151,29 @@ async function loadOrders() {
       ? `${count} طلب${state.filter ? ` · ${filterLabel}` : ''}`
       : 'لا توجد طلبات في هذا التصنيف';
 
-    document.getElementById('ordersList').innerHTML = state.orders.map((o) => `
-      <button type="button" class="order-card" data-order-id="${o.id}">
+    document.getElementById('ordersList').innerHTML = state.orders.map((o) => {
+      const giftCount = (o.lines || []).reduce((s, l) => s + Number(l.bonus || 0), 0);
+      return `
+      <button type="button" class="order-card${giftCount ? ' has-gift' : ''}" data-order-id="${o.id}">
         <div class="order-card-head">
           <div>
             <strong class="order-no" dir="ltr">${esc(o.orderNo)}</strong>
             <p class="order-customer">${esc(o.customerName || 'بدون زبون')}</p>
             <p class="order-agent">${esc(o.agentName || '—')}${o.catalogBranchName ? ` · ${esc(o.catalogBranchName)}` : ''}</p>
           </div>
-          <span class="badge ${statusBadge(o.status)}">${esc(statusLabel(o.status))}</span>
+          <div class="order-card-badges">
+            ${giftCount ? `<span class="gift-pill">هدايا ${giftCount}</span>` : ''}
+            <span class="badge ${statusBadge(o.status)}">${esc(statusLabel(o.status))}</span>
+          </div>
         </div>
         <div class="order-stats">
           <span class="order-stat"><em>${fmtMoney(o.totalAmount)}</em> المبلغ</span>
           <span class="order-stat"><em>${o.lines?.length || 0}</em> بند</span>
-          <span class="order-stat"><em dir="ltr">${esc(formatWhen(o))}</em> التاريخ</span>
+          <span class="order-stat${giftCount ? ' gift' : ''}"><em>${giftCount}</em> هدايا</span>
         </div>
-      </button>`).join('') || '<div class="empty-state"><p>لا توجد طلبات</p></div>';
+        <div class="order-card-foot" dir="ltr">${esc(formatWhen(o))}</div>
+      </button>`;
+    }).join('') || '<div class="empty-state"><p>لا توجد طلبات</p></div>';
 
     document.querySelectorAll('[data-order-id]').forEach((btn) => {
       btn.addEventListener('click', () => openOrder(Number(btn.dataset.orderId)));
@@ -179,19 +186,80 @@ async function loadOrders() {
   }
 }
 
+function lineTotals(lines = []) {
+  return lines.reduce((acc, l) => {
+    acc.qty += Number(l.quant || 0);
+    acc.gifts += Number(l.bonus || 0);
+    acc.amount += Number(l.lineTotal || 0);
+    if (Number(l.bonus || 0) > 0) acc.giftLines += 1;
+    return acc;
+  }, { qty: 0, gifts: 0, amount: 0, giftLines: 0 });
+}
+
 function renderLines(lines = []) {
   if (!lines.length) return '<p class="empty-state">لا توجد بنود</p>';
-  return `<div class="lines">${lines.map((l) => `
-    <div class="line-row">
-      <div>
-        <div class="line-name">${esc(l.matName || '—')}</div>
-        <div class="line-meta" dir="ltr">${esc(l.barcode || '')}${l.bonus ? ` · بونص ${l.bonus}` : ''}</div>
+  const totals = lineTotals(lines);
+  return `
+    <div class="lines">${lines.map((l, idx) => {
+      const qty = Number(l.quant || 0);
+      const gift = Number(l.bonus || 0);
+      const hasGift = gift > 0;
+      return `
+      <article class="line-card${hasGift ? ' has-gift' : ''}">
+        <div class="line-card-top">
+          <span class="line-index">${idx + 1}</span>
+          <div class="line-card-title">
+            <strong class="line-name">${esc(l.matName || '—')}</strong>
+            ${l.barcode ? `<span class="line-barcode" dir="ltr">${esc(l.barcode)}</span>` : ''}
+          </div>
+          ${hasGift ? `<span class="gift-pill">هدية ${gift}</span>` : ''}
+        </div>
+        <div class="line-metrics">
+          <div class="metric">
+            <span class="metric-label">الكمية</span>
+            <strong class="metric-value" dir="ltr">${qty}</strong>
+          </div>
+          <div class="metric metric-gift${hasGift ? ' on' : ''}">
+            <span class="metric-label">الهدايا</span>
+            <strong class="metric-value" dir="ltr">${gift}</strong>
+          </div>
+          <div class="metric">
+            <span class="metric-label">السعر</span>
+            <strong class="metric-value" dir="ltr">${fmtMoney(l.unitPrice)}</strong>
+          </div>
+          <div class="metric">
+            <span class="metric-label">الإجمالي</span>
+            <strong class="metric-value" dir="ltr">${fmtMoney(l.lineTotal)}</strong>
+          </div>
+        </div>
+        ${hasGift ? `
+        <div class="gift-callout">
+          <span class="gift-callout-badge">هدية</span>
+          <div>
+            <strong>يُجهَّز مع هدايا</strong>
+            <p>كمية البيع <b dir="ltr">${qty}</b> + هدايا <b dir="ltr">${gift}</b> = إجمالي للتسليم <b dir="ltr">${qty + gift}</b></p>
+          </div>
+        </div>` : ''}
+        ${l.remarks ? `<p class="line-note">${esc(l.remarks)}</p>` : ''}
+      </article>`;
+    }).join('')}</div>
+    <div class="order-summary">
+      <div class="summary-chip">
+        <span>البنود</span>
+        <strong dir="ltr">${lines.length}</strong>
       </div>
-      <div class="line-qty">${esc(l.quant)} × ${fmtMoney(l.unitPrice)}</div>
-    </div>`).join('')}</div>
-    <div class="totals">
-      <span>الإجمالي</span>
-      <span dir="ltr">${fmtMoney(lines.reduce((s, l) => s + Number(l.lineTotal || 0), 0))}</span>
+      <div class="summary-chip">
+        <span>الكميات</span>
+        <strong dir="ltr">${totals.qty}</strong>
+      </div>
+      <div class="summary-chip summary-gift${totals.gifts ? ' on' : ''}">
+        <span>إجمالي الهدايا</span>
+        <strong dir="ltr">${totals.gifts}</strong>
+      </div>
+      <div class="summary-chip summary-amount">
+        <span>المبلغ</span>
+        <strong dir="ltr">${fmtMoney(totals.amount)}</strong>
+      </div>
     </div>`;
 }
 
@@ -201,6 +269,8 @@ async function openOrder(id) {
     const data = await api(`/orders/${id}`);
     const o = data.order;
     state.selectedOrder = o;
+    const lines = o.lines || [];
+    const totals = lineTotals(lines);
     const actions = [
       { id: 'pending', label: 'قيد الانتظار', cls: 'soft' },
       { id: 'processing', label: 'قيد التجهيز والإرسال', cls: 'primary' },
@@ -208,18 +278,64 @@ async function openOrder(id) {
     ];
     document.getElementById('orderDetail').innerHTML = `
       <div class="detail-banner">
-        <div>
+        <div class="detail-banner-main">
           <p class="detail-kicker">طلب شراء</p>
           <h2 dir="ltr">${esc(o.orderNo)}</h2>
-          <p>${esc(o.customerName || '—')}${o.customerNum ? ` · ${esc(o.customerNum)}` : ''}</p>
-          <p>المندوب: ${esc(o.agentName || '—')}${o.catalogBranchName ? ` · ${esc(o.catalogBranchName)}` : ''}</p>
+          <div class="detail-meta-grid">
+            <div>
+              <span>الزبون</span>
+              <strong>${esc(o.customerName || '—')}${o.customerNum ? ` · ${esc(o.customerNum)}` : ''}</strong>
+            </div>
+            <div>
+              <span>المندوب</span>
+              <strong>${esc(o.agentName || '—')}</strong>
+            </div>
+            ${o.catalogBranchName ? `
+            <div>
+              <span>الفرع</span>
+              <strong>${esc(o.catalogBranchName)}</strong>
+            </div>` : ''}
+            <div>
+              <span>التاريخ</span>
+              <strong dir="ltr">${esc(formatWhen(o))}</strong>
+            </div>
+          </div>
         </div>
         <span class="badge lg ${statusBadge(o.status)}">${esc(statusLabel(o.status))}</span>
       </div>
-      ${o.notes ? `<div class="panel"><h3>ملاحظات</h3><p>${esc(o.notes)}</p></div>` : ''}
-      <div class="panel">
-        <h3>بنود الطلب</h3>
-        ${renderLines(o.lines || [])}
+
+      <div class="prep-strip">
+        <div class="prep-item">
+          <span>بنود</span>
+          <strong dir="ltr">${lines.length}</strong>
+        </div>
+        <div class="prep-item">
+          <span>كميات</span>
+          <strong dir="ltr">${totals.qty}</strong>
+        </div>
+        <div class="prep-item prep-gift${totals.gifts ? ' on' : ''}">
+          <span>هدايا</span>
+          <strong dir="ltr">${totals.gifts}</strong>
+        </div>
+        <div class="prep-item">
+          <span>المبلغ</span>
+          <strong dir="ltr">${fmtMoney(o.totalAmount || totals.amount)}</strong>
+        </div>
+      </div>
+      ${totals.gifts ? `
+      <div class="gift-banner">
+        <strong>تنبيه تجهيز:</strong>
+        هذا الطلب يحتوي على <b dir="ltr">${totals.gifts}</b> هدية
+        ضمن <b dir="ltr">${totals.giftLines}</b> منتج — راجع البنود المظلّلة.
+      </div>` : ''}
+
+      ${o.notes ? `<div class="panel notes-panel"><h3>ملاحظات المندوب</h3><p>${esc(o.notes)}</p></div>` : ''}
+      <div class="panel lines-panel">
+        <div class="panel-head-row">
+          <h3>بنود التجهيز</h3>
+          <span class="muted-count">${lines.length} منتج</span>
+        </div>
+        ${renderLines(lines)}
       </div>
       <div class="panel">
         <h3>تغيير الحالة</h3>
