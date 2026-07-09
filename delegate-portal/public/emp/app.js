@@ -4,14 +4,14 @@ const EMP_KEY = 'empUser';
 
 const STATUS_META = {
   pending: { label: 'قيد الانتظار', badge: 'pending' },
-  processing: { label: 'قيد التجهيز والإرسال', badge: 'processing' },
+  processing: { label: 'تم التجهيز', badge: 'processing' },
   rejected: { label: 'مرفوض', badge: 'rejected' }
 };
 
 const FILTERS = [
   { id: '', label: 'الكل' },
   { id: 'pending', label: 'قيد الانتظار' },
-  { id: 'processing', label: 'قيد التجهيز والإرسال' },
+  { id: 'processing', label: 'تم التجهيز' },
   { id: 'rejected', label: 'مرفوض' }
 ];
 
@@ -273,7 +273,7 @@ async function openOrder(id) {
     const totals = lineTotals(lines);
     const actions = [
       { id: 'pending', label: 'قيد الانتظار', cls: 'soft' },
-      { id: 'processing', label: 'قيد التجهيز والإرسال', cls: 'primary' },
+      { id: 'processing', label: 'تم التجهيز', cls: 'primary' },
       { id: 'rejected', label: 'مرفوض', cls: 'danger' }
     ];
     document.getElementById('orderDetail').innerHTML = `

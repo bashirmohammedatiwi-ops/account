@@ -1876,7 +1876,7 @@ async function openOrderDetail(id) {
     </div>
     <div class="btn-row order-status-actions no-print" style="margin-top:12px">
       <button type="button" class="btn btn-soft btn-sm" data-status="pending">قيد الانتظار</button>
-      <button type="button" class="btn btn-primary btn-sm" data-status="processing">قيد التجهيز والإرسال</button>
+      <button type="button" class="btn btn-primary btn-sm" data-status="processing">تم التجهيز</button>
       <button type="button" class="btn btn-danger btn-sm" data-status="rejected">مرفوض</button>
     </div>`;
 

@@ -68,7 +68,7 @@ router.patch('/orders/:id/status', authEmployee, (req, res) => {
   try {
     const status = String(req.body?.status || '').trim();
     if (!ALLOWED_STATUSES.has(status) && !ALLOWED_STATUSES.has(canonicalStatus(status))) {
-      return res.status(400).json({ ok: false, error: 'حالة غير صالحة — استخدم: قيد الانتظار / قيد التجهيز والإرسال / مرفوض' });
+      return res.status(400).json({ ok: false, error: 'حالة غير صالحة — استخدم: قيد الانتظار / تم التجهيز / مرفوض' });
     }
     const uiStatus = ALLOWED_STATUSES.has(status) ? status : canonicalStatus(status);
     const order = setOrderStatus(Number(req.params.id), uiStatus, {

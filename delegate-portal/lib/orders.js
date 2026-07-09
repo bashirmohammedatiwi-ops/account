@@ -6,9 +6,9 @@ const STATUS_LABELS = {
   submitted: 'قيد الانتظار',
   under_review: 'قيد الانتظار',
   pending: 'قيد الانتظار',
-  approved: 'قيد التجهيز والإرسال',
-  processing: 'قيد التجهيز والإرسال',
-  delivered: 'قيد التجهيز والإرسال',
+  approved: 'تم التجهيز',
+  processing: 'تم التجهيز',
+  delivered: 'تم التجهيز',
   rejected: 'مرفوض',
   cancelled: 'مرفوض'
 };

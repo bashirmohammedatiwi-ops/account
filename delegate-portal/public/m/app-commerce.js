@@ -82,7 +82,7 @@ const STATUS_BADGE = {
 const ORDER_FILTERS = [
   { id: '', label: 'الكل' },
   { id: 'pending', label: 'قيد الانتظار' },
-  { id: 'processing', label: 'قيد التجهيز والإرسال' },
+  { id: 'processing', label: 'تم التجهيز' },
   { id: 'rejected', label: 'مرفوض' }
 ];
 
@@ -93,13 +93,13 @@ function orderStatusClass(status) {
 function orderStatusLabel(o) {
   return o?.statusLabel || ({
     pending: 'قيد الانتظار',
-    processing: 'قيد التجهيز والإرسال',
+    processing: 'تم التجهيز',
     rejected: 'مرفوض',
     draft: 'قيد الانتظار',
     submitted: 'قيد الانتظار',
     under_review: 'قيد الانتظار',
-    approved: 'قيد التجهيز والإرسال',
-    delivered: 'قيد التجهيز والإرسال',
+    approved: 'تم التجهيز',
+    delivered: 'تم التجهيز',
     cancelled: 'مرفوض'
   })[o?.status] || o?.status || '—';
 }
