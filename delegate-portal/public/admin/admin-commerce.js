@@ -601,6 +601,12 @@ async function refreshCatalogPricesNow() {
 function renderProductBadges(p) {
   const badges = [];
   if (p.edariSeq) badges.push('<span class="badge ok">Edari</span>');
+  if (p.shadeName || p.colorCode) {
+    const swatch = p.colorCode
+      ? `<span class="shade-swatch" style="background:${esc(p.colorCode)}"></span>`
+      : '';
+    badges.push(`<span class="badge shade-badge">${swatch}${esc(p.shadeName || 'درجة')}</span>`);
+  }
   if (!p.isActive) badges.push('<span class="badge err">موقوف</span>');
   if (!p.imageUrl) badges.push('<span class="badge muted-badge">بدون صورة</span>');
   return badges.join(' ');
@@ -1063,7 +1069,7 @@ function setProductImagePreview(p) {
     box.innerHTML = `<img src="${getApiBase()}${p.imageUrl}" alt="" class="product-preview-img">`;
     removeBtn?.classList.remove('hidden');
   } else {
-    box.innerHTML = '<span class="product-image-placeholder">📦</span>';
+    box.innerHTML = '<span class="product-image-placeholder">صورة</span>';
     removeBtn?.classList.add('hidden');
   }
 }
@@ -1079,6 +1085,114 @@ function setProductImagePreviewFromFile(file) {
 
 function clearPendingProductImage() {
   pendingProductImageFile = null;
+}
+
+function isImageFile(file) {
+  if (!file) return false;
+  if (file.type && file.type.startsWith('image/')) return true;
+  return /\.(jpe?g|png|webp|gif|bmp|avif)$/i.test(file.name || '');
+}
+
+function pickImageFromFileList(files) {
+  const list = [...(files || [])];
+  return list.find((f) => isImageFile(f)) || null;
+}
+
+function pickImageFromDataTransfer(dt) {
+  if (!dt) return null;
+  const fromFiles = pickImageFromFileList(dt.files);
+  if (fromFiles) return fromFiles;
+  const items = [...(dt.items || [])];
+  for (const item of items) {
+    if (item.kind === 'file' && (!item.type || item.type.startsWith('image/'))) {
+      const file = item.getAsFile();
+      if (file && isImageFile(file)) return file;
+    }
+  }
+  return null;
+}
+
+async function applyProductImageFile(file) {
+  if (!file) return;
+  if (!isImageFile(file)) {
+    showToast('الملف ليس صورة صالحة', 'err');
+    return;
+  }
+  const id = document.getElementById('productId')?.value;
+  try {
+    if (id) {
+      await uploadProductImage(Number(id), file);
+    } else {
+      pendingProductImageFile = file;
+      setProductImagePreviewFromFile(file);
+      showToast('تم تجهيز الصورة — تُرفع عند الإضافة');
+    }
+  } catch (err) {
+    showToast(err.message || 'فشل رفع الصورة', 'err');
+  }
+}
+
+function isProductModalOpen() {
+  const modal = document.getElementById('productModal');
+  return !!(modal && !modal.classList.contains('hidden'));
+}
+
+function bindProductImageDropzone() {
+  const zone = document.getElementById('productImageDropzone');
+  if (!zone || zone.dataset.boundDropzone) return;
+  zone.dataset.boundDropzone = '1';
+
+  const setDrag = (on) => zone.classList.toggle('is-dragover', !!on);
+
+  zone.addEventListener('click', (e) => {
+    if (e.target.closest('button')) return;
+    document.getElementById('productImageInput')?.click();
+  });
+
+  zone.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      document.getElementById('productImageInput')?.click();
+    }
+  });
+
+  ['dragenter', 'dragover'].forEach((evt) => {
+    zone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      setDrag(true);
+    });
+  });
+
+  zone.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    if (!zone.contains(e.relatedTarget)) setDrag(false);
+  });
+
+  zone.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDrag(false);
+    const file = pickImageFromDataTransfer(e.dataTransfer);
+    if (!file) {
+      showToast('أسقط ملف صورة فقط', 'err');
+      return;
+    }
+    await applyProductImageFile(file);
+  });
+
+  // Paste while product modal is open (Ctrl+V / Cmd+V)
+  document.addEventListener('paste', async (e) => {
+    if (!isProductModalOpen()) return;
+    const file = pickImageFromDataTransfer(e.clipboardData);
+    if (!file) return;
+    // Don't steal paste from text fields unless clipboard is an image
+    const tag = (e.target?.tagName || '').toLowerCase();
+    if ((tag === 'input' || tag === 'textarea') && !file.type?.startsWith('image/')) return;
+    e.preventDefault();
+    await applyProductImageFile(file);
+  });
 }
 
 let lastEdariMaterial = null;
@@ -1203,6 +1317,7 @@ function openProductModal(id = null) {
   const isEdit = !!id;
   lastEdariMaterial = null;
   clearPendingProductImage();
+  clearShadeRows();
 
   if (!isEdit && !commerce.selectedSectionId) {
     return showToast('اختر قسماً أولاً', 'err');
@@ -1214,6 +1329,7 @@ function openProductModal(id = null) {
   document.getElementById('productSaveBtn').textContent = isEdit ? 'حفظ' : 'إضافة';
   document.getElementById('btnProductSyncEdari')?.classList.toggle('hidden', !isEdit);
   modal.classList.toggle('product-modal--edit', isEdit);
+  document.getElementById('productShadesBuilder')?.classList.toggle('hidden', isEdit);
   if (barcodeInput) barcodeInput.readOnly = isEdit;
 
   if (isEdit) {
@@ -1227,6 +1343,9 @@ function openProductModal(id = null) {
     document.getElementById('productSkuNum').value = p.skuNum || '';
     document.getElementById('productEdariSeq').value = p.edariSeq || '';
     document.getElementById('productUnit').value = p.unit || '';
+    document.getElementById('productShadeName').value = p.shadeName || '';
+    document.getElementById('productColorCode').value = p.colorCode || '';
+    document.getElementById('productGroupKey').value = p.groupKey || '';
     renderEdariLivePreview({
       stockQty: p.minOrderQty ?? 0,
       qty: p.minOrderQty ?? 0,
@@ -1234,16 +1353,20 @@ function openProductModal(id = null) {
       price: p.price ?? 0
     }, 'ok');
     document.getElementById('productImageHint').textContent =
-      `PNG أو JPG — آخر مزامنة Edari: ${(p.syncedAt || '—').slice(0, 19).replace('T', ' ')}`;
+      `اسحب وأفلت أو الصق (Ctrl+V) — آخر مزامنة Edari: ${(p.syncedAt || '—').slice(0, 19).replace('T', ' ')}`;
     setProductImagePreview(p);
   } else {
     document.getElementById('productForm').reset();
     document.getElementById('productQty').value = '';
     document.getElementById('productPrice').value = '';
+    document.getElementById('productShadeName').value = '';
+    document.getElementById('productColorCode').value = '';
+    document.getElementById('productGroupKey').value = '';
     if (barcodeInput) barcodeInput.readOnly = false;
     setProductSectionContext(commerce.selectedSectionId);
     document.getElementById('edariLivePreview')?.classList.add('hidden');
-    document.getElementById('productImageHint').textContent = 'PNG أو JPG — تظهر في تطبيق المندوب';
+    document.getElementById('productImageHint').textContent =
+      'اسحب وأفلت، أو الصق (Ctrl+V)، أو اختر ملفاً — PNG / JPG / WebP';
     setProductImagePreview(null);
     setTimeout(() => barcodeInput?.focus(), 120);
   }
@@ -1275,44 +1398,112 @@ async function saveProductForm(e) {
     return;
   }
 
-  const body = {
-    sectionId: Number(document.getElementById('productSectionId').value),
-    name: document.getElementById('productName').value.trim(),
-    barcode: document.getElementById('productBarcode').value.trim()
-  };
+  const sectionId = Number(document.getElementById('productSectionId').value);
+  const barcode = document.getElementById('productBarcode').value.trim();
+  const name = document.getElementById('productName').value.trim();
+  const shadeName = document.getElementById('productShadeName')?.value.trim() || '';
+  const colorCode = document.getElementById('productColorCode')?.value.trim() || '';
+  const extraShades = collectExtraShadeRows();
 
-  if (!body.sectionId) return showToast('اختر قسماً', 'err');
-  if (!body.barcode) return showToast('الباركود مطلوب', 'err');
+  if (!sectionId) return showToast('اختر قسماً', 'err');
+  if (!barcode) return showToast('الباركود مطلوب', 'err');
 
   try {
     if (!lastEdariMaterial?.seq) {
       return showToast('أدخل باركوداً موجوداً في Edari أولاً', 'err');
     }
-    if (!body.name) return showToast('الاسم مطلوب — امسح الباركود وأعد الإدخال', 'err');
+    if (!name) return showToast('الاسم مطلوب — امسح الباركود وأعد الإدخال', 'err');
     const price = Number(document.getElementById('productPrice').value) || 0;
     const minOrderQty = Number(document.getElementById('productQty').value) || 0;
-    const data = await commerceApi('/products/by-barcode', {
-      method: 'POST',
-      body: JSON.stringify({
-        sectionId: body.sectionId,
-        barcode: body.barcode,
-        name: body.name,
-        price,
-        minOrderQty,
-        priceOverride: false,
-        material: buildMaterialPayload(lastEdariMaterial, price, minOrderQty)
-      })
-    });
-    if (pendingProductImageFile && data.product?.id) {
-      await uploadProductImage(data.product.id, pendingProductImageFile);
-      clearPendingProductImage();
+
+    if (extraShades.length) {
+      const shades = [
+        {
+          barcode,
+          shadeName,
+          colorCode,
+          material: buildMaterialPayload(lastEdariMaterial, price, minOrderQty),
+          price,
+          minOrderQty
+        },
+        ...extraShades
+      ];
+      const data = await commerceApi('/products/shade-group', {
+        method: 'POST',
+        body: JSON.stringify({ sectionId, name, shades })
+      });
+      if (pendingProductImageFile && data.products?.[0]?.id) {
+        await uploadProductImage(data.products[0].id, pendingProductImageFile);
+        clearPendingProductImage();
+      }
+      const errN = (data.errors || []).length;
+      showToast(errN
+        ? `أُضيف ${data.products.length} درجة — فشل ${errN}`
+        : `أُضيف ${data.products.length} درجة`);
+    } else {
+      const data = await commerceApi('/products/by-barcode', {
+        method: 'POST',
+        body: JSON.stringify({
+          sectionId,
+          barcode,
+          name,
+          price,
+          minOrderQty,
+          shadeName,
+          colorCode,
+          priceOverride: false,
+          material: buildMaterialPayload(lastEdariMaterial, price, minOrderQty)
+        })
+      });
+      if (pendingProductImageFile && data.product?.id) {
+        await uploadProductImage(data.product.id, pendingProductImageFile);
+        clearPendingProductImage();
+      }
+      showToast('تمت إضافة المنتج');
     }
-    showToast('تمت إضافة المنتج');
     closeProductModal();
     await loadCatalogProducts();
   } catch (err) {
     showToast(err.message || 'فشل الحفظ', 'err');
   }
+}
+
+function clearShadeRows() {
+  const box = document.getElementById('productShadeRows');
+  if (box) box.innerHTML = '';
+}
+
+function addShadeRow(prefill = {}) {
+  const box = document.getElementById('productShadeRows');
+  if (!box) return;
+  const row = document.createElement('div');
+  row.className = 'product-shade-row';
+  row.innerHTML = `
+    <input type="text" class="shade-row-barcode" dir="ltr" placeholder="باركود الدرجة" value="${esc(prefill.barcode || '')}">
+    <input type="text" class="shade-row-name" placeholder="اسم الدرجة" value="${esc(prefill.shadeName || '')}">
+    <input type="color" class="shade-row-color" value="${esc(prefill.colorCode || '#cccccc')}" title="لون">
+    <input type="text" class="shade-row-color-hex" dir="ltr" placeholder="#hex" value="${esc(prefill.colorCode || '')}">
+    <button type="button" class="btn btn-icon shade-row-remove" aria-label="حذف">×</button>
+  `;
+  const color = row.querySelector('.shade-row-color');
+  const hex = row.querySelector('.shade-row-color-hex');
+  color?.addEventListener('input', () => { if (hex) hex.value = color.value; });
+  hex?.addEventListener('change', () => {
+    if (color && /^#[0-9a-fA-F]{6}$/.test(hex.value.trim())) color.value = hex.value.trim();
+  });
+  row.querySelector('.shade-row-remove')?.addEventListener('click', () => row.remove());
+  box.appendChild(row);
+}
+
+function collectExtraShadeRows() {
+  return [...document.querySelectorAll('#productShadeRows .product-shade-row')]
+    .map((row) => ({
+      barcode: row.querySelector('.shade-row-barcode')?.value.trim() || '',
+      shadeName: row.querySelector('.shade-row-name')?.value.trim() || '',
+      colorCode: row.querySelector('.shade-row-color-hex')?.value.trim()
+        || row.querySelector('.shade-row-color')?.value || ''
+    }))
+    .filter((s) => s.barcode);
 }
 
 async function deleteProductById(id) {
@@ -1685,6 +1876,7 @@ function initCommerceAdmin() {
   document.getElementById('btnAddSection')?.addEventListener('click', () => openCatalogCreate('section'));
 
   document.getElementById('btnAddProduct')?.addEventListener('click', () => openProductModal());
+  document.getElementById('btnAddShadeRow')?.addEventListener('click', () => addShadeRow());
 
   document.getElementById('btnBulkAddProducts')?.addEventListener('click', () => {
     if (!commerce.selectedSectionId) return showToast('اختر قسماً أولاً', 'err');
@@ -1816,28 +2008,22 @@ function initCommerceAdmin() {
     }
   });
 
-  document.getElementById('btnProductUploadImage')?.addEventListener('click', () => {
+  document.getElementById('btnProductUploadImage')?.addEventListener('click', (e) => {
+    e.stopPropagation();
     document.getElementById('productImageInput').click();
   });
 
   document.getElementById('productImageInput')?.addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    const id = document.getElementById('productId').value;
-    try {
-      if (id) {
-        await uploadProductImage(Number(id), file);
-      } else {
-        pendingProductImageFile = file;
-        setProductImagePreviewFromFile(file);
-      }
-    } catch (err) {
-      showToast(err.message, 'err');
-    }
     e.target.value = '';
+    if (!file) return;
+    await applyProductImageFile(file);
   });
 
-  document.getElementById('btnProductRemoveImage')?.addEventListener('click', async () => {
+  bindProductImageDropzone();
+
+  document.getElementById('btnProductRemoveImage')?.addEventListener('click', async (e) => {
+    e.stopPropagation();
     const id = document.getElementById('productId').value;
     if (pendingProductImageFile) {
       clearPendingProductImage();

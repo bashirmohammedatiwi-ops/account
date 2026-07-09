@@ -8,14 +8,16 @@ const {
 const {
   listProducts,
   getProduct,
-  lookupByBarcode
+  lookupByBarcode,
+  groupProductsByShade
 } = require('../lib/products');
 const {
   createOrder,
   updateOrder,
   submitOrder,
   listOrders,
-  loadOrder
+  loadOrder,
+  deleteOrderByAgent
 } = require('../lib/orders');
 
 const router = express.Router();
@@ -29,7 +31,9 @@ router.get('/catalog/branches/:id/sections', authAgent, (req, res) => {
 });
 
 router.get('/catalog/sections/:id/products', authAgent, (req, res) => {
-  res.json({ ok: true, products: listProducts(Number(req.params.id), { activeOnly: true }) });
+  const products = listProducts(Number(req.params.id), { activeOnly: true });
+  const groups = groupProductsByShade(products);
+  res.json({ ok: true, products, groups });
 });
 
 router.get('/products/lookup', authAgent, (req, res) => {
@@ -94,6 +98,16 @@ router.post('/orders/:id/submit', authAgent, (req, res) => {
     const order = submitOrder(Number(req.params.id), req.agent.id);
     if (!order) return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
     res.json({ ok: true, order });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.delete('/orders/:id', authAgent, (req, res) => {
+  try {
+    const result = deleteOrderByAgent(Number(req.params.id), req.agent.id);
+    if (!result) return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
+    res.json({ ok: true, ...result });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }

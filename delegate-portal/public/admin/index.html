@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Edari Admin — لوحة التحكم</title>
-  <link rel="stylesheet" href="admin.css?v=20260623ui">
+  <link rel="stylesheet" href="admin.css?v=20260709agentTrees2">
 </head>
 <body>
   <div id="topLoader" class="top-loader" hidden aria-live="polite">
@@ -834,19 +834,43 @@
           </div>
           <p class="field-hint">الاسم والعدد والسعر يُحدَّثان تلقائياً من Edari — لا يمكن تعديلهما يدوياً</p>
 
+          <div class="field-row product-shade-fields">
+            <label class="field">
+              <span>درجة اللون (اختياري)</span>
+              <input type="text" id="productShadeName" placeholder="مثل: 201 أو Nude" autocomplete="off">
+            </label>
+            <label class="field">
+              <span>كود اللون</span>
+              <input type="text" id="productColorCode" dir="ltr" placeholder="#e4e3e1" autocomplete="off">
+            </label>
+          </div>
+          <input type="hidden" id="productGroupKey" value="">
+          <p class="field-hint">للمنتجات ذات التدرجات: أدخل درجة اللون والكود، أو استخدم «إضافة درجات متعددة» أدناه</p>
+
+          <div class="product-shades-builder" id="productShadesBuilder">
+            <div class="product-shades-head">
+              <span class="field-label">درجات إضافية (نفس المنتج)</span>
+              <button type="button" class="btn btn-soft btn-sm" id="btnAddShadeRow">+ درجة</button>
+            </div>
+            <div id="productShadeRows" class="product-shade-rows"></div>
+          </div>
+
           <div class="product-modal-media">
             <span class="field-label">صورة المنتج</span>
-            <div class="product-modal-media-row">
-              <div class="product-image-preview" id="productImagePreview">
-                <span class="product-image-placeholder">صورة</span>
-              </div>
-              <div class="product-image-side">
-                <div class="btn-row product-image-actions">
-                  <button type="button" class="btn btn-soft btn-sm" id="btnProductUploadImage">رفع صورة</button>
-                  <button type="button" class="btn btn-soft btn-sm hidden" id="btnProductRemoveImage">حذف الصورة</button>
+            <div class="product-image-dropzone" id="productImageDropzone" tabindex="0" role="button" aria-label="رفع صورة المنتج">
+              <div class="product-modal-media-row">
+                <div class="product-image-preview" id="productImagePreview">
+                  <span class="product-image-placeholder">صورة</span>
                 </div>
-                <p class="field-hint" id="productImageHint">PNG أو JPG — تظهر في تطبيق المندوب</p>
+                <div class="product-image-side">
+                  <div class="btn-row product-image-actions">
+                    <button type="button" class="btn btn-soft btn-sm" id="btnProductUploadImage">رفع صورة</button>
+                    <button type="button" class="btn btn-soft btn-sm hidden" id="btnProductRemoveImage">حذف الصورة</button>
+                  </div>
+                  <p class="field-hint" id="productImageHint">اسحب وأفلت، أو الصق (Ctrl+V)، أو اختر ملفاً — PNG / JPG / WebP</p>
+                </div>
               </div>
+              <p class="product-dropzone-overlay" aria-hidden="true">أفلت الصورة هنا</p>
             </div>
             <input type="file" id="productImageInput" accept="image/*" class="hidden">
           </div>
@@ -970,14 +994,14 @@
           <div class="tree-picks tree-picks-sm" id="agentTreeChecks"></div>
         </div>
         <footer class="modal-foot">
-          <button type="submit" class="btn btn-primary">حفظ</button>
+          <button type="submit" class="btn btn-primary" id="agentSaveBtn">حفظ</button>
         </footer>
       </form>
     </div>
   </div>
 
   <script src="config.js"></script>
-  <script src="admin.js?v=20260615loader"></script>
+  <script src="admin.js?v=20260709agentTrees2"></script>
   <script src="admin-commerce.js?v=20260613orderinv"></script>
   <script src="admin-sales-report.js?v=20260615stable"></script>
   <script src="admin-account-statements.js?v=20260615kpi"></script>

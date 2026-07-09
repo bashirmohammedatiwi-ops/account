@@ -9,9 +9,18 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260707m">
-  <link rel="stylesheet" href="portal-pro.css?v=20260707m">
-  <link rel="stylesheet" href="mobile.css?v=20260707n">
+  <link rel="stylesheet" href="styles.css?v=20260709orders1">
+  <link rel="stylesheet" href="portal-pro.css?v=20260709orders1">
+  <link rel="stylesheet" href="mobile.css?v=20260709orders1">
+  <script>
+    // Early orientation class for first paint (iPad)
+    (function () {
+      var w = window.innerWidth || 0, h = window.innerHeight || 0;
+      if (w && h) {
+        document.documentElement.classList.add(w > h ? 'shop-orient-landscape' : 'shop-orient-portrait');
+      }
+    })();
+  </script>
 </head>
 <body class="ed-body">
   <!-- Login -->
@@ -457,12 +466,14 @@
 
       <!-- My orders -->
       <section class="screen" id="screen-my-orders">
-        <div class="inv-page-head">
+        <div class="inv-page-head inv-orders-head">
           <div>
             <h3 class="inv-page-title">طلباتي</h3>
             <p class="inv-page-meta" id="myOrdersMeta">—</p>
           </div>
+          <button type="button" class="btn soft btn-sm" id="btnRefreshOrders" aria-label="تحديث">تحديث</button>
         </div>
+        <div class="inv-order-filters" id="myOrdersFilters" role="tablist" aria-label="تصفية حسب الحالة"></div>
         <div class="inv-order-list" id="myOrdersList"></div>
       </section>
 
@@ -541,6 +552,6 @@
   </div>
   <script src="app.js?v=20260707n"></script>
   <script src="app-reports.js?v=20260613rpt3"></script>
-  <script src="app-commerce.js?v=20260617shop5"></script>
+  <script src="app-commerce.js?v=20260709orders1"></script>
 </body>
 </html>

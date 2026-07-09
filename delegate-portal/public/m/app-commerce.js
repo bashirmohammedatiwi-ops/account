@@ -1,27 +1,62 @@
 /* Mobile commerce v3: Edari-style showcase + live invoice + localStorage */
 
+/** Product grid: iPad landscape = 2 rows, portrait = 3 rows. */
 function shopGridLayout() {
-  const w = window.innerWidth;
-  const h = window.innerHeight;
+  const w = window.innerWidth || 360;
+  const h = window.innerHeight || 640;
+  const landscape = w > h;
+  const shortSide = Math.min(w, h);
+  const longSide = Math.max(w, h);
+  // iPad / large tablet (incl. split-view widths)
+  const isTablet = shortSide >= 600 || (shortSide >= 500 && longSide >= 900);
+
   let cols = 2;
-  if (w >= 1280) cols = 4;
-  else if (w >= 600) cols = 3;
   let rows = 2;
-  if (w >= 1024 && h >= 680) rows = 3;
-  else if (w >= 768 && h >= 560) rows = 3;
-  return { cols, rows, perPage: cols * rows };
+
+  if (!isTablet) {
+    // Phone
+    cols = 2;
+    rows = landscape ? 1 : 2;
+  } else if (landscape) {
+    // iPad horizontal → 2 rows
+    cols = w >= 1180 ? 4 : 3;
+    rows = 2;
+  } else {
+    // iPad vertical → 3 rows × 3 cols
+    cols = 3;
+    rows = 3;
+  }
+
+  // Very tall desktop / large screens keep 3 rows with more columns
+  if (!isTablet && w >= 1280) {
+    cols = 4;
+    rows = 3;
+  }
+
+  return { cols, rows, perPage: cols * rows, landscape, isTablet };
 }
 
 function getProductsPerPage() {
   return shopGridLayout().perPage;
 }
 
+function applyShopGridVars(el, layout = shopGridLayout()) {
+  if (!el) return;
+  el.style.setProperty('--shop-cols', String(layout.cols));
+  el.style.setProperty('--shop-rows', String(layout.rows));
+  el.dataset.shopCols = String(layout.cols);
+  el.dataset.shopRows = String(layout.rows);
+}
+
 const commerce = {
   branches: [],
   sections: [],
   products: [],
+  productGroups: [],
   productFilter: '',
   orders: [],
+  ordersFilter: '',
+  selectedOrder: null,
   selectedBranch: null,
   selectedSection: null,
   selectedProductId: null,
@@ -33,15 +68,53 @@ const commerce = {
 };
 
 const STATUS_BADGE = {
-  submitted: 'pending',
+  draft: 'muted',
+  submitted: 'info',
   under_review: 'pending',
   approved: 'ok',
   rejected: 'danger',
-  processing: 'pending',
+  processing: 'info',
   delivered: 'ok',
-  draft: 'muted',
   cancelled: 'muted'
 };
+
+const ORDER_FILTERS = [
+  { id: '', label: 'الكل' },
+  { id: 'submitted', label: 'مرسل' },
+  { id: 'under_review', label: 'مراجعة' },
+  { id: 'approved', label: 'معتمد' },
+  { id: 'processing', label: 'تنفيذ' },
+  { id: 'delivered', label: 'مُسلَّم' },
+  { id: 'rejected', label: 'مرفوض' },
+  { id: 'cancelled', label: 'ملغى' },
+  { id: 'draft', label: 'مسودة' }
+];
+
+function orderStatusClass(status) {
+  return STATUS_BADGE[status] || 'muted';
+}
+
+function orderStatusLabel(o) {
+  return o?.statusLabel || ({
+    draft: 'مسودة',
+    submitted: 'مرسل',
+    under_review: 'قيد المراجعة',
+    approved: 'معتمد',
+    rejected: 'مرفوض',
+    processing: 'قيد التنفيذ',
+    delivered: 'تم التسليم',
+    cancelled: 'ملغى'
+  })[o?.status] || o?.status || '—';
+}
+
+function canAgentRemoveOrder(status) {
+  return ['draft', 'submitted', 'under_review', 'cancelled', 'rejected'].includes(status);
+}
+
+function formatOrderWhen(o) {
+  const raw = o.submittedAt || o.updatedAt || o.createdAt || '';
+  return String(raw).slice(0, 16).replace('T', ' ');
+}
 
 function invoiceStorageKey() {
   return `delegateInvoice:${state.agent?.id || 'guest'}`;
@@ -250,11 +323,36 @@ function productImageSrc(p) {
   return `${window.location.origin}${p.imageUrl}`;
 }
 
+function findProductGroup(productId) {
+  const id = Number(productId);
+  return (commerce.productGroups || []).find((g) =>
+    (g.shades || []).some((s) => Number(s.id) === id)
+  ) || null;
+}
+
+function displayProductName(p) {
+  const g = findProductGroup(p.id);
+  if (g?.hasShades && g.name) return g.name;
+  return p.name;
+}
+
+function renderShadeDots(p) {
+  const g = findProductGroup(p.id);
+  if (!g?.hasShades || (g.shades || []).length < 2) return '';
+  const dots = g.shades.slice(0, 8).map((s) => {
+    const bg = s.colorCode || '#ccc';
+    return `<span class="shop-shade-dot" style="background:${esc(bg)}" title="${esc(s.shadeName || '')}"></span>`;
+  }).join('');
+  const more = g.shades.length > 8 ? `<span class="shop-shade-more">+${g.shades.length - 8}</span>` : '';
+  return `<span class="shop-shade-dots">${dots}${more}</span>`;
+}
+
 function renderProductGridCard(p) {
   const d = getDraft(p.id);
   const selected = commerce.selectedProductId === p.id;
   const inCart = (d.quant || 0) > 0 || (d.bonus || 0) > 0;
   const img = productImageSrc(p);
+  const label = displayProductName(p);
   return `
     <button type="button" class="shop-prod-card${selected ? ' shop-prod-card-active' : ''}${inCart ? ' shop-prod-card-in-cart' : ''}" data-product-id="${p.id}" data-select-product="${p.id}">
       <span class="shop-prod-card-media">
@@ -262,7 +360,8 @@ function renderProductGridCard(p) {
     ? `<img src="${img}" alt="" class="shop-prod-card-img" loading="lazy">`
     : '<span class="shop-prod-card-empty" aria-hidden="true">📦</span>'}
       </span>
-      <span class="shop-prod-card-name">${esc(p.name)}</span>
+      <span class="shop-prod-card-name">${esc(label)}</span>
+      ${renderShadeDots(p)}
     </button>`;
 }
 
@@ -284,10 +383,29 @@ function renderProductDetailPanel() {
   const img = productImageSrc(p);
   const stock = Number(p.minOrderQty ?? 0);
   const lineTotal = (d.quant || 0) * Number(p.price || 0);
+  const group = findProductGroup(p.id);
+  const title = displayProductName(p);
+  const shadePicker = group?.hasShades && (group.shades || []).length > 1
+    ? `<div class="shop-shade-picker" role="listbox" aria-label="درجات اللون">
+        ${group.shades.map((s) => {
+    const active = Number(s.id) === Number(p.id);
+    const bg = s.colorCode || '#ddd';
+    return `<button type="button" class="shop-shade-chip${active ? ' is-active' : ''}"
+            data-select-product="${s.id}" title="${esc(s.shadeName || s.barcode || '')}"
+            style="--shade:${esc(bg)}">
+            <span class="shop-shade-chip-swatch" style="background:${esc(bg)}"></span>
+            <span class="shop-shade-chip-label">${esc(s.shadeName || '—')}</span>
+          </button>`;
+  }).join('')}
+      </div>`
+    : (p.shadeName
+      ? `<p class="shop-detail-shade"><span class="shop-shade-chip-swatch" style="background:${esc(p.colorCode || '#ccc')}"></span> ${esc(p.shadeName)}</p>`
+      : '');
   panel.innerHTML = `
     <div class="shop-detail-inner">
       ${img ? `<button type="button" class="shop-detail-hero" data-view-product-id="${p.id}" aria-label="عرض الصورة"><img src="${img}" alt=""></button>` : ''}
-      <h3 class="shop-detail-name">${esc(p.name)}</h3>
+      <h3 class="shop-detail-name">${esc(title)}</h3>
+      ${shadePicker}
       <p class="shop-detail-meta">
         <span dir="ltr">${esc(p.barcode || p.skuNum || '—')}</span>
         <span class="shop-detail-price" dir="ltr">${fmtInvInt(p.price)}</span>
@@ -350,20 +468,28 @@ function bindProductPagesScroll() {
 function renderProductPages() {
   const track = document.getElementById('shopProductsPages');
   const vp = document.getElementById('shopPagesViewport');
+  const gridArea = document.querySelector('.shop-edari-grid-area');
   if (!track) return;
+  const layout = shopGridLayout();
+  applyShopGridVars(gridArea, layout);
+  applyShopGridVars(document.getElementById('screen-shop-products'), layout);
+  document.body.classList.toggle('shop-orient-landscape', layout.landscape);
+  document.body.classList.toggle('shop-orient-portrait', !layout.landscape);
+  document.body.classList.toggle('shop-is-tablet', layout.isTablet);
+
   const items = filteredProducts();
   if (!items.length) {
     track.innerHTML = '<div class="shop-pages-empty"><p>لا توجد منتجات</p></div>';
     renderPageDots(0);
     return;
   }
-  const pages = chunkArray(items, getProductsPerPage());
+  const pages = chunkArray(items, layout.perPage);
   if (!commerce.selectedProductId || !items.some((p) => p.id === commerce.selectedProductId)) {
     commerce.selectedProductId = items[0].id;
   }
   track.innerHTML = pages.map((pageItems) => `
     <div class="shop-page">
-      <div class="shop-page-grid">
+      <div class="shop-page-grid" style="--shop-cols:${layout.cols};--shop-rows:${layout.rows}">
         ${pageItems.map(renderProductGridCard).join('')}
       </div>
     </div>`).join('');
@@ -379,13 +505,34 @@ function renderProductShowcase() {
   updateInvoiceUI();
 }
 
+/** One card per shade-group (primary product); search matches any shade. */
 function filteredProducts() {
   const q = commerce.productFilter.trim().toLowerCase();
-  if (!q) return commerce.products;
-  return commerce.products.filter((p) => {
-    const hay = `${p.name} ${p.barcode} ${p.skuNum}`.toLowerCase();
-    return hay.includes(q);
-  });
+  const groups = commerce.productGroups?.length
+    ? commerce.productGroups
+    : (commerce.products || []).map((p) => ({
+      groupKey: `solo-${p.id}`,
+      hasShades: false,
+      name: p.name,
+      primary: p,
+      shades: [p]
+    }));
+
+  const matched = [];
+  for (const g of groups) {
+    const shades = g.shades || [];
+    if (!shades.length) continue;
+    if (!q) {
+      matched.push(g.primary || shades[0]);
+      continue;
+    }
+    const hit = shades.some((p) => {
+      const hay = `${g.name || ''} ${p.name} ${p.barcode} ${p.skuNum} ${p.shadeName || ''}`.toLowerCase();
+      return hay.includes(q);
+    });
+    if (hit) matched.push(g.primary || shades[0]);
+  }
+  return matched;
 }
 
 function renderProductsList() {
@@ -396,6 +543,7 @@ async function loadSectionProducts() {
   if (!commerce.selectedSection?.id) return;
   const data = await commerceApi(`/catalog/sections/${commerce.selectedSection.id}/products`);
   commerce.products = data.products || [];
+  commerce.productGroups = data.groups || [];
   commerce.productFilter = '';
   const searchEl = document.getElementById('shopProductSearch');
   if (searchEl) searchEl.value = '';
@@ -850,28 +998,68 @@ function selectInvoiceCustomer(branch) {
 async function loadMyOrders() {
   setOverlay(true);
   try {
-    const data = await commerceApi('/orders');
+    const filter = commerce.ordersFilter || '';
+    const qs = filter ? `?status=${encodeURIComponent(filter)}` : '';
+    const data = await commerceApi(`/orders${qs}`);
     commerce.orders = data.orders || [];
-    document.getElementById('myOrdersMeta').textContent = commerce.orders.length
-      ? `${commerce.orders.length} طلب مرسل`
-      : 'لا توجد طلبات بعد';
-    document.getElementById('myOrdersList').innerHTML = commerce.orders.map((o) => `
-      <button type="button" class="inv-order-card" data-order-id="${o.id}">
-        <div class="inv-order-card-head">
-          <div>
-            <strong class="inv-order-no" dir="ltr">${esc(o.orderNo)}</strong>
-            <p class="inv-order-customer">${esc(o.customerName || '—')}</p>
-          </div>
-          <span class="badge ${STATUS_BADGE[o.status] || 'pending'}">${esc(o.statusLabel)}</span>
-        </div>
-        <div class="inv-order-card-foot">
-          <span dir="ltr">${fmtInvInt(o.totalAmount)}</span>
-          <span>${o.lines?.length || 0} بند · ${esc((o.submittedAt || o.createdAt || '').slice(0, 16).replace('T', ' '))}</span>
-        </div>
-      </button>`).join('') || '<div class="empty-state"><p>لا توجد طلبات</p></div>';
 
-    document.querySelectorAll('[data-order-id]').forEach((btn) => {
-      btn.addEventListener('click', () => openOrderDetail(Number(btn.dataset.orderId)));
+    const filtersEl = document.getElementById('myOrdersFilters');
+    if (filtersEl) {
+      filtersEl.innerHTML = ORDER_FILTERS.map((f) => `
+        <button type="button" class="inv-order-filter${filter === f.id ? ' active' : ''}"
+          data-order-filter="${esc(f.id)}" role="tab" aria-selected="${filter === f.id}">
+          ${esc(f.label)}
+        </button>`).join('');
+      filtersEl.querySelectorAll('[data-order-filter]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          commerce.ordersFilter = btn.dataset.orderFilter || '';
+          void loadMyOrders();
+        });
+      });
+    }
+
+    const count = commerce.orders.length;
+    document.getElementById('myOrdersMeta').textContent = count
+      ? `${count} طلب${filter ? ` · ${ORDER_FILTERS.find((f) => f.id === filter)?.label || ''}` : ''}`
+      : 'لا توجد طلبات بعد';
+
+    document.getElementById('myOrdersList').innerHTML = commerce.orders.map((o) => {
+      const removable = canAgentRemoveOrder(o.status);
+      const removeLabel = ['submitted', 'under_review'].includes(o.status) ? 'إلغاء' : 'حذف';
+      return `
+      <article class="inv-order-card" data-order-id="${o.id}">
+        <button type="button" class="inv-order-card-main" data-open-order="${o.id}">
+          <div class="inv-order-card-head">
+            <div class="inv-order-card-titles">
+              <strong class="inv-order-no" dir="ltr">${esc(o.orderNo)}</strong>
+              <p class="inv-order-customer">${esc(o.customerName || 'بدون زبون')}</p>
+              ${o.catalogBranchName ? `<p class="inv-order-branch">${esc(o.catalogBranchName)}</p>` : ''}
+            </div>
+            <span class="badge ${orderStatusClass(o.status)}">${esc(orderStatusLabel(o))}</span>
+          </div>
+          <div class="inv-order-card-stats">
+            <span class="inv-order-stat"><em>${fmtInvInt(o.totalAmount)}</em> المبلغ</span>
+            <span class="inv-order-stat"><em>${o.lines?.length || 0}</em> بند</span>
+            <span class="inv-order-stat"><em dir="ltr">${esc(formatOrderWhen(o))}</em> التاريخ</span>
+          </div>
+        </button>
+        ${removable ? `
+        <div class="inv-order-card-actions">
+          <button type="button" class="btn soft btn-sm inv-order-del" data-delete-order="${o.id}" data-order-status="${esc(o.status)}">
+            ${removeLabel}
+          </button>
+        </div>` : ''}
+      </article>`;
+    }).join('') || '<div class="empty-state inv-orders-empty"><p>لا توجد طلبات في هذا التصنيف</p></div>';
+
+    document.querySelectorAll('[data-open-order]').forEach((btn) => {
+      btn.addEventListener('click', () => openOrderDetail(Number(btn.dataset.openOrder)));
+    });
+    document.querySelectorAll('[data-delete-order]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        void deleteMyOrder(Number(btn.dataset.deleteOrder), btn.dataset.orderStatus);
+      });
     });
   } catch (e) {
     alert(e.message);
@@ -880,17 +1068,60 @@ async function loadMyOrders() {
   }
 }
 
+async function deleteMyOrder(id, status) {
+  const soft = ['submitted', 'under_review'].includes(status);
+  const msg = soft
+    ? 'إلغاء هذا الطلب؟ سيظهر كملغى ولن يُعالَج.'
+    : 'حذف هذا الطلب نهائياً؟ لا يمكن التراجع.';
+  if (!confirm(msg)) return;
+  setOverlay(true);
+  try {
+    await commerceApi(`/orders/${id}`, { method: 'DELETE' });
+    if (state.screen === 'order-detail') goToScreen('my-orders');
+    else await loadMyOrders();
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    setOverlay(false);
+  }
+}
+
+function renderOrderTimeline(events = []) {
+  if (!events.length) return '';
+  const rows = [...events].reverse().slice(0, 8).map((e) => `
+    <li class="inv-order-timeline-item">
+      <span class="inv-order-timeline-dot"></span>
+      <div>
+        <strong>${esc(orderStatusLabel({ status: e.toStatus }))}</strong>
+        ${e.note ? `<p>${esc(e.note)}</p>` : ''}
+        <time dir="ltr">${esc(String(e.createdAt || '').slice(0, 16).replace('T', ' '))}</time>
+      </div>
+    </li>`).join('');
+  return `<div class="inv-order-timeline"><h4>سجل الحالة</h4><ul>${rows}</ul></div>`;
+}
+
 async function openOrderDetail(id) {
   setOverlay(true);
   try {
     const data = await commerceApi(`/orders/${id}`);
     const o = data.order;
+    commerce.selectedOrder = o;
     const lines = (o.lines || []).map((l) => ({
       ...l,
       price: l.unitPrice,
       matNum: l.barcode
     }));
+    const removable = canAgentRemoveOrder(o.status);
+    const removeLabel = ['submitted', 'under_review'].includes(o.status) ? 'إلغاء الطلب' : 'حذف الطلب';
     document.getElementById('orderDetailSheet').innerHTML = `
+      <div class="inv-order-detail-banner">
+        <div>
+          <p class="inv-order-detail-kicker">طلب شراء</p>
+          <h3 class="inv-order-detail-title" dir="ltr">${esc(o.orderNo)}</h3>
+          <p class="inv-order-detail-sub">${esc(o.customerName || '—')}${o.catalogBranchName ? ` · ${esc(o.catalogBranchName)}` : ''}</p>
+        </div>
+        <span class="badge badge-lg ${orderStatusClass(o.status)}">${esc(orderStatusLabel(o))}</span>
+      </div>
       ${renderEdariInvoiceDocument(lines, {
     title: `طلب ${o.orderNo}`,
     clientName: o.customerName || '—',
@@ -899,10 +1130,14 @@ async function openOrderDetail(id) {
     remarks: o.notes || '',
     readonly: true
   })}
-      <div class="inv-order-status-row">
-        <span class="badge ${STATUS_BADGE[o.status] || 'pending'}">${esc(o.statusLabel)}</span>
-        <span class="muted">${esc(o.catalogBranchName || '')}</span>
-      </div>`;
+      ${renderOrderTimeline(o.events || [])}
+      ${removable ? `
+      <div class="inv-order-detail-actions">
+        <button type="button" class="btn danger" id="btnDeleteOrderDetail">${esc(removeLabel)}</button>
+      </div>` : ''}`;
+    document.getElementById('btnDeleteOrderDetail')?.addEventListener('click', () => {
+      void deleteMyOrder(o.id, o.status);
+    });
     goToScreen('order-detail');
   } catch (e) {
     alert(e.message);
@@ -934,9 +1169,10 @@ window.commerceNav = {
       crumb.textContent = 'طلبات مرسلة للوحة التحكم';
       if (kicker) kicker.textContent = 'Edari · الطلبات';
     } else if (name === 'order-detail') {
-      title.textContent = 'تفاصيل الطلب';
-      crumb.textContent = '';
-      if (kicker) kicker.textContent = 'Edari · الفاتورة';
+      const o = commerce.selectedOrder;
+      title.textContent = o?.orderNo ? `طلب ${o.orderNo}` : 'تفاصيل الطلب';
+      crumb.textContent = o ? orderStatusLabel(o) : '';
+      if (kicker) kicker.textContent = 'Edari · الطلب';
     }
   },
 
@@ -1028,6 +1264,11 @@ function initCommerceMobile() {
   });
 
   document.getElementById('shopProductDetail')?.addEventListener('click', (e) => {
+    const selectBtn = e.target.closest('[data-select-product]');
+    if (selectBtn) {
+      selectProduct(selectBtn.dataset.selectProduct);
+      return;
+    }
     const draftBtn = e.target.closest('[data-draft-action]');
     if (draftBtn) {
       adjustDraft(draftBtn.dataset.productId, draftBtn.dataset.field, Number(draftBtn.dataset.delta));
@@ -1077,6 +1318,7 @@ function initCommerceMobile() {
   document.getElementById('btnClearInvoice')?.addEventListener('click', confirmClearInvoice);
   document.getElementById('btnPickCustomer')?.addEventListener('click', () => openCustomerPicker());
   document.getElementById('btnCloseCustomer')?.addEventListener('click', closeCustomerPicker);
+  document.getElementById('btnRefreshOrders')?.addEventListener('click', () => void loadMyOrders());
 
   document.getElementById('invoiceNotes')?.addEventListener('input', (e) => {
     commerce.invoiceNotes = e.target.value || '';
@@ -1116,22 +1358,20 @@ function initCommerceMobile() {
   updateResumeBanner();
 
   let shopResizeTimer;
-  window.addEventListener('resize', () => {
+  const rerenderShopGrid = () => {
     clearTimeout(shopResizeTimer);
     shopResizeTimer = setTimeout(() => {
       if (state.screen !== 'shop-products') return;
       renderProductPages();
-    }, 160);
+    }, 120);
+  };
+  window.addEventListener('resize', rerenderShopGrid, { passive: true });
+  window.addEventListener('orientationchange', () => {
+    setTimeout(rerenderShopGrid, 80);
   }, { passive: true });
 
   if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', () => {
-      clearTimeout(shopResizeTimer);
-      shopResizeTimer = setTimeout(() => {
-        if (state.screen !== 'shop-products') return;
-        renderProductPages();
-      }, 160);
-    }, { passive: true });
+    window.visualViewport.addEventListener('resize', rerenderShopGrid, { passive: true });
   }
 }
 

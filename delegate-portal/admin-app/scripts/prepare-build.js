@@ -62,26 +62,22 @@ function download(url, dest) {
 async function ensureNodePortable() {
   const nodeExe = path.join(NODE_OUT, 'node.exe');
   if (fs.existsSync(nodeExe)) {
-    console.log('Node portable: موجود');
-    return;
+    try {
+      const ver = execSync(`"${nodeExe}" -p process.versions.node`, { encoding: 'utf8' }).trim();
+      console.log(`Node portable: موجود (v${ver})`);
+      return;
+    } catch { /* re-download */ }
   }
 
-  const version = process.version.replace('v', '');
-  const major = version.split('.')[0];
-  const zipName = `node-v${major}.win-x64.zip`;
-  const url = `https://nodejs.org/dist/v${major}.0.0/${zipName}`;
+  // Pin to Node 20 LTS — matches better-sqlite3 prebuilds and avoids host Node 24 ABI issues.
+  const version = '20.18.0';
+  const zipName = `node-v${version}-win-x64.zip`;
+  const url = `https://nodejs.org/dist/v${version}/${zipName}`;
   const zipPath = path.join(OUT, zipName);
 
-  console.log(`جاري تنزيل Node ${major}.x للتضمين...`);
+  console.log(`جاري تنزيل Node ${version} للتضمين...`);
   fs.mkdirSync(OUT, { recursive: true });
-
-  try {
-    await download(url, zipPath);
-  } catch {
-    const fallback = `https://nodejs.org/dist/v20.18.0/node-v20.18.0-win-x64.zip`;
-    console.log('محاولة رابط بديل...');
-    await download(fallback, zipPath);
-  }
+  await download(url, zipPath);
 
   execSync(
     `powershell -NoProfile -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${OUT}' -Force"`,
@@ -122,7 +118,8 @@ function preparePortal() {
 
 function rebuildPortalNativeModules() {
   const nodeExe = path.join(NODE_OUT, 'node.exe');
-  if (!fs.existsSync(nodeExe)) {
+  const npmCmd = path.join(NODE_OUT, 'npm.cmd');
+  if (!fs.existsSync(nodeExe) || !fs.existsSync(npmCmd)) {
     console.log('تخطّي rebuild — Node portable غير موجود');
     return;
   }
@@ -132,23 +129,34 @@ function rebuildPortalNativeModules() {
     target = execSync(`"${nodeExe}" -p process.versions.node`, { encoding: 'utf8' }).trim();
   } catch { /* use default */ }
 
-  console.log(`إعادة بناء better-sqlite3 لـ Node ${target}...`);
+  console.log(`تثبيت better-sqlite3 لـ Node ${target} (prebuild)...`);
+  const sqliteDir = path.join(PORTAL_OUT, 'node_modules', 'better-sqlite3');
   try {
-    execSync('npm rebuild better-sqlite3 --build-from-source', {
+    // Prefer prebuilt binary for the bundled Node — avoid node-gyp/Python.
+    if (fs.existsSync(sqliteDir)) {
+      rimraf(sqliteDir);
+    }
+    execSync(`"${npmCmd}" install better-sqlite3@11.10.0 --omit=dev --no-save --no-audit --no-fund`, {
       cwd: PORTAL_OUT,
       env: {
         ...process.env,
         npm_config_target: target,
         npm_config_runtime: 'node',
         npm_config_arch: 'x64',
-        npm_config_disturl: 'https://nodejs.org/dist'
+        npm_config_disturl: 'https://nodejs.org/dist',
+        npm_config_build_from_source: 'false'
       },
+      stdio: 'inherit',
+      shell: true
+    });
+    execSync(`"${nodeExe}" -e "require('better-sqlite3'); console.log('better-sqlite3 ok')"`, {
+      cwd: PORTAL_OUT,
       stdio: 'inherit',
       shell: true
     });
     console.log('better-sqlite3: جاهز لـ Node المضمّن');
   } catch (err) {
-    console.warn('تحذير: فشل rebuild better-sqlite3 —', err.message);
+    console.warn('تحذير: فشل تثبيت better-sqlite3 —', err.message);
   }
 }
 
@@ -161,9 +169,10 @@ function prepareEdariReader() {
 
 async function main() {
   fs.mkdirSync(OUT, { recursive: true });
+  // Node portable must exist before native module install (ABI match).
+  await ensureNodePortable();
   preparePortal();
   prepareEdariReader();
-  await ensureNodePortable();
   console.log('\n✓ build-resources جاهزة');
 }
 

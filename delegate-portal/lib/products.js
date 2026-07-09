@@ -17,6 +17,9 @@ function ensureUploadDir(sub = '') {
 
 function mapProduct(row, extras = {}) {
   if (!row) return null;
+  const shadeName = String(row.shade_name || '').trim();
+  const colorCode = String(row.color_code || '').trim();
+  const groupKey = String(row.group_key || '').trim();
   return {
     id: row.id,
     sectionId: row.section_id,
@@ -30,6 +33,10 @@ function mapProduct(row, extras = {}) {
     priceOverride: !!row.price_override,
     description: row.description || '',
     minOrderQty: Number(row.min_order_qty || 0),
+    shadeName,
+    colorCode,
+    groupKey,
+    hasShade: !!(shadeName || colorCode),
     imagePath: row.image_path || '',
     imageUrl: row.image_path ? `/uploads/${row.image_path.replace(/\\/g, '/')}` : '',
     isActive: !!row.is_active,
@@ -41,6 +48,62 @@ function mapProduct(row, extras = {}) {
     branchName: row.branch_name || extras.branchName || '',
     ...extras
   };
+}
+
+/** Group products that share group_key (color shades of one item). */
+function groupProductsByShade(products = []) {
+  const groups = [];
+  const byKey = new Map();
+  for (const p of products) {
+    const key = p.groupKey || `solo-${p.id}`;
+    if (!byKey.has(key)) {
+      const g = {
+        groupKey: key,
+        name: p.name,
+        sectionId: p.sectionId,
+        description: p.description || '',
+        shades: [],
+        primary: p
+      };
+      byKey.set(key, g);
+      groups.push(g);
+    }
+    const g = byKey.get(key);
+    g.shades.push(p);
+    if (!g.primary.hasShade && p.hasShade) g.primary = p;
+    if ((p.sortOrder || 0) < (g.primary.sortOrder || 0)) g.primary = p;
+  }
+  for (const g of groups) {
+    g.shades.sort((a, b) => String(a.shadeName).localeCompare(String(b.shadeName), 'ar')
+      || a.id - b.id);
+    if (g.shades.length === 1 && !g.shades[0].hasShade) {
+      g.hasShades = false;
+    } else {
+      g.hasShades = g.shades.some((s) => s.hasShade) || g.shades.length > 1;
+    }
+    // Prefer a display name without trailing shade code when grouped
+    if (g.hasShades && g.shades.length > 1) {
+      const base = stripShadeFromName(g.primary.name, g.primary.shadeName);
+      g.name = base || g.primary.name;
+    } else {
+      g.name = g.primary.name;
+    }
+  }
+  return groups;
+}
+
+function stripShadeFromName(name, shadeName) {
+  let n = String(name || '').trim();
+  const shade = String(shadeName || '').trim();
+  if (shade) {
+    n = n.replace(new RegExp(`\\s*[-–—/]?\\s*${escapeRegExp(shade)}\\s*$`, 'i'), '').trim();
+  }
+  n = n.replace(/\s*[-–—]\s*\d{1,4}[A-Za-z]?\s*$/, '').trim();
+  return n;
+}
+
+function escapeRegExp(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /** سعر الجملة في Edari = SellPr1 (وليس SellPr2 نصف الجملة ولا SellPr3). */
@@ -437,8 +500,9 @@ function createProduct(data) {
   const r = db.prepare(`
     INSERT INTO products
       (section_id, edari_seq, sku_num, barcode, name, unit, price, bonus_default,
-       price_override, description, min_order_qty, is_active, sort_order, synced_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+       price_override, description, min_order_qty, shade_name, color_code, group_key,
+       is_active, sort_order, synced_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
   `).run(
     data.sectionId,
     data.edariSeq || '',
@@ -451,6 +515,9 @@ function createProduct(data) {
     data.priceOverride ? 1 : 0,
     data.description || '',
     Number(data.minOrderQty || 0),
+    String(data.shadeName || '').trim(),
+    String(data.colorCode || '').trim(),
+    String(data.groupKey || '').trim(),
     data.isActive !== false ? 1 : 0,
     data.sortOrder || 0,
     data.syncedAt || new Date().toISOString()
@@ -465,6 +532,7 @@ function updateProduct(id, patch) {
     UPDATE products SET
       section_id = ?, edari_seq = ?, sku_num = ?, barcode = ?, name = ?, unit = ?,
       price = ?, bonus_default = ?, price_override = ?, description = ?, min_order_qty = ?,
+      shade_name = ?, color_code = ?, group_key = ?,
       is_active = ?, sort_order = ?,
       synced_at = COALESCE(?, synced_at),
       image_path = COALESCE(?, image_path), updated_at = datetime('now')
@@ -481,6 +549,9 @@ function updateProduct(id, patch) {
     patch.priceOverride != null ? (patch.priceOverride ? 1 : 0) : row.price_override,
     patch.description ?? row.description,
     patch.minOrderQty ?? row.min_order_qty,
+    patch.shadeName != null ? String(patch.shadeName).trim() : (row.shade_name || ''),
+    patch.colorCode != null ? String(patch.colorCode).trim() : (row.color_code || ''),
+    patch.groupKey != null ? String(patch.groupKey).trim() : (row.group_key || ''),
     patch.isActive != null ? (patch.isActive ? 1 : 0) : row.is_active,
     patch.sortOrder ?? row.sort_order,
     patch.syncedAt ?? null,
@@ -898,22 +969,93 @@ function addProductByBarcode(sectionId, code, options = {}) {
     ? Number(options.minOrderQty)
     : Number(material.stockQty ?? material.qty ?? 0);
 
+  const shadeName = String(options.shadeName || '').trim();
+  const colorCode = String(options.colorCode || '').trim();
+  let groupKey = String(options.groupKey || '').trim();
+  if (!groupKey && (shadeName || colorCode)) {
+    groupKey = `shade-${sectionId}-${Date.now()}`;
+  }
+
+  const displayName = String(options.name || '').trim() || material.name;
+  const finalName = shadeName && !displayName.includes(shadeName)
+    ? `${displayName} - ${shadeName}`
+    : displayName;
+
   return createProduct({
     sectionId,
     edariSeq: material.seq,
     skuNum: material.num,
     barcode: material.barcode || material.num,
-    name: String(options.name || '').trim() || material.name,
+    name: finalName,
     unit: material.unit,
     price: resolvedPrice,
     bonusDefault: Number(material.bonus) || 0,
     priceOverride: false,
-    description: material.remarks || '',
+    description: options.description != null ? String(options.description) : (material.remarks || ''),
     minOrderQty: resolvedQty,
+    shadeName,
+    colorCode,
+    groupKey,
     sortOrder: Number(options.sortOrder || 0),
     isActive: options.isActive !== false,
     syncedAt: material.syncedAt || new Date().toISOString()
   });
+}
+
+/**
+ * Add several shade barcodes as one product group.
+ * Each shade looks up Edari for wholesale price + stock.
+ */
+function addProductShadeGroup(sectionId, payload = {}) {
+  const section = getSection(sectionId);
+  if (!section) throw new Error('القسم غير موجود');
+
+  const baseName = String(payload.name || '').trim();
+  const shades = Array.isArray(payload.shades) ? payload.shades : [];
+  if (!shades.length) throw new Error('أضف درجة لون واحدة على الأقل مع باركود');
+
+  const groupKey = String(payload.groupKey || '').trim()
+    || `shade-${sectionId}-${Date.now()}`;
+  const description = String(payload.description || '').trim();
+  const created = [];
+  const errors = [];
+
+  const tx = db.transaction(() => {
+    shades.forEach((shade, idx) => {
+      const barcode = normalizeCode(shade.barcode || shade.code);
+      if (!barcode) {
+        errors.push({ index: idx, error: 'باركود فارغ' });
+        return;
+      }
+      try {
+        const product = addProductByBarcode(sectionId, barcode, {
+          name: baseName || undefined,
+          shadeName: shade.shadeName || shade.name || '',
+          colorCode: shade.colorCode || shade.color || '',
+          groupKey,
+          description,
+          sortOrder: Number(shade.sortOrder ?? idx),
+          material: shade.material,
+          price: shade.price,
+          minOrderQty: shade.minOrderQty
+        });
+        created.push(product);
+      } catch (err) {
+        errors.push({ index: idx, barcode, error: err.message || String(err) });
+      }
+    });
+    if (!created.length) {
+      throw new Error(errors[0]?.error || 'تعذّر إضافة أي درجة');
+    }
+  });
+  tx();
+
+  return {
+    groupKey,
+    products: created,
+    errors,
+    group: groupProductsByShade(created)[0] || null
+  };
 }
 
 /** Upsert one Edari material into local cache (from live ODBC lookup or API). */
@@ -1114,6 +1256,8 @@ module.exports = {
   edariMaterialStats,
   cacheEdariMaterial,
   addProductByBarcode,
+  addProductShadeGroup,
+  groupProductsByShade,
   bulkAddByBarcode,
   bulkProductsAction,
   createProduct,

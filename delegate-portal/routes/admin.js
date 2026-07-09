@@ -4,6 +4,7 @@ const db = require('../lib/db');
 const { signAdmin } = require('../lib/auth');
 const {
   getAssignableTrees,
+  assignAgentTrees,
   getSyncStatus,
   getChildren,
   getStatementForAccount,
@@ -95,9 +96,14 @@ router.post('/agents', (req, res) => {
       'INSERT INTO agents (name, phone, username, password_hash) VALUES (?, ?, ?, ?)'
     ).run(name, phone || '', username, hash);
     const agentId = r.lastInsertRowid;
-    const ins = db.prepare('INSERT INTO agent_trees (agent_id, account_seq) VALUES (?, ?)');
-    for (const seq of treeSeqs) ins.run(agentId, String(seq));
-    res.json({ ok: true, id: agentId });
+    const { valid, invalid } = assignAgentTrees(agentId, treeSeqs);
+    res.json({
+      ok: true,
+      id: agentId,
+      treesAssigned: valid.length,
+      treesSkipped: invalid.length,
+      skippedTreeSeqs: invalid,
+    });
   } catch (e) {
     res.status(400).json({ ok: false, error: e.message.includes('UNIQUE') ? 'اسم المستخدم مستخدم' : e.message });
   }
@@ -117,9 +123,14 @@ router.put('/agents/:id', (req, res) => {
     db.prepare('UPDATE agents SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(password, 10), id);
   }
   if (Array.isArray(treeSeqs)) {
-    db.prepare('DELETE FROM agent_trees WHERE agent_id = ?').run(id);
-    const ins = db.prepare('INSERT INTO agent_trees (agent_id, account_seq) VALUES (?, ?)');
-    for (const seq of treeSeqs) ins.run(id, String(seq));
+    const { valid, invalid } = assignAgentTrees(id, treeSeqs);
+    res.json({
+      ok: true,
+      treesAssigned: valid.length,
+      treesSkipped: invalid.length,
+      skippedTreeSeqs: invalid,
+    });
+    return;
   }
   res.json({ ok: true });
 });

@@ -107,6 +107,7 @@ async function checkBackendHealth() {
   }
 }
 let treesCache = [];
+let agentAssignableTrees = [];
 
 const explorer = {
   trees: [],
@@ -250,18 +251,120 @@ async function loadDashboard() {
   }
 }
 
+function normTreeSeq(seq) {
+  return String(seq ?? '').replace(/[^0-9]/g, '');
+}
+
+function normalizeAssignableTree(row = {}) {
+  const seq = String(row.seq ?? row.Seq ?? '').trim();
+  const num = String(row.num ?? row.Num ?? '').trim();
+  const name1 = String(row.name1 ?? row.Name1 ?? row.name ?? '').trim();
+  return {
+    seq,
+    num,
+    name1,
+    sub_count: Number(row.sub_count ?? row.subCount ?? row.SubCount ?? 0),
+    bal: Number(row.bal ?? row.Bal ?? 0),
+  };
+}
+
+function treeDisplayLabel(tree) {
+  const num = String(tree?.num || '').trim();
+  const name = String(tree?.name1 || tree?.name || '').trim();
+  const seq = String(tree?.seq || '').trim();
+  if (tree?.missingOnServer) {
+    const base = name || num || (seq ? `شجرة #${seq}` : '—');
+    return `${base} (غير مرفوعة للسيرفر)`;
+  }
+  if (name && num) return `${name} (${num})`;
+  if (name) return name;
+  if (num) return `شجرة ${num}`;
+  if (seq) return `شجرة #${seq}`;
+  return 'شجرة بدون اسم';
+}
+
+async function loadAgentAssignableTrees() {
+  // Prefer server DB trees (Arabic names already synced). Edari live is only for filling gaps.
+  const dbData = await api('/api/admin/trees');
+  let trees = (dbData?.trees || []).map(normalizeAssignableTree).filter((t) => t.seq);
+
+  let edariTrees = [];
+  try {
+    if (window.edariDesktop?.listEdariTrees) {
+      const data = await window.edariDesktop.listEdariTrees();
+      edariTrees = (data?.trees || []).map(normalizeAssignableTree).filter((t) => t.seq);
+    } else {
+      const data = await api('/api/admin/edari/trees').catch(() => null);
+      edariTrees = (data?.trees || []).map(normalizeAssignableTree).filter((t) => t.seq);
+    }
+  } catch (_) { /* Edari optional for labels */ }
+
+  if (edariTrees.length) {
+    const byNorm = new Map(edariTrees.map((t) => [normTreeSeq(t.seq), t]));
+    trees = trees.map((t) => {
+      const ed = byNorm.get(normTreeSeq(t.seq));
+      if (!ed) return t;
+      return {
+        ...t,
+        num: String(t.num || ed.num || '').trim(),
+        name1: String(t.name1 || ed.name1 || '').trim(),
+        sub_count: Number(t.sub_count || ed.sub_count || 0)
+      };
+    });
+  }
+
+  // Sort: numbered trees first, readable labels
+  trees.sort((a, b) => String(a.num || a.seq).localeCompare(String(b.num || b.seq), 'ar', { numeric: true }));
+  agentAssignableTrees = trees;
+  return trees;
+}
+
+function mergeAgentTreeOptions(selected = []) {
+  const map = new Map(agentAssignableTrees.map((t) => [String(t.seq), { ...t }]));
+  for (const raw of selected || []) {
+    const key = String(raw ?? '').trim();
+    if (!key || map.has(key)) continue;
+    map.set(key, {
+      seq: key,
+      num: '',
+      name1: '',
+      sub_count: 0,
+      missingOnServer: true,
+    });
+  }
+  return [...map.values()].sort((a, b) =>
+    String(a.num || a.seq).localeCompare(String(b.num || b.seq), undefined, { numeric: true })
+  );
+}
+
 async function loadTrees() {
   try {
     let trees = [];
     if (window.edariDesktop?.listEdariTrees) {
       const data = await window.edariDesktop.listEdariTrees();
-      if (data?.ok !== false) trees = data.trees || [];
+      if (data?.ok !== false) trees = (data.trees || []).map(normalizeAssignableTree);
     }
+    const dbData = await api('/api/admin/trees').catch(() => null);
+    const dbTrees = (dbData?.trees || []).map(normalizeAssignableTree).filter((t) => t.seq);
+
     if (!trees.length) {
-      const data = await api('/api/admin/edari/trees').catch(() => api('/api/admin/trees'));
-      trees = data.trees || [];
+      trees = dbTrees;
+    } else if (dbTrees.length) {
+      const bySeq = new Map(dbTrees.map((t) => [String(t.seq), t]));
+      trees = trees.map((t) => {
+        const db = bySeq.get(String(t.seq));
+        if (!db) return t;
+        return {
+          ...t,
+          num: t.num || db.num,
+          name1: t.name1 || db.name1,
+          sub_count: t.sub_count || db.sub_count,
+          bal: t.bal ?? db.bal,
+        };
+      });
     }
-    treesCache = trees;
+
+    treesCache = trees.filter((t) => t.seq);
     explorer.trees = treesCache;
     if (explorer.loaded) renderExplorerTrees();
   } catch (e) {
@@ -875,52 +978,85 @@ async function loadSyncTrees() {
 function renderTreeChecks(selected = []) {
   const el = document.getElementById('agentTreeChecks');
   if (!el) return;
-  if (!treesCache.length) {
-    el.innerHTML = '<p class="muted">لا توجد شجرات — تأكد أن EdariNX يعمل أو ارفع البيانات إلى السيرفر</p>';
+  const trees = mergeAgentTreeOptions(selected);
+  if (!trees.length) {
+    el.innerHTML = '<p class="muted">لا توجد شجرات على السيرفر — ارفع البيانات من صفحة «رفع البيانات» أولاً</p>';
     return;
   }
   const selectedSet = new Set((selected || []).map(String));
-  el.innerHTML = treesCache.map((t) => `
-    <label class="tree-pick">
-      <input type="checkbox" name="treeSeq" value="${esc(t.seq)}" ${selectedSet.has(String(t.seq)) ? 'checked' : ''}>
-      <div class="tree-pick-body">
-        <div class="tree-pick-name">${esc(t.name1 || t.num || '—')}</div>
-        <div class="tree-pick-meta">${esc(t.num || '—')} · ${t.sub_count || 0} فرع</div>
-      </div>
-    </label>`).join('');
+  el.innerHTML = trees.map((t) => {
+    const label = treeDisplayLabel(t);
+    const num = String(t.num || t.seq || '—');
+    const subCount = Number(t.sub_count || 0);
+    const missing = !!t.missingOnServer;
+    const checked = !missing && selectedSet.has(String(t.seq));
+    return `
+    <label class="tree-pick${missing ? ' tree-pick-muted' : ''}${checked ? ' is-checked' : ''}">
+      <input type="checkbox" name="treeSeq" value="${esc(t.seq)}" ${missing ? 'disabled' : ''} ${checked ? 'checked' : ''}>
+      <span class="tree-pick-body">
+        <span class="tree-pick-name">${esc(label)}</span>
+        <span class="tree-pick-meta">${missing ? 'ارفع هذه الشجرة للسيرفر لتفعيلها' : `رقم ${esc(num)} · ${subCount} فرع`}</span>
+      </span>
+    </label>`;
+  }).join('');
+
+  el.querySelectorAll('input[name=treeSeq]').forEach((input) => {
+    input.addEventListener('change', () => {
+      input.closest('.tree-pick')?.classList.toggle('is-checked', input.checked);
+    });
+  });
 }
 
 async function openAgentModal(id = null) {
-  document.getElementById('agentModal').classList.remove('hidden');
+  const modal = document.getElementById('agentModal');
+  const treeEl = document.getElementById('agentTreeChecks');
+  const form = document.getElementById('agentForm');
+  if (!modal || !form) return;
+
+  modal.classList.remove('hidden');
   document.getElementById('agentModalTitle').textContent = id ? 'تعديل مندوب' : 'إضافة مندوب';
-  document.getElementById('agentId').value = id || '';
+  document.getElementById('agentId').value = id ? String(id) : '';
   document.getElementById('agentPassword').required = !id;
 
-  const treeEl = document.getElementById('agentTreeChecks');
   if (treeEl) treeEl.innerHTML = '<p class="muted loading">جاري تحميل الشجرات...</p>';
-  await loadTrees();
-  if (treeEl && !treesCache.length) {
-    treeEl.innerHTML = '<p class="muted">لا توجد شجرات — تأكد أن EdariNX يعمل أو ارفع البيانات إلى السيرفر</p>';
+  try {
+    await loadAgentAssignableTrees();
+  } catch (e) {
+    if (treeEl) treeEl.innerHTML = `<p class="muted">تعذّر تحميل الشجرات: ${esc(e.message)}</p>`;
+    return;
   }
 
+  let selectedTreeSeqs = [];
   if (id) {
     try {
       const data = await api('/api/admin/agents');
-      const a = data.agents.find((x) => x.id === id);
-      if (!a) return;
-      document.getElementById('agentName').value = a.name;
+      const a = data.agents.find((x) => String(x.id) === String(id));
+      if (!a) {
+        if (treeEl) treeEl.innerHTML = '<p class="muted">تعذّر العثور على المندوب</p>';
+        return;
+      }
+      document.getElementById('agentName').value = a.name || '';
       document.getElementById('agentPhone').value = a.phone || '';
-      document.getElementById('agentUsername').value = a.username;
-      document.getElementById('agentActive').checked = a.active;
-      renderTreeChecks(a.treeSeqs || []);
+      document.getElementById('agentUsername').value = a.username || '';
+      document.getElementById('agentPassword').value = '';
+      document.getElementById('agentActive').checked = !!a.active;
+      selectedTreeSeqs = a.treeSeqs || [];
     } catch (e) {
       if (treeEl) treeEl.innerHTML = `<p class="muted">تعذّر تحميل بيانات المندوب: ${esc(e.message)}</p>`;
+      return;
     }
   } else {
-    document.getElementById('agentForm').reset();
+    form.reset();
+    document.getElementById('agentId').value = '';
     document.getElementById('agentActive').checked = true;
-    renderTreeChecks([]);
+    document.getElementById('agentPassword').required = true;
   }
+
+  if (!agentAssignableTrees.length && !selectedTreeSeqs.length) {
+    if (treeEl) treeEl.innerHTML = '<p class="muted">لا توجد شجرات على السيرفر — ارفع البيانات من صفحة «رفع البيانات» أولاً</p>';
+    return;
+  }
+  renderTreeChecks(selectedTreeSeqs);
 }
 
 function applySyncProgressLine(line) {
@@ -1221,28 +1357,92 @@ document.getElementById('btnSyncTreesNone')?.addEventListener('click', () => {
 document.getElementById('btnSyncTreesReload')?.addEventListener('click', loadSyncTrees);
 document.getElementById('btnRefreshSyncLogs')?.addEventListener('click', () => { void loadSyncLogs(); });
 
-document.getElementById('agentForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const id = document.getElementById('agentId').value;
-  const treeSeqs = [...document.querySelectorAll('#agentTreeChecks input[name=treeSeq]:checked')].map((c) => c.value);
+function notifyAdmin(msg, type = 'ok') {
+  if (typeof showToast === 'function') {
+    showToast(msg, type);
+    return;
+  }
+  alert(msg);
+}
+
+async function saveAgentForm(e) {
+  if (e) e.preventDefault();
+  const form = document.getElementById('agentForm');
+  const submitBtn = document.querySelector('#agentForm button[type="submit"]');
+  if (!form) return;
+
+  const id = String(document.getElementById('agentId')?.value || '').trim();
+  const treeSeqs = [...document.querySelectorAll('#agentTreeChecks input[name=treeSeq]:checked:not(:disabled)')]
+    .map((c) => String(c.value || '').trim())
+    .filter(Boolean);
   const body = {
-    name: document.getElementById('agentName').value,
-    phone: document.getElementById('agentPhone').value,
-    username: document.getElementById('agentUsername').value,
-    active: document.getElementById('agentActive').checked,
-    treeSeqs
+    name: String(document.getElementById('agentName')?.value || '').trim(),
+    phone: String(document.getElementById('agentPhone')?.value || '').trim(),
+    username: String(document.getElementById('agentUsername')?.value || '').trim(),
+    active: !!document.getElementById('agentActive')?.checked,
+    treeSeqs,
   };
-  const pass = document.getElementById('agentPassword').value;
+  const pass = String(document.getElementById('agentPassword')?.value || '');
   if (pass) body.password = pass;
 
-  if (id) {
-    await api(`/api/admin/agents/${id}`, { method: 'PUT', body: JSON.stringify(body) });
-  } else {
-    if (!pass) return alert('كلمة المرور مطلوبة');
-    await api('/api/admin/agents', { method: 'POST', body: JSON.stringify(body) });
+  if (!body.name || !body.username) {
+    notifyAdmin('الاسم واسم المستخدم مطلوبان', 'err');
+    return;
   }
-  document.getElementById('agentModal').classList.add('hidden');
-  loadAgents();
+  if (!id && !pass) {
+    notifyAdmin('كلمة المرور مطلوبة للمندوب الجديد', 'err');
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.dataset.busy = '1';
+  }
+  try {
+    let result;
+    if (id) {
+      result = await api(`/api/admin/agents/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        body: JSON.stringify(body)
+      });
+      let msg = 'تم تحديث المندوب';
+      if (result?.treesSkipped > 0) {
+        msg += ` — تم تجاهل ${result.treesSkipped} شجرة غير موجودة على السيرفر`;
+      }
+      notifyAdmin(msg, result?.treesSkipped > 0 ? 'warn' : 'ok');
+    } else {
+      result = await api('/api/admin/agents', {
+        method: 'POST',
+        body: JSON.stringify(body)
+      });
+      let msg = 'تم إضافة المندوب';
+      if (result?.treesSkipped > 0) {
+        msg += ` — تم تجاهل ${result.treesSkipped} شجرة غير موجودة على السيرفر`;
+      }
+      notifyAdmin(msg, result?.treesSkipped > 0 ? 'warn' : 'ok');
+    }
+    document.getElementById('agentModal')?.classList.add('hidden');
+    await loadAgents();
+  } catch (err) {
+    console.error('saveAgentForm', err);
+    notifyAdmin(err.message || 'فشل حفظ المندوب', 'err');
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      delete submitBtn.dataset.busy;
+    }
+  }
+}
+
+document.getElementById('agentForm')?.addEventListener('submit', saveAgentForm);
+document.getElementById('agentSaveBtn')?.addEventListener('click', (e) => {
+  // Backup path if native submit is blocked by validation/UI quirks
+  const form = document.getElementById('agentForm');
+  if (!form) return;
+  if (typeof form.requestSubmit === 'function') {
+    e.preventDefault();
+    form.requestSubmit();
+  }
 });
 
 document.querySelectorAll('.nav-item').forEach((btn) => {

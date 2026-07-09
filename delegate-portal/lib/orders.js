@@ -271,6 +271,42 @@ function orderStats() {
   return { byStatus: rows, todaySubmitted: today?.c || 0 };
 }
 
+/** Statuses an agent may hard-delete. */
+const AGENT_DELETABLE = new Set(['draft', 'cancelled', 'rejected']);
+/** Statuses an agent may cancel (soft delete → cancelled). */
+const AGENT_CANCELLABLE = new Set(['submitted', 'under_review']);
+
+/**
+ * Agent removes an order: cancel if still pending review, otherwise hard-delete when allowed.
+ */
+function deleteOrderByAgent(orderId, agentId) {
+  const row = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+  if (!row) return null;
+  if (Number(row.agent_id) !== Number(agentId)) {
+    throw new Error('لا تملك صلاحية هذا الطلب');
+  }
+
+  if (AGENT_CANCELLABLE.has(row.status)) {
+    return setOrderStatus(orderId, 'cancelled', {
+      actorType: 'agent',
+      actorId: String(agentId),
+      note: 'ألغاه المندوب'
+    });
+  }
+
+  if (!AGENT_DELETABLE.has(row.status)) {
+    throw new Error(`لا يمكن حذف الطلب وهو «${statusLabel(row.status)}»`);
+  }
+
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM order_events WHERE order_id = ?').run(orderId);
+    db.prepare('DELETE FROM order_lines WHERE order_id = ?').run(orderId);
+    db.prepare('DELETE FROM orders WHERE id = ?').run(orderId);
+  });
+  tx();
+  return { deleted: true, id: orderId, previousStatus: row.status };
+}
+
 module.exports = {
   STATUS_LABELS,
   statusLabel,
@@ -279,6 +315,7 @@ module.exports = {
   updateOrder,
   submitOrder,
   setOrderStatus,
+  deleteOrderByAgent,
   listOrders,
   orderStats
 };

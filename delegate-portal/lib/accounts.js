@@ -558,6 +558,33 @@ function importSyncData({
   }
 }
 
+function filterAssignableTreeSeqs(treeSeqs = []) {
+  const allowed = new Set(
+    db.prepare(`SELECT seq FROM accounts WHERE CAST(sub_count AS INTEGER) > 0`).all()
+      .map((r) => String(r.seq))
+  );
+  const valid = [];
+  const invalid = [];
+  for (const raw of treeSeqs) {
+    const seq = String(raw ?? '').trim();
+    if (!seq) continue;
+    if (allowed.has(seq)) valid.push(seq);
+    else invalid.push(seq);
+  }
+  return { valid, invalid };
+}
+
+function assignAgentTrees(agentId, treeSeqs = []) {
+  const { valid, invalid } = filterAssignableTreeSeqs(treeSeqs);
+  const replace = db.transaction(() => {
+    db.prepare('DELETE FROM agent_trees WHERE agent_id = ?').run(agentId);
+    const ins = db.prepare('INSERT INTO agent_trees (agent_id, account_seq) VALUES (?, ?)');
+    for (const seq of valid) ins.run(agentId, seq);
+  });
+  replace();
+  return { valid, invalid };
+}
+
 function getSyncStatus() {
   const last = db.prepare('SELECT * FROM sync_logs ORDER BY id DESC LIMIT 1').get();
   const counts = db.prepare(`
@@ -577,6 +604,8 @@ module.exports = {
   agentAllowedSeqs,
   canAgentAccess,
   getAssignableTrees,
+  filterAssignableTreeSeqs,
+  assignAgentTrees,
   getStatementForAccount,
   importSyncData,
   startSyncSession,

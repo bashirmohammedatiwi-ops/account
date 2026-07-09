@@ -1014,13 +1014,13 @@ function srSummaryAmountCell(value, fill, isTotal = false) {
   return {
     text: String(value ?? '0'),
     font: 'Roboto',
-    fontSize: isTotal ? 27 : 23,
+    fontSize: isTotal ? 28 : 24,
     bold: true,
     color: SALES.ink,
     alignment: 'center',
     noWrap: true,
     fillColor: fill || null,
-    margin: [4, 15, 4, 15]
+    margin: [4, 14, 4, 14]
   };
 }
 
@@ -1028,13 +1028,13 @@ function srSummaryQtyCell(value, fill, isTotal = false) {
   return {
     text: String(value ?? '0'),
     font: 'Roboto',
-    fontSize: isTotal ? 30 : 25,
+    fontSize: isTotal ? 28 : 24,
     bold: true,
     color: SALES.debit,
     alignment: 'center',
     noWrap: true,
     fillColor: fill || null,
-    margin: [4, 15, 4, 15]
+    margin: [4, 14, 4, 14]
   };
 }
 
@@ -1042,15 +1042,15 @@ function srSummaryCountCell(value, fill) {
   return srSummaryQtyCell(value, fill, false);
 }
 
-function srSummaryTh(text, fill = '#475569') {
+function srSummaryTh(text, fill = '#334155') {
   return {
     text,
     bold: true,
-    fontSize: 15,
+    fontSize: 13.5,
     color: '#ffffff',
     alignment: 'center',
     fillColor: fill,
-    margin: [4, 12, 4, 12]
+    margin: [4, 10, 4, 10]
   };
 }
 
@@ -1067,11 +1067,11 @@ function srGrandTh(text) {
   return {
     text,
     bold: true,
-    fontSize: 16,
+    fontSize: 14,
     color: '#ffffff',
     alignment: 'center',
-    fillColor: '#475569',
-    margin: [6, 13, 6, 13]
+    fillColor: '#334155',
+    margin: [6, 11, 6, 11]
   };
 }
 
@@ -1091,32 +1091,32 @@ function srGrandSummaryDataCells(label, qty, amount, fill) {
       text: fmtSummaryAmount(amount),
       font: 'Roboto',
       bold: true,
-      fontSize: 22,
+      fontSize: 20,
       color: SALES.ink,
       alignment: 'center',
       noWrap: true,
       fillColor: fill,
-      margin: [6, 16, 6, 16]
+      margin: [6, 14, 6, 14]
     },
     {
       text: fmtSummaryQty(qty),
       font: 'Roboto',
       bold: true,
-      fontSize: 19,
+      fontSize: 20,
       color: SALES.ink,
       alignment: 'center',
       noWrap: true,
       fillColor: fill,
-      margin: [6, 16, 6, 16]
+      margin: [6, 14, 6, 14]
     },
     {
       text: label,
       bold: true,
-      fontSize: 18,
+      fontSize: 16,
       color: SALES.ink,
       alignment: 'right',
       fillColor: fill,
-      margin: [12, 16, 12, 16]
+      margin: [12, 14, 12, 14]
     }
   ];
 }
@@ -1128,12 +1128,12 @@ function srGrandSummaryNetRow(netAmount) {
       text: fmtSummaryAmount(netAmount),
       font: 'Roboto',
       bold: true,
-      fontSize: 26,
+      fontSize: 22,
       color: SALES.ink,
       alignment: 'center',
       noWrap: true,
       fillColor: fill,
-      margin: [6, 18, 6, 18]
+      margin: [6, 16, 6, 16]
     },
     {
       text: '—',
@@ -1143,7 +1143,7 @@ function srGrandSummaryNetRow(netAmount) {
       color: SALES.muted,
       alignment: 'center',
       fillColor: fill,
-      margin: [6, 18, 6, 18]
+      margin: [6, 16, 6, 16]
     },
     {
       text: 'صافي',
@@ -1164,12 +1164,12 @@ function srSummaryTreeCells(title, qty, bonus, amount, fill) {
     {
       text: fmtSummaryQty(bonus),
       font: 'Roboto',
-      fontSize: 19,
+      fontSize: 22,
       bold: true,
       color: SALES.ink,
       alignment: 'center',
       fillColor: fill,
-      margin: [4, 15, 4, 15]
+      margin: [4, 14, 4, 14]
     },
     srSummaryQtyCell(fmtSummaryQty(qty), fill),
     {
@@ -1421,7 +1421,29 @@ function aggregateReportCategories(report) {
   return out;
 }
 
-const KPI_CARD_GAP = 8;
+const SALES_PAGE_WIDTH = 595.28;
+const SALES_KPI_PAGE_MARGINS = 28;
+const SALES_KPI_CONTENT_WIDTH = SALES_PAGE_WIDTH - SALES_KPI_PAGE_MARGINS;
+const KPI_CARD_GAP = 6;
+const KPI_CARD_WIDTH = Math.floor((SALES_KPI_CONTENT_WIDTH - KPI_CARD_GAP * 3) / 4);
+const KPI_CARD = {
+  width: KPI_CARD_WIDTH,
+  height: 102,
+  radius: 12,
+  padH: 13,
+  padV: 13,
+  labelSize: 12,
+  valueSize: 20,
+  subSize: 10,
+  labelColor: '#f1f5f9',
+  subColor: '#e2e8f0',
+};
+const KPI_COLORS = {
+  sales: '#0f766e',
+  gifts: '#c2410c',
+  returns: '#be123c',
+  net: '#0f172a',
+};
 
 function reportLineCount(report) {
   const grand = report.grandSummary?.lineCount;
@@ -1429,53 +1451,71 @@ function reportLineCount(report) {
   return (report.sections || []).reduce((n, s) => n + (s.lines?.length || 0), 0);
 }
 
-function salesKpiValueFontSize(value) {
-  const len = String(value || '').length;
-  if (len <= 6) return 24;
-  if (len <= 8) return 21;
-  if (len <= 10) return 18;
-  if (len <= 12) return 15;
-  return 13;
+function salesKpiGapCell() {
+  return { text: '', border: [false, false, false, false] };
 }
 
-function salesKpiCard(label, value, sub, color) {
-  const valueFont = salesKpiValueFontSize(value);
+function salesKpiCardCell({ label, value, sub, color }) {
+  const w = KPI_CARD.width;
+  const h = KPI_CARD.height;
   return {
-    table: {
-      widths: ['*'],
-      body: [[{
+    stack: [
+      {
+        canvas: [{
+          type: 'rect',
+          x: 0,
+          y: 0,
+          w,
+          h,
+          r: KPI_CARD.radius,
+          color,
+        }],
+      },
+      {
         stack: [
           {
             text: label,
-            fontSize: 15,
+            fontSize: KPI_CARD.labelSize,
             bold: true,
-            color: '#ffffff',
-            alignment: 'right'
+            color: KPI_CARD.labelColor,
+            alignment: 'right',
+            lineHeight: 1.1,
           },
           {
             text: value,
             font: 'Roboto',
             bold: true,
-            fontSize: valueFont,
+            fontSize: KPI_CARD.valueSize,
             color: '#ffffff',
             alignment: 'right',
-            noWrap: true,
-            margin: [0, 10, 0, 0]
+            lineHeight: 1,
+            characterSpacing: -0.15,
+            margin: [0, 9, 0, 0],
           },
           {
             text: sub,
-            fontSize: 12.5,
-            bold: true,
-            color: '#f8fafc',
+            fontSize: KPI_CARD.subSize,
+            color: KPI_CARD.subColor,
             alignment: 'right',
-            margin: [0, 8, 0, 0]
-          }
+            lineHeight: 1.15,
+            margin: [0, 7, 0, 0],
+          },
         ],
-        fillColor: color,
-        margin: [8, 12, 8, 12]
-      }]]
-    },
-    layout: 'noBorders'
+        margin: [KPI_CARD.padH, -h + KPI_CARD.padV, KPI_CARD.padH, 0],
+      },
+    ],
+    border: [false, false, false, false],
+  };
+}
+
+function salesKpiTableLayout() {
+  return {
+    hLineWidth: () => 0,
+    vLineWidth: () => 0,
+    paddingLeft: () => 0,
+    paddingRight: () => 0,
+    paddingTop: () => 0,
+    paddingBottom: () => 0,
   };
 }
 
@@ -1484,39 +1524,51 @@ function salesKpiStatsBlock(report, cats) {
   const lineCount = reportLineCount(report);
   const treeCount = (report.sections || []).length;
 
-  const cards = [
-    salesKpiCard(
-      'صافي المبيعات',
-      fmtSummaryAmount(net),
-      `${lineCount} بند · ${treeCount} شجرة`,
-      '#1e293b'
-    ),
-    salesKpiCard(
-      'مردود',
-      fmtSummaryAmount(cats.returns?.amount || 0),
-      `العدد ${fmtSummaryQty(cats.returns?.qty || 0)}`,
-      '#dc2626'
-    ),
-    salesKpiCard(
-      'هدايا',
-      fmtSummaryAmount(cats.gifts?.amount || 0),
-      `العدد ${fmtSummaryQty(cats.gifts?.bonus || 0)}`,
-      '#d97706'
-    ),
-    salesKpiCard(
-      'مبيعات',
-      fmtSummaryAmount(cats.sales?.amount || 0),
-      `العدد ${fmtSummaryQty(cats.sales?.qty || 0)}`,
-      '#0d9488'
-    )
+  const items = [
+    {
+      label: 'صافي المبيعات',
+      value: fmtSummaryAmount(net),
+      sub: `${lineCount} بند · ${treeCount} شجرة`,
+      color: KPI_COLORS.net,
+    },
+    {
+      label: 'مردود',
+      value: fmtSummaryAmount(cats.returns?.amount || 0),
+      sub: `العدد ${fmtSummaryQty(cats.returns?.qty || 0)}`,
+      color: KPI_COLORS.returns,
+    },
+    {
+      label: 'هدايا',
+      value: fmtSummaryAmount(cats.gifts?.amount || 0),
+      sub: `العدد ${fmtSummaryQty(cats.gifts?.bonus || 0)}`,
+      color: KPI_COLORS.gifts,
+    },
+    {
+      label: 'مبيعات',
+      value: fmtSummaryAmount(cats.sales?.amount || 0),
+      sub: `العدد ${fmtSummaryQty(cats.sales?.qty || 0)}`,
+      color: KPI_COLORS.sales,
+    },
   ];
 
-  const row = cards.map((card) => ({ width: '*', ...card }));
+  const row = [];
+  items.forEach((item, index) => {
+    if (index > 0) row.push(salesKpiGapCell());
+    row.push(salesKpiCardCell(item));
+  });
+
+  const w = KPI_CARD.width;
+  const g = KPI_CARD_GAP;
+  const widths = [w, g, w, g, w, g, w];
 
   return {
-    columns: row,
-    columnGap: KPI_CARD_GAP,
-    margin: [0, 0, 0, 18]
+    table: {
+      widths,
+      heights: [KPI_CARD.height],
+      body: [row],
+    },
+    layout: salesKpiTableLayout(),
+    margin: [0, 4, 0, 20],
   };
 }
 
@@ -1538,10 +1590,10 @@ function salesOverviewSection(report) {
       {
         text: 'الملخص الإجمالي',
         bold: true,
-        fontSize: 20,
+        fontSize: 18,
         color: SALES.ink,
         alignment: 'right',
-        margin: [0, 6, 0, 12]
+        margin: [0, 2, 0, 10]
       },
       {
         table: {
@@ -1733,7 +1785,6 @@ function salesTreesSummaryBlock(report) {
   };
 }
 
-const SALES_PAGE_WIDTH = 595.28;
 const SALES_PAGE_HEIGHT = 841.89;
 /** pdfmake حد أقصى تقريبي لارتفاع الصفحة (نقطة) */
 const SALES_MAX_PAGE_HEIGHT = 14000;
@@ -1744,7 +1795,7 @@ function estimateSalesReportHeight(report) {
   const footer = 24;
   let body = 0;
   body += 110; // رأس + شريط الفترة
-  body += 320; // بطاقات KPI (خط كبير)
+  body += 340; // بطاقات KPI
   body += 300; // الملخص الإجمالي
   if (sections.length) body += 70 + sections.length * 54 + 64; // ملخص الشجرات
   if (sections.length) body += 44; // فاصل + عنوان التفاصيل

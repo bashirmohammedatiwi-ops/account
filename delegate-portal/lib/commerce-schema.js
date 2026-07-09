@@ -187,6 +187,17 @@ function migrateProductExtras(db) {
   if (!columnExists(db, 'products', 'min_order_qty')) {
     db.exec('ALTER TABLE products ADD COLUMN min_order_qty REAL DEFAULT 0');
   }
+  // Color shade / variant metadata (one barcode row per shade; group_key links shades)
+  if (!columnExists(db, 'products', 'shade_name')) {
+    db.exec("ALTER TABLE products ADD COLUMN shade_name TEXT DEFAULT ''");
+  }
+  if (!columnExists(db, 'products', 'color_code')) {
+    db.exec("ALTER TABLE products ADD COLUMN color_code TEXT DEFAULT ''");
+  }
+  if (!columnExists(db, 'products', 'group_key')) {
+    db.exec("ALTER TABLE products ADD COLUMN group_key TEXT DEFAULT ''");
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_products_group_key ON products(group_key)');
 }
 
 module.exports = { migrateCommerceSchema };

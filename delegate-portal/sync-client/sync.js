@@ -514,10 +514,10 @@ async function listEdariTrees() {
   const rows = await query(`SELECT Seq, Num, Name1, SubCount, Bal FROM File11n WHERE SubCount > 0 ORDER BY Num`);
   return rows.map((r) => ({
     seq: accountSeq(r),
-    num: String(r.Num || ''),
-    name1: r.Name1 || '',
-    sub_count: Number(r.SubCount || 0),
-    bal: Number(r.Bal || 0)
+    num: String(r.Num ?? r.num ?? ''),
+    name1: String(r.Name1 ?? r.name1 ?? '').trim(),
+    sub_count: Number(r.SubCount ?? r.sub_count ?? 0),
+    bal: Number(r.Bal ?? r.bal ?? 0)
   }));
 }
 

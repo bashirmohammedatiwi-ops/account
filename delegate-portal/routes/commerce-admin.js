@@ -31,6 +31,8 @@ const {
   edariMaterialStats,
   cacheEdariMaterial,
   addProductByBarcode,
+  addProductShadeGroup,
+  groupProductsByShade,
   bulkAddByBarcode,
   bulkProductsAction,
   createProduct,
@@ -285,9 +287,32 @@ router.post('/products/by-barcode', (req, res) => {
       isActive: body.isActive,
       priceOverride: body.priceOverride,
       price: body.price,
-      description: body.description
+      description: body.description,
+      shadeName: body.shadeName,
+      colorCode: body.colorCode,
+      groupKey: body.groupKey
     });
     res.json({ ok: true, product });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+/** Add a product with multiple color shades (each shade = barcode from Edari). */
+router.post('/products/shade-group', (req, res) => {
+  try {
+    const body = req.body || {};
+    const sectionId = Number(body.sectionId);
+    if (!sectionId) {
+      return res.status(400).json({ ok: false, error: 'القسم مطلوب' });
+    }
+    const result = addProductShadeGroup(sectionId, {
+      name: body.name,
+      description: body.description,
+      groupKey: body.groupKey,
+      shades: body.shades
+    });
+    res.json({ ok: true, ...result });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
