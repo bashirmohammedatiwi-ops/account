@@ -1,29 +1,59 @@
 const db = require('./db');
 
+/** Canonical UI statuses: pending | processing | rejected */
 const STATUS_LABELS = {
-  draft: 'مسودة',
-  submitted: 'مرسل',
-  under_review: 'قيد المراجعة',
-  approved: 'معتمد',
+  draft: 'قيد الانتظار',
+  submitted: 'قيد الانتظار',
+  under_review: 'قيد الانتظار',
+  pending: 'قيد الانتظار',
+  approved: 'قيد التجهيز والإرسال',
+  processing: 'قيد التجهيز والإرسال',
+  delivered: 'قيد التجهيز والإرسال',
   rejected: 'مرفوض',
-  processing: 'قيد التنفيذ',
-  delivered: 'تم التسليم',
-  cancelled: 'ملغى'
+  cancelled: 'مرفوض'
+};
+
+/** Map any stored status → one of the three UI statuses. */
+const STATUS_CANONICAL = {
+  draft: 'pending',
+  submitted: 'pending',
+  under_review: 'pending',
+  pending: 'pending',
+  approved: 'processing',
+  processing: 'processing',
+  delivered: 'processing',
+  rejected: 'rejected',
+  cancelled: 'rejected'
+};
+
+/** DB values accepted when filtering by a UI status. */
+const STATUS_FILTER_GROUP = {
+  pending: ['draft', 'submitted', 'under_review', 'pending'],
+  processing: ['approved', 'processing', 'delivered'],
+  rejected: ['rejected', 'cancelled']
 };
 
 const AGENT_EDITABLE = new Set(['draft']);
+/** Free movement among the three UI statuses (pending / processing / rejected). */
+const UI_STATUSES = new Set(['pending', 'processing', 'rejected']);
 const ADMIN_TRANSITIONS = {
-  submitted: ['under_review', 'approved', 'rejected', 'cancelled'],
-  under_review: ['approved', 'rejected', 'processing', 'cancelled'],
-  approved: ['processing', 'delivered', 'cancelled'],
-  processing: ['delivered', 'cancelled'],
-  rejected: [],
-  delivered: [],
-  cancelled: []
+  draft: ['submitted', 'pending', 'processing', 'rejected'],
+  submitted: ['pending', 'processing', 'rejected'],
+  under_review: ['pending', 'processing', 'rejected'],
+  pending: ['processing', 'rejected', 'pending'],
+  approved: ['processing', 'rejected', 'pending'],
+  processing: ['pending', 'rejected', 'processing'],
+  delivered: ['processing', 'rejected', 'pending'],
+  rejected: ['pending', 'processing', 'rejected'],
+  cancelled: ['pending', 'processing', 'rejected']
 };
 
+function canonicalStatus(s) {
+  return STATUS_CANONICAL[s] || 'pending';
+}
+
 function statusLabel(s) {
-  return STATUS_LABELS[s] || s;
+  return STATUS_LABELS[s] || STATUS_LABELS[canonicalStatus(s)] || s;
 }
 
 function nextOrderNo() {
@@ -62,11 +92,14 @@ function mapOrder(row, lines = [], events = []) {
     ? db.prepare('SELECT id, name FROM catalog_branches WHERE id = ?').get(row.catalog_branch_id)
     : null;
 
+  const rawStatus = row.status;
+  const uiStatus = canonicalStatus(rawStatus);
   return {
     id: row.id,
     orderNo: row.order_no,
-    status: row.status,
-    statusLabel: statusLabel(row.status),
+    status: uiStatus,
+    rawStatus,
+    statusLabel: statusLabel(rawStatus),
     agentId: row.agent_id,
     agentName: agent?.name || '',
     customerAccSeq: row.customer_acc_seq || '',
@@ -220,16 +253,33 @@ function submitOrder(orderId, agentId) {
 function setOrderStatus(orderId, newStatus, { actorType = 'admin', actorId = '', note = '' } = {}) {
   const row = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
   if (!row) return null;
+  // Accept UI aliases (pending) and store canonical DB values.
+  const storeStatus = ({
+    pending: 'submitted',
+    processing: 'processing',
+    rejected: 'rejected'
+  })[newStatus] || newStatus;
+
+  const fromUi = canonicalStatus(row.status);
+  const toUi = canonicalStatus(storeStatus);
   const allowed = ADMIN_TRANSITIONS[row.status] || [];
-  if (!allowed.includes(newStatus) && row.status !== newStatus) {
-    throw new Error(`لا يمكن تغيير الحالة من ${statusLabel(row.status)} إلى ${statusLabel(newStatus)}`);
+  const freeUiMove = UI_STATUSES.has(fromUi) && UI_STATUSES.has(toUi);
+  const sameUi = fromUi === toUi;
+  if (
+    !sameUi
+    && !freeUiMove
+    && !allowed.includes(storeStatus)
+    && !allowed.includes(newStatus)
+    && row.status !== storeStatus
+  ) {
+    throw new Error(`لا يمكن تغيير الحالة من ${statusLabel(row.status)} إلى ${statusLabel(storeStatus)}`);
   }
   db.prepare(`
     UPDATE orders SET status = ?, updated_at = datetime('now') WHERE id = ?
-  `).run(newStatus, orderId);
+  `).run(storeStatus, orderId);
   logEvent(orderId, {
     fromStatus: row.status,
-    toStatus: newStatus,
+    toStatus: storeStatus,
     actorType,
     actorId,
     note
@@ -245,8 +295,14 @@ function listOrders({ agentId, status, limit = 50, offset = 0 } = {}) {
     params.push(agentId);
   }
   if (status) {
-    where.push('status = ?');
-    params.push(status);
+    const group = STATUS_FILTER_GROUP[status] || STATUS_FILTER_GROUP[canonicalStatus(status)];
+    if (group?.length) {
+      where.push(`status IN (${group.map(() => '?').join(',')})`);
+      params.push(...group);
+    } else {
+      where.push('status = ?');
+      params.push(status);
+    }
   }
   const sql = `
     SELECT * FROM orders
@@ -273,8 +329,8 @@ function orderStats() {
 
 /** Statuses an agent may hard-delete. */
 const AGENT_DELETABLE = new Set(['draft', 'cancelled', 'rejected']);
-/** Statuses an agent may cancel (soft delete → cancelled). */
-const AGENT_CANCELLABLE = new Set(['submitted', 'under_review']);
+/** Statuses an agent may cancel (soft delete → rejected). */
+const AGENT_CANCELLABLE = new Set(['submitted', 'under_review', 'pending']);
 
 /**
  * Agent removes an order: cancel if still pending review, otherwise hard-delete when allowed.
@@ -286,8 +342,8 @@ function deleteOrderByAgent(orderId, agentId) {
     throw new Error('لا تملك صلاحية هذا الطلب');
   }
 
-  if (AGENT_CANCELLABLE.has(row.status)) {
-    return setOrderStatus(orderId, 'cancelled', {
+  if (AGENT_CANCELLABLE.has(row.status) || canonicalStatus(row.status) === 'pending') {
+    return setOrderStatus(orderId, 'rejected', {
       actorType: 'agent',
       actorId: String(agentId),
       note: 'ألغاه المندوب'
@@ -320,6 +376,8 @@ function deleteOrderByAdmin(orderId) {
 
 module.exports = {
   STATUS_LABELS,
+  STATUS_FILTER_GROUP,
+  canonicalStatus,
   statusLabel,
   loadOrder,
   createOrder,

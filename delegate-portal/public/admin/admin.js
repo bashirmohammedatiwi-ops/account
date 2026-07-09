@@ -120,7 +120,7 @@ const explorer = {
 };
 
 function esc(v) {
-  return String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return asText(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function fmtNum(v) {
@@ -255,10 +255,28 @@ function normTreeSeq(seq) {
   return String(seq ?? '').replace(/[^0-9]/g, '');
 }
 
+/** Coerce API/Edari values to plain text (avoids "[object Object]"). */
+function asText(v, depth = 0) {
+  if (v == null) return '';
+  if (typeof v === 'string') {
+    const s = v.trim();
+    return (!s || s === '[object Object]') ? '' : s;
+  }
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (typeof v === 'object' && depth < 3) {
+    if (Array.isArray(v)) {
+      return v.map((x) => asText(x, depth + 1)).filter(Boolean).join(' ').trim();
+    }
+    const nested = v.name1 ?? v.Name1 ?? v.value ?? v.Value ?? v.label ?? v.text ?? v.data;
+    if (nested != null && nested !== v) return asText(nested, depth + 1);
+  }
+  return '';
+}
+
 function normalizeAssignableTree(row = {}) {
-  const seq = String(row.seq ?? row.Seq ?? '').trim();
-  const num = String(row.num ?? row.Num ?? '').trim();
-  const name1 = String(row.name1 ?? row.Name1 ?? row.name ?? '').trim();
+  const seq = asText(row.seq ?? row.Seq);
+  const num = asText(row.num ?? row.Num);
+  const name1 = asText(row.name1 ?? row.Name1 ?? row.name ?? row.Name);
   return {
     seq,
     num,
@@ -269,10 +287,14 @@ function normalizeAssignableTree(row = {}) {
 }
 
 function treeDisplayLabel(tree) {
-  const num = String(tree?.num || '').trim();
-  const name = String(tree?.name1 || tree?.name || '').trim();
-  const seq = String(tree?.seq || '').trim();
-  if (tree?.missingOnServer) {
+  // Guard: sales-report used to overwrite this with a key-based helper.
+  if (tree == null || (typeof tree !== 'object') || Array.isArray(tree)) {
+    return asText(tree) || '—';
+  }
+  const num = asText(tree.num);
+  const name = asText(tree.name1);
+  const seq = asText(tree.seq);
+  if (tree.missingOnServer) {
     const base = name || num || (seq ? `شجرة #${seq}` : '—');
     return `${base} (غير مرفوعة للسيرفر)`;
   }
@@ -306,8 +328,8 @@ async function loadAgentAssignableTrees() {
       if (!ed) return t;
       return {
         ...t,
-        num: String(t.num || ed.num || '').trim(),
-        name1: String(t.name1 || ed.name1 || '').trim(),
+        num: asText(t.num) || asText(ed.num),
+        name1: asText(t.name1) || asText(ed.name1),
         sub_count: Number(t.sub_count || ed.sub_count || 0)
       };
     });
@@ -398,7 +420,7 @@ function renderExplorerTrees() {
         <span class="code">${esc(t.num)}</span>
         <span class="num ${balClass(Number(t.bal))}">${fmtNumAlways(t.bal)}</span>
       </div>
-      <div class="name">${esc(t.name1 || '—')}</div>
+      <div class="name">${esc(asText(t.name1) || '—')}</div>
       <div class="sub">${t.sub_count || 0} فرع</div>
     </button>`).join('') || '<p class="empty-msg">—</p>';
 
@@ -942,8 +964,8 @@ function renderSyncTreeChecks(trees, selected = []) {
     <label class="tree-pick">
       <input type="checkbox" name="syncTreeSeq" value="${esc(t.seq)}" ${selected.includes(String(t.seq)) ? 'checked' : ''}>
       <div class="tree-pick-body">
-        <div class="tree-pick-name">${esc(t.name1 || '—')}</div>
-        <div class="tree-pick-meta">${esc(t.num)} · ${t.sub_count || 0} فرع</div>
+        <div class="tree-pick-name">${esc(asText(t.name1) || treeDisplayLabel(t))}</div>
+        <div class="tree-pick-meta">${esc(asText(t.num) || asText(t.seq))} · ${t.sub_count || 0} فرع</div>
       </div>
     </label>`).join('');
 
@@ -986,16 +1008,20 @@ function renderTreeChecks(selected = []) {
   const selectedSet = new Set((selected || []).map(String));
   el.innerHTML = trees.map((t) => {
     const label = treeDisplayLabel(t);
-    const num = String(t.num || t.seq || '—');
+    const num = asText(t.num) || asText(t.seq) || '—';
     const subCount = Number(t.sub_count || 0);
     const missing = !!t.missingOnServer;
     const checked = !missing && selectedSet.has(String(t.seq));
+    const meta = missing
+      ? 'ارفع هذه الشجرة للسيرفر لتفعيلها'
+      : `رقم ${num} · ${subCount} فرع`;
+    const safeLabel = (label && label !== '[object Object]') ? label : (num !== '—' ? `شجرة ${num}` : 'شجرة بدون اسم');
     return `
-    <label class="tree-pick${missing ? ' tree-pick-muted' : ''}${checked ? ' is-checked' : ''}">
+    <label class="tree-pick${missing ? ' tree-pick-muted' : ''}${checked ? ' is-checked' : ''}" title="${esc(safeLabel)}">
       <input type="checkbox" name="treeSeq" value="${esc(t.seq)}" ${missing ? 'disabled' : ''} ${checked ? 'checked' : ''}>
       <span class="tree-pick-body">
-        <span class="tree-pick-name">${esc(label)}</span>
-        <span class="tree-pick-meta">${missing ? 'ارفع هذه الشجرة للسيرفر لتفعيلها' : `رقم ${esc(num)} · ${subCount} فرع`}</span>
+        <strong class="tree-pick-name">${esc(safeLabel)}</strong>
+        <small class="tree-pick-meta">${esc(meta)}</small>
       </span>
     </label>`;
   }).join('');

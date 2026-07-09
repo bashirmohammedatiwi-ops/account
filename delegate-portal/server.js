@@ -11,6 +11,7 @@ const mobileRoutes = require('./routes/mobile');
 const delegateRoutes = require('./routes/delegate');
 const commerceAdminRoutes = require('./routes/commerce-admin');
 const commerceMobileRoutes = require('./routes/commerce-mobile');
+const empRoutes = require('./routes/emp');
 const priceAppRoutes = require('./routes/price-app');
 const { UPLOAD_ROOT } = require('./lib/products');
 
@@ -34,6 +35,7 @@ app.use('/api/admin', commerceAdminRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/mobile', mobileRoutes);
 app.use('/api/mobile', commerceMobileRoutes);
+app.use('/api/emp', empRoutes);
 app.use('/api/delegate', delegateRoutes);
 app.use(priceAppRoutes);
 
@@ -57,6 +59,19 @@ app.get('/m/*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'm', 'index.html'));
 });
 
+app.use('/emp', (req, res, next) => {
+  if (/\.(css|js|html)$/i.test(req.path)) {
+    res.set('Cache-Control', 'no-cache, must-revalidate');
+  }
+  next();
+}, express.static(path.join(__dirname, 'public', 'emp'), {
+  etag: false,
+  lastModified: false
+}));
+app.get('/emp/*', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'emp', 'index.html'));
+});
+
 app.use((err, _req, res, _next) => {
   console.error(err);
   res.status(500).json({ ok: false, error: err.message || 'خطأ في السيرفر' });
@@ -65,5 +80,6 @@ app.use((err, _req, res, _next) => {
 app.listen(PORT, HOST, () => {
   console.log(`Edari Delegate Portal: http://${HOST}:${PORT}/admin`);
   console.log(`Delegate mobile: http://${HOST}:${PORT}/m`);
+  console.log(`Employee prep: http://${HOST}:${PORT}/emp`);
   console.log(`Sync API key: ${process.env.SYNC_API_KEY || '(default)'}`);
 });

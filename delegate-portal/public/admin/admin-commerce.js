@@ -1819,14 +1819,16 @@ async function loadOrdersPage() {
 
 function orderStatusBadgeClass(status) {
   return ({
-    draft: 'muted-badge',
-    submitted: 'pending',
-    under_review: 'warn',
-    approved: 'ok',
+    pending: 'pending',
+    processing: 'ok',
     rejected: 'off',
-    processing: 'pending',
+    // legacy keys (if any slip through)
+    draft: 'pending',
+    submitted: 'pending',
+    under_review: 'pending',
+    approved: 'ok',
     delivered: 'ok',
-    cancelled: 'muted-badge'
+    cancelled: 'off'
   })[status] || 'pending';
 }
 
@@ -1873,12 +1875,9 @@ async function openOrderDetail(id) {
       <span class="muted">${esc(o.submittedAt || o.createdAt || '—')}</span>
     </div>
     <div class="btn-row order-status-actions no-print" style="margin-top:12px">
-      <button type="button" class="btn btn-primary btn-sm" data-status="approved">موافقة</button>
-      <button type="button" class="btn btn-soft btn-sm" data-status="under_review">مراجعة</button>
-      <button type="button" class="btn btn-danger btn-sm" data-status="rejected">رفض</button>
-      <button type="button" class="btn btn-soft btn-sm" data-status="processing">تنفيذ</button>
-      <button type="button" class="btn btn-soft btn-sm" data-status="delivered">تم التسليم</button>
-      <button type="button" class="btn btn-soft btn-sm" data-status="cancelled">إلغاء</button>
+      <button type="button" class="btn btn-soft btn-sm" data-status="pending">قيد الانتظار</button>
+      <button type="button" class="btn btn-primary btn-sm" data-status="processing">قيد التجهيز والإرسال</button>
+      <button type="button" class="btn btn-danger btn-sm" data-status="rejected">مرفوض</button>
     </div>`;
 
   document.getElementById('btnCloseOrderDetail')?.addEventListener('click', () => {

@@ -13,6 +13,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_PASS: ${ADMIN_PASS:-admin123}
+      EMP_USER: ${EMP_USER:-allemp}
+      EMP_PASS: ${EMP_PASS:-000000}
     volumes:
       - portal_data:/app/data
       - portal_uploads:/app/uploads

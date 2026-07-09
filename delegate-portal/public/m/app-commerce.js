@@ -68,26 +68,22 @@ const commerce = {
 };
 
 const STATUS_BADGE = {
-  draft: 'muted',
-  submitted: 'info',
-  under_review: 'pending',
-  approved: 'ok',
-  rejected: 'danger',
+  pending: 'pending',
   processing: 'info',
-  delivered: 'ok',
-  cancelled: 'muted'
+  rejected: 'danger',
+  draft: 'pending',
+  submitted: 'pending',
+  under_review: 'pending',
+  approved: 'info',
+  delivered: 'info',
+  cancelled: 'danger'
 };
 
 const ORDER_FILTERS = [
   { id: '', label: 'الكل' },
-  { id: 'submitted', label: 'مرسل' },
-  { id: 'under_review', label: 'مراجعة' },
-  { id: 'approved', label: 'معتمد' },
-  { id: 'processing', label: 'تنفيذ' },
-  { id: 'delivered', label: 'مُسلَّم' },
-  { id: 'rejected', label: 'مرفوض' },
-  { id: 'cancelled', label: 'ملغى' },
-  { id: 'draft', label: 'مسودة' }
+  { id: 'pending', label: 'قيد الانتظار' },
+  { id: 'processing', label: 'قيد التجهيز والإرسال' },
+  { id: 'rejected', label: 'مرفوض' }
 ];
 
 function orderStatusClass(status) {
@@ -96,19 +92,20 @@ function orderStatusClass(status) {
 
 function orderStatusLabel(o) {
   return o?.statusLabel || ({
-    draft: 'مسودة',
-    submitted: 'مرسل',
-    under_review: 'قيد المراجعة',
-    approved: 'معتمد',
+    pending: 'قيد الانتظار',
+    processing: 'قيد التجهيز والإرسال',
     rejected: 'مرفوض',
-    processing: 'قيد التنفيذ',
-    delivered: 'تم التسليم',
-    cancelled: 'ملغى'
+    draft: 'قيد الانتظار',
+    submitted: 'قيد الانتظار',
+    under_review: 'قيد الانتظار',
+    approved: 'قيد التجهيز والإرسال',
+    delivered: 'قيد التجهيز والإرسال',
+    cancelled: 'مرفوض'
   })[o?.status] || o?.status || '—';
 }
 
 function canAgentRemoveOrder(status) {
-  return ['draft', 'submitted', 'under_review', 'cancelled', 'rejected'].includes(status);
+  return ['draft', 'submitted', 'under_review', 'pending', 'cancelled', 'rejected'].includes(status);
 }
 
 function formatOrderWhen(o) {
@@ -1025,7 +1022,7 @@ async function loadMyOrders() {
 
     document.getElementById('myOrdersList').innerHTML = commerce.orders.map((o) => {
       const removable = canAgentRemoveOrder(o.status);
-      const removeLabel = ['submitted', 'under_review'].includes(o.status) ? 'إلغاء' : 'حذف';
+      const removeLabel = ['pending', 'submitted', 'under_review', 'draft'].includes(o.status) ? 'إلغاء' : 'حذف';
       return `
       <article class="inv-order-card" data-order-id="${o.id}">
         <button type="button" class="inv-order-card-main" data-open-order="${o.id}">
@@ -1069,7 +1066,7 @@ async function loadMyOrders() {
 }
 
 async function deleteMyOrder(id, status) {
-  const soft = ['submitted', 'under_review'].includes(status);
+  const soft = ['pending', 'submitted', 'under_review', 'draft'].includes(status);
   const msg = soft
     ? 'إلغاء هذا الطلب؟ سيظهر كملغى ولن يُعالَج.'
     : 'حذف هذا الطلب نهائياً؟ لا يمكن التراجع.';
@@ -1112,7 +1109,7 @@ async function openOrderDetail(id) {
       matNum: l.barcode
     }));
     const removable = canAgentRemoveOrder(o.status);
-    const removeLabel = ['submitted', 'under_review'].includes(o.status) ? 'إلغاء الطلب' : 'حذف الطلب';
+    const removeLabel = ['pending', 'submitted', 'under_review', 'draft'].includes(o.status) ? 'إلغاء الطلب' : 'حذف الطلب';
     document.getElementById('orderDetailSheet').innerHTML = `
       <div class="inv-order-detail-banner">
         <div>

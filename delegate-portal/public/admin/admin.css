@@ -832,7 +832,10 @@ body {
 }
 
 .modal-form .tree-pick-name,
-.modal-form .tree-pick-meta {
+.modal-form .tree-pick-meta,
+.modal-form .tree-pick-name strong,
+.modal-form strong.tree-pick-name,
+.modal-form small.tree-pick-meta {
   display: block;
   width: 100%;
   max-width: 100%;
@@ -848,19 +851,35 @@ body {
   visibility: visible !important;
 }
 
-.modal-form .tree-pick-name {
+.modal-form .tree-pick-name,
+.modal-form strong.tree-pick-name {
   font-weight: 700;
 }
 
-.modal-form .tree-pick-meta {
+.modal-form .tree-pick-meta,
+.modal-form small.tree-pick-meta {
   color: #64748b !important;
   font-size: 0.76rem;
   font-weight: 500;
 }
 
-.modal-form .tree-pick input {
-  margin-top: 3px;
+.modal-form .tree-pick input[type="checkbox"],
+.modal-form .tree-picks input[type="checkbox"] {
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px;
+  max-width: 18px;
+  margin: 3px 0 0 !important;
+  padding: 0 !important;
+  flex: 0 0 18px;
   flex-shrink: 0;
+  appearance: auto;
+  -webkit-appearance: checkbox;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  accent-color: var(--primary, #0d9488);
 }
 
 .tree-pick-muted {
@@ -931,7 +950,7 @@ body {
 
 .field input,
 .search,
-.modal-form input {
+.modal-form input:not([type="checkbox"]):not([type="radio"]) {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--border);
@@ -944,7 +963,7 @@ body {
 
 .field input:focus,
 .search:focus,
-.modal-form input:focus {
+.modal-form input:not([type="checkbox"]):not([type="radio"]):focus {
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);

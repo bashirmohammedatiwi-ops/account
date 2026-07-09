@@ -73,9 +73,9 @@ function findTreeByKey(key) {
   return salesReport.trees.find((t) => String(t.num) === k || String(t.seq) === k) || null;
 }
 
-function treeDisplayLabel(key) {
+function salesTreeDisplayLabel(key) {
   const t = findTreeByKey(key);
-  if (!t) return String(key);
+  if (!t) return String(key ?? '');
   return `${t.num || '—'} — ${t.name1 || '—'}`;
 }
 
@@ -250,7 +250,7 @@ function renderTreePickItem(t, pinnedSet) {
 
 function renderTreePinCard(key) {
   const selected = salesReport.selected.has(key);
-  const label = treeDisplayLabel(key);
+  const label = salesTreeDisplayLabel(key);
   const parts = label.split(' — ');
   const num = parts[0] || key;
   const name = parts.slice(1).join(' — ') || '—';
@@ -317,7 +317,7 @@ function renderSelectedChips() {
     return;
   }
   wrap.innerHTML = keys.map((key) => {
-    const label = treeDisplayLabel(key);
+    const label = salesTreeDisplayLabel(key);
     const num = label.split(' — ')[0] || key;
     return `
     <span class="pick-sel-chip">

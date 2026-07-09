@@ -76,6 +76,26 @@ function accountSeq(row) {
   return String(row.Seq ?? row.seq ?? '').replace(/[^0-9]/g, '');
 }
 
+/** Flatten ODBC/driver values that sometimes arrive as objects. */
+function fieldText(v, depth = 0) {
+  if (v == null) return '';
+  if (typeof v === 'string') {
+    const s = v.trim();
+    return (!s || s === '[object Object]') ? '' : s;
+  }
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (Buffer.isBuffer(v)) return v.toString('utf8').trim();
+  if (typeof v === 'object' && depth < 4) {
+    if (Array.isArray(v)) {
+      return v.map((x) => fieldText(x, depth + 1)).filter(Boolean).join(' ').trim();
+    }
+    const nested = v.value ?? v.Value ?? v.name1 ?? v.Name1 ?? v.name ?? v.Name
+      ?? v.label ?? v.text ?? v.data ?? v.Data;
+    if (nested != null && nested !== v) return fieldText(nested, depth + 1);
+  }
+  return '';
+}
+
 function buildChildrenMap(accounts) {
   const children = new Map();
   for (const a of accounts) {
@@ -514,8 +534,8 @@ async function listEdariTrees() {
   const rows = await query(`SELECT Seq, Num, Name1, SubCount, Bal FROM File11n WHERE SubCount > 0 ORDER BY Num`);
   return rows.map((r) => ({
     seq: accountSeq(r),
-    num: String(r.Num ?? r.num ?? ''),
-    name1: String(r.Name1 ?? r.name1 ?? '').trim(),
+    num: fieldText(r.Num ?? r.num),
+    name1: fieldText(r.Name1 ?? r.name1),
     sub_count: Number(r.SubCount ?? r.sub_count ?? 0),
     bal: Number(r.Bal ?? r.bal ?? 0)
   }));

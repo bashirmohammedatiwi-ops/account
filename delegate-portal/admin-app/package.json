@@ -1,6 +1,6 @@
 {
   "name": "edari-admin-desktop",
-  "version": "1.0.136",
+  "version": "1.0.140",
   "description": "Edari Admin — لوحة تحكم الحسابات والمندوبين",
   "main": "electron/main.js",
   "author": "Edari",
