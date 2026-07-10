@@ -42,6 +42,44 @@ function formatWhen(o) {
   return String(raw).slice(0, 16).replace('T', ' ');
 }
 
+function productImageSrc(url) {
+  if (!url) return '';
+  if (String(url).startsWith('http')) return url;
+  return `${window.location.origin}${url}`;
+}
+
+function openImageLightbox(url, caption = '') {
+  const box = document.getElementById('imageLightbox');
+  const img = document.getElementById('lightboxImg');
+  const cap = document.getElementById('lightboxCaption');
+  if (!box || !img || !url) return;
+  img.src = url;
+  img.alt = caption || 'صورة المنتج';
+  if (cap) cap.textContent = caption || '';
+  box.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeImageLightbox() {
+  const box = document.getElementById('imageLightbox');
+  const img = document.getElementById('lightboxImg');
+  if (!box) return;
+  box.classList.add('hidden');
+  if (img) img.src = '';
+  document.body.style.overflow = '';
+}
+
+function lineThumbHtml(line, idx) {
+  const src = productImageSrc(line.imageUrl);
+  const name = esc(line.matName || 'منتج');
+  if (src) {
+    return `<button type="button" class="line-thumb" data-img="${esc(src)}" data-caption="${name}" aria-label="تكبير صورة ${name}">
+      <img src="${esc(src)}" alt="" loading="lazy">
+    </button>`;
+  }
+  return `<div class="line-thumb line-thumb-empty" aria-hidden="true"><span>${idx + 1}</span></div>`;
+}
+
 function statusLabel(status) {
   return STATUS_META[status]?.label || status || '—';
 }
@@ -198,69 +236,42 @@ function lineTotals(lines = []) {
 
 function renderLines(lines = []) {
   if (!lines.length) return '<p class="empty-state">لا توجد بنود</p>';
-  const totals = lineTotals(lines);
-  return `
-    <div class="lines">${lines.map((l, idx) => {
-      const qty = Number(l.quant || 0);
-      const gift = Number(l.bonus || 0);
-      const hasGift = gift > 0;
-      return `
-      <article class="line-card${hasGift ? ' has-gift' : ''}">
-        <div class="line-card-top">
-          <span class="line-index">${idx + 1}</span>
-          <div class="line-card-title">
-            <strong class="line-name">${esc(l.matName || '—')}</strong>
-            ${l.barcode ? `<span class="line-barcode" dir="ltr">${esc(l.barcode)}</span>` : ''}
-          </div>
-          ${hasGift ? `<span class="gift-pill">هدية ${gift}</span>` : ''}
+  return `<div class="prep-lines">${lines.map((l, idx) => {
+    const qty = Number(l.quant || 0);
+    const gift = Number(l.bonus || 0);
+    const deliver = qty + gift;
+    const hasGift = gift > 0;
+    return `
+    <article class="prep-line${hasGift ? ' has-gift' : ''}">
+      ${lineThumbHtml(l, idx)}
+      <div class="prep-line-main">
+        <div class="prep-line-head">
+          <strong class="prep-line-name">${esc(l.matName || '—')}</strong>
+          ${hasGift ? `<span class="gift-tag">+${gift} هدية</span>` : ''}
         </div>
-        <div class="line-metrics">
-          <div class="metric">
-            <span class="metric-label">الكمية</span>
-            <strong class="metric-value" dir="ltr">${qty}</strong>
-          </div>
-          <div class="metric metric-gift${hasGift ? ' on' : ''}">
-            <span class="metric-label">الهدايا</span>
-            <strong class="metric-value" dir="ltr">${gift}</strong>
-          </div>
-          <div class="metric">
-            <span class="metric-label">السعر</span>
-            <strong class="metric-value" dir="ltr">${fmtMoney(l.unitPrice)}</strong>
-          </div>
-          <div class="metric">
-            <span class="metric-label">الإجمالي</span>
-            <strong class="metric-value" dir="ltr">${fmtMoney(l.lineTotal)}</strong>
-          </div>
+        ${l.barcode ? `<span class="prep-line-code" dir="ltr">${esc(l.barcode)}</span>` : ''}
+        <div class="prep-line-stats">
+          <span><em dir="ltr">${qty}</em> بيع</span>
+          <span class="${hasGift ? 'gift-stat' : ''}"><em dir="ltr">${gift}</em> هدية</span>
+          <span class="deliver-stat"><em dir="ltr">${deliver}</em> للتسليم</span>
         </div>
-        ${hasGift ? `
-        <div class="gift-callout">
-          <span class="gift-callout-badge">هدية</span>
-          <div>
-            <strong>يُجهَّز مع هدايا</strong>
-            <p>كمية البيع <b dir="ltr">${qty}</b> + هدايا <b dir="ltr">${gift}</b> = إجمالي للتسليم <b dir="ltr">${qty + gift}</b></p>
-          </div>
-        </div>` : ''}
-        ${l.remarks ? `<p class="line-note">${esc(l.remarks)}</p>` : ''}
-      </article>`;
-    }).join('')}</div>
-    <div class="order-summary">
-      <div class="summary-chip">
-        <span>البنود</span>
-        <strong dir="ltr">${lines.length}</strong>
+        ${l.remarks ? `<p class="prep-line-note">${esc(l.remarks)}</p>` : ''}
       </div>
-      <div class="summary-chip">
-        <span>الكميات</span>
-        <strong dir="ltr">${totals.qty}</strong>
+      <div class="prep-line-price" dir="ltr">
+        <span class="prep-line-total">${fmtMoney(l.lineTotal)}</span>
+        ${qty > 0 ? `<span class="prep-line-unit">${fmtMoney(l.unitPrice)}</span>` : ''}
       </div>
-      <div class="summary-chip summary-gift${totals.gifts ? ' on' : ''}">
-        <span>إجمالي الهدايا</span>
-        <strong dir="ltr">${totals.gifts}</strong>
-      </div>
-      <div class="summary-chip summary-amount">
-        <span>المبلغ</span>
-        <strong dir="ltr">${fmtMoney(totals.amount)}</strong>
-      </div>
-    </div>`;
+    </article>`;
+  }).join('')}</div>`;
+}
+
+function bindLineThumbs(root) {
+  root?.querySelectorAll('.line-thumb[data-img]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openImageLightbox(btn.dataset.img, btn.dataset.caption || '');
+    });
+  });
 }
 
 async function openOrder(id) {
@@ -277,68 +288,35 @@ async function openOrder(id) {
       { id: 'rejected', label: 'مرفوض', cls: 'danger' }
     ];
     document.getElementById('orderDetail').innerHTML = `
-      <div class="detail-banner">
-        <div class="detail-banner-main">
-          <p class="detail-kicker">طلب شراء</p>
-          <h2 dir="ltr">${esc(o.orderNo)}</h2>
-          <div class="detail-meta-grid">
-            <div>
-              <span>الزبون</span>
-              <strong>${esc(o.customerName || '—')}${o.customerNum ? ` · ${esc(o.customerNum)}` : ''}</strong>
-            </div>
-            <div>
-              <span>المندوب</span>
-              <strong>${esc(o.agentName || '—')}</strong>
-            </div>
-            ${o.catalogBranchName ? `
-            <div>
-              <span>الفرع</span>
-              <strong>${esc(o.catalogBranchName)}</strong>
-            </div>` : ''}
-            <div>
-              <span>التاريخ</span>
-              <strong dir="ltr">${esc(formatWhen(o))}</strong>
-            </div>
+      <div class="order-hero">
+        <div class="order-hero-top">
+          <div>
+            <p class="order-hero-kicker">طلب شراء</p>
+            <h2 class="order-hero-no" dir="ltr">${esc(o.orderNo)}</h2>
           </div>
+          <span class="badge lg ${statusBadge(o.status)}">${esc(statusLabel(o.status))}</span>
         </div>
-        <span class="badge lg ${statusBadge(o.status)}">${esc(statusLabel(o.status))}</span>
+        <div class="order-hero-info">
+          <span><b>${esc(o.customerName || 'بدون زبون')}</b>${o.customerNum ? ` · ${esc(o.customerNum)}` : ''}</span>
+          <span>${esc(o.agentName || '—')}${o.catalogBranchName ? ` · ${esc(o.catalogBranchName)}` : ''}</span>
+          <span dir="ltr">${esc(formatWhen(o))}</span>
+        </div>
+        <div class="order-hero-chips">
+          <span>${lines.length} بند</span>
+          <span>${totals.qty} بيع</span>
+          ${totals.gifts ? `<span class="chip-gift">${totals.gifts} هدية</span>` : ''}
+          <span class="chip-amount" dir="ltr">${fmtMoney(o.totalAmount || totals.amount)}</span>
+        </div>
       </div>
 
-      <div class="prep-strip">
-        <div class="prep-item">
-          <span>بنود</span>
-          <strong dir="ltr">${lines.length}</strong>
-        </div>
-        <div class="prep-item">
-          <span>كميات</span>
-          <strong dir="ltr">${totals.qty}</strong>
-        </div>
-        <div class="prep-item prep-gift${totals.gifts ? ' on' : ''}">
-          <span>هدايا</span>
-          <strong dir="ltr">${totals.gifts}</strong>
-        </div>
-        <div class="prep-item">
-          <span>المبلغ</span>
-          <strong dir="ltr">${fmtMoney(o.totalAmount || totals.amount)}</strong>
-        </div>
-      </div>
-      ${totals.gifts ? `
-      <div class="gift-banner">
-        <strong>تنبيه تجهيز:</strong>
-        هذا الطلب يحتوي على <b dir="ltr">${totals.gifts}</b> هدية
-        ضمن <b dir="ltr">${totals.giftLines}</b> منتج — راجع البنود المظلّلة.
-      </div>` : ''}
+      ${totals.gifts ? `<p class="gift-hint">⚠ يحتوي الطلب على <b dir="ltr">${totals.gifts}</b> قطعة هدية</p>` : ''}
+      ${o.notes ? `<div class="order-notes"><strong>ملاحظات:</strong> ${esc(o.notes)}</div>` : ''}
 
-      ${o.notes ? `<div class="panel notes-panel"><h3>ملاحظات المندوب</h3><p>${esc(o.notes)}</p></div>` : ''}
-      <div class="panel lines-panel">
-        <div class="panel-head-row">
-          <h3>بنود التجهيز</h3>
-          <span class="muted-count">${lines.length} منتج</span>
-        </div>
-        ${renderLines(lines)}
-      </div>
-      <div class="panel">
-        <h3>تغيير الحالة</h3>
+      <h3 class="section-title">المنتجات <span>${lines.length}</span></h3>
+      ${renderLines(lines)}
+
+      <div class="status-bar">
+        <p class="status-bar-label">تغيير الحالة</p>
         <div class="status-actions">
           ${actions.map((a) => `
             <button type="button" class="btn ${a.cls}${o.status === a.id ? ' active' : ''}"
@@ -348,7 +326,9 @@ async function openOrder(id) {
         </div>
       </div>`;
 
-    document.querySelectorAll('[data-set-status]').forEach((btn) => {
+    const detailRoot = document.getElementById('orderDetail');
+    bindLineThumbs(detailRoot);
+    detailRoot.querySelectorAll('[data-set-status]').forEach((btn) => {
       btn.addEventListener('click', () => void setOrderStatus(o.id, btn.dataset.setStatus));
     });
     goToScreen('detail');
@@ -447,6 +427,14 @@ document.getElementById('btnRefresh')?.addEventListener('click', () => {
 
 document.getElementById('btnBack')?.addEventListener('click', () => {
   void loadOrders();
+});
+
+document.getElementById('btnLightboxClose')?.addEventListener('click', closeImageLightbox);
+document.getElementById('imageLightbox')?.addEventListener('click', (e) => {
+  if (e.target.id === 'imageLightbox') closeImageLightbox();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeImageLightbox();
 });
 
 void tryRestoreSession();

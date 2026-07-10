@@ -69,6 +69,24 @@ function nextOrderNo() {
   return `${prefix}-${String(seq).padStart(4, '0')}`;
 }
 
+function lineImageUrl(productId, barcode) {
+  let path = '';
+  if (productId) {
+    const r = db.prepare('SELECT image_path FROM products WHERE id = ?').get(productId);
+    path = r?.image_path || '';
+  }
+  if (!path && barcode) {
+    const r = db.prepare(`
+      SELECT image_path FROM products
+      WHERE barcode = ? AND image_path IS NOT NULL AND trim(image_path) != ''
+      ORDER BY id DESC LIMIT 1
+    `).get(String(barcode));
+    path = r?.image_path || '';
+  }
+  if (!path) return '';
+  return `/uploads/${String(path).replace(/\\/g, '/')}`;
+}
+
 function mapLine(row) {
   return {
     id: row.id,
@@ -79,7 +97,8 @@ function mapLine(row) {
     bonus: Number(row.bonus || 0),
     unitPrice: Number(row.unit_price || 0),
     lineTotal: Number(row.line_total || 0),
-    remarks: row.remarks || ''
+    remarks: row.remarks || '',
+    imageUrl: lineImageUrl(row.product_id, row.barcode)
   };
 }
 

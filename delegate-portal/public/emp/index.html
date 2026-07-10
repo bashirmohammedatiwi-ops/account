@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260709prepDone">
+  <link rel="stylesheet" href="styles.css?v=20260710prepImg">
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -71,6 +71,12 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260709prepDone"></script>
+  <div id="imageLightbox" class="img-lightbox hidden" role="dialog" aria-modal="true" aria-label="عرض الصورة">
+    <button type="button" class="img-lightbox-close" id="btnLightboxClose" aria-label="إغلاق">×</button>
+    <img id="lightboxImg" src="" alt="">
+    <p class="img-lightbox-caption" id="lightboxCaption"></p>
+  </div>
+
+  <script src="app.js?v=20260710prepImg"></script>
 </body>
 </html>
