@@ -64,7 +64,8 @@ const commerce = {
   invoiceCustomer: null,
   invoiceNotes: '',
   pickerTree: null,
-  pickerBranches: []
+  pickerBranches: [],
+  pickerSearch: ''
 };
 
 const STATUS_BADGE = {
@@ -912,21 +913,62 @@ function confirmClearInvoice() {
 async function openCustomerPicker() {
   commerce.pickerTree = null;
   commerce.pickerBranches = [];
+  commerce.pickerSearch = '';
+  const searchEl = document.getElementById('customerPickerSearch');
+  if (searchEl) searchEl.value = '';
   document.getElementById('customerPickerTitle').textContent = 'اختر الشجرة';
   document.getElementById('customerPickerCrumb').textContent = 'الفروع من كشوف الحساب — نفس الزبائن في الكشوفات';
   document.getElementById('customerOverlay')?.classList.remove('hidden');
   document.body.classList.add('inv-sheet-open');
   await renderCustomerTrees();
+  searchEl?.focus();
 }
 
 function closeCustomerPicker() {
   document.getElementById('customerOverlay')?.classList.add('hidden');
+  commerce.pickerSearch = '';
   if (!isInvoiceModalOpen()) document.body.classList.remove('inv-sheet-open');
+}
+
+function pickerSearchHaystack(item) {
+  return [item.name1, item.name2, item.num, item.address, item.remarks, item.groupPath, item.treeName]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+function pickerMatchesSearch(item, q) {
+  if (!q) return true;
+  if (typeof branchMatchesSearch === 'function') return branchMatchesSearch(item, q);
+  const hay = pickerSearchHaystack(item);
+  if (hay.includes(q)) return true;
+  const qDigits = q.replace(/\D/g, '');
+  if (qDigits.length >= 3) return hay.replace(/\D/g, '').includes(qDigits);
+  return false;
+}
+
+function filterPickerTrees(trees) {
+  const q = commerce.pickerSearch.trim().toLowerCase();
+  return (trees || []).filter((t) => pickerMatchesSearch(t, q));
+}
+
+function filterPickerBranches(branches) {
+  const q = commerce.pickerSearch.trim().toLowerCase();
+  return (branches || []).filter((b) => pickerMatchesSearch(b, q));
+}
+
+function renderPickerSearchMeta(total, shown, noun) {
+  const q = commerce.pickerSearch.trim();
+  if (!q) return `${total} ${noun}`;
+  if (!shown) return `لا نتائج لـ «${q}»`;
+  return `${shown} من ${total} ${noun}`;
 }
 
 async function renderCustomerTrees() {
   const list = document.getElementById('customerPickerList');
+  const metaEl = document.getElementById('customerPickerMeta');
   list.innerHTML = '<p class="muted">جاري التحميل...</p>';
+  if (metaEl) metaEl.textContent = '';
   try {
     if (!state.trees?.length) {
       const data = await commerceApi('/trees');
@@ -938,7 +980,13 @@ async function renderCustomerTrees() {
       return;
     }
     document.getElementById('customerPickerTitle').textContent = 'اختر الشجرة';
-    list.innerHTML = trees.map((t) => `
+    const filtered = filterPickerTrees(trees);
+    if (metaEl) metaEl.textContent = renderPickerSearchMeta(trees.length, filtered.length, 'شجرة');
+    if (!filtered.length) {
+      list.innerHTML = '<div class="empty-state"><p>لا توجد شجرات مطابقة للبحث</p></div>';
+      return;
+    }
+    list.innerHTML = filtered.map((t) => `
       <button type="button" class="inv-picker-item" data-pick-tree="${esc(t.seq)}">
         <span class="inv-picker-icon">${ICONS.tree}</span>
         <span class="inv-picker-copy">
@@ -954,29 +1002,50 @@ async function renderCustomerTrees() {
 
 async function openCustomerTreeBranches(seq) {
   commerce.pickerTree = state.trees.find((t) => String(t.seq) === String(seq)) || { seq };
-  document.getElementById('customerPickerTitle').textContent = 'اختر الزبون (الفرع)';
+  commerce.pickerSearch = '';
+  const searchEl = document.getElementById('customerPickerSearch');
+  if (searchEl) searchEl.value = '';
+  document.getElementById('customerPickerTitle').textContent = 'اختر الزبون';
   document.getElementById('customerPickerCrumb').textContent =
     `شجرة: ${commerce.pickerTree.name1 || commerce.pickerTree.seq}`;
   const list = document.getElementById('customerPickerList');
+  const metaEl = document.getElementById('customerPickerMeta');
   list.innerHTML = '<p class="muted">جاري التحميل...</p>';
+  if (metaEl) metaEl.textContent = '';
   try {
-    const data = await commerceApi(`/accounts/${encodeURIComponent(seq)}/children`);
+    const data = await commerceApi(`/accounts/${encodeURIComponent(seq)}/children?view=leaves`);
     commerce.pickerBranches = data.children || [];
-    if (!commerce.pickerBranches.length) {
-      list.innerHTML = '<div class="empty-state"><p>لا توجد فروع في هذه الشجرة</p></div>';
-      return;
-    }
-    list.innerHTML = commerce.pickerBranches.map((b) => `
-      <button type="button" class="inv-picker-item" data-pick-customer="${esc(b.seq)}">
-        <span class="inv-picker-icon">${ICONS.branch}</span>
-        <span class="inv-picker-copy">
-          <strong>${esc(b.name1)}</strong>
-          <span dir="ltr">${esc(b.num)}</span>
-        </span>
-      </button>`).join('');
+    renderCustomerBranches();
+    searchEl?.focus();
   } catch (e) {
     list.innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`;
   }
+}
+
+function renderCustomerBranches() {
+  const list = document.getElementById('customerPickerList');
+  const metaEl = document.getElementById('customerPickerMeta');
+  const branches = commerce.pickerBranches || [];
+  if (!branches.length) {
+    list.innerHTML = '<div class="empty-state"><p>لا يوجد زبائن في هذه الشجرة</p></div>';
+    if (metaEl) metaEl.textContent = '';
+    return;
+  }
+  const filtered = filterPickerBranches(branches);
+  if (metaEl) metaEl.textContent = renderPickerSearchMeta(branches.length, filtered.length, 'زبون');
+  if (!filtered.length) {
+    list.innerHTML = '<div class="empty-state"><p>لا يوجد زبائن مطابقون للبحث</p></div>';
+    return;
+  }
+  list.innerHTML = filtered.map((b) => `
+    <button type="button" class="inv-picker-item" data-pick-customer="${esc(b.seq)}">
+      <span class="inv-picker-icon">${ICONS.branch}</span>
+      <span class="inv-picker-copy">
+        <strong>${esc(b.name1 || '—')}</strong>
+        <span dir="ltr">${esc(b.num || b.seq)}</span>
+        ${b.groupPath ? `<span class="inv-picker-sub">${esc(b.groupPath)}</span>` : ''}
+      </span>
+    </button>`).join('');
 }
 
 function selectInvoiceCustomer(branch) {
@@ -1191,6 +1260,9 @@ window.commerceNav = {
     if (document.getElementById('customerOverlay') && !document.getElementById('customerOverlay').classList.contains('hidden')) {
       if (commerce.pickerTree) {
         commerce.pickerTree = null;
+        commerce.pickerSearch = '';
+        const searchEl = document.getElementById('customerPickerSearch');
+        if (searchEl) searchEl.value = '';
         void renderCustomerTrees();
         return true;
       }
@@ -1315,6 +1387,11 @@ function initCommerceMobile() {
   document.getElementById('btnClearInvoice')?.addEventListener('click', confirmClearInvoice);
   document.getElementById('btnPickCustomer')?.addEventListener('click', () => openCustomerPicker());
   document.getElementById('btnCloseCustomer')?.addEventListener('click', closeCustomerPicker);
+  document.getElementById('customerPickerSearch')?.addEventListener('input', (e) => {
+    commerce.pickerSearch = e.target.value || '';
+    if (commerce.pickerTree) renderCustomerBranches();
+    else void renderCustomerTrees();
+  });
   document.getElementById('btnRefreshOrders')?.addEventListener('click', () => void loadMyOrders());
 
   document.getElementById('invoiceNotes')?.addEventListener('input', (e) => {

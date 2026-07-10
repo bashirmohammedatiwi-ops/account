@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260709prepDone">
+  <link rel="stylesheet" href="styles.css?v=20260710custSearch">
   <link rel="stylesheet" href="portal-pro.css?v=20260709orders1">
   <link rel="stylesheet" href="mobile.css?v=20260709orders1">
   <script>
@@ -538,6 +538,11 @@
         </header>
         <div class="inv-sheet-body">
           <p class="inv-picker-crumb" id="customerPickerCrumb"></p>
+          <div class="inv-picker-search-wrap">
+            <input type="search" id="customerPickerSearch" class="inv-picker-search"
+              placeholder="ابحث بالاسم أو الرقم..." autocomplete="off" enterkeyhint="search">
+            <p class="inv-picker-meta" id="customerPickerMeta"></p>
+          </div>
           <div class="inv-picker-list" id="customerPickerList"></div>
         </div>
       </div>
@@ -552,6 +557,6 @@
   </div>
   <script src="app.js?v=20260707n"></script>
   <script src="app-reports.js?v=20260613rpt3"></script>
-  <script src="app-commerce.js?v=20260709prepDone"></script>
+  <script src="app-commerce.js?v=20260710custSearch"></script>
 </body>
 </html>
