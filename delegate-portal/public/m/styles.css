@@ -4048,6 +4048,7 @@ body.inv-sheet-open { overflow: hidden; }
 }
 
 .shop-detail-step-gift { background: #fffbf0; }
+.shop-detail-step-tester { background: #f0f9ff; }
 
 .shop-detail-summary {
   flex-shrink: 0;
@@ -4214,6 +4215,7 @@ body.inv-sheet-open { overflow: hidden; }
 }
 
 .shop-detail-step-gift .prod-step-label { color: #b8860b; }
+.shop-detail-step-tester .prod-step-label { color: #0369a1; }
 
 .prod-step-btns {
   display: flex;
@@ -4249,6 +4251,8 @@ body.inv-sheet-open { overflow: hidden; }
 .prod-btn-plus { background: #8b2346; color: #fff; }
 
 .shop-detail-step-gift .prod-btn-plus { background: #e8b923; color: #3f2a00; }
+.shop-detail-step-tester .prod-btn-plus { background: #38bdf8; color: #0c4a6e; }
+.inv-table-stepper-tester { background: #f0f9ff; border-radius: 8px; }
 
 .prod-step-val {
   min-width: 1.6rem;

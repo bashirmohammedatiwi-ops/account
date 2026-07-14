@@ -93,6 +93,7 @@ function renderOrderInvoiceHero(lines, meta = {}) {
   const total = lines.reduce((s, l) => s + orderLineTotal(l), 0);
   const qtySum = lines.reduce((s, l) => s + Number(l.quant || 0), 0);
   const bonusSum = lines.reduce((s, l) => s + Number(l.bonus || 0), 0);
+  const testerSum = lines.reduce((s, l) => s + Number(l.tester || 0), 0);
 
   return `
     <div class="doc-panel invoice-doc inv-order-doc">
@@ -115,6 +116,7 @@ function renderOrderInvoiceHero(lines, meta = {}) {
             <th>عدد البنود</th><td dir="ltr">${lines.length}</td>
             <th>إجمالي الكمية</th><td dir="ltr">${fmtInvInt(qtySum)}</td>
             <th>إجمالي الهدايا</th><td dir="ltr">${fmtInvInt(bonusSum)}</td>
+            <th>إجمالي التيستر</th><td dir="ltr">${fmtInvInt(testerSum)}</td>
             <th>إجمالي الفاتورة</th><td class="net" dir="ltr">${fmtInvInt(total)}</td>
           </tr>
         </tbody>
@@ -137,6 +139,7 @@ function renderOrderInvoiceLines(lines) {
             <th class="col-name">اسم المادة</th>
             <th class="col-amt">الكمية</th>
             <th class="col-amt">هدية</th>
+            <th class="col-amt">تيستر</th>
             <th class="col-amt">سعر الوحدة</th>
             <th class="col-amt">المبلغ</th>
           </tr>
@@ -149,13 +152,14 @@ function renderOrderInvoiceLines(lines) {
               <td class="col-name">${esc(line.matName || '—')}</td>
               ${qtyTd(line.quant)}
               ${qtyTd(line.bonus)}
+              ${qtyTd(line.tester)}
               ${invMoneyTd(line.unitPrice ?? line.price)}
               ${invMoneyTd(orderLineTotal(line), 'net')}
             </tr>`).join('')}
         </tbody>
         <tfoot>
           <tr class="row-sum">
-            <td colspan="6" class="total-label">إجمالي الفاتورة</td>
+            <td colspan="7" class="total-label">إجمالي الفاتورة</td>
             <td class="num" dir="ltr">${fmtInvInt(total)}</td>
           </tr>
           <tr class="row-total">

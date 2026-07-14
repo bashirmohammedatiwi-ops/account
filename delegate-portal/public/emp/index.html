@@ -4,14 +4,32 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="تجهيز">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="application-name" content="تجهيز الطلبات">
   <meta name="theme-color" content="#0f766e">
   <title>Edari — تجهيز الطلبات</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260710prepImg">
+  <link rel="stylesheet" href="styles.css?v=20260714pwa">
 </head>
 <body>
+  <div id="offlineBanner" class="offline-banner hidden" role="status">لا يوجد اتصال بالإنترنت</div>
+
+  <div id="installBanner" class="install-banner hidden">
+    <div class="install-banner-copy">
+      <strong>ثبّت التطبيق على الهاتف</strong>
+      <p>للوصول السريع من الشاشة الرئيسية</p>
+    </div>
+    <button type="button" class="btn primary sm" id="btnInstallApp">تثبيت</button>
+    <button type="button" class="install-dismiss" id="btnDismissInstall" aria-label="إغلاق">×</button>
+  </div>
+
   <div id="loginScreen" class="login-screen">
     <div class="login-card">
       <div class="login-brand">
@@ -53,6 +71,7 @@
 
     <main class="app-main">
       <section class="screen active" id="screen-list">
+        <div class="pull-hint hidden" id="pullHint" aria-hidden="true">اسحب للتحديث</div>
         <div class="filters" id="orderFilters" role="tablist" aria-label="تصفية الحالة"></div>
         <p class="list-meta" id="ordersMeta">—</p>
         <div class="order-list" id="ordersList"></div>
@@ -77,6 +96,6 @@
     <p class="img-lightbox-caption" id="lightboxCaption"></p>
   </div>
 
-  <script src="app.js?v=20260710prepImg"></script>
+  <script src="app.js?v=20260714pwa"></script>
 </body>
 </html>

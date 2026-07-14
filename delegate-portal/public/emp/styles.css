@@ -29,6 +29,79 @@ html, body {
 
 .hidden { display: none !important; }
 
+.offline-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 90;
+  padding: calc(8px + var(--safe-top)) 14px 8px;
+  background: #b91c1c;
+  color: #fff;
+  text-align: center;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.install-banner {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + var(--safe-bottom));
+  z-index: 85;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: #0f172a;
+  color: #fff;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.35);
+}
+
+.install-banner-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.install-banner-copy strong {
+  display: block;
+  font-size: 0.88rem;
+}
+
+.install-banner-copy p {
+  margin: 2px 0 0;
+  font-size: 0.76rem;
+  color: #cbd5e1;
+}
+
+.install-dismiss {
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 1.4rem;
+  line-height: 1;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.btn.sm {
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.pull-hint {
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 700;
+  padding: 4px 0 8px;
+}
+
+html.standalone .install-banner { display: none !important; }
+
 .login-screen {
   min-height: 100dvh;
   display: grid;
@@ -549,6 +622,23 @@ html, body {
   color: #fff;
 }
 
+.tester-tag {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #0284c7;
+  color: #fff;
+}
+
+.prep-line.has-tester {
+  border-color: #7dd3fc;
+  background: #f8fcff;
+}
+
+.prep-line-stats .tester-stat em { color: #0369a1; }
+
 .prep-line-code {
   font-size: 0.74rem;
   color: var(--muted);
@@ -578,6 +668,32 @@ html, body {
   font-size: 0.78rem;
   color: #64748b;
   line-height: 1.4;
+}
+
+.prep-line-side {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.line-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.btn.ghost {
+  background: #f1f5f9;
+  color: var(--text);
+}
+
+.edit-hint {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  color: var(--primary);
+  font-weight: 700;
 }
 
 .prep-line-price {
@@ -727,6 +843,6 @@ html, body {
 }
 
 @media (max-width: 420px) {
-  .prep-line-price { display: none; }
+  .prep-line-side .prep-line-price { display: none; }
   .prep-line-stats { gap: 6px; }
 }

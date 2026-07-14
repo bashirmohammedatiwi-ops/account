@@ -1,4 +1,5 @@
 const db = require('./db');
+const { notifyNewOrder } = require('./push');
 
 /** Canonical UI statuses: pending | processing | rejected */
 const STATUS_LABELS = {
@@ -95,6 +96,7 @@ function mapLine(row) {
     matName: row.mat_name,
     quant: Number(row.quant || 0),
     bonus: Number(row.bonus || 0),
+    tester: Number(row.tester || 0),
     unitPrice: Number(row.unit_price || 0),
     lineTotal: Number(row.line_total || 0),
     remarks: row.remarks || '',
@@ -152,6 +154,97 @@ function loadOrder(id) {
   return mapOrder(row, lines, events);
 }
 
+function employeeCanEditLines(orderRow) {
+  if (!orderRow) return false;
+  if (orderRow.status === 'draft' && !orderRow.submitted_at) return false;
+  const ui = canonicalStatus(orderRow.status);
+  return ui === 'pending' || ui === 'processing';
+}
+
+function updateOrderLineByEmployee(orderId, lineId, patch, actorId = '') {
+  const orderRow = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+  if (!orderRow) return null;
+  if (!employeeCanEditLines(orderRow)) {
+    throw new Error('لا يمكن تعديل بنود الطلب في هذه الحالة');
+  }
+
+  const line = db.prepare('SELECT * FROM order_lines WHERE id = ? AND order_id = ?').get(lineId, orderId);
+  if (!line) throw new Error('البند غير موجود');
+
+  const quant = patch.quant !== undefined ? Number(patch.quant) : Number(line.quant || 0);
+  const bonus = patch.bonus !== undefined ? Number(patch.bonus) : Number(line.bonus || 0);
+  const tester = patch.tester !== undefined ? Number(patch.tester) : Number(line.tester || 0);
+  if (Number.isNaN(quant) || Number.isNaN(bonus) || Number.isNaN(tester) || quant < 0 || bonus < 0 || tester < 0) {
+    throw new Error('الكميات يجب أن تكون أرقاماً موجبة');
+  }
+  if (quant === 0 && bonus === 0 && tester === 0) {
+    throw new Error('يجب أن تكون كمية البيع أو الهدية أو التيستر أكبر من صفر — أو احذف البند');
+  }
+
+  const unitPrice = patch.unitPrice !== undefined
+    ? Number(patch.unitPrice)
+    : Number(line.unit_price || 0);
+  const lineTotal = Number(patch.lineTotal ?? quant * unitPrice);
+  const remarks = patch.remarks !== undefined ? String(patch.remarks || '') : (line.remarks || '');
+
+  db.prepare(`
+    UPDATE order_lines
+    SET quant = ?, bonus = ?, tester = ?, unit_price = ?, line_total = ?, remarks = ?
+    WHERE id = ? AND order_id = ?
+  `).run(quant, bonus, tester, unitPrice, lineTotal, remarks, lineId, orderId);
+
+  db.prepare(`UPDATE orders SET updated_at = datetime('now') WHERE id = ?`).run(orderId);
+  recalcOrderTotals(orderId);
+  logEvent(orderId, {
+    fromStatus: orderRow.status,
+    toStatus: orderRow.status,
+    actorType: 'employee',
+    actorId: String(actorId),
+    note: `تعديل بند: ${line.mat_name} (بيع ${quant} · هدية ${bonus} · تيستر ${tester})`
+  });
+  return loadOrder(orderId);
+}
+
+function deleteOrderLineByEmployee(orderId, lineId, actorId = '') {
+  const orderRow = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+  if (!orderRow) return null;
+  if (!employeeCanEditLines(orderRow)) {
+    throw new Error('لا يمكن حذف بنود الطلب في هذه الحالة');
+  }
+
+  const line = db.prepare('SELECT * FROM order_lines WHERE id = ? AND order_id = ?').get(lineId, orderId);
+  if (!line) throw new Error('البند غير موجود');
+
+  const count = db.prepare('SELECT COUNT(*) AS c FROM order_lines WHERE order_id = ?').get(orderId).c;
+  if (count <= 1) throw new Error('يجب أن يبقى بند واحد على الأقل في الطلب');
+
+  db.prepare('DELETE FROM order_lines WHERE id = ? AND order_id = ?').run(lineId, orderId);
+  db.prepare(`UPDATE orders SET updated_at = datetime('now') WHERE id = ?`).run(orderId);
+  recalcOrderTotals(orderId);
+  logEvent(orderId, {
+    fromStatus: orderRow.status,
+    toStatus: orderRow.status,
+    actorType: 'employee',
+    actorId: String(actorId),
+    note: `حذف بند: ${line.mat_name}`
+  });
+  return loadOrder(orderId);
+}
+
+function orderFeed({ sinceId = 0, status = 'pending' } = {}) {
+  const orders = listOrders({ status, limit: 100, offset: 0 })
+    .filter((o) => o.rawStatus !== 'draft' || o.submittedAt);
+  const latest = orders[0] || null;
+  const newOrders = sinceId > 0
+    ? orders.filter((o) => o.id > sinceId)
+    : [];
+  return {
+    pendingCount: orders.length,
+    latest,
+    newOrders
+  };
+}
+
 function recalcOrderTotals(orderId) {
   const lines = db.prepare('SELECT quant, line_total FROM order_lines WHERE order_id = ?').all(orderId);
   const totalQty = lines.reduce((s, l) => s + Number(l.quant || 0), 0);
@@ -172,6 +265,7 @@ function normalizeLines(lines = []) {
   return lines.map((line) => {
     const quant = Number(line.quant || 0);
     const bonus = Number(line.bonus || 0);
+    const tester = Number(line.tester || 0);
     const unitPrice = Number(line.unitPrice ?? line.price ?? 0);
     const lineTotal = Number(line.lineTotal ?? quant * unitPrice);
     return {
@@ -180,19 +274,20 @@ function normalizeLines(lines = []) {
       matName: String(line.matName || line.name || '').trim(),
       quant,
       bonus,
+      tester,
       unitPrice,
       lineTotal,
       remarks: String(line.remarks || '')
     };
-  }).filter((l) => l.matName && (l.quant || l.bonus || l.lineTotal));
+  }).filter((l) => l.matName && (l.quant || l.bonus || l.tester || l.lineTotal));
 }
 
 function replaceLines(orderId, lines) {
   db.prepare('DELETE FROM order_lines WHERE order_id = ?').run(orderId);
   const insert = db.prepare(`
     INSERT INTO order_lines
-      (order_id, product_id, barcode, mat_name, quant, bonus, unit_price, line_total, remarks)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (order_id, product_id, barcode, mat_name, quant, bonus, tester, unit_price, line_total, remarks)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const line of normalizeLines(lines)) {
     insert.run(
@@ -202,6 +297,7 @@ function replaceLines(orderId, lines) {
       line.matName,
       line.quant,
       line.bonus,
+      line.tester,
       line.unitPrice,
       line.lineTotal,
       line.remarks
@@ -266,7 +362,9 @@ function submitOrder(orderId, agentId) {
     actorId: agentId,
     note: 'إرسال الطلب'
   });
-  return loadOrder(orderId);
+  const order = loadOrder(orderId);
+  void notifyNewOrder(order).catch(() => {});
+  return order;
 }
 
 function setOrderStatus(orderId, newStatus, { actorType = 'admin', actorId = '', note = '' } = {}) {
@@ -403,6 +501,9 @@ module.exports = {
   updateOrder,
   submitOrder,
   setOrderStatus,
+  updateOrderLineByEmployee,
+  deleteOrderLineByEmployee,
+  orderFeed,
   deleteOrderByAgent,
   deleteOrderByAdmin,
   listOrders,

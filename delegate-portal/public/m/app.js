@@ -1181,6 +1181,7 @@ async function openInvoice(ref, by = 'auto', acc = '') {
                 <th class="col-name">اسم المادة</th>
                 <th class="col-amt">الكمية</th>
                 <th class="col-amt">هدية</th>
+                <th class="col-amt">تيستر</th>
                 <th class="col-amt">سعر الوحدة</th>
                 <th class="col-amt">المبلغ</th>
               </tr>
@@ -1193,13 +1194,14 @@ async function openInvoice(ref, by = 'auto', acc = '') {
                 <td class="col-name">${esc(line.matName || '—')}${line.remarks ? `<span class="row-note">${esc(line.remarks)}</span>` : ''}</td>
                 ${qtyTd(line.quant)}
                 ${qtyTd(line.bonus)}
+                ${qtyTd(line.tester)}
                 ${invMoneyTd(line.price)}
                 ${invMoneyTd(invoiceLineTotal(line), 'net')}
               </tr>`).join('')}
             </tbody>
             <tfoot>
               <tr class="row-sum">
-                <td colspan="6" class="total-label">إجمالي الفاتورة</td>
+                <td colspan="7" class="total-label">إجمالي الفاتورة</td>
                 <td class="num" dir="ltr">${fmtInvInt(inv.total)}</td>
               </tr>
               <tr class="row-sum">

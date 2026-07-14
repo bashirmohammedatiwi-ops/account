@@ -135,9 +135,24 @@ function migrateCommerceSchema(db) {
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS push_devices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_type TEXT NOT NULL,
+      owner_id TEXT NOT NULL,
+      token TEXT NOT NULL,
+      platform TEXT NOT NULL DEFAULT 'android',
+      app TEXT NOT NULL DEFAULT 'emp',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(owner_type, owner_id, token)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_push_devices_owner ON push_devices(owner_type, owner_id);
   `);
 
   migrateProductExtras(db);
+  migrateOrderLineExtras(db);
 
   const branchCount = db.prepare('SELECT COUNT(*) AS c FROM catalog_branches').get().c;
   if (!branchCount) {
@@ -198,6 +213,12 @@ function migrateProductExtras(db) {
     db.exec("ALTER TABLE products ADD COLUMN group_key TEXT DEFAULT ''");
   }
   db.exec('CREATE INDEX IF NOT EXISTS idx_products_group_key ON products(group_key)');
+}
+
+function migrateOrderLineExtras(db) {
+  if (!columnExists(db, 'order_lines', 'tester')) {
+    db.exec('ALTER TABLE order_lines ADD COLUMN tester REAL DEFAULT 0');
+  }
 }
 
 module.exports = { migrateCommerceSchema };

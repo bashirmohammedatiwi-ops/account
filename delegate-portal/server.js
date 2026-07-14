@@ -60,7 +60,7 @@ app.get('/m/*', (_req, res) => {
 });
 
 app.use('/emp', (req, res, next) => {
-  if (/\.(css|js|html)$/i.test(req.path)) {
+  if (/\.(css|js|html|json|webmanifest)$/i.test(req.path) || req.path === '/sw.js') {
     res.set('Cache-Control', 'no-cache, must-revalidate');
   }
   next();
@@ -81,5 +81,6 @@ app.listen(PORT, HOST, () => {
   console.log(`Edari Delegate Portal: http://${HOST}:${PORT}/admin`);
   console.log(`Delegate mobile: http://${HOST}:${PORT}/m`);
   console.log(`Employee prep: http://${HOST}:${PORT}/emp`);
+  console.log(`Employee Flutter app API: http://${HOST}:${PORT}/api/emp`);
   console.log(`Sync API key: ${process.env.SYNC_API_KEY || '(default)'}`);
 });

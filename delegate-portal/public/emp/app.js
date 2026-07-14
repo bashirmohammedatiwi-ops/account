@@ -1,6 +1,7 @@
 const API = '/api/emp';
 const TOKEN_KEY = 'empToken';
 const EMP_KEY = 'empUser';
+const INSTALL_DISMISS_KEY = 'empInstallDismissed';
 
 const STATUS_META = {
   pending: { label: 'قيد الانتظار', badge: 'pending' },
@@ -18,10 +19,116 @@ const FILTERS = [
 const state = {
   employee: null,
   screen: 'list',
-  filter: 'pending',
+  filter: new URLSearchParams(window.location.search).get('filter') || 'pending',
   orders: [],
-  selectedOrder: null
+  selectedOrder: null,
+  deferredInstall: null,
+  pullStartY: 0,
+  pulling: false
 };
+
+function isStandaloneApp() {
+  return window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+}
+
+function isIos() {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent);
+}
+
+function setOfflineBanner(offline) {
+  document.getElementById('offlineBanner')?.classList.toggle('hidden', !offline);
+}
+
+function showInstallBanner(show) {
+  const el = document.getElementById('installBanner');
+  if (!el) return;
+  const dismissed = localStorage.getItem(INSTALL_DISMISS_KEY);
+  if (show && !isStandaloneApp() && !dismissed) {
+    el.classList.remove('hidden');
+    const copy = el.querySelector('.install-banner-copy p');
+    if (copy && isIos() && !state.deferredInstall) {
+      copy.textContent = 'من Safari: زر المشاركة ثم «إضافة إلى الشاشة الرئيسية»';
+    }
+  } else {
+    el.classList.add('hidden');
+  }
+}
+
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(() => {});
+}
+
+function bindPwaUi() {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    state.deferredInstall = e;
+    showInstallBanner(true);
+  });
+
+  document.getElementById('btnInstallApp')?.addEventListener('click', async () => {
+    const prompt = state.deferredInstall;
+    if (!prompt) {
+      alert('من المتصفح: قائمة ⋮ ثم «إضافة إلى الشاشة الرئيسية» أو «تثبيت التطبيق»');
+      return;
+    }
+    prompt.prompt();
+    await prompt.userChoice.catch(() => ({}));
+    state.deferredInstall = null;
+    showInstallBanner(false);
+  });
+
+  document.getElementById('btnDismissInstall')?.addEventListener('click', () => {
+    localStorage.setItem(INSTALL_DISMISS_KEY, '1');
+    showInstallBanner(false);
+  });
+
+  window.addEventListener('online', () => setOfflineBanner(false));
+  window.addEventListener('offline', () => setOfflineBanner(true));
+  setOfflineBanner(!navigator.onLine);
+
+  if (isIos() && !isStandaloneApp() && !localStorage.getItem(INSTALL_DISMISS_KEY)) {
+    showInstallBanner(true);
+  }
+
+  if (isStandaloneApp()) {
+    document.documentElement.classList.add('standalone');
+  }
+}
+
+function bindPullToRefresh() {
+  const scrollEl = document.querySelector('.app-main');
+  const hint = document.getElementById('pullHint');
+  if (!scrollEl) return;
+
+  scrollEl.addEventListener('touchstart', (e) => {
+    if (state.screen !== 'list' || scrollEl.scrollTop > 0) return;
+    state.pullStartY = e.touches[0]?.clientY || 0;
+    state.pulling = true;
+  }, { passive: true });
+
+  scrollEl.addEventListener('touchmove', (e) => {
+    if (!state.pulling || state.screen !== 'list') return;
+    const y = e.touches[0]?.clientY || 0;
+    const delta = y - state.pullStartY;
+    if (delta > 48 && scrollEl.scrollTop <= 0) {
+      hint?.classList.remove('hidden');
+    } else {
+      hint?.classList.add('hidden');
+    }
+  }, { passive: true });
+
+  scrollEl.addEventListener('touchend', async () => {
+    if (!state.pulling) return;
+    const visible = hint && !hint.classList.contains('hidden');
+    state.pulling = false;
+    hint?.classList.add('hidden');
+    if (visible && state.screen === 'list') {
+      await loadOrders();
+    }
+  }, { passive: true });
+}
 
 function esc(v) {
   return String(v ?? '')
@@ -234,35 +341,101 @@ function lineTotals(lines = []) {
   }, { qty: 0, gifts: 0, amount: 0, giftLines: 0 });
 }
 
-function renderLines(lines = []) {
+function orderEditable(o) {
+  return o && (o.status === 'pending' || o.status === 'processing');
+}
+
+function renderLines(lines = [], { editable = false, orderId = 0 } = {}) {
   if (!lines.length) return '<p class="empty-state">لا توجد بنود</p>';
   return `<div class="prep-lines">${lines.map((l, idx) => {
     const qty = Number(l.quant || 0);
     const gift = Number(l.bonus || 0);
-    const deliver = qty + gift;
+    const tester = Number(l.tester || 0);
+    const deliver = qty + gift + tester;
     const hasGift = gift > 0;
+    const hasTester = tester > 0;
     return `
-    <article class="prep-line${hasGift ? ' has-gift' : ''}">
+    <article class="prep-line${hasGift ? ' has-gift' : ''}${hasTester ? ' has-tester' : ''}" data-line-id="${l.id || ''}">
       ${lineThumbHtml(l, idx)}
       <div class="prep-line-main">
         <div class="prep-line-head">
           <strong class="prep-line-name">${esc(l.matName || '—')}</strong>
           ${hasGift ? `<span class="gift-tag">+${gift} هدية</span>` : ''}
+          ${hasTester ? `<span class="tester-tag">+${tester} تيستر</span>` : ''}
         </div>
         ${l.barcode ? `<span class="prep-line-code" dir="ltr">${esc(l.barcode)}</span>` : ''}
         <div class="prep-line-stats">
           <span><em dir="ltr">${qty}</em> بيع</span>
           <span class="${hasGift ? 'gift-stat' : ''}"><em dir="ltr">${gift}</em> هدية</span>
+          <span class="${hasTester ? 'tester-stat' : ''}"><em dir="ltr">${tester}</em> تيستر</span>
           <span class="deliver-stat"><em dir="ltr">${deliver}</em> للتسليم</span>
         </div>
         ${l.remarks ? `<p class="prep-line-note">${esc(l.remarks)}</p>` : ''}
       </div>
-      <div class="prep-line-price" dir="ltr">
-        <span class="prep-line-total">${fmtMoney(l.lineTotal)}</span>
-        ${qty > 0 ? `<span class="prep-line-unit">${fmtMoney(l.unitPrice)}</span>` : ''}
+      <div class="prep-line-side">
+        <div class="prep-line-price" dir="ltr">
+          <span class="prep-line-total">${fmtMoney(l.lineTotal)}</span>
+          ${qty > 0 ? `<span class="prep-line-unit">${fmtMoney(l.unitPrice)}</span>` : ''}
+        </div>
+        ${editable ? `<div class="line-actions">
+          <button type="button" class="btn ghost sm line-edit" data-order-id="${orderId}" data-line-id="${l.id}">تعديل</button>
+          <button type="button" class="btn danger sm line-del" data-order-id="${orderId}" data-line-id="${l.id}">حذف</button>
+        </div>` : ''}
       </div>
     </article>`;
   }).join('')}</div>`;
+}
+
+function bindLineActions(root) {
+  root?.querySelectorAll('.line-edit').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const orderId = Number(btn.dataset.orderId);
+      const lineId = Number(btn.dataset.lineId);
+      const line = (state.selectedOrder?.lines || []).find((l) => Number(l.id) === lineId);
+      if (line) void editLine(orderId, line);
+    });
+  });
+  root?.querySelectorAll('.line-del').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      void deleteLine(Number(btn.dataset.orderId), Number(btn.dataset.lineId));
+    });
+  });
+}
+
+async function editLine(orderId, line) {
+  const qty = prompt('كمية البيع:', String(line.quant ?? 0));
+  if (qty === null) return;
+  const bonus = prompt('كمية الهدية:', String(line.bonus ?? 0));
+  if (bonus === null) return;
+  const tester = prompt('كمية التيستر:', String(line.tester ?? 0));
+  if (tester === null) return;
+  setOverlay(true);
+  try {
+    await api(`/orders/${orderId}/lines/${line.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ quant: Number(qty), bonus: Number(bonus), tester: Number(tester) })
+    });
+    await openOrder(orderId);
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    setOverlay(false);
+  }
+}
+
+async function deleteLine(orderId, lineId) {
+  if (!confirm('حذف هذا المنتج من الطلب؟')) return;
+  setOverlay(true);
+  try {
+    await api(`/orders/${orderId}/lines/${lineId}`, { method: 'DELETE' });
+    await openOrder(orderId);
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    setOverlay(false);
+  }
 }
 
 function bindLineThumbs(root) {
@@ -313,7 +486,8 @@ async function openOrder(id) {
       ${o.notes ? `<div class="order-notes"><strong>ملاحظات:</strong> ${esc(o.notes)}</div>` : ''}
 
       <h3 class="section-title">المنتجات <span>${lines.length}</span></h3>
-      ${renderLines(lines)}
+      ${orderEditable(o) ? '<p class="edit-hint">يمكنك تعديل الكميات أو حذف منتج من الطلب</p>' : ''}
+      ${renderLines(lines, { editable: orderEditable(o), orderId: o.id })}
 
       <div class="status-bar">
         <p class="status-bar-label">تغيير الحالة</p>
@@ -328,6 +502,7 @@ async function openOrder(id) {
 
     const detailRoot = document.getElementById('orderDetail');
     bindLineThumbs(detailRoot);
+    bindLineActions(detailRoot);
     detailRoot.querySelectorAll('[data-set-status]').forEach((btn) => {
       btn.addEventListener('click', () => void setOrderStatus(o.id, btn.dataset.setStatus));
     });
@@ -437,4 +612,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeImageLightbox();
 });
 
+registerServiceWorker();
+bindPwaUi();
+bindPullToRefresh();
 void tryRestoreSession();

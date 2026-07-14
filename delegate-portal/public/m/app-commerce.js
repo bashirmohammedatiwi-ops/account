@@ -124,7 +124,8 @@ function commerceApi(path, opts = {}) {
 
 function getDraft(productId) {
   const id = Number(productId);
-  if (!commerce.draft[id]) commerce.draft[id] = { quant: 0, bonus: 0 };
+  if (!commerce.draft[id]) commerce.draft[id] = { quant: 0, bonus: 0, tester: 0 };
+  if (commerce.draft[id].tester == null) commerce.draft[id].tester = 0;
   return commerce.draft[id];
 }
 
@@ -151,7 +152,7 @@ function selectProduct(productId) {
 }
 
 function invoiceLineCount() {
-  return Object.values(commerce.draft).filter((d) => d.quant > 0 || d.bonus > 0).length;
+  return Object.values(commerce.draft).filter((d) => d.quant > 0 || d.bonus > 0 || d.tester > 0).length;
 }
 
 function updateShopOrderStats() {
@@ -186,7 +187,7 @@ function buildOrderLines() {
   const lines = [];
   for (const p of commerce.products) {
     const d = commerce.draft[p.id];
-    if (!d || (!d.quant && !d.bonus)) continue;
+    if (!d || (!d.quant && !d.bonus && !d.tester)) continue;
     lines.push({
       productId: p.id,
       barcode: p.barcode || p.skuNum || '',
@@ -194,6 +195,7 @@ function buildOrderLines() {
       matName: p.name,
       quant: d.quant || 0,
       bonus: d.bonus || 0,
+      tester: d.tester || 0,
       unitPrice: Number(p.price || 0),
       price: Number(p.price || 0),
       lineTotal: (d.quant || 0) * Number(p.price || 0)
@@ -237,7 +239,7 @@ function clearInvoiceStorage() {
 
 function hasSavedInvoiceLines(saved) {
   if (!saved?.draft) return false;
-  return Object.values(saved.draft).some((d) => Number(d.quant) > 0 || Number(d.bonus) > 0);
+  return Object.values(saved.draft).some((d) => Number(d.quant) > 0 || Number(d.bonus) > 0 || Number(d.tester) > 0);
 }
 
 function applyPersistedDraft() {
@@ -273,7 +275,7 @@ function updateResumeBanner() {
 
 function adjustDraft(productId, field, delta) {
   const d = getDraft(productId);
-  const key = field === 'bonus' ? 'bonus' : 'quant';
+  const key = field === 'bonus' ? 'bonus' : field === 'tester' ? 'tester' : 'quant';
   d[key] = Math.max(0, Number(d[key] || 0) + Number(delta || 0));
   syncProductRow(productId);
   updateInvoiceUI();
@@ -283,15 +285,17 @@ function adjustDraft(productId, field, delta) {
 function syncProductRow(productId) {
   const id = Number(productId);
   const d = getDraft(id);
-  const active = (d.quant || 0) > 0 || (d.bonus || 0) > 0;
+  const active = (d.quant || 0) > 0 || (d.bonus || 0) > 0 || (d.tester || 0) > 0;
   const card = document.querySelector(`.shop-prod-card[data-product-id="${id}"]`);
   if (card) card.classList.toggle('shop-prod-card-in-cart', active);
   if (commerce.selectedProductId === id) {
     const qEl = document.querySelector('[data-detail-q]');
     const bEl = document.querySelector('[data-detail-b]');
+    const tEl = document.querySelector('[data-detail-t]');
     const lineEl = document.querySelector('[data-detail-line-total]');
     if (qEl) qEl.textContent = String(d.quant || 0);
     if (bEl) bEl.textContent = String(d.bonus || 0);
+    if (tEl) tEl.textContent = String(d.tester || 0);
     if (lineEl) {
       const p = findProduct(id);
       lineEl.textContent = fmtInvInt((d.quant || 0) * Number(p?.price || 0));
@@ -302,10 +306,12 @@ function syncProductRow(productId) {
 
 function renderQtyBlock(productId, field, value) {
   const isGift = field === 'bonus';
-  const detailAttr = isGift ? 'data-detail-b' : 'data-detail-q';
-  const label = isGift ? 'عينة' : 'وحدة';
+  const isTester = field === 'tester';
+  const detailAttr = isGift ? 'data-detail-b' : isTester ? 'data-detail-t' : 'data-detail-q';
+  const label = isGift ? 'هدية' : isTester ? 'تيستر' : 'وحدة';
+  const extraCls = isGift ? ' shop-detail-step-gift' : isTester ? ' shop-detail-step-tester' : '';
   return `
-    <div class="shop-detail-step${isGift ? ' shop-detail-step-gift' : ''}">
+    <div class="shop-detail-step${extraCls}">
       <span class="prod-step-label">${label}</span>
       <div class="prod-step-btns">
         <button type="button" class="prod-btn prod-btn-minus" data-draft-action data-product-id="${productId}" data-field="${field}" data-delta="-1" aria-label="نقص">−</button>
@@ -348,7 +354,7 @@ function renderShadeDots(p) {
 function renderProductGridCard(p) {
   const d = getDraft(p.id);
   const selected = commerce.selectedProductId === p.id;
-  const inCart = (d.quant || 0) > 0 || (d.bonus || 0) > 0;
+  const inCart = (d.quant || 0) > 0 || (d.bonus || 0) > 0 || (d.tester || 0) > 0;
   const img = productImageSrc(p);
   const label = displayProductName(p);
   return `
@@ -411,6 +417,7 @@ function renderProductDetailPanel() {
       <div class="shop-detail-qty">
         ${renderQtyBlock(p.id, 'quant', d.quant || 0)}
         ${renderQtyBlock(p.id, 'bonus', d.bonus || 0)}
+        ${renderQtyBlock(p.id, 'tester', d.tester || 0)}
       </div>
       <div class="shop-detail-summary">
         <span>مخزون <strong dir="ltr">${stock > 0 ? fmtInvInt(stock) : '—'}</strong></span>
@@ -610,6 +617,7 @@ function renderInvoiceHeroBlock(lines, meta = {}) {
   const total = lines.reduce((s, l) => s + orderLineTotal(l), 0);
   const qtySum = lines.reduce((s, l) => s + Number(l.quant || 0), 0);
   const bonusSum = lines.reduce((s, l) => s + Number(l.bonus || 0), 0);
+  const testerSum = lines.reduce((s, l) => s + Number(l.tester || 0), 0);
 
   return `
     <div class="doc-panel invoice-doc inv-order-doc">
@@ -632,6 +640,7 @@ function renderInvoiceHeroBlock(lines, meta = {}) {
             <th>عدد البنود</th><td dir="ltr">${lines.length}</td>
             <th>إجمالي الكمية</th><td dir="ltr">${fmtInvInt(qtySum)}</td>
             <th>إجمالي الهدايا</th><td dir="ltr">${fmtInvInt(bonusSum)}</td>
+            <th>إجمالي التيستر</th><td dir="ltr">${fmtInvInt(testerSum)}</td>
             <th>إجمالي الفاتورة</th><td class="net" dir="ltr">${fmtInvInt(total)}</td>
           </tr>
         </tbody>
@@ -657,6 +666,7 @@ function renderInvoiceLinesBlock(lines, meta = {}) {
             <th class="col-name">اسم المادة</th>
             <th class="col-amt">الكمية</th>
             <th class="col-amt">هدية</th>
+            <th class="col-amt">تيستر</th>
             <th class="col-amt">سعر الوحدة</th>
             <th class="col-amt">المبلغ</th>
           </tr>
@@ -664,7 +674,7 @@ function renderInvoiceLinesBlock(lines, meta = {}) {
         <tbody>
           ${lines.map((line, i) => {
     const qtyCells = readonly
-      ? `${qtyTd(line.quant)}${qtyTd(line.bonus)}`
+      ? `${qtyTd(line.quant)}${qtyTd(line.bonus)}${qtyTd(line.tester)}`
       : `<td class="col-amt inv-editable-qty">
                   <div class="inv-table-stepper">
                     <button type="button" class="inv-step-btn inv-step-btn-xs" data-invoice-action data-product-id="${line.productId}" data-field="quant" data-delta="-1">−</button>
@@ -677,6 +687,13 @@ function renderInvoiceLinesBlock(lines, meta = {}) {
                     <button type="button" class="inv-step-btn inv-step-btn-xs" data-invoice-action data-product-id="${line.productId}" data-field="bonus" data-delta="-1">−</button>
                     <span dir="ltr">${line.bonus || 0}</span>
                     <button type="button" class="inv-step-btn inv-step-btn-xs" data-invoice-action data-product-id="${line.productId}" data-field="bonus" data-delta="1">+</button>
+                  </div>
+                </td>
+                <td class="col-amt inv-editable-qty">
+                  <div class="inv-table-stepper inv-table-stepper-tester">
+                    <button type="button" class="inv-step-btn inv-step-btn-xs" data-invoice-action data-product-id="${line.productId}" data-field="tester" data-delta="-1">−</button>
+                    <span dir="ltr">${line.tester || 0}</span>
+                    <button type="button" class="inv-step-btn inv-step-btn-xs" data-invoice-action data-product-id="${line.productId}" data-field="tester" data-delta="1">+</button>
                   </div>
                 </td>`;
     return `
@@ -692,11 +709,11 @@ function renderInvoiceLinesBlock(lines, meta = {}) {
         </tbody>
         <tfoot>
           <tr class="row-sum">
-            <td colspan="6" class="total-label">إجمالي الفاتورة</td>
+            <td colspan="7" class="total-label">إجمالي الفاتورة</td>
             <td class="num" dir="ltr">${fmtInvInt(total)}</td>
           </tr>
           <tr class="row-total">
-            <td colspan="6" class="total-label">الصافي للدفع</td>
+            <td colspan="7" class="total-label">الصافي للدفع</td>
             <td class="num net" dir="ltr">${fmtInvInt(total)}</td>
           </tr>
         </tfoot>
