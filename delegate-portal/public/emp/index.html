@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260714pwa">
+  <link rel="stylesheet" href="styles.css?v=20260715v3">
 </head>
 <body>
   <div id="offlineBanner" class="offline-banner hidden" role="status">لا يوجد اتصال بالإنترنت</div>
@@ -72,16 +72,53 @@
     <main class="app-main">
       <section class="screen active" id="screen-list">
         <div class="pull-hint hidden" id="pullHint" aria-hidden="true">اسحب للتحديث</div>
+        <div class="search-wrap">
+          <input type="search" id="orderSearch" class="search-input" placeholder="بحث برقم الطلب، الزبون، الفرع…" autocomplete="off">
+        </div>
         <div class="filters" id="orderSourceFilters" role="tablist" aria-label="مصدر الطلب"></div>
         <div class="filters" id="orderFilters" role="tablist" aria-label="تصفية الحالة"></div>
         <p class="list-meta" id="ordersMeta">—</p>
         <div class="order-list" id="ordersList"></div>
       </section>
 
+      <section class="screen" id="screen-stats">
+        <div class="stats-hero">
+          <h2>الإحصائيات</h2>
+          <p>ملخص أداء التجهيز</p>
+        </div>
+        <div class="stats-grid" id="statsGrid"></div>
+        <div class="stats-chart" id="statsChart"></div>
+      </section>
+
+      <section class="screen" id="screen-profile">
+        <div class="profile-hero">
+          <div class="profile-avatar" id="profileAvatar">م</div>
+          <h2 id="profileName">موظف التجهيز</h2>
+          <p id="profileUser">—</p>
+        </div>
+        <div class="profile-card">
+          <p><span>الخادم</span><b id="profileServer">—</b></p>
+          <p><span>الإصدار</span><b>3.0 ويب</b></p>
+        </div>
+        <button type="button" class="btn danger full" id="btnLogoutProfile">تسجيل الخروج</button>
+      </section>
+
       <section class="screen" id="screen-detail">
         <div id="orderDetail"></div>
       </section>
     </main>
+
+    <nav class="bottom-nav hidden" id="bottomNav" aria-label="التنقل الرئيسي">
+      <button type="button" class="bottom-nav-item active" data-tab="list">
+        <span class="bn-icon">📥</span><span>الطلبات</span><em class="bn-badge hidden" id="pendingBadge">0</em>
+      </button>
+      <button type="button" class="bottom-nav-item" data-tab="stats">
+        <span class="bn-icon">📊</span><span>الإحصائيات</span>
+      </button>
+      <button type="button" class="bottom-nav-item" data-tab="profile">
+        <span class="bn-icon">👤</span><span>حسابي</span>
+      </button>
+    </nav>
   </div>
 
   <div class="overlay hidden" id="overlay">
@@ -97,6 +134,6 @@
     <p class="img-lightbox-caption" id="lightboxCaption"></p>
   </div>
 
-  <script src="app.js?v=20260714pwa"></script>
+  <script src="app.js?v=20260715v3"></script>
 </body>
 </html>

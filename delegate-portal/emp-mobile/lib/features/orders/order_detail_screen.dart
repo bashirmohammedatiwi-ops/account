@@ -8,7 +8,9 @@ import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/models.dart';
-import 'orders_screen.dart' show ordersListProvider;
+import '../../widgets/app_widgets.dart';
+import '../../widgets/premium_widgets.dart';
+import 'orders_providers.dart';
 
 final orderDetailProvider = FutureProvider.autoDispose.family<PurchaseOrder, int>((ref, id) async {
   return ref.read(apiClientProvider).getOrder(id);
@@ -29,6 +31,8 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
   Future<void> _reload() async {
     ref.invalidate(orderDetailProvider(widget.orderId));
     ref.invalidate(ordersListProvider);
+    ref.invalidate(orderStatsProvider);
+    ref.invalidate(pendingCountProvider);
   }
 
   Future<void> _setStatus(String status) async {
@@ -36,7 +40,8 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('تغيير الحالة'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('تغيير الحالة', style: TextStyle(fontWeight: FontWeight.w900)),
         content: Text('تغيير حالة الطلب إلى «$label»؟'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
@@ -44,7 +49,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
         ],
       ),
     );
-    if (ok != true) return;
+    if (ok != true || !mounted) return;
     setState(() => _busy = true);
     try {
       await ref.read(apiClientProvider).setOrderStatus(widget.orderId, status);
@@ -67,48 +72,40 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      showDragHandle: true,
+      backgroundColor: themed(context, light: AppColors.surface, dark: AppColors.surfaceDark),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) {
         return Padding(
-          padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.of(ctx).viewInsets.bottom + 24),
+          padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(ctx).viewInsets.bottom + 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(line.matName, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+              Center(
+                child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(999))),
+              ),
               const SizedBox(height: 16),
-              TextField(
-                controller: quantCtrl,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                decoration: const InputDecoration(labelText: 'كمية البيع'),
-              ),
+              Text(line.matName, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+              const SizedBox(height: 18),
+              _QtyField(controller: quantCtrl, label: 'كمية البيع', icon: Icons.shopping_cart_outlined),
               const SizedBox(height: 12),
-              TextField(
-                controller: bonusCtrl,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                decoration: const InputDecoration(labelText: 'كمية الهدية'),
-              ),
+              _QtyField(controller: bonusCtrl, label: 'كمية الهدية', icon: Icons.card_giftcard_outlined, color: AppColors.gift),
               const SizedBox(height: 12),
-              TextField(
-                controller: testerCtrl,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                decoration: const InputDecoration(labelText: 'كمية التيستر'),
-              ),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('حفظ التعديل'),
-              ),
+              _QtyField(controller: testerCtrl, label: 'كمية التيستر', icon: Icons.science_outlined, color: AppColors.tester),
+              const SizedBox(height: 22),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('حفظ التعديل')),
             ],
           ),
         );
       },
     );
 
-    if (saved != true || line.id == null) return;
+    if (saved != true || line.id == null) {
+      quantCtrl.dispose();
+      bonusCtrl.dispose();
+      testerCtrl.dispose();
+      return;
+    }
     setState(() => _busy = true);
     try {
       await ref.read(apiClientProvider).updateLine(
@@ -119,9 +116,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
             tester: num.tryParse(testerCtrl.text) ?? line.tester,
           );
       await _reload();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث البند')));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث البند')));
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
@@ -142,7 +137,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.rejected),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('حذف'),
           ),
@@ -154,9 +149,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
     try {
       await ref.read(apiClientProvider).deleteLine(widget.orderId, line.id!);
       await _reload();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف البند')));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف البند')));
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
@@ -169,15 +162,15 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
+        backgroundColor: themed(context, light: AppColors.surface, dark: AppColors.surfaceDark),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(name, style: const TextStyle(fontWeight: FontWeight.w800)),
-            ),
-            InteractiveViewer(
-              child: CachedNetworkImage(imageUrl: url, fit: BoxFit.contain),
+            Padding(padding: const EdgeInsets.all(16), child: Text(name, style: const TextStyle(fontWeight: FontWeight.w900))),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: InteractiveViewer(child: CachedNetworkImage(imageUrl: url, fit: BoxFit.contain)),
             ),
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إغلاق')),
           ],
@@ -193,97 +186,271 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        appBar: AppBar(
-          leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => context.pop()),
-          title: const Text('تفاصيل الطلب'),
-          actions: [
-            if (_busy) const Padding(padding: EdgeInsets.all(16), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
-            IconButton(onPressed: _busy ? null : _reload, icon: const Icon(Icons.refresh)),
-          ],
-        ),
+        backgroundColor: themed(context, light: AppColors.bg, dark: AppColors.bgDark),
         body: orderAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Center(child: Text(e is ApiException ? e.message : 'خطأ')),
-          data: (order) {
-            final giftLines = order.lines.where((l) => l.bonus > 0).length;
-            final testerLines = order.lines.where((l) => l.tester > 0).length;
-            return ListView(
-              padding: const EdgeInsets.all(12),
+          data: (order) => DefaultTabController(
+            length: 3,
+            child: Column(
               children: [
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(child: Text(order.orderNo, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: statusColor(order.status).withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(statusLabelAr(order.status), style: TextStyle(color: statusColor(order.status), fontWeight: FontWeight.w800)),
-                            ),
-                          ],
+                Expanded(
+                  child: NestedScrollView(
+                    headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                      SliverAppBar(
+                        expandedHeight: 188,
+                        pinned: true,
+                        backgroundColor: AppColors.primaryDeep,
+                        leading: IconButton(
+                          icon: const Icon(Icons.arrow_forward_rounded, color: Colors.white),
+                          onPressed: () => context.pop(),
                         ),
-                        const SizedBox(height: 8),
-                        Text(order.customerName ?? 'بدون زبون', style: const TextStyle(fontWeight: FontWeight.w700)),
-                        Text('${order.agentName ?? '—'}${order.catalogBranchName != null ? ' · ${order.catalogBranchName}' : ''}',
-                            style: const TextStyle(color: AppColors.muted, fontSize: 12)),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 10,
-                          children: [
-                            Chip(label: Text('${order.lines.length} بند')),
-                            Chip(label: Text('${formatMoney(order.totalAmount)} د.ع')),
-                            if (giftLines > 0) Chip(label: Text('$giftLines بند هدايا'), backgroundColor: AppColors.warnSoft),
-                            if (testerLines > 0) Chip(label: Text('$testerLines بند تيستر'), backgroundColor: AppColors.okSoft),
-                          ],
-                        ),
-                        if (order.notes != null && order.notes!.isNotEmpty) ...[
-                          const SizedBox(height: 10),
-                          Text('ملاحظات: ${order.notes}', style: const TextStyle(color: AppColors.muted)),
+                        actions: [
+                          if (_busy)
+                            const Padding(padding: EdgeInsets.all(16), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)))
+                          else
+                            IconButton(onPressed: _reload, icon: const Icon(Icons.refresh_rounded, color: Colors.white)),
                         ],
+                        flexibleSpace: FlexibleSpaceBar(
+                          background: Container(
+                            decoration: const BoxDecoration(gradient: AppColors.headerGradient),
+                            padding: const EdgeInsets.fromLTRB(20, 88, 20, 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Hero(
+                                  tag: 'order-${order.id}',
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: Text(order.orderNo, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900)),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(order.customerName ?? 'بدون زبون', style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontWeight: FontWeight.w700)),
+                                const SizedBox(height: 8),
+                                Row(children: [SourceBadge(isShorja: order.isShorja), const SizedBox(width: 8), StatusBadge(status: order.status)]),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      SliverPersistentHeader(
+                        pinned: true,
+                        delegate: _TabBarDelegate(
+                          TabBar(
+                            labelStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+                            tabs: const [
+                              Tab(text: 'البنود', icon: Icon(Icons.inventory_2_outlined, size: 18)),
+                              Tab(text: 'التفاصيل', icon: Icon(Icons.info_outline_rounded, size: 18)),
+                              Tab(text: 'السجل', icon: Icon(Icons.history_rounded, size: 18)),
+                            ],
+                          ),
+                          themed(context, light: AppColors.surface, dark: AppColors.surfaceDark),
+                        ),
+                      ),
+                    ],
+                    body: TabBarView(
+                      children: [
+                        _LinesTab(order: order, onEdit: _editLine, onDelete: _deleteLine, onImage: _showImage),
+                        _InfoTab(order: order),
+                        ListView(padding: const EdgeInsets.all(16), children: [EventTimeline(events: order.events)]),
                       ],
                     ),
                   ),
                 ),
-                if (order.hasGifts)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: AppColors.warnSoft, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.warn.withValues(alpha: 0.3))),
-                    child: const Text('يحتوي الطلب على هدايا — جهّز الكمية + الهدية', style: TextStyle(color: AppColors.warn, fontWeight: FontWeight.w700)),
-                  ),
-                if (order.hasTesters)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: AppColors.okSoft, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.ok.withValues(alpha: 0.3))),
-                    child: const Text('يحتوي الطلب على تيستر — أضفه مع الكمية للتسليم', style: TextStyle(color: AppColors.ok, fontWeight: FontWeight.w700)),
-                  ),
-                if (order.editable)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text('اضغط على البند لتعديل الكمية أو الحذف', style: TextStyle(color: AppColors.muted.withValues(alpha: 0.9), fontSize: 12, fontWeight: FontWeight.w600)),
-                  ),
-                ...order.lines.map((line) => _LineCard(
-                      line: line,
-                      editable: order.editable,
-                      onTapImage: () => _showImage(line.imageUrl, line.matName),
-                      onEdit: () => _editLine(line),
-                      onDelete: () => _deleteLine(line),
-                    )),
-                const SizedBox(height: 12),
-                _StatusBar(current: order.status, busy: _busy, onSelect: _setStatus),
-                const SizedBox(height: 24),
+                QuickStatusBar(current: order.status, busy: _busy, onSelect: _setStatus),
               ],
-            );
-          },
+            ),
+          ),
         ),
+      ),
+    );
+  }
+}
+
+class _TabBarDelegate extends SliverPersistentHeaderDelegate {
+  _TabBarDelegate(this.tabBar, this.bg);
+
+  final TabBar tabBar;
+  final Color bg;
+
+  @override
+  double get minExtent => 56;
+  @override
+  double get maxExtent => 56;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(color: bg, child: tabBar);
+  }
+
+  @override
+  bool shouldRebuild(covariant _TabBarDelegate oldDelegate) => false;
+}
+
+class _LinesTab extends StatelessWidget {
+  const _LinesTab({required this.order, required this.onEdit, required this.onDelete, required this.onImage});
+
+  final PurchaseOrder order;
+  final void Function(OrderLine) onEdit;
+  final void Function(OrderLine) onDelete;
+  final void Function(String?, String) onImage;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        if (order.hasGifts)
+          Padding(padding: const EdgeInsets.only(bottom: 10), child: _AlertBanner(color: AppColors.gift, soft: AppColors.giftSoft, icon: Icons.card_giftcard_rounded, text: 'يحتوي الطلب على هدايا')),
+        if (order.editable)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text('اضغط على البند لتعديل الكمية أو الحذف', style: TextStyle(color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark), fontSize: 12, fontWeight: FontWeight.w600)),
+          ),
+        ...order.lines.map((line) => _LineCard(
+              line: line,
+              editable: order.editable,
+              onTapImage: () => onImage(line.imageUrl, line.matName),
+              onEdit: () => onEdit(line),
+              onDelete: () => onDelete(line),
+            )),
+      ],
+    );
+  }
+}
+
+class _InfoTab extends StatelessWidget {
+  const _InfoTab({required this.order});
+
+  final PurchaseOrder order;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        if (order.isShorja)
+          _AlertBanner(
+            color: AppColors.shorja,
+            soft: AppColors.shorjaSoft,
+            icon: Icons.storefront_rounded,
+            text: '${order.shorjaBranchName ?? 'فرع الشورجة'}${order.shorjaInvoiceNo != null ? ' · فاتورة ${order.shorjaInvoiceNo}' : ''}',
+          ),
+        if (!order.isShorja)
+          _AlertBanner(
+            color: AppColors.accent,
+            soft: const Color(0xFFEEF2FF),
+            icon: Icons.local_shipping_outlined,
+            text: '${order.agentName ?? '—'}${order.catalogBranchName != null ? ' · ${order.catalogBranchName}' : ''}',
+          ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(child: _MetricTile(label: 'البنود', value: '${order.lines.length}', icon: Icons.inventory_2_outlined)),
+            const SizedBox(width: 10),
+            Expanded(child: _MetricTile(label: 'الإجمالي', value: formatMoney(order.totalAmount), icon: Icons.payments_outlined)),
+            const SizedBox(width: 10),
+            Expanded(child: _MetricTile(label: 'الوقت', value: formatTimeAgo(order.submittedAt), icon: Icons.access_time_rounded)),
+          ],
+        ),
+        if (order.hasTesters)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: _AlertBanner(color: AppColors.tester, soft: AppColors.testerSoft, icon: Icons.science_outlined, text: 'يحتوي الطلب على تيستر'),
+          ),
+        if (order.notes != null && order.notes!.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.notes_rounded, color: AppColors.primary),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(order.notes!, style: const TextStyle(fontWeight: FontWeight.w600, height: 1.5))),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _MetricTile extends StatelessWidget {
+  const _MetricTile({required this.label, required this.value, required this.icon});
+
+  final String label;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Icon(icon, color: AppColors.primary, size: 20),
+            const SizedBox(height: 6),
+            Text(value, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+            Text(label, style: TextStyle(fontSize: 11, color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark), fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AlertBanner extends StatelessWidget {
+  const _AlertBanner({required this.color, required this.soft, required this.icon, required this.text});
+
+  final Color color;
+  final Color soft;
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark(context) ? color.withValues(alpha: 0.15) : soft,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color),
+          const SizedBox(width: 10),
+          Expanded(child: Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w800))),
+        ],
+      ),
+    );
+  }
+}
+
+class _QtyField extends StatelessWidget {
+  const _QtyField({required this.controller, required this.label, required this.icon, this.color});
+
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      keyboardType: TextInputType.number,
+      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: color ?? AppColors.primary),
       ),
     );
   }
@@ -308,29 +475,32 @@ class _LineCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasGift = line.bonus > 0;
     final hasTester = line.tester > 0;
+    Color? tint;
+    if (hasGift) tint = AppColors.giftSoft;
+    if (hasTester) tint = AppColors.testerSoft;
+
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      color: hasGift ? const Color(0xFFFFFBF7) : hasTester ? const Color(0xFFF8FCFF) : null,
+      margin: const EdgeInsets.only(bottom: 10),
+      color: isDark(context) ? null : tint,
       child: InkWell(
         onTap: editable ? onEdit : null,
         borderRadius: BorderRadius.circular(AppColors.radius),
         child: Padding(
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(12),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               GestureDetector(
                 onTap: onTapImage,
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                   child: line.imageUrl != null && line.imageUrl!.isNotEmpty
-                      ? CachedNetworkImage(imageUrl: line.imageUrl!, width: 72, height: 72, fit: BoxFit.cover)
+                      ? CachedNetworkImage(imageUrl: line.imageUrl!, width: 78, height: 78, fit: BoxFit.cover)
                       : Container(
-                          width: 72,
-                          height: 72,
-                          color: AppColors.border,
-                          alignment: Alignment.center,
-                          child: const Icon(Icons.inventory_2_outlined, color: AppColors.muted),
+                          width: 78,
+                          height: 78,
+                          color: themed(context, light: AppColors.border, dark: AppColors.borderDark),
+                          child: Icon(Icons.inventory_2_outlined, color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark)),
                         ),
                 ),
               ),
@@ -339,29 +509,22 @@ class _LineCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    Text(line.matName, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+                    if (line.barcode != null && line.barcode!.isNotEmpty)
+                      Text(line.barcode!, style: TextStyle(color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark), fontSize: 12)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
                       children: [
-                        Expanded(child: Text(line.matName, style: const TextStyle(fontWeight: FontWeight.w800))),
-                        if (hasGift)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(color: AppColors.gift, borderRadius: BorderRadius.circular(6)),
-                            child: Text('+${line.bonus} هدية', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
-                          ),
-                        if (hasTester)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(color: AppColors.ok, borderRadius: BorderRadius.circular(6)),
-                            child: Text('+${line.tester} تيستر', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
-                          ),
+                        _QtyChip(label: 'بيع', value: '${line.quant}', color: AppColors.primary),
+                        _QtyChip(label: 'هدية', value: '${line.bonus}', color: AppColors.gift),
+                        _QtyChip(label: 'تيستر', value: '${line.tester}', color: AppColors.tester),
+                        _QtyChip(label: 'تسليم', value: '${line.deliverQty}', color: AppColors.processing),
                       ],
                     ),
-                    if (line.barcode != null && line.barcode!.isNotEmpty)
-                      Text(line.barcode!, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
-                    const SizedBox(height: 6),
-                    Text('بيع ${line.quant} · هدية ${line.bonus} · تيستر ${line.tester} · للتسليم ${line.deliverQty}',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                    Text('${formatMoney(line.lineTotal)} د.ع', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 8),
+                    Text('${formatMoney(line.lineTotal)} د.ع', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w900)),
                   ],
                 ),
               ),
@@ -384,63 +547,23 @@ class _LineCard extends StatelessWidget {
   }
 }
 
-class _StatusBar extends StatelessWidget {
-  const _StatusBar({required this.current, required this.busy, required this.onSelect});
-
-  final String current;
-  final bool busy;
-  final ValueChanged<String> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('تحديث حالة الطلب', style: TextStyle(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 10),
-            _StatusBtn(label: 'قيد الانتظار', status: 'pending', current: current, busy: busy, onSelect: onSelect),
-            const SizedBox(height: 8),
-            _StatusBtn(label: 'تم التجهيز', status: 'processing', current: current, busy: busy, onSelect: onSelect),
-            const SizedBox(height: 8),
-            _StatusBtn(label: 'مرفوض', status: 'rejected', current: current, busy: busy, onSelect: onSelect, danger: true),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusBtn extends StatelessWidget {
-  const _StatusBtn({
-    required this.label,
-    required this.status,
-    required this.current,
-    required this.busy,
-    required this.onSelect,
-    this.danger = false,
-  });
+class _QtyChip extends StatelessWidget {
+  const _QtyChip({required this.label, required this.value, required this.color});
 
   final String label;
-  final String status;
-  final String current;
-  final bool busy;
-  final ValueChanged<String> onSelect;
-  final bool danger;
+  final String value;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    final active = current == status;
-    return OutlinedButton(
-      onPressed: busy || active ? null : () => onSelect(status),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: danger ? AppColors.danger : AppColors.primary,
-        side: BorderSide(color: active ? AppColors.primary : AppColors.border, width: active ? 2 : 1),
-        padding: const EdgeInsets.symmetric(vertical: 14),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
-      child: Text(active ? '$label (الحالية)' : label, style: const TextStyle(fontWeight: FontWeight.w800)),
+      child: Text('$label $value', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: color)),
     );
   }
 }

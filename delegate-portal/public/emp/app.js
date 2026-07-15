@@ -25,9 +25,12 @@ const SOURCE_FILTERS = [
 const state = {
   employee: null,
   screen: 'list',
+  tab: 'list',
   filter: new URLSearchParams(window.location.search).get('filter') || 'pending',
   sourceFilter: new URLSearchParams(window.location.search).get('source') || '',
+  search: '',
   orders: [],
+  stats: null,
   selectedOrder: null,
   deferredInstall: null,
   pullStartY: 0,
@@ -235,6 +238,8 @@ function showLogin(err = '') {
 function showApp() {
   document.getElementById('loginScreen')?.classList.add('hidden');
   document.getElementById('appShell')?.classList.remove('hidden');
+  document.getElementById('bottomNav')?.classList.remove('hidden');
+  renderProfile();
 }
 
 async function api(path, opts = {}) {
@@ -246,8 +251,11 @@ async function api(path, opts = {}) {
   const res = await fetch(`${API}${path}`, { ...opts, headers });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401) {
-    clearSession();
-    showLogin('انتهت الجلسة — سجّل الدخول مجدداً');
+    // تجاهل 401 من طلب قديم بعد تسجيل دخول جديد
+    if (token && token === getToken()) {
+      clearSession();
+      showLogin('انتهت الجلسة — سجّل الدخول مجدداً');
+    }
     throw new Error(data.error || 'انتهت الجلسة');
   }
   if (!res.ok) throw new Error(data.error || res.statusText);
@@ -256,22 +264,97 @@ async function api(path, opts = {}) {
 
 function goToScreen(name) {
   state.screen = name;
+  if (name !== 'detail') state.tab = name;
   document.querySelectorAll('.screen').forEach((el) => {
     el.classList.toggle('active', el.id === `screen-${name}`);
   });
   const backBtn = document.getElementById('btnBack');
   const title = document.getElementById('screenTitle');
   const kicker = document.getElementById('headerKicker');
+  const bottomNav = document.getElementById('bottomNav');
+  bottomNav?.classList.toggle('hidden', name === 'detail');
+  document.querySelectorAll('.bottom-nav-item').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.tab === state.tab && name !== 'detail');
+  });
   if (name === 'list') {
     backBtn?.classList.add('hidden');
     if (title) title.textContent = 'الطلبات';
     if (kicker) kicker.textContent = state.employee?.name || 'تجهيز الطلبات';
+  } else if (name === 'stats') {
+    backBtn?.classList.add('hidden');
+    if (title) title.textContent = 'الإحصائيات';
+    if (kicker) kicker.textContent = 'ملخص الأداء';
+    void loadStats();
+  } else if (name === 'profile') {
+    backBtn?.classList.add('hidden');
+    if (title) title.textContent = 'حسابي';
+    if (kicker) kicker.textContent = state.employee?.name || 'الموظف';
+    renderProfile();
   } else if (name === 'detail') {
     backBtn?.classList.remove('hidden');
     const o = state.selectedOrder;
     if (title) title.textContent = o?.orderNo ? `طلب ${o.orderNo}` : 'تفاصيل الطلب';
     if (kicker) kicker.textContent = o ? statusLabel(o.status) : 'تفاصيل';
   }
+}
+
+function filterOrders(list) {
+  const q = String(state.search || '').trim().toLowerCase();
+  if (!q) return list;
+  return list.filter((o) => {
+    const hay = [o.orderNo, o.customerName, o.agentName, o.shorjaInvoiceNo, o.shorjaBranchName, o.catalogBranchName]
+      .filter(Boolean).join(' ').toLowerCase();
+    return hay.includes(q);
+  });
+}
+
+function renderProfile() {
+  const name = state.employee?.name || 'موظف التجهيز';
+  const user = state.employee?.username || '—';
+  document.getElementById('profileName').textContent = name;
+  document.getElementById('profileUser').textContent = user;
+  document.getElementById('profileAvatar').textContent = name.trim().charAt(0) || 'م';
+  document.getElementById('profileServer').textContent = window.location.origin;
+}
+
+async function loadStats() {
+  try {
+    const data = await api('/orders/stats');
+    state.stats = data.stats || {};
+    const by = state.stats.byStatus || [];
+    let pending = 0; let processing = 0; let rejected = 0;
+    for (const row of by) {
+      const s = String(row.status || '');
+      const c = Number(row.c || 0);
+      if (['draft', 'submitted', 'under_review', 'pending'].includes(s)) pending += c;
+      else if (['approved', 'processing', 'delivered'].includes(s)) processing += c;
+      else if (['rejected', 'cancelled'].includes(s)) rejected += c;
+    }
+    const today = state.stats.todaySubmitted || 0;
+    document.getElementById('statsGrid').innerHTML = `
+      <div class="stat-tile pending"><b>${pending}</b><span>قيد الانتظار</span></div>
+      <div class="stat-tile processing"><b>${processing}</b><span>تم التجهيز</span></div>
+      <div class="stat-tile rejected"><b>${rejected}</b><span>مرفوض</span></div>
+      <div class="stat-tile today"><b>${today}</b><span>طلبات اليوم</span></div>`;
+    const max = Math.max(pending, processing, rejected, 1);
+    document.getElementById('statsChart').innerHTML = `
+      <div class="bar" style="--h:${Math.round(pending / max * 100)}%"><i>انتظار</i><b>${pending}</b></div>
+      <div class="bar processing" style="--h:${Math.round(processing / max * 100)}%"><i>مجهّز</i><b>${processing}</b></div>
+      <div class="bar rejected" style="--h:${Math.round(rejected / max * 100)}%"><i>مرفوض</i><b>${rejected}</b></div>`;
+  } catch (e) {
+    document.getElementById('statsGrid').innerHTML = `<p class="login-error">${esc(e.message)}</p>`;
+  }
+}
+
+async function updatePendingBadge() {
+  try {
+    const data = await api('/orders/feed?status=pending');
+    const n = Number(data.pendingCount || 0);
+    const badge = document.getElementById('pendingBadge');
+    if (!badge) return;
+    badge.textContent = String(n);
+    badge.classList.toggle('hidden', n <= 0);
+  } catch { /* ignore */ }
 }
 
 function renderFilters() {
@@ -314,14 +397,26 @@ async function loadOrders() {
     const qs = params.toString() ? `?${params.toString()}` : '';
     const data = await api(`/orders${qs}`);
     state.orders = data.orders || [];
-    const count = state.orders.length;
-    const filterLabel = FILTERS.find((f) => f.id === state.filter)?.label || '';
-    const sourceLabel = SOURCE_FILTERS.find((f) => f.id === state.sourceFilter)?.label || '';
-    document.getElementById('ordersMeta').textContent = count
-      ? `${count} طلب${state.filter ? ` · ${filterLabel}` : ''}${state.sourceFilter ? ` · ${sourceLabel}` : ''}`
-      : 'لا توجد طلبات في هذا التصنيف';
+    renderOrdersList();
+    goToScreen('list');
+    void updatePendingBadge();
+  } catch (e) {
+    if (getToken()) alert(e.message);
+  } finally {
+    setOverlay(false);
+  }
+}
 
-    document.getElementById('ordersList').innerHTML = state.orders.map((o) => {
+function renderOrdersList() {
+  const visible = filterOrders(state.orders);
+  const count = visible.length;
+  const filterLabel = FILTERS.find((f) => f.id === state.filter)?.label || '';
+  const sourceLabel = SOURCE_FILTERS.find((f) => f.id === state.sourceFilter)?.label || '';
+  document.getElementById('ordersMeta').textContent = count
+    ? `${count} طلب${state.filter ? ` · ${filterLabel}` : ''}${state.sourceFilter ? ` · ${sourceLabel}` : ''}`
+    : (state.search ? 'لا توجد نتائج للبحث' : 'لا توجد طلبات في هذا التصنيف');
+
+  document.getElementById('ordersList').innerHTML = visible.map((o) => {
       const giftCount = (o.lines || []).reduce((s, l) => s + Number(l.bonus || 0), 0);
       const sourceBadge = o.sourceType === 'shorja'
         ? '<span class="source-pill shorja">شورجة</span>'
@@ -355,12 +450,6 @@ async function loadOrders() {
     document.querySelectorAll('[data-order-id]').forEach((btn) => {
       btn.addEventListener('click', () => openOrder(Number(btn.dataset.orderId)));
     });
-    goToScreen('list');
-  } catch (e) {
-    if (getToken()) alert(e.message);
-  } finally {
-    setOverlay(false);
-  }
 }
 
 function lineTotals(lines = []) {
@@ -633,7 +722,24 @@ document.getElementById('btnRefresh')?.addEventListener('click', () => {
 });
 
 document.getElementById('btnBack')?.addEventListener('click', () => {
-  void loadOrders();
+  goToScreen(state.tab || 'list');
+});
+
+document.getElementById('orderSearch')?.addEventListener('input', (e) => {
+  state.search = e.target.value || '';
+  if (state.orders.length) renderOrdersList();
+});
+
+document.querySelectorAll('.bottom-nav-item').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab || 'list';
+    goToScreen(tab);
+  });
+});
+
+document.getElementById('btnLogoutProfile')?.addEventListener('click', () => {
+  clearSession();
+  showLogin();
 });
 
 document.getElementById('btnLightboxClose')?.addEventListener('click', closeImageLightbox);

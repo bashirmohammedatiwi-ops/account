@@ -40,8 +40,11 @@ class AuthNotifier extends Notifier<AuthState> {
   Future<void> restoreSession() async {
     final epoch = _epoch;
     try {
-      final token = (await _prefs).getString(_tokenKey);
-      final empRaw = (await _prefs).getString(_employeeKey);
+      final prefs = await _prefs;
+      if (epoch != _epoch) return;
+
+      final token = prefs.getString(_tokenKey);
+      final empRaw = prefs.getString(_employeeKey);
       if (epoch != _epoch) return;
 
       Employee? employee;
@@ -50,16 +53,19 @@ class AuthNotifier extends Notifier<AuthState> {
       }
 
       if (token == null || token.isEmpty) {
+        if (epoch != _epoch) return;
         state = const AuthState(loading: false);
         return;
       }
 
       if (employee == null) {
+        if (epoch != _epoch) return;
         state = AuthState(token: token, loading: true);
         await _refresh(epoch, token);
         return;
       }
 
+      if (epoch != _epoch) return;
       state = AuthState(token: token, employee: employee, loading: false);
     } catch (_) {
       if (epoch != _epoch) return;

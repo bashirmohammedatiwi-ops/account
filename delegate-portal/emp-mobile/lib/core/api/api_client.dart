@@ -18,6 +18,7 @@ final dioProvider = Provider<Dio>((ref) {
   dio.interceptors.add(InterceptorsWrapper(
     onRequest: (options, handler) {
       final token = ref.read(authProvider).token;
+      options.extra['authToken'] = token;
       if (token != null && token.isNotEmpty) {
         options.headers['Authorization'] = 'Bearer $token';
       }
@@ -25,7 +26,12 @@ final dioProvider = Provider<Dio>((ref) {
     },
     onError: (error, handler) {
       if (error.response?.statusCode == 401) {
-        ref.read(authProvider.notifier).logout();
+        final reqToken = error.requestOptions.extra['authToken'];
+        final current = ref.read(authProvider).token;
+        // تجاهل 401 من طلبات قديمة (مثلاً بعد تسجيل دخول جديد)
+        if (reqToken != null && reqToken.isNotEmpty && reqToken == current) {
+          ref.read(authProvider.notifier).logout();
+        }
       }
       handler.next(error);
     },
@@ -114,12 +120,18 @@ class ApiClient {
     return PurchaseOrder.fromJson(Map<String, dynamic>.from(data['order'] as Map), serverUrl: serverUrl);
   }
 
-  Future<OrderFeed> orderFeed({int sinceId = 0, String status = 'pending'}) async {
+  Future<OrderFeed> orderFeed({int sinceId = 0, String status = 'pending', String? sourceType}) async {
     final data = await _json('GET', '/orders/feed', query: {
       'sinceId': sinceId,
       'status': status,
+      if (sourceType != null && sourceType.isNotEmpty) 'sourceType': sourceType,
     });
     return OrderFeed.fromJson(data, serverUrl: serverUrl);
+  }
+
+  Future<OrderStats> orderStats() async {
+    final data = await _json('GET', '/orders/stats');
+    return OrderStats.fromJson(Map<String, dynamic>.from(data['stats'] as Map));
   }
 
   Future<void> registerDevice(String token, {String platform = 'android'}) async {

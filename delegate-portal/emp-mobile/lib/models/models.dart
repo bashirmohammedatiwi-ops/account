@@ -82,6 +82,33 @@ class OrderLine {
       };
 }
 
+class OrderEvent {
+  const OrderEvent({
+    required this.id,
+    required this.fromStatus,
+    required this.toStatus,
+    required this.note,
+    required this.actorType,
+    this.createdAt,
+  });
+
+  final int id;
+  final String fromStatus;
+  final String toStatus;
+  final String note;
+  final String actorType;
+  final String? createdAt;
+
+  factory OrderEvent.fromJson(Map<String, dynamic> json) => OrderEvent(
+        id: json['id'] as int? ?? 0,
+        fromStatus: '${json['fromStatus'] ?? ''}',
+        toStatus: '${json['toStatus'] ?? ''}',
+        note: '${json['note'] ?? ''}',
+        actorType: '${json['actorType'] ?? ''}',
+        createdAt: json['createdAt'] as String?,
+      );
+}
+
 class PurchaseOrder {
   const PurchaseOrder({
     required this.id,
@@ -100,7 +127,10 @@ class PurchaseOrder {
     this.totalAmount,
     this.totalQty,
     this.submittedAt,
+    this.createdAt,
+    this.updatedAt,
     this.lines = const [],
+    this.events = const [],
     this.editable = false,
   });
 
@@ -120,7 +150,10 @@ class PurchaseOrder {
   final num? totalAmount;
   final num? totalQty;
   final String? submittedAt;
+  final String? createdAt;
+  final String? updatedAt;
   final List<OrderLine> lines;
+  final List<OrderEvent> events;
   final bool editable;
 
   bool get isShorja => sourceType == 'shorja';
@@ -131,7 +164,7 @@ class PurchaseOrder {
   factory PurchaseOrder.fromJson(Map<String, dynamic> json, {String? serverUrl}) {
     final status = '${json['status'] ?? ''}';
     return PurchaseOrder(
-      id: json['id'] as int,
+      id: (json['id'] as num).toInt(),
       orderNo: '${json['orderNo'] ?? ''}',
       status: status,
       statusLabel: '${json['statusLabel'] ?? status}',
@@ -147,8 +180,13 @@ class PurchaseOrder {
       totalAmount: json['totalAmount'] as num?,
       totalQty: json['totalQty'] as num?,
       submittedAt: json['submittedAt'] as String?,
+      createdAt: json['createdAt'] as String?,
+      updatedAt: json['updatedAt'] as String?,
       lines: (json['lines'] as List? ?? [])
           .map((e) => OrderLine.fromJson(Map<String, dynamic>.from(e as Map), serverUrl: serverUrl))
+          .toList(),
+      events: (json['events'] as List? ?? [])
+          .map((e) => OrderEvent.fromJson(Map<String, dynamic>.from(e as Map)))
           .toList(),
       editable: status == 'pending' || status == 'processing',
     );
@@ -175,4 +213,53 @@ class OrderFeed {
             .map((e) => PurchaseOrder.fromJson(Map<String, dynamic>.from(e as Map), serverUrl: serverUrl))
             .toList(),
       );
+}
+
+class OrderStats {
+  const OrderStats({
+    required this.todaySubmitted,
+    required this.pending,
+    required this.processing,
+    required this.rejected,
+    required this.totalAmount,
+  });
+
+  final int todaySubmitted;
+  final int pending;
+  final int processing;
+  final int rejected;
+  final num totalAmount;
+
+  int get total => pending + processing + rejected;
+
+  factory OrderStats.fromJson(Map<String, dynamic> json) {
+    final byStatus = (json['byStatus'] as List? ?? []);
+    int countFor(List<String> keys) {
+      var n = 0;
+      for (final row in byStatus) {
+        final m = Map<String, dynamic>.from(row as Map);
+        final status = '${m['status'] ?? ''}';
+        if (keys.contains(status)) n += m['c'] as int? ?? 0;
+      }
+      return n;
+    }
+
+    num amountFor(List<String> keys) {
+      num sum = 0;
+      for (final row in byStatus) {
+        final m = Map<String, dynamic>.from(row as Map);
+        final status = '${m['status'] ?? ''}';
+        if (keys.contains(status)) sum += m['amount'] as num? ?? 0;
+      }
+      return sum;
+    }
+
+    return OrderStats(
+      todaySubmitted: json['todaySubmitted'] as int? ?? 0,
+      pending: countFor(['draft', 'submitted', 'under_review', 'pending']),
+      processing: countFor(['approved', 'processing', 'delivered']),
+      rejected: countFor(['rejected', 'cancelled']),
+      totalAmount: amountFor(['submitted', 'under_review', 'pending', 'approved', 'processing', 'delivered']),
+    );
+  }
 }
