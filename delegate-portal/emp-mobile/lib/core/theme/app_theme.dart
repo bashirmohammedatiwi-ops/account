@@ -32,6 +32,8 @@ class AppColors {
   static const pendingSoft = Color(0xFFFFFBEB);
   static const processing = Color(0xFF0284C7);
   static const processingSoft = Color(0xFFE0F2FE);
+  static const confirmed = Color(0xFF059669);
+  static const confirmedSoft = Color(0xFFD1FAE5);
   static const rejected = Color(0xFFDC2626);
   static const rejectedSoft = Color(0xFFFEE2E2);
   static const gift = Color(0xFFEA580C);

@@ -169,6 +169,8 @@ function mapOrder(row, lines = [], events = []) {
     createdAt: row.created_at,
     submittedAt: row.submitted_at,
     updatedAt: row.updated_at,
+    prepConfirmed: Boolean(row.prep_confirmed),
+    prepConfirmedAt: row.prep_confirmed_at || null,
     lines: lines.map(mapLine),
     events: events.map((e) => ({
       id: e.id,
@@ -475,15 +477,42 @@ function setOrderStatus(orderId, newStatus, { actorType = 'admin', actorId = '',
   ) {
     throw new Error(`لا يمكن تغيير الحالة من ${statusLabel(row.status)} إلى ${statusLabel(storeStatus)}`);
   }
+  const keepConfirm = canonicalStatus(storeStatus) === 'processing';
   db.prepare(`
-    UPDATE orders SET status = ?, updated_at = datetime('now') WHERE id = ?
-  `).run(storeStatus, orderId);
+    UPDATE orders SET status = ?, prep_confirmed = ?, prep_confirmed_at = ?, updated_at = datetime('now') WHERE id = ?
+  `).run(
+    storeStatus,
+    keepConfirm ? Number(row.prep_confirmed || 0) : 0,
+    keepConfirm ? row.prep_confirmed_at : null,
+    orderId
+  );
   logEvent(orderId, {
     fromStatus: row.status,
     toStatus: storeStatus,
     actorType,
     actorId,
     note
+  });
+  return loadOrder(orderId);
+}
+
+function setPrepConfirmed(orderId, confirmed, { actorType = 'employee', actorId = '', note = '' } = {}) {
+  const row = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+  if (!row) return null;
+  if (canonicalStatus(row.status) !== 'processing') {
+    throw new Error('يمكن تأكيد التجهيز فقط للطلبات في حالة «تم التجهيز»');
+  }
+  const flag = confirmed ? 1 : 0;
+  const at = confirmed ? new Date().toISOString().slice(0, 19).replace('T', ' ') : null;
+  db.prepare(`
+    UPDATE orders SET prep_confirmed = ?, prep_confirmed_at = ?, updated_at = datetime('now') WHERE id = ?
+  `).run(flag, at, orderId);
+  logEvent(orderId, {
+    fromStatus: row.status,
+    toStatus: row.status,
+    actorType,
+    actorId,
+    note: note || (confirmed ? 'تأكيد اكتمال التجهيز ✓' : 'إلغاء تأكيد التجهيز')
   });
   return loadOrder(orderId);
 }
@@ -590,6 +619,7 @@ module.exports = {
   updateOrder,
   submitOrder,
   setOrderStatus,
+  setPrepConfirmed,
   updateOrderLineByEmployee,
   deleteOrderLineByEmployee,
   orderFeed,

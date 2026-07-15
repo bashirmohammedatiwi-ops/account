@@ -64,6 +64,38 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
     }
   }
 
+  Future<void> _togglePrepConfirm(PurchaseOrder order) async {
+    final next = !order.prepConfirmed;
+    if (!next) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('إلغاء التأكيد'),
+          content: const Text('إلغاء علامة تأكيد التجهيز عن هذا الطلب؟'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('لا')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('نعم')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    setState(() => _busy = true);
+    try {
+      await ref.read(apiClientProvider).setPrepConfirmed(widget.orderId, confirmed: next);
+      await _reload();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(next ? 'تم تأكيد التجهيز ✓' : 'تم إلغاء التأكيد')),
+        );
+      }
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _editLine(OrderLine line) async {
     final quantCtrl = TextEditingController(text: line.quant.toString());
     final bonusCtrl = TextEditingController(text: line.bonus.toString());
@@ -229,7 +261,29 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
                                 const SizedBox(height: 6),
                                 Text(order.customerName ?? 'بدون زبون', style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontWeight: FontWeight.w700)),
                                 const SizedBox(height: 8),
-                                Row(children: [SourceBadge(isShorja: order.isShorja), const SizedBox(width: 8), StatusBadge(status: order.status)]),
+                                Row(children: [
+                                  SourceBadge(isShorja: order.isShorja),
+                                  const SizedBox(width: 8),
+                                  StatusBadge(status: order.status),
+                                  if (order.prepConfirmed && order.status == 'processing') ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.confirmed,
+                                        borderRadius: BorderRadius.circular(999),
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.check_rounded, color: Colors.white, size: 13),
+                                          SizedBox(width: 4),
+                                          Text('مؤكد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 11)),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ]),
                               ],
                             ),
                           ),
@@ -259,6 +313,12 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
                     ),
                   ),
                 ),
+                if (order.status == 'processing')
+                  PrepConfirmBar(
+                    confirmed: order.prepConfirmed,
+                    busy: _busy,
+                    onToggle: () => _togglePrepConfirm(order),
+                  ),
                 QuickStatusBar(current: order.status, busy: _busy, onSelect: _setStatus),
               ],
             ),
@@ -309,12 +369,13 @@ class _LinesTab extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 10),
             child: Text('اضغط على البند لتعديل الكمية أو الحذف', style: TextStyle(color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark), fontSize: 12, fontWeight: FontWeight.w600)),
           ),
-        ...order.lines.map((line) => _LineCard(
-              line: line,
+        ...order.lines.asMap().entries.map((entry) => _LineCard(
+              lineNo: entry.key + 1,
+              line: entry.value,
               editable: order.editable,
-              onTapImage: () => onImage(line.imageUrl, line.matName),
-              onEdit: () => onEdit(line),
-              onDelete: () => onDelete(line),
+              onTapImage: () => onImage(entry.value.imageUrl, entry.value.matName),
+              onEdit: () => onEdit(entry.value),
+              onDelete: () => onDelete(entry.value),
             )),
       ],
     );
@@ -458,6 +519,7 @@ class _QtyField extends StatelessWidget {
 
 class _LineCard extends StatelessWidget {
   const _LineCard({
+    required this.lineNo,
     required this.line,
     required this.editable,
     required this.onTapImage,
@@ -465,6 +527,7 @@ class _LineCard extends StatelessWidget {
     required this.onDelete,
   });
 
+  final int lineNo;
   final OrderLine line;
   final bool editable;
   final VoidCallback onTapImage;
@@ -490,18 +553,25 @@ class _LineCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _LineNumberBadge(number: lineNo),
+              const SizedBox(width: 10),
               GestureDetector(
                 onTap: onTapImage,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: line.imageUrl != null && line.imageUrl!.isNotEmpty
-                      ? CachedNetworkImage(imageUrl: line.imageUrl!, width: 78, height: 78, fit: BoxFit.cover)
-                      : Container(
-                          width: 78,
-                          height: 78,
-                          color: themed(context, light: AppColors.border, dark: AppColors.borderDark),
-                          child: Icon(Icons.inventory_2_outlined, color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark)),
-                        ),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: line.imageUrl != null && line.imageUrl!.isNotEmpty
+                          ? CachedNetworkImage(imageUrl: line.imageUrl!, width: 78, height: 78, fit: BoxFit.cover)
+                          : Container(
+                              width: 78,
+                              height: 78,
+                              color: themed(context, light: AppColors.border, dark: AppColors.borderDark),
+                              child: Icon(Icons.inventory_2_outlined, color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark)),
+                            ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(width: 12),
@@ -509,7 +579,20 @@ class _LineCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(line.matName, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text('بند $lineNo', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w900, fontSize: 11)),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(line.matName, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15))),
+                      ],
+                    ),
                     if (line.barcode != null && line.barcode!.isNotEmpty)
                       Text(line.barcode!, style: TextStyle(color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark), fontSize: 12)),
                     const SizedBox(height: 8),
@@ -541,6 +624,31 @@ class _LineCard extends StatelessWidget {
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LineNumberBadge extends StatelessWidget {
+  const _LineNumberBadge({required this.number});
+
+  final int number;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        gradient: AppColors.cardGradient,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.25), blurRadius: 8, offset: const Offset(0, 2))],
+      ),
+      child: Center(
+        child: Text(
+          '$number',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15),
         ),
       ),
     );

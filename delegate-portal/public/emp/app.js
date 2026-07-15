@@ -10,10 +10,16 @@ const STATUS_META = {
 };
 
 const FILTERS = [
+  { id: 'pending', label: 'انتظار' },
+  { id: 'processing', label: 'مجهّز' },
+  { id: 'rejected', label: 'مرفوض' },
+  { id: '', label: 'الكل' }
+];
+
+const PREP_FILTERS = [
   { id: '', label: 'الكل' },
-  { id: 'pending', label: 'قيد الانتظار' },
-  { id: 'processing', label: 'تم التجهيز' },
-  { id: 'rejected', label: 'مرفوض' }
+  { id: 'confirmed', label: 'مؤكد ✓' },
+  { id: 'pending_confirm', label: 'بانتظار التأكيد' }
 ];
 
 const SOURCE_FILTERS = [
@@ -28,6 +34,7 @@ const state = {
   tab: 'list',
   filter: new URLSearchParams(window.location.search).get('filter') || 'pending',
   sourceFilter: new URLSearchParams(window.location.search).get('source') || '',
+  prepFilter: '',
   search: '',
   orders: [],
   stats: null,
@@ -189,12 +196,14 @@ function closeImageLightbox() {
 function lineThumbHtml(line, idx) {
   const src = productImageSrc(line.imageUrl);
   const name = esc(line.matName || 'منتج');
+  const no = idx + 1;
   if (src) {
     return `<button type="button" class="line-thumb" data-img="${esc(src)}" data-caption="${name}" aria-label="تكبير صورة ${name}">
+      <span class="line-no-badge">${no}</span>
       <img src="${esc(src)}" alt="" loading="lazy">
     </button>`;
   }
-  return `<div class="line-thumb line-thumb-empty" aria-hidden="true"><span>${idx + 1}</span></div>`;
+  return `<div class="line-thumb line-thumb-empty" aria-hidden="true"><span class="line-no-badge">${no}</span></div>`;
 }
 
 function statusLabel(status) {
@@ -299,9 +308,21 @@ function goToScreen(name) {
 }
 
 function filterOrders(list) {
+  let rows = list;
+  if (state.filter === 'processing' && state.prepFilter === 'confirmed') {
+    rows = rows.filter((o) => o.prepConfirmed);
+  } else if (state.filter === 'processing' && state.prepFilter === 'pending_confirm') {
+    rows = rows.filter((o) => !o.prepConfirmed);
+  }
+  if (state.filter === 'processing') {
+    rows = [...rows].sort((a, b) => {
+      if (!!a.prepConfirmed === !!b.prepConfirmed) return Number(b.id) - Number(a.id);
+      return a.prepConfirmed ? -1 : 1;
+    });
+  }
   const q = String(state.search || '').trim().toLowerCase();
-  if (!q) return list;
-  return list.filter((o) => {
+  if (!q) return rows;
+  return rows.filter((o) => {
     const hay = [o.orderNo, o.customerName, o.agentName, o.shorjaInvoiceNo, o.shorjaBranchName, o.catalogBranchName]
       .filter(Boolean).join(' ').toLowerCase();
     return hay.includes(q);
@@ -361,16 +382,39 @@ function renderFilters() {
   const el = document.getElementById('orderFilters');
   if (!el) return;
   el.innerHTML = FILTERS.map((f) => `
-    <button type="button" class="filter-chip${state.filter === f.id ? ' active' : ''}"
+    <button type="button" class="filter-chip status-chip${state.filter === f.id ? ' active' : ''}"
       data-filter="${esc(f.id)}" role="tab" aria-selected="${state.filter === f.id}">
       ${esc(f.label)}
     </button>`).join('');
   el.querySelectorAll('[data-filter]').forEach((btn) => {
     btn.addEventListener('click', () => {
       state.filter = btn.dataset.filter || '';
+      if (state.filter !== 'processing') state.prepFilter = '';
+      renderFilters();
       void loadOrders();
     });
   });
+
+  const prepEl = document.getElementById('orderPrepFilters');
+  if (prepEl) {
+    if (state.filter === 'processing') {
+      prepEl.classList.remove('hidden');
+      prepEl.innerHTML = PREP_FILTERS.map((f) => `
+        <button type="button" class="filter-chip prep-chip${state.prepFilter === f.id ? ' active' : ''}"
+          data-prep="${esc(f.id)}" role="tab" aria-selected="${state.prepFilter === f.id}">
+          ${esc(f.label)}
+        </button>`).join('');
+      prepEl.querySelectorAll('[data-prep]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.prepFilter = btn.dataset.prep || '';
+          renderOrdersList();
+        });
+      });
+    } else {
+      prepEl.classList.add('hidden');
+      prepEl.innerHTML = '';
+    }
+  }
 
   const srcEl = document.getElementById('orderSourceFilters');
   if (!srcEl) return;
@@ -385,6 +429,23 @@ function renderFilters() {
       void loadOrders();
     });
   });
+}
+
+async function togglePrepConfirm(orderId, confirmed) {
+  if (!confirmed && !confirm('إلغاء علامة تأكيد التجهيز عن هذا الطلب؟')) return;
+  setOverlay(true);
+  try {
+    await api(`/orders/${orderId}/prep-confirm`, {
+      method: 'PATCH',
+      body: JSON.stringify({ confirmed })
+    });
+    await loadOrders();
+    if (state.selectedOrder?.id === orderId) await openOrder(orderId);
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    setOverlay(false);
+  }
 }
 
 async function loadOrders() {
@@ -418,14 +479,19 @@ function renderOrdersList() {
 
   document.getElementById('ordersList').innerHTML = visible.map((o) => {
       const giftCount = (o.lines || []).reduce((s, l) => s + Number(l.bonus || 0), 0);
+      const confirmed = o.status === 'processing' && o.prepConfirmed;
       const sourceBadge = o.sourceType === 'shorja'
         ? '<span class="source-pill shorja">شورجة</span>'
         : '<span class="source-pill delegate">مندوب</span>';
       const subline = o.sourceType === 'shorja'
         ? `${esc(o.shorjaBranchName || 'فرع الشورجة')}${o.shorjaInvoiceNo ? ` · فاتورة ${esc(o.shorjaInvoiceNo)}` : ''}`
         : `${esc(o.agentName || '—')}${o.catalogBranchName ? ` · ${esc(o.catalogBranchName)}` : ''}`;
+      const prepBtn = o.status === 'processing'
+        ? `<button type="button" class="prep-confirm-btn${confirmed ? ' confirmed' : ''}" data-prep-toggle="${o.id}" data-prep-state="${confirmed ? '1' : '0'}">${confirmed ? '✓ مؤكد — إلغاء' : '✓ تأكيد التجهيز'}</button>`
+        : '';
       return `
-      <button type="button" class="order-card${giftCount ? ' has-gift' : ''}" data-order-id="${o.id}">
+      <button type="button" class="order-card${giftCount ? ' has-gift' : ''}${confirmed ? ' prep-confirmed' : ''}" data-order-id="${o.id}">
+        ${confirmed ? '<div class="prep-confirmed-bar" aria-hidden="true"></div>' : ''}
         <div class="order-card-head">
           <div>
             <strong class="order-no" dir="ltr">${esc(o.orderNo)}</strong>
@@ -433,6 +499,7 @@ function renderOrdersList() {
             <p class="order-agent">${subline}</p>
           </div>
           <div class="order-card-badges">
+            ${confirmed ? '<span class="confirmed-pill">✓ مؤكد</span>' : ''}
             ${sourceBadge}
             ${giftCount ? `<span class="gift-pill">هدايا ${giftCount}</span>` : ''}
             <span class="badge ${statusBadge(o.status)}">${esc(statusLabel(o.status))}</span>
@@ -443,12 +510,19 @@ function renderOrdersList() {
           <span class="order-stat"><em>${o.lines?.length || 0}</em> بند</span>
           <span class="order-stat${giftCount ? ' gift' : ''}"><em>${giftCount}</em> هدايا</span>
         </div>
+        ${prepBtn}
         <div class="order-card-foot" dir="ltr">${esc(formatWhen(o))}</div>
       </button>`;
     }).join('') || '<div class="empty-state"><p>لا توجد طلبات</p></div>';
 
     document.querySelectorAll('[data-order-id]').forEach((btn) => {
       btn.addEventListener('click', () => openOrder(Number(btn.dataset.orderId)));
+    });
+    document.querySelectorAll('[data-prep-toggle]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        void togglePrepConfirm(Number(btn.dataset.prepToggle), btn.dataset.prepState !== '1');
+      });
     });
 }
 
@@ -480,6 +554,7 @@ function renderLines(lines = [], { editable = false, orderId = 0 } = {}) {
       ${lineThumbHtml(l, idx)}
       <div class="prep-line-main">
         <div class="prep-line-head">
+          <span class="line-no-pill">بند ${idx + 1}</span>
           <strong class="prep-line-name">${esc(l.matName || '—')}</strong>
           ${hasGift ? `<span class="gift-tag">+${gift} هدية</span>` : ''}
           ${hasTester ? `<span class="tester-tag">+${tester} تيستر</span>` : ''}
@@ -606,6 +681,14 @@ async function openOrder(id) {
       ${totals.gifts ? `<p class="gift-hint">⚠ يحتوي الطلب على <b dir="ltr">${totals.gifts}</b> قطعة هدية</p>` : ''}
       ${o.notes ? `<div class="order-notes"><strong>ملاحظات:</strong> ${esc(o.notes)}</div>` : ''}
 
+      ${o.status === 'processing' ? `
+      <div class="prep-confirm-panel${o.prepConfirmed ? ' confirmed' : ''}">
+        <p>${o.prepConfirmed ? '✓ تم تأكيد اكتمال التجهيز' : 'بعد الانتهاء، أكّد التجهيز بوضع علامة ✓'}</p>
+        <button type="button" class="btn ${o.prepConfirmed ? 'ghost' : 'primary'} full" data-detail-prep="${o.id}" data-prep-state="${o.prepConfirmed ? '1' : '0'}">
+          ${o.prepConfirmed ? 'إلغاء التأكيد' : 'تأكيد اكتمال التجهيز ✓'}
+        </button>
+      </div>` : ''}
+
       <h3 class="section-title">المنتجات <span>${lines.length}</span></h3>
       ${orderEditable(o) ? '<p class="edit-hint">يمكنك تعديل الكميات أو حذف منتج من الطلب</p>' : ''}
       ${renderLines(lines, { editable: orderEditable(o), orderId: o.id })}
@@ -626,6 +709,9 @@ async function openOrder(id) {
     bindLineActions(detailRoot);
     detailRoot.querySelectorAll('[data-set-status]').forEach((btn) => {
       btn.addEventListener('click', () => void setOrderStatus(o.id, btn.dataset.setStatus));
+    });
+    detailRoot.querySelectorAll('[data-detail-prep]').forEach((btn) => {
+      btn.addEventListener('click', () => void togglePrepConfirm(Number(btn.dataset.detailPrep), btn.dataset.prepState !== '1'));
     });
     goToScreen('detail');
   } catch (e) {

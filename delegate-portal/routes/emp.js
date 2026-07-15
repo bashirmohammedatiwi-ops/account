@@ -5,6 +5,7 @@ const {
   listOrders,
   loadOrder,
   setOrderStatus,
+  setPrepConfirmed,
   updateOrderLineByEmployee,
   deleteOrderLineByEmployee,
   orderFeed,
@@ -89,6 +90,21 @@ router.patch('/orders/:id/status', authEmployee, (req, res) => {
     }
     const uiStatus = ALLOWED_STATUSES.has(status) ? status : canonicalStatus(status);
     const order = setOrderStatus(Number(req.params.id), uiStatus, {
+      actorType: 'employee',
+      actorId: String(req.employee.username || EMP_USER),
+      note: req.body?.note || ''
+    });
+    if (!order) return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
+    res.json({ ok: true, order });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.patch('/orders/:id/prep-confirm', authEmployee, (req, res) => {
+  try {
+    const confirmed = req.body?.confirmed !== false;
+    const order = setPrepConfirmed(Number(req.params.id), confirmed, {
       actorType: 'employee',
       actorId: String(req.employee.username || EMP_USER),
       note: req.body?.note || ''

@@ -239,6 +239,17 @@ function migrateShorjaOrderFields(db) {
   }
   db.exec('CREATE INDEX IF NOT EXISTS idx_orders_source_type ON orders(source_type)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_orders_shorja_invoice ON orders(shorja_invoice_id)');
+  migratePrepConfirmField(db);
+}
+
+function migratePrepConfirmField(db) {
+  if (!columnExists(db, 'orders', 'prep_confirmed')) {
+    db.exec('ALTER TABLE orders ADD COLUMN prep_confirmed INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!columnExists(db, 'orders', 'prep_confirmed_at')) {
+    db.exec('ALTER TABLE orders ADD COLUMN prep_confirmed_at TEXT');
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_orders_prep_confirmed ON orders(prep_confirmed)');
 }
 
 module.exports = { migrateCommerceSchema, migrateShorjaOrderFields };

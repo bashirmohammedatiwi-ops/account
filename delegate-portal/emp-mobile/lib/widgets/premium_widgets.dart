@@ -199,6 +199,64 @@ class EventTimeline extends StatelessWidget {
   }
 }
 
+class PrepConfirmBar extends StatelessWidget {
+  const PrepConfirmBar({
+    super.key,
+    required this.confirmed,
+    required this.busy,
+    required this.onToggle,
+  });
+
+  final bool confirmed;
+  final bool busy;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      color: themed(context, light: confirmed ? AppColors.confirmedSoft : AppColors.processingSoft, dark: AppColors.surfaceDark),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  confirmed ? Icons.verified_rounded : Icons.fact_check_outlined,
+                  color: confirmed ? AppColors.confirmed : AppColors.processing,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    confirmed ? 'تم تأكيد اكتمال التجهيز' : 'بعد الانتهاء، أكّد التجهيز بوضع علامة ✓',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: confirmed ? AppColors.confirmed : AppColors.processing,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            FilledButton.icon(
+              onPressed: busy ? null : onToggle,
+              icon: Icon(confirmed ? Icons.undo_rounded : Icons.check_circle_rounded),
+              label: Text(confirmed ? 'إلغاء التأكيد' : 'تأكيد اكتمال التجهيز ✓'),
+              style: FilledButton.styleFrom(
+                backgroundColor: confirmed ? AppColors.confirmed : AppColors.processing,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class QuickStatusBar extends StatelessWidget {
   const QuickStatusBar({super.key, required this.current, required this.busy, required this.onSelect});
 

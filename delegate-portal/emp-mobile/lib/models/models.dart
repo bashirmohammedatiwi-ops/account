@@ -129,6 +129,8 @@ class PurchaseOrder {
     this.submittedAt,
     this.createdAt,
     this.updatedAt,
+    this.prepConfirmed = false,
+    this.prepConfirmedAt,
     this.lines = const [],
     this.events = const [],
     this.editable = false,
@@ -152,6 +154,8 @@ class PurchaseOrder {
   final String? submittedAt;
   final String? createdAt;
   final String? updatedAt;
+  final bool prepConfirmed;
+  final String? prepConfirmedAt;
   final List<OrderLine> lines;
   final List<OrderEvent> events;
   final bool editable;
@@ -182,6 +186,8 @@ class PurchaseOrder {
       submittedAt: json['submittedAt'] as String?,
       createdAt: json['createdAt'] as String?,
       updatedAt: json['updatedAt'] as String?,
+      prepConfirmed: json['prepConfirmed'] == true || json['prep_confirmed'] == 1,
+      prepConfirmedAt: json['prepConfirmedAt'] as String? ?? json['prep_confirmed_at'] as String?,
       lines: (json['lines'] as List? ?? [])
           .map((e) => OrderLine.fromJson(Map<String, dynamic>.from(e as Map), serverUrl: serverUrl))
           .toList(),

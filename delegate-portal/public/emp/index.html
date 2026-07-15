@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260715v3">
+  <link rel="stylesheet" href="styles.css?v=20260715v4">
 </head>
 <body>
   <div id="offlineBanner" class="offline-banner hidden" role="status">لا يوجد اتصال بالإنترنت</div>
@@ -72,11 +72,18 @@
     <main class="app-main">
       <section class="screen active" id="screen-list">
         <div class="pull-hint hidden" id="pullHint" aria-hidden="true">اسحب للتحديث</div>
-        <div class="search-wrap">
-          <input type="search" id="orderSearch" class="search-input" placeholder="بحث برقم الطلب، الزبون، الفرع…" autocomplete="off">
+        <div class="list-toolbar">
+          <div class="search-wrap">
+            <input type="search" id="orderSearch" class="search-input" placeholder="بحث برقم الطلب، الزبون، الفرع…" autocomplete="off">
+          </div>
+          <div class="filter-panel">
+            <p class="filter-label">حالة الطلب</p>
+            <div class="filters status-filters" id="orderFilters" role="tablist" aria-label="تصفية الحالة"></div>
+            <div class="filters prep-filters hidden" id="orderPrepFilters" role="tablist" aria-label="تأكيد التجهيز"></div>
+            <p class="filter-label">مصدر الطلب</p>
+            <div class="filters source-filters" id="orderSourceFilters" role="tablist" aria-label="مصدر الطلب"></div>
+          </div>
         </div>
-        <div class="filters" id="orderSourceFilters" role="tablist" aria-label="مصدر الطلب"></div>
-        <div class="filters" id="orderFilters" role="tablist" aria-label="تصفية الحالة"></div>
         <p class="list-meta" id="ordersMeta">—</p>
         <div class="order-list" id="ordersList"></div>
       </section>
@@ -134,6 +141,6 @@
     <p class="img-lightbox-caption" id="lightboxCaption"></p>
   </div>
 
-  <script src="app.js?v=20260715v3"></script>
+  <script src="app.js?v=20260715v4"></script>
 </body>
 </html>

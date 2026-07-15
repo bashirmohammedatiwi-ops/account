@@ -259,6 +259,32 @@ html.standalone .install-banner { display: none !important; }
 .screen { display: none; }
 .screen.active { display: block; }
 
+.list-toolbar {
+  margin-bottom: 12px;
+}
+
+.filter-panel {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+}
+
+.filter-label {
+  margin: 0 0 8px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.prep-filters { margin-bottom: 10px; }
+
+.filter-chip.status-chip.active { background: #0f766e; border-color: #0f766e; }
+.filter-chip.prep-chip.active { background: #059669; border-color: #059669; }
+.filter-chip.source-chip.active { background: #6366f1; border-color: #6366f1; }
+
 .filters {
   display: flex;
   gap: 8px;
@@ -311,6 +337,75 @@ html.standalone .install-banner { display: none !important; }
   cursor: pointer;
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
 }
+
+.order-card.prep-confirmed {
+  position: relative;
+  border: 2px solid #059669;
+  background: #ecfdf5;
+  box-shadow: 0 8px 24px rgba(5, 150, 105, 0.14);
+  overflow: hidden;
+}
+
+.prep-confirmed-bar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #059669, #34d399);
+}
+
+.confirmed-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #059669;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.prep-confirm-btn {
+  width: 100%;
+  margin-top: 10px;
+  border: 1px dashed #0284c7;
+  background: #e0f2fe;
+  color: #0369a1;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.prep-confirm-btn.confirmed {
+  border-color: #059669;
+  background: #d1fae5;
+  color: #047857;
+}
+
+.prep-confirm-panel {
+  margin: 12px 0;
+  padding: 12px;
+  border-radius: 14px;
+  background: #e0f2fe;
+  border: 1px solid #7dd3fc;
+}
+
+.prep-confirm-panel.confirmed {
+  background: #d1fae5;
+  border-color: #6ee7b7;
+}
+
+.prep-confirm-panel p {
+  margin: 0 0 10px;
+  font-weight: 800;
+  color: #0369a1;
+}
+
+.prep-confirm-panel.confirmed p { color: #047857; }
 
 .order-card.has-gift {
   border-color: #fdba74;
@@ -555,6 +650,35 @@ html.standalone .install-banner { display: none !important; }
   background: #f1f5f9;
   cursor: zoom-in;
   position: relative;
+}
+
+.line-no-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #0d9488, #14b8a6);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.35);
+}
+
+.line-no-pill {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: #ccfbf1;
+  color: #0f766e;
+  font-size: 0.72rem;
+  font-weight: 900;
 }
 
 .line-thumb::after {
