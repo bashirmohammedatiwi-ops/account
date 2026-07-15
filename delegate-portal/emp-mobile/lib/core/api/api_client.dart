@@ -76,9 +76,10 @@ class ApiClient {
     return Employee.fromJson(Map<String, dynamic>.from(data['employee'] as Map));
   }
 
-  Future<List<PurchaseOrder>> listOrders({String? status}) async {
+  Future<List<PurchaseOrder>> listOrders({String? status, String? sourceType}) async {
     final data = await _json('GET', '/orders', query: {
       if (status != null && status.isNotEmpty) 'status': status,
+      if (sourceType != null && sourceType.isNotEmpty) 'sourceType': sourceType,
       'limit': 100,
     });
     return (data['orders'] as List)

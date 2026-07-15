@@ -12,6 +12,7 @@ const delegateRoutes = require('./routes/delegate');
 const commerceAdminRoutes = require('./routes/commerce-admin');
 const commerceMobileRoutes = require('./routes/commerce-mobile');
 const empRoutes = require('./routes/emp');
+const integrationShorjaRoutes = require('./routes/integration-shorja');
 const priceAppRoutes = require('./routes/price-app');
 const { UPLOAD_ROOT } = require('./lib/products');
 
@@ -36,6 +37,7 @@ app.use('/api/sync', syncRoutes);
 app.use('/api/mobile', mobileRoutes);
 app.use('/api/mobile', commerceMobileRoutes);
 app.use('/api/emp', empRoutes);
+app.use('/api/integration', integrationShorjaRoutes);
 app.use('/api/delegate', delegateRoutes);
 app.use(priceAppRoutes);
 

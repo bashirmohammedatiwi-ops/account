@@ -10,10 +10,15 @@ import '../../core/theme/app_theme.dart';
 import '../../models/models.dart';
 
 final ordersFilterProvider = StateProvider<String>((ref) => 'pending');
+final ordersSourceFilterProvider = StateProvider<String>((ref) => '');
 
 final ordersListProvider = FutureProvider.autoDispose<List<PurchaseOrder>>((ref) async {
   final filter = ref.watch(ordersFilterProvider);
-  return ref.read(apiClientProvider).listOrders(status: filter.isEmpty ? null : filter);
+  final source = ref.watch(ordersSourceFilterProvider);
+  return ref.read(apiClientProvider).listOrders(
+    status: filter.isEmpty ? null : filter,
+    sourceType: source.isEmpty ? null : source,
+  );
 });
 
 class OrdersScreen extends ConsumerStatefulWidget {
@@ -37,6 +42,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
   @override
   Widget build(BuildContext context) {
     final filter = ref.watch(ordersFilterProvider);
+    final sourceFilter = ref.watch(ordersSourceFilterProvider);
     final ordersAsync = ref.watch(ordersListProvider);
     final employee = ref.watch(authProvider).employee;
 
@@ -67,6 +73,17 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
         ),
         body: Column(
           children: [
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Row(
+                children: [
+                  _SourceFilterChip(label: 'كل المصادر', id: '', selected: sourceFilter.isEmpty),
+                  _SourceFilterChip(label: 'المندوبين', id: 'delegate', selected: sourceFilter == 'delegate'),
+                  _SourceFilterChip(label: 'الشورجة', id: 'shorja', selected: sourceFilter == 'shorja'),
+                ],
+              ),
+            ),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
@@ -144,6 +161,28 @@ class _FilterChip extends ConsumerWidget {
   }
 }
 
+class _SourceFilterChip extends ConsumerWidget {
+  const _SourceFilterChip({required this.label, required this.id, required this.selected});
+
+  final String label;
+  final String id;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: FilterChip(
+        label: Text(label),
+        selected: selected,
+        onSelected: (_) => ref.read(ordersSourceFilterProvider.notifier).state = id,
+        selectedColor: const Color(0xFFDCFCE7),
+        checkmarkColor: const Color(0xFF15803D),
+      ),
+    );
+  }
+}
+
 class _OrderCard extends StatelessWidget {
   const _OrderCard({required this.order});
 
@@ -178,8 +217,17 @@ class _OrderCard extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(order.customerName ?? 'بدون زبون', style: const TextStyle(fontWeight: FontWeight.w700)),
-              Text('${order.agentName ?? '—'}${order.catalogBranchName != null ? ' · ${order.catalogBranchName}' : ''}',
-                  style: const TextStyle(color: AppColors.muted, fontSize: 12, fontWeight: FontWeight.w600)),
+              Text(
+                order.isShorja
+                    ? '${order.shorjaBranchName ?? 'فرع الشورجة'}${order.shorjaInvoiceNo != null && order.shorjaInvoiceNo!.isNotEmpty ? ' · فاتورة ${order.shorjaInvoiceNo}' : ''}'
+                    : '${order.agentName ?? '—'}${order.catalogBranchName != null ? ' · ${order.catalogBranchName}' : ''}',
+                style: const TextStyle(color: AppColors.muted, fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+              if (order.isShorja)
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text('طلب شورجة', style: TextStyle(color: Color(0xFF15803D), fontSize: 11, fontWeight: FontWeight.w800)),
+                ),
               const SizedBox(height: 10),
               Wrap(
                 spacing: 12,

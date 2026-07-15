@@ -16,10 +16,17 @@ const FILTERS = [
   { id: 'rejected', label: 'مرفوض' }
 ];
 
+const SOURCE_FILTERS = [
+  { id: '', label: 'كل المصادر' },
+  { id: 'delegate', label: 'طلبات المندوبين' },
+  { id: 'shorja', label: 'طلبات الشورجة' }
+];
+
 const state = {
   employee: null,
   screen: 'list',
   filter: new URLSearchParams(window.location.search).get('filter') || 'pending',
+  sourceFilter: new URLSearchParams(window.location.search).get('source') || '',
   orders: [],
   selectedOrder: null,
   deferredInstall: null,
@@ -281,32 +288,57 @@ function renderFilters() {
       void loadOrders();
     });
   });
+
+  const srcEl = document.getElementById('orderSourceFilters');
+  if (!srcEl) return;
+  srcEl.innerHTML = SOURCE_FILTERS.map((f) => `
+    <button type="button" class="filter-chip source-chip${state.sourceFilter === f.id ? ' active' : ''}"
+      data-source="${esc(f.id)}" role="tab" aria-selected="${state.sourceFilter === f.id}">
+      ${esc(f.label)}
+    </button>`).join('');
+  srcEl.querySelectorAll('[data-source]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.sourceFilter = btn.dataset.source || '';
+      void loadOrders();
+    });
+  });
 }
 
 async function loadOrders() {
   setOverlay(true);
   try {
     renderFilters();
-    const qs = state.filter ? `?status=${encodeURIComponent(state.filter)}` : '';
+    const params = new URLSearchParams();
+    if (state.filter) params.set('status', state.filter);
+    if (state.sourceFilter) params.set('sourceType', state.sourceFilter);
+    const qs = params.toString() ? `?${params.toString()}` : '';
     const data = await api(`/orders${qs}`);
     state.orders = data.orders || [];
     const count = state.orders.length;
     const filterLabel = FILTERS.find((f) => f.id === state.filter)?.label || '';
+    const sourceLabel = SOURCE_FILTERS.find((f) => f.id === state.sourceFilter)?.label || '';
     document.getElementById('ordersMeta').textContent = count
-      ? `${count} طلب${state.filter ? ` · ${filterLabel}` : ''}`
+      ? `${count} طلب${state.filter ? ` · ${filterLabel}` : ''}${state.sourceFilter ? ` · ${sourceLabel}` : ''}`
       : 'لا توجد طلبات في هذا التصنيف';
 
     document.getElementById('ordersList').innerHTML = state.orders.map((o) => {
       const giftCount = (o.lines || []).reduce((s, l) => s + Number(l.bonus || 0), 0);
+      const sourceBadge = o.sourceType === 'shorja'
+        ? '<span class="source-pill shorja">شورجة</span>'
+        : '<span class="source-pill delegate">مندوب</span>';
+      const subline = o.sourceType === 'shorja'
+        ? `${esc(o.shorjaBranchName || 'فرع الشورجة')}${o.shorjaInvoiceNo ? ` · فاتورة ${esc(o.shorjaInvoiceNo)}` : ''}`
+        : `${esc(o.agentName || '—')}${o.catalogBranchName ? ` · ${esc(o.catalogBranchName)}` : ''}`;
       return `
       <button type="button" class="order-card${giftCount ? ' has-gift' : ''}" data-order-id="${o.id}">
         <div class="order-card-head">
           <div>
             <strong class="order-no" dir="ltr">${esc(o.orderNo)}</strong>
             <p class="order-customer">${esc(o.customerName || 'بدون زبون')}</p>
-            <p class="order-agent">${esc(o.agentName || '—')}${o.catalogBranchName ? ` · ${esc(o.catalogBranchName)}` : ''}</p>
+            <p class="order-agent">${subline}</p>
           </div>
           <div class="order-card-badges">
+            ${sourceBadge}
             ${giftCount ? `<span class="gift-pill">هدايا ${giftCount}</span>` : ''}
             <span class="badge ${statusBadge(o.status)}">${esc(statusLabel(o.status))}</span>
           </div>

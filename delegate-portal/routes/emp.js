@@ -52,15 +52,22 @@ router.get('/orders/feed', authEmployee, (req, res) => {
   const sinceId = Number(req.query.sinceId) || 0;
   const status = String(req.query.status || 'pending').trim();
   const filter = ALLOWED_STATUSES.has(status) ? status : 'pending';
-  res.json({ ok: true, ...orderFeed({ sinceId, status: filter }) });
+  const sourceType = String(req.query.sourceType || '').trim();
+  res.json({ ok: true, ...orderFeed({ sinceId, status: filter, sourceType }) });
 });
 
 router.get('/orders', authEmployee, (req, res) => {
   const status = String(req.query.status || '').trim();
+  const sourceType = String(req.query.sourceType || '').trim();
   const limit = Math.min(Number(req.query.limit) || 100, 200);
   const offset = Number(req.query.offset) || 0;
   const filter = status && ALLOWED_STATUSES.has(status) ? status : undefined;
-  let orders = listOrders({ status: filter, limit, offset });
+  let orders = listOrders({
+    status: filter,
+    sourceType: sourceType || undefined,
+    limit,
+    offset
+  });
   orders = orders.filter((o) => o.rawStatus !== 'draft' || o.submittedAt);
   res.json({ ok: true, orders });
 });

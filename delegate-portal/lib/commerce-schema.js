@@ -153,6 +153,7 @@ function migrateCommerceSchema(db) {
 
   migrateProductExtras(db);
   migrateOrderLineExtras(db);
+  migrateShorjaOrderFields(db);
 
   const branchCount = db.prepare('SELECT COUNT(*) AS c FROM catalog_branches').get().c;
   if (!branchCount) {
@@ -221,4 +222,23 @@ function migrateOrderLineExtras(db) {
   }
 }
 
-module.exports = { migrateCommerceSchema };
+function migrateShorjaOrderFields(db) {
+  const orderCols = [
+    ['source_type', "TEXT NOT NULL DEFAULT 'delegate'"],
+    ['customer_display_name', 'TEXT'],
+    ['shorja_invoice_id', 'INTEGER'],
+    ['shorja_invoice_no', 'TEXT'],
+    ['shorja_branch_name', 'TEXT']
+  ];
+  for (const [col, type] of orderCols) {
+    if (!columnExists(db, 'orders', col)) {
+      try {
+        db.exec(`ALTER TABLE orders ADD COLUMN ${col} ${type}`);
+      } catch { /* exists */ }
+    }
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_orders_source_type ON orders(source_type)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_orders_shorja_invoice ON orders(shorja_invoice_id)');
+}
+
+module.exports = { migrateCommerceSchema, migrateShorjaOrderFields };

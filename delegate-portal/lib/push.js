@@ -90,10 +90,17 @@ async function notifyEmployees({ title, body, data = {} }) {
 
 async function notifyNewOrder(order) {
   if (!order) return;
+  const isShorja = order.sourceType === 'shorja';
   return notifyEmployees({
-    title: 'طلب شراء جديد',
-    body: `${order.orderNo} · ${order.customerName || 'بدون زبون'}`,
-    data: { type: 'new_order', orderId: String(order.id) }
+    title: isShorja ? 'طلب تجهيز شورجة' : 'طلب شراء جديد',
+    body: isShorja
+      ? `${order.orderNo} · ${order.customerName || order.shorjaBranchName || 'فرع الشورجة'}`
+      : `${order.orderNo} · ${order.customerName || 'بدون زبون'}`,
+    data: {
+      type: isShorja ? 'new_shorja_order' : 'new_order',
+      orderId: String(order.id),
+      sourceType: String(order.sourceType || 'delegate')
+    }
   });
 }
 

@@ -1,4 +1,5 @@
 const db = require('./db');
+const bcrypt = require('bcryptjs');
 const { notifyNewOrder } = require('./push');
 
 /** Canonical UI statuses: pending | processing | rejected */
@@ -57,17 +58,33 @@ function statusLabel(s) {
   return STATUS_LABELS[s] || STATUS_LABELS[canonicalStatus(s)] || s;
 }
 
-function nextOrderNo() {
-  const prefix = `PO-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`;
+function nextOrderNo(prefix = 'PO') {
+  const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const head = `${prefix}-${day}`;
   const last = db.prepare(`
     SELECT order_no FROM orders WHERE order_no LIKE ? ORDER BY id DESC LIMIT 1
-  `).get(`${prefix}-%`);
+  `).get(`${head}-%`);
   let seq = 1;
   if (last?.order_no) {
     const part = Number(last.order_no.split('-').pop());
     if (!Number.isNaN(part)) seq = part + 1;
   }
-  return `${prefix}-${String(seq).padStart(4, '0')}`;
+  return `${head}-${String(seq).padStart(4, '0')}`;
+}
+
+function nextShorjaOrderNo() {
+  return nextOrderNo('SO');
+}
+
+function ensureShorjaSystemAgent() {
+  const existing = db.prepare(`SELECT id FROM agents WHERE username = 'shorja-system'`).get();
+  if (existing) return Number(existing.id);
+  const hash = bcrypt.hashSync(`shorja-system-${Date.now()}`, 10);
+  const r = db.prepare(`
+    INSERT INTO agents (name, phone, username, password_hash, active)
+    VALUES ('فرع الشورجة', '', 'shorja-system', ?, 1)
+  `).run(hash);
+  return Number(r.lastInsertRowid);
 }
 
 function lineImageUrl(productId, barcode) {
@@ -105,29 +122,47 @@ function mapLine(row) {
 }
 
 function mapOrder(row, lines = [], events = []) {
+  const sourceType = String(row.source_type || 'delegate');
   const account = row.customer_acc_seq
     ? db.prepare('SELECT seq, num, name1 FROM accounts WHERE seq = ?').get(String(row.customer_acc_seq))
     : null;
-  const agent = db.prepare('SELECT id, name FROM agents WHERE id = ?').get(row.agent_id);
+  const agent = row.agent_id
+    ? db.prepare('SELECT id, name FROM agents WHERE id = ?').get(row.agent_id)
+    : null;
   const branch = row.catalog_branch_id
     ? db.prepare('SELECT id, name FROM catalog_branches WHERE id = ?').get(row.catalog_branch_id)
     : null;
 
   const rawStatus = row.status;
   const uiStatus = canonicalStatus(rawStatus);
+  const customerName = sourceType === 'shorja'
+    ? (row.customer_display_name || row.shorja_branch_name || 'فرع الشورجة')
+    : (account?.name1 || '');
+  const agentName = sourceType === 'shorja'
+    ? 'فرع الشورجة'
+    : (agent?.name || '');
+  const catalogBranchName = sourceType === 'shorja'
+    ? (row.shorja_branch_name || '')
+    : (branch?.name || '');
+
   return {
     id: row.id,
     orderNo: row.order_no,
     status: uiStatus,
     rawStatus,
     statusLabel: statusLabel(rawStatus),
+    sourceType,
+    sourceLabel: sourceType === 'shorja' ? 'طلب شورجة' : 'طلب مندوب',
     agentId: row.agent_id,
-    agentName: agent?.name || '',
+    agentName,
     customerAccSeq: row.customer_acc_seq || '',
-    customerName: account?.name1 || '',
+    customerName,
     customerNum: account?.num || '',
     catalogBranchId: row.catalog_branch_id,
-    catalogBranchName: branch?.name || '',
+    catalogBranchName,
+    shorjaInvoiceId: row.shorja_invoice_id != null ? Number(row.shorja_invoice_id) : null,
+    shorjaInvoiceNo: row.shorja_invoice_no || '',
+    shorjaBranchName: row.shorja_branch_name || '',
     notes: row.notes || '',
     totalQty: Number(row.total_qty || 0),
     totalAmount: Number(row.total_amount || 0),
@@ -231,8 +266,8 @@ function deleteOrderLineByEmployee(orderId, lineId, actorId = '') {
   return loadOrder(orderId);
 }
 
-function orderFeed({ sinceId = 0, status = 'pending' } = {}) {
-  const orders = listOrders({ status, limit: 100, offset: 0 })
+function orderFeed({ sinceId = 0, status = 'pending', sourceType = '' } = {}) {
+  const orders = listOrders({ status, sourceType: sourceType || undefined, limit: 100, offset: 0 })
     .filter((o) => o.rawStatus !== 'draft' || o.submittedAt);
   const latest = orders[0] || null;
   const newOrders = sinceId > 0
@@ -304,6 +339,55 @@ function replaceLines(orderId, lines) {
     );
   }
   recalcOrderTotals(orderId);
+}
+
+function createShorjaOrder(data) {
+  const invoiceId = Number(data.shorjaInvoiceId || 0);
+  if (!invoiceId) throw new Error('shorjaInvoiceId مطلوب');
+  const existing = db.prepare(`
+    SELECT id FROM orders WHERE source_type = 'shorja' AND shorja_invoice_id = ?
+  `).get(invoiceId);
+  if (existing) return loadOrder(Number(existing.id));
+
+  const agentId = ensureShorjaSystemAgent();
+  const orderNo = nextShorjaOrderNo();
+  const customerName = String(data.customerName || '').trim();
+  const branchName = String(data.shorjaBranchName || data.branchName || '').trim();
+  const notes = String(data.notes || '').trim();
+  const noteParts = [
+    customerName ? `عميل: ${customerName}` : '',
+    data.shorjaInvoiceNo ? `فاتورة: ${data.shorjaInvoiceNo}` : '',
+    notes
+  ].filter(Boolean);
+
+  const r = db.prepare(`
+    INSERT INTO orders
+      (order_no, agent_id, customer_acc_seq, catalog_branch_id, status, notes,
+       source_type, customer_display_name, shorja_invoice_id, shorja_invoice_no, shorja_branch_name,
+       submitted_at)
+    VALUES (?, ?, ?, NULL, 'submitted', ?, 'shorja', ?, ?, ?, ?, datetime('now'))
+  `).run(
+    orderNo,
+    agentId,
+    data.customerAccSeq || '',
+    noteParts.join('\n'),
+    customerName,
+    invoiceId,
+    String(data.shorjaInvoiceNo || ''),
+    branchName
+  );
+  const id = Number(r.lastInsertRowid);
+  if (data.lines?.length) replaceLines(id, data.lines);
+  logEvent(id, {
+    fromStatus: '',
+    toStatus: 'submitted',
+    actorType: 'shorja',
+    actorId: branchName || 'branch',
+    note: 'طلب تجهيز من فرع الشورجة'
+  });
+  const order = loadOrder(id);
+  void notifyNewOrder(order).catch(() => {});
+  return order;
 }
 
 function createOrder(agentId, data) {
@@ -404,12 +488,16 @@ function setOrderStatus(orderId, newStatus, { actorType = 'admin', actorId = '',
   return loadOrder(orderId);
 }
 
-function listOrders({ agentId, status, limit = 50, offset = 0 } = {}) {
+function listOrders({ agentId, status, sourceType, limit = 50, offset = 0 } = {}) {
   const where = [];
   const params = [];
   if (agentId) {
     where.push('agent_id = ?');
     params.push(agentId);
+  }
+  if (sourceType) {
+    where.push('source_type = ?');
+    params.push(String(sourceType));
   }
   if (status) {
     const group = STATUS_FILTER_GROUP[status] || STATUS_FILTER_GROUP[canonicalStatus(status)];
@@ -498,6 +586,7 @@ module.exports = {
   statusLabel,
   loadOrder,
   createOrder,
+  createShorjaOrder,
   updateOrder,
   submitOrder,
   setOrderStatus,

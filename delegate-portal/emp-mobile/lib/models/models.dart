@@ -88,10 +88,14 @@ class PurchaseOrder {
     required this.orderNo,
     required this.status,
     required this.statusLabel,
+    this.sourceType = 'delegate',
+    this.sourceLabel,
     this.agentName,
     this.customerName,
     this.customerNum,
     this.catalogBranchName,
+    this.shorjaInvoiceNo,
+    this.shorjaBranchName,
     this.notes,
     this.totalAmount,
     this.totalQty,
@@ -104,16 +108,22 @@ class PurchaseOrder {
   final String orderNo;
   final String status;
   final String statusLabel;
+  final String sourceType;
+  final String? sourceLabel;
   final String? agentName;
   final String? customerName;
   final String? customerNum;
   final String? catalogBranchName;
+  final String? shorjaInvoiceNo;
+  final String? shorjaBranchName;
   final String? notes;
   final num? totalAmount;
   final num? totalQty;
   final String? submittedAt;
   final List<OrderLine> lines;
   final bool editable;
+
+  bool get isShorja => sourceType == 'shorja';
 
   bool get hasGifts => lines.any((l) => l.bonus > 0);
   bool get hasTesters => lines.any((l) => l.tester > 0);
@@ -125,10 +135,14 @@ class PurchaseOrder {
       orderNo: '${json['orderNo'] ?? ''}',
       status: status,
       statusLabel: '${json['statusLabel'] ?? status}',
+      sourceType: '${json['sourceType'] ?? 'delegate'}',
+      sourceLabel: json['sourceLabel'] as String?,
       agentName: json['agentName'] as String?,
       customerName: json['customerName'] as String?,
       customerNum: json['customerNum'] as String?,
       catalogBranchName: json['catalogBranchName'] as String?,
+      shorjaInvoiceNo: json['shorjaInvoiceNo'] as String?,
+      shorjaBranchName: json['shorjaBranchName'] as String?,
       notes: json['notes'] as String?,
       totalAmount: json['totalAmount'] as num?,
       totalQty: json['totalQty'] as num?,
