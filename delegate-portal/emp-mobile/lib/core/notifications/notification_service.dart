@@ -9,13 +9,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/api_client.dart';
 import '../auth/auth_provider.dart';
+import 'background_poll.dart';
 
 const _lastOrderIdKey = 'empLastSeenOrderId';
-
-@pragma('vm:entry-point')
-Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
-}
+const _lastReminderKey = 'empLastReminderAt';
 
 final notificationServiceProvider = Provider<NotificationService>((ref) {
   final service = NotificationService(ref);
@@ -29,6 +26,7 @@ class NotificationService {
   final Ref _ref;
   final _notifications = FlutterLocalNotificationsPlugin();
   Timer? _pollTimer;
+  Timer? _reminderTimer;
   bool _initialized = false;
 
   Future<void> init() async {
@@ -50,27 +48,57 @@ class NotificationService {
   Future<void> start() async {
     await init();
     _pollTimer?.cancel();
+    _reminderTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(seconds: 45), (_) => poll());
+    _reminderTimer = Timer.periodic(const Duration(minutes: 1), (_) => checkReminder());
     await poll(seed: true);
     await _registerFcmIfAvailable();
+    await scheduleBackgroundPolling();
   }
 
   void stop() {
     _pollTimer?.cancel();
+    _reminderTimer?.cancel();
     _pollTimer = null;
+    _reminderTimer = null;
+    unawaited(cancelBackgroundPolling());
   }
 
   void dispose() => stop();
 
+  Future<void> requestPermission() async {
+    await init();
+    await _notifications
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
+    await _registerFcmIfAvailable();
+    await scheduleBackgroundPolling();
+    await poll(seed: true);
+  }
+
+  Future<void> unregisterDeviceToken() async {
+    if (kIsWeb || Firebase.apps.isEmpty) return;
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token != null && token.isNotEmpty) {
+        await _ref.read(apiClientProvider).unregisterDevice(token);
+      }
+    } catch (e) {
+      debugPrint('unregisterDevice: $e');
+    }
+  }
+
   Future<void> _registerFcmIfAvailable() async {
     if (kIsWeb || Firebase.apps.isEmpty) return;
     try {
-      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
       final messaging = FirebaseMessaging.instance;
-      await messaging.requestPermission();
+      await messaging.requestPermission(alert: true, badge: true, sound: true);
       final token = await messaging.getToken();
       if (token != null && token.isNotEmpty && _ref.read(authProvider).isAuthenticated) {
         await _ref.read(apiClientProvider).registerDevice(token);
+        debugPrint('[emp] FCM token registered');
+      } else if (token == null) {
+        debugPrint('[emp] FCM token unavailable — using polling notifications');
       }
       messaging.onTokenRefresh.listen((token) async {
         if (_ref.read(authProvider).isAuthenticated) {
@@ -103,13 +131,34 @@ class NotificationService {
       if (!seed && feed.newOrders.isNotEmpty) {
         for (final order in feed.newOrders) {
           await showLocal(
-            title: 'طلب شراء جديد',
-            body: '${order.orderNo} · ${order.customerName ?? 'بدون زبون'}',
+            title: order.isShorja ? 'طلب تجهيز شورجة' : 'طلب شراء جديد',
+            body: '${order.orderNo} · ${order.customerName ?? order.shorjaBranchName ?? 'بدون زبون'}',
             payload: 'order:${order.id}',
           );
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('poll failed: $e');
+    }
+  }
+
+  Future<void> checkReminder() async {
+    if (!_ref.read(authProvider).isAuthenticated) return;
+    final prefs = await SharedPreferences.getInstance();
+    final last = prefs.getInt(_lastReminderKey) ?? 0;
+    if (DateTime.now().millisecondsSinceEpoch - last < 15 * 60 * 1000) return;
+    try {
+      final feed = await _ref.read(apiClientProvider).orderFeed();
+      if (feed.pendingCount > 0) {
+        await prefs.setInt(_lastReminderKey, DateTime.now().millisecondsSinceEpoch);
+        await showLocal(
+          title: 'تذكير تجهيز',
+          body: '${feed.pendingCount} طلب بانتظار التجهيز',
+        );
+      }
+    } catch (e) {
+      debugPrint('reminder failed: $e');
+    }
   }
 
   Future<void> showLocal({required String title, required String body, String? payload}) async {
@@ -124,6 +173,8 @@ class NotificationService {
           channelDescription: 'إشعارات طلبات الشراء الجديدة',
           importance: Importance.high,
           priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
         ),
         iOS: DarwinNotificationDetails(),
       ),

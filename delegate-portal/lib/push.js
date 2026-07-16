@@ -18,6 +18,7 @@ function registerDevice({ ownerType, ownerId, token, platform, app = 'emp' }) {
     INSERT INTO push_devices (owner_type, owner_id, token, platform, app)
     VALUES (?, ?, ?, ?, ?)
   `).run(ownerType, String(ownerId), t, String(platform || 'android'), app);
+  console.log(`[push] registered device for ${ownerType}/${ownerId} (${platform || 'android'})`);
   return { id: r.lastInsertRowid, updated: false };
 }
 
@@ -30,6 +31,18 @@ function unregisterDevice({ ownerType, ownerId, token }) {
   return { removed: r.changes };
 }
 
+function removeTokens(tokens = []) {
+  const list = [...new Set((tokens || []).filter(Boolean))];
+  if (!list.length) return 0;
+  const stmt = db.prepare('DELETE FROM push_devices WHERE token = ?');
+  let removed = 0;
+  for (const token of list) {
+    removed += stmt.run(token).changes;
+  }
+  if (removed) console.log(`[push] removed ${removed} invalid token(s)`);
+  return removed;
+}
+
 function listEmployeeTokens() {
   return db.prepare(`
     SELECT token FROM push_devices
@@ -40,7 +53,14 @@ function listEmployeeTokens() {
 function sendFcm(tokens, { title, body, data = {} }) {
   const key = process.env.FCM_SERVER_KEY || '';
   const list = [...new Set((tokens || []).filter(Boolean))];
-  if (!key || !list.length) return Promise.resolve({ sent: 0, skipped: true });
+  if (!key) {
+    console.warn('[push] FCM_SERVER_KEY not set — server push disabled (app uses polling)');
+    return Promise.resolve({ sent: 0, skipped: true, reason: 'no_key' });
+  }
+  if (!list.length) {
+    console.warn('[push] No registered device tokens for employees');
+    return Promise.resolve({ sent: 0, skipped: true, reason: 'no_tokens' });
+  }
 
   const payload = JSON.stringify({
     registration_ids: list,
@@ -65,7 +85,23 @@ function sendFcm(tokens, { title, body, data = {} }) {
       res.on('end', () => {
         try {
           const parsed = raw ? JSON.parse(raw) : {};
-          resolve({ sent: parsed.success || 0, failure: parsed.failure || 0, raw: parsed });
+          const dead = [];
+          if (Array.isArray(parsed.results)) {
+            parsed.results.forEach((r, i) => {
+              if (r.error === 'NotRegistered' || r.error === 'InvalidRegistration') {
+                if (list[i]) dead.push(list[i]);
+              }
+            });
+          }
+          if (dead.length) removeTokens(dead);
+          const sent = parsed.success || 0;
+          const failure = parsed.failure || 0;
+          if (failure > 0) {
+            console.warn('[push] FCM partial failure:', { sent, failure });
+          } else if (sent > 0) {
+            console.log(`[push] FCM sent to ${sent} device(s): ${title}`);
+          }
+          resolve({ sent, failure, raw: parsed });
         } catch (err) {
           reject(err);
         }
@@ -79,7 +115,7 @@ function sendFcm(tokens, { title, body, data = {} }) {
 
 async function notifyEmployees({ title, body, data = {} }) {
   const tokens = listEmployeeTokens();
-  if (!tokens.length) return { sent: 0, skipped: true };
+  if (!tokens.length) return { sent: 0, skipped: true, reason: 'no_tokens' };
   try {
     return await sendFcm(tokens, { title, body, data });
   } catch (err) {

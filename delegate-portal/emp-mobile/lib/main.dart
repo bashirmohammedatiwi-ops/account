@@ -1,18 +1,50 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:workmanager/workmanager.dart';
 
+import 'core/notifications/background_poll.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_mode_provider.dart';
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
     await Firebase.initializeApp();
+  } catch (_) {}
+  final n = message.notification;
+  if (n == null) return;
+  final plugin = FlutterLocalNotificationsPlugin();
+  const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+  await plugin.initialize(const InitializationSettings(android: android));
+  await plugin.show(
+    DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    n.title ?? 'طلب جديد',
+    n.body ?? '',
+    const NotificationDetails(
+      android: AndroidNotificationDetails(
+        'emp_orders',
+        'طلبات التجهيز',
+        importance: Importance.high,
+        priority: Priority.high,
+      ),
+    ),
+  );
+}
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Workmanager().initialize(callbackDispatcher, isInDebugMode: kDebugMode);
+  try {
+    await Firebase.initializeApp();
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   } catch (_) {
-    // Firebase optional — polling notifications work without it.
+    // بدون Firebase: الإشعارات عبر polling + workmanager
   }
   runApp(const ProviderScope(child: EdariEmpApp()));
 }

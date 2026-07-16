@@ -66,9 +66,34 @@ class ProfileScreen extends ConsumerWidget {
                     children: [
                       ListTile(
                         contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.notifications_active_outlined, color: AppColors.primary),
+                        title: const Text('إشعارات الطلبات', style: TextStyle(fontWeight: FontWeight.w800)),
+                        subtitle: Text(
+                          'تنبيهات فورية للطلبات الجديدة والتذكير',
+                          style: TextStyle(color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark)),
+                        ),
+                        trailing: FilledButton.tonal(
+                          onPressed: () async {
+                            await ref.read(notificationServiceProvider).requestPermission();
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('تم تفعيل الإشعارات — تأكد من السماح من إعدادات الهاتف')),
+                              );
+                            }
+                          },
+                          child: const Text('تفعيل'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  _ProfileCard(
+                    children: [
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.info_outline_rounded, color: AppColors.primary),
                         title: const Text('إصدار التطبيق', style: TextStyle(fontWeight: FontWeight.w800)),
-                        subtitle: const Text('3.0.0 — تصميم احترافي محدّث'),
+                        subtitle: const Text('3.8.0 — إشعارات محسّنة + خلفية'),
                       ),
                     ],
                   ),
@@ -88,7 +113,9 @@ class ProfileScreen extends ConsumerWidget {
                         ),
                       );
                       if (ok != true) return;
-                      ref.read(notificationServiceProvider).stop();
+                      final notify = ref.read(notificationServiceProvider);
+                      await notify.unregisterDeviceToken();
+                      notify.stop();
                       await ref.read(authProvider.notifier).logout();
                     },
                     icon: const Icon(Icons.logout_rounded),

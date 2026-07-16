@@ -2,6 +2,22 @@ const API = '/api/emp';
 const TOKEN_KEY = 'empToken';
 const EMP_KEY = 'empUser';
 const INSTALL_DISMISS_KEY = 'empInstallDismissed';
+const LAST_ORDER_ID_KEY = 'empLastSeenOrderId';
+const REMINDER_KEY = 'empLastReminderAt';
+const THEME_KEY = 'empTheme';
+
+const STATUS_SEGMENTS = [
+  { id: 'pending', label: 'انتظار', icon: '⏳' },
+  { id: 'processing', label: 'مجهّز', icon: '📦' },
+  { id: 'rejected', label: 'مرفوض', icon: '⛔' },
+  { id: '', label: 'الكل', icon: '📋' }
+];
+
+const SOURCE_TABS = [
+  { id: '', label: 'الكل', icon: '🏷️' },
+  { id: 'shorja', label: 'شورجة', icon: '🏪' },
+  { id: 'delegate', label: 'مندوبين', icon: '🚚' }
+];
 
 const STATUS_META = {
   pending: { label: 'قيد الانتظار', badge: 'pending' },
@@ -34,7 +50,12 @@ const state = {
   selectedOrder: null,
   deferredInstall: null,
   pullStartY: 0,
-  pulling: false
+  pulling: false,
+  detailTab: 'lines',
+  lineEditCtx: null,
+  notifyTimer: null,
+  reminderTimer: null,
+  statusCounts: { pending: 0, processing: 0, rejected: 0, total: 0 }
 };
 
 function isStandaloneApp() {
@@ -151,12 +172,143 @@ function esc(v) {
 function fmtMoney(v) {
   const n = Number(v);
   if (Number.isNaN(n)) return '—';
-  return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  return `${n.toLocaleString('en-US', { maximumFractionDigits: 0 })} د.ع`;
 }
 
 function formatWhen(o) {
   const raw = o.submittedAt || o.updatedAt || o.createdAt || '';
   return String(raw).slice(0, 16).replace('T', ' ');
+}
+
+function formatTimeAgo(iso) {
+  if (!iso) return '—';
+  try {
+    const dt = new Date(String(iso).replace(' ', 'T'));
+    const diff = Date.now() - dt.getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'الآن';
+    if (mins < 60) return `منذ ${mins} د`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `منذ ${hrs} س`;
+    return `منذ ${Math.floor(hrs / 24)} ي`;
+  } catch {
+    return String(iso);
+  }
+}
+
+function toast(msg, ms = 2800) {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.add('hidden'), ms);
+}
+
+function applyTheme(dark) {
+  document.documentElement.classList.toggle('dark', !!dark);
+  const meta = document.getElementById('themeColorMeta');
+  if (meta) meta.content = dark ? '#0b1220' : '#0f766e';
+  localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light');
+}
+
+function initTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  const dark = saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  applyTheme(dark);
+  const toggle = document.getElementById('darkModeToggle');
+  if (toggle) toggle.checked = dark;
+}
+
+async function requestNotifyPermission() {
+  if (!('Notification' in window)) {
+    toast('المتصفح لا يدعم الإشعارات');
+    return false;
+  }
+  if (Notification.permission === 'granted') return true;
+  if (Notification.permission === 'denied') {
+    toast('الإشعارات محظورة من إعدادات المتصفح');
+    return false;
+  }
+  const r = await Notification.requestPermission();
+  return r === 'granted';
+}
+
+function pushNotification(title, body, { tag, onClick } = {}) {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      const n = new Notification(title, {
+        body,
+        icon: './icons/icon-192.png',
+        tag: tag || 'emp',
+        dir: 'rtl',
+        lang: 'ar'
+      });
+      if (onClick) n.onclick = () => { window.focus(); onClick(); n.close(); };
+    } catch { /* ignore */ }
+  }
+}
+
+function stopNotifications() {
+  clearInterval(state.notifyTimer);
+  clearInterval(state.reminderTimer);
+  state.notifyTimer = null;
+  state.reminderTimer = null;
+}
+
+function startNotifications() {
+  stopNotifications();
+  state.notifyTimer = setInterval(() => pollOrderFeed(false), 45000);
+  state.reminderTimer = setInterval(() => void checkReminder(), 60000);
+  void pollOrderFeed(true);
+}
+
+async function pollOrderFeed(seed = false) {
+  if (!getToken()) return;
+  try {
+    const sinceId = seed ? 0 : Number(localStorage.getItem(LAST_ORDER_ID_KEY) || 0);
+    const data = await api(`/orders/feed?sinceId=${sinceId}`);
+    const latestId = data.latest?.id || sinceId;
+    if (latestId > sinceId) localStorage.setItem(LAST_ORDER_ID_KEY, String(latestId));
+    if (!seed && (data.newOrders || []).length) {
+      for (const o of data.newOrders) {
+        pushNotification('طلب شراء جديد', `${o.orderNo} · ${o.customerName || 'بدون زبون'}`, {
+          tag: `order-${o.id}`,
+          onClick: () => void openOrder(o.id)
+        });
+        toast(`طلب جديد: ${o.orderNo}`);
+      }
+      if (state.screen === 'list') void loadOrders();
+    }
+    updatePendingBadge(Number(data.pendingCount || 0));
+  } catch { /* ignore */ }
+}
+
+async function checkReminder() {
+  const last = Number(localStorage.getItem(REMINDER_KEY) || 0);
+  if (Date.now() - last < 15 * 60 * 1000) return;
+  try {
+    const data = await api('/orders/feed?status=pending');
+    const n = Number(data.pendingCount || 0);
+    if (n > 0) {
+      localStorage.setItem(REMINDER_KEY, String(Date.now()));
+      pushNotification('تذكير تجهيز', `${n} طلب بانتظار التجهيز`, { tag: 'reminder' });
+      toast(`تذكير: ${n} طلب بانتظار التجهيز`);
+    }
+  } catch { /* ignore */ }
+}
+
+function parseStatusCounts(stats) {
+  const by = stats?.byStatus || [];
+  let pending = 0; let processing = 0; let rejected = 0;
+  for (const row of by) {
+    const s = String(row.status || '');
+    const c = Number(row.c || 0);
+    if (['draft', 'submitted', 'under_review', 'pending'].includes(s)) pending += c;
+    else if (['approved', 'processing', 'delivered'].includes(s)) processing += c;
+    else if (['rejected', 'cancelled'].includes(s)) rejected += c;
+  }
+  return { pending, processing, rejected, total: pending + processing + rejected };
 }
 
 function productImageSrc(url) {
@@ -270,6 +422,8 @@ function goToScreen(name) {
   document.querySelectorAll('.screen').forEach((el) => {
     el.classList.toggle('active', el.id === `screen-${name}`);
   });
+  const sub = document.getElementById('subHeader');
+  if (sub) sub.classList.toggle('hidden', name === 'list');
   const backBtn = document.getElementById('btnBack');
   const title = document.getElementById('screenTitle');
   const kicker = document.getElementById('headerKicker');
@@ -330,35 +484,58 @@ async function loadStats() {
   try {
     const data = await api('/orders/stats');
     state.stats = data.stats || {};
-    const by = state.stats.byStatus || [];
-    let pending = 0; let processing = 0; let rejected = 0;
-    for (const row of by) {
-      const s = String(row.status || '');
-      const c = Number(row.c || 0);
-      if (['draft', 'submitted', 'under_review', 'pending'].includes(s)) pending += c;
-      else if (['approved', 'processing', 'delivered'].includes(s)) processing += c;
-      else if (['rejected', 'cancelled'].includes(s)) rejected += c;
-    }
+    state.statusCounts = parseStatusCounts(state.stats);
+    const { pending, processing, rejected } = state.statusCounts;
     const today = state.stats.todaySubmitted || 0;
+    const total = state.statusCounts.total || pending + processing + rejected;
     document.getElementById('statsGrid').innerHTML = `
-      <div class="stat-tile pending"><b>${pending}</b><span>قيد الانتظار</span></div>
-      <div class="stat-tile processing"><b>${processing}</b><span>تم التجهيز</span></div>
-      <div class="stat-tile rejected"><b>${rejected}</b><span>مرفوض</span></div>
+      <div class="stat-tile pending clickable" data-go-filter="pending"><b>${pending}</b><span>قيد الانتظار</span></div>
+      <div class="stat-tile processing clickable" data-go-filter="processing"><b>${processing}</b><span>تم التجهيز</span></div>
+      <div class="stat-tile rejected clickable" data-go-filter="rejected"><b>${rejected}</b><span>مرفوض</span></div>
       <div class="stat-tile today"><b>${today}</b><span>طلبات اليوم</span></div>`;
+    document.getElementById('statsGrid').querySelectorAll('[data-go-filter]').forEach((tile) => {
+      tile.addEventListener('click', () => {
+        state.filter = tile.dataset.goFilter || '';
+        goToScreen('list');
+        void loadOrders();
+      });
+    });
+    const overview = document.getElementById('statsOverview');
+    if (overview) {
+      overview.innerHTML = `<h3>نظرة سريعة</h3>
+        <p>إجمالي الطلبات المعروضة: <b>${total}</b></p>
+        <p>طلبات اليوم: <b>${today}</b></p>`;
+    }
     const max = Math.max(pending, processing, rejected, 1);
     document.getElementById('statsChart').innerHTML = `
       <div class="bar" style="--h:${Math.round(pending / max * 100)}%"><i>انتظار</i><b>${pending}</b></div>
       <div class="bar processing" style="--h:${Math.round(processing / max * 100)}%"><i>مجهّز</i><b>${processing}</b></div>
       <div class="bar rejected" style="--h:${Math.round(rejected / max * 100)}%"><i>مرفوض</i><b>${rejected}</b></div>`;
+    renderListHero();
+    renderFilters();
   } catch (e) {
     document.getElementById('statsGrid').innerHTML = `<p class="login-error">${esc(e.message)}</p>`;
   }
 }
 
-async function updatePendingBadge() {
+function renderListHero() {
+  const name = state.employee?.name || 'موظف التجهيز';
+  const today = state.stats?.todaySubmitted ?? '—';
+  const heroName = document.getElementById('heroName');
+  const heroToday = document.getElementById('heroToday');
+  const heroAvatar = document.getElementById('heroAvatar');
+  if (heroName) heroName.textContent = name;
+  if (heroToday) heroToday.textContent = `${today} طلب ورد اليوم`;
+  if (heroAvatar) heroAvatar.textContent = name.trim().charAt(0) || 'م';
+}
+
+async function updatePendingBadge(count) {
   try {
-    const data = await api('/orders/feed?status=pending');
-    const n = Number(data.pendingCount || 0);
+    let n = count;
+    if (n == null) {
+      const data = await api('/orders/feed?status=pending');
+      n = Number(data.pendingCount || 0);
+    }
     const badge = document.getElementById('pendingBadge');
     if (!badge) return;
     badge.textContent = String(n);
@@ -368,38 +545,42 @@ async function updatePendingBadge() {
 
 function renderFilters() {
   const el = document.getElementById('orderFilters');
-  if (!el) return;
-  el.innerHTML = FILTERS.map((f) => `
-    <button type="button" class="filter-chip status-chip${state.filter === f.id ? ' active' : ''}"
-      data-filter="${esc(f.id)}" role="tab" aria-selected="${state.filter === f.id}">
-      ${esc(f.label)}
-    </button>`).join('');
-  el.querySelectorAll('[data-filter]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      state.filter = btn.dataset.filter || '';
-      renderFilters();
-      void loadOrders();
+  if (el) {
+    el.innerHTML = STATUS_SEGMENTS.map((s) => {
+      const count = s.id === '' ? state.statusCounts.total : (state.statusCounts[s.id] || 0);
+      const active = state.filter === s.id ? ' active' : '';
+      return `<button type="button" class="status-seg${active}" data-filter="${esc(s.id)}" role="tab">
+        <span class="seg-ico">${s.icon}</span>
+        <span class="seg-count">${count}</span>
+        <span class="seg-lbl">${esc(s.label)}</span>
+      </button>`;
+    }).join('');
+    el.querySelectorAll('[data-filter]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.filter = btn.dataset.filter ?? '';
+        renderFilters();
+        void loadOrders();
+      });
     });
-  });
-
-  const prepHint = document.getElementById('prepHint');
-  if (prepHint) {
-    prepHint.classList.toggle('hidden', state.filter !== 'processing');
   }
 
+  const prepHint = document.getElementById('prepHint');
+  if (prepHint) prepHint.classList.toggle('hidden', state.filter !== 'processing');
+
   const srcEl = document.getElementById('orderSourceFilters');
-  if (!srcEl) return;
-  srcEl.innerHTML = SOURCE_FILTERS.map((f) => `
-    <button type="button" class="filter-chip source-chip${state.sourceFilter === f.id ? ' active' : ''}"
-      data-source="${esc(f.id)}" role="tab" aria-selected="${state.sourceFilter === f.id}">
-      ${esc(f.label)}
-    </button>`).join('');
-  srcEl.querySelectorAll('[data-source]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      state.sourceFilter = btn.dataset.source || '';
-      void loadOrders();
+  if (srcEl) {
+    srcEl.innerHTML = SOURCE_TABS.map((t) => {
+      const active = state.sourceFilter === t.id ? ' active' : '';
+      return `<button type="button" class="source-tab${active}" data-source="${esc(t.id)}">${t.icon} ${esc(t.label)}</button>`;
+    }).join('');
+    srcEl.querySelectorAll('[data-source]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.sourceFilter = btn.dataset.source ?? '';
+        renderFilters();
+        void loadOrders();
+      });
     });
-  });
+  }
 }
 
 async function togglePrepConfirm(orderId, confirmed) {
@@ -410,30 +591,39 @@ async function togglePrepConfirm(orderId, confirmed) {
       method: 'PATCH',
       body: JSON.stringify({ confirmed })
     });
-    await loadOrders();
+    toast(confirmed ? 'تم تأكيد التجهيز ✓' : 'أُلغي تأكيد التجهيز');
+    await loadOrders({ keepScreen: state.screen === 'detail' });
     if (state.selectedOrder?.id === orderId) await openOrder(orderId);
   } catch (e) {
-    alert(e.message);
+    toast(e.message);
   } finally {
     setOverlay(false);
   }
 }
 
-async function loadOrders() {
+async function loadOrders({ keepScreen = false } = {}) {
   setOverlay(true);
   try {
+    const [statsData, ordersData] = await Promise.all([
+      api('/orders/stats').catch(() => ({ stats: {} })),
+      (async () => {
+        const params = new URLSearchParams();
+        if (state.filter) params.set('status', state.filter);
+        if (state.sourceFilter) params.set('sourceType', state.sourceFilter);
+        const qs = params.toString() ? `?${params.toString()}` : '';
+        return api(`/orders${qs}`);
+      })()
+    ]);
+    state.stats = statsData.stats || {};
+    state.statusCounts = parseStatusCounts(state.stats);
+    state.orders = ordersData.orders || [];
+    renderListHero();
     renderFilters();
-    const params = new URLSearchParams();
-    if (state.filter) params.set('status', state.filter);
-    if (state.sourceFilter) params.set('sourceType', state.sourceFilter);
-    const qs = params.toString() ? `?${params.toString()}` : '';
-    const data = await api(`/orders${qs}`);
-    state.orders = data.orders || [];
     renderOrdersList();
-    goToScreen('list');
+    if (!keepScreen) goToScreen('list');
     void updatePendingBadge();
   } catch (e) {
-    if (getToken()) alert(e.message);
+    if (getToken()) toast(e.message);
   } finally {
     setOverlay(false);
   }
@@ -441,60 +631,74 @@ async function loadOrders() {
 
 function renderOrdersList() {
   const visible = filterOrders(state.orders);
-  const count = visible.length;
-  const filterLabel = FILTERS.find((f) => f.id === state.filter)?.label || '';
-  const sourceLabel = SOURCE_FILTERS.find((f) => f.id === state.sourceFilter)?.label || '';
-  document.getElementById('ordersMeta').textContent = count
-    ? `${count} طلب${state.filter ? ` · ${filterLabel}` : ''}${state.sourceFilter ? ` · ${sourceLabel}` : ''}`
-    : (state.search ? 'لا توجد نتائج للبحث' : 'لا توجد طلبات في هذا التصنيف');
+  const listEl = document.getElementById('ordersList');
+  const emptyEl = document.getElementById('ordersEmpty');
+  if (!listEl) return;
 
-  document.getElementById('ordersList').innerHTML = visible.map((o) => {
-      const giftCount = (o.lines || []).reduce((s, l) => s + Number(l.bonus || 0), 0);
-      const confirmed = o.status === 'processing' && o.prepConfirmed;
-      const sourceBadge = o.sourceType === 'shorja'
-        ? '<span class="source-pill shorja">شورجة</span>'
-        : '<span class="source-pill delegate">مندوب</span>';
-      const subline = o.sourceType === 'shorja'
-        ? `${esc(o.shorjaBranchName || 'فرع الشورجة')}${o.shorjaInvoiceNo ? ` · فاتورة ${esc(o.shorjaInvoiceNo)}` : ''}`
-        : `${esc(o.agentName || '—')}${o.catalogBranchName ? ` · ${esc(o.catalogBranchName)}` : ''}`;
-      const prepBtn = o.status === 'processing'
-        ? `<button type="button" class="prep-confirm-btn${confirmed ? ' confirmed' : ''}" data-prep-toggle="${o.id}" data-prep-state="${confirmed ? '1' : '0'}">${confirmed ? '✓ مؤكد — إلغاء' : '✓ تأكيد التجهيز'}</button>`
-        : '';
-      return `
-      <button type="button" class="order-card${giftCount ? ' has-gift' : ''}${confirmed ? ' prep-confirmed' : ''}" data-order-id="${o.id}">
-        ${confirmed ? '<div class="prep-confirmed-bar" aria-hidden="true"></div>' : ''}
-        <div class="order-card-head">
+  if (!visible.length) {
+    listEl.innerHTML = '';
+    emptyEl?.classList.remove('hidden');
+    return;
+  }
+  emptyEl?.classList.add('hidden');
+
+  listEl.innerHTML = visible.map((o) => {
+    const giftCount = (o.lines || []).reduce((s, l) => s + Number(l.bonus || 0), 0);
+    const confirmed = o.status === 'processing' && o.prepConfirmed;
+    const sourceBadge = o.sourceType === 'shorja'
+      ? '<span class="badge-v3 shorja">شورجة</span>'
+      : '<span class="badge-v3 delegate">مندوب</span>';
+    const subline = o.sourceType === 'shorja'
+      ? `${esc(o.shorjaBranchName || 'فرع الشورجة')}${o.shorjaInvoiceNo ? ` · فاتورة ${esc(o.shorjaInvoiceNo)}` : ''}`
+      : `${esc(o.agentName || '—')}${o.catalogBranchName ? ` · ${esc(o.catalogBranchName)}` : ''}`;
+    const lineCount = o.lines?.length || 0;
+    return `
+    <article class="order-card-v3${confirmed ? ' confirmed' : ''}" data-order-id="${o.id}">
+      ${confirmed ? '<div class="confirmed-strip" aria-hidden="true"></div>' : ''}
+      <button type="button" class="order-card-body" data-open-order="${o.id}">
+        <div class="order-card-top">
           <div>
             <strong class="order-no" dir="ltr">${esc(o.orderNo)}</strong>
-            <p class="order-customer">${esc(o.customerName || 'بدون زبون')}</p>
-            <p class="order-agent">${subline}</p>
+            <div class="order-customer-row">
+              <span>${esc(o.customerName || 'بدون زبون')}</span>
+              ${confirmed ? '<span class="badge-v3 processing">✓ مؤكد</span>' : ''}
+            </div>
+            <p class="order-subline">${subline}</p>
           </div>
-          <div class="order-card-badges">
-            ${confirmed ? '<span class="confirmed-pill">✓ مؤكد</span>' : ''}
+          <div class="order-badges">
             ${sourceBadge}
-            ${giftCount ? `<span class="gift-pill">هدايا ${giftCount}</span>` : ''}
-            <span class="badge ${statusBadge(o.status)}">${esc(statusLabel(o.status))}</span>
+            <span class="badge-v3 ${statusBadge(o.status)}">${esc(statusLabel(o.status))}</span>
           </div>
         </div>
-        <div class="order-stats">
-          <span class="order-stat"><em>${fmtMoney(o.totalAmount)}</em> المبلغ</span>
-          <span class="order-stat"><em>${o.lines?.length || 0}</em> بند</span>
-          <span class="order-stat${giftCount ? ' gift' : ''}"><em>${giftCount}</em> هدايا</span>
+        <div class="order-mini-stats">
+          <span class="mini-stat"><em dir="ltr">${fmtMoney(o.totalAmount)}</em></span>
+          <span class="mini-stat"><em>${lineCount}</em> بند</span>
+          ${giftCount ? `<span class="mini-stat gift"><em>${giftCount}</em> هدية</span>` : ''}
+          <span class="time-ago">${formatTimeAgo(o.submittedAt || o.updatedAt)}</span>
         </div>
-        ${prepBtn}
-        <div class="order-card-foot" dir="ltr">${esc(formatWhen(o))}</div>
-      </button>`;
-    }).join('') || '<div class="empty-state"><p>لا توجد طلبات</p></div>';
+      </button>
+      ${o.status === 'processing' ? `
+      <div class="prep-check-row${confirmed ? ' confirmed' : ''}" data-prep-row="${o.id}">
+        <button type="button" class="prep-check-circle" data-prep-toggle="${o.id}" data-prep-state="${confirmed ? '1' : '0'}" aria-label="تأكيد التجهيز">
+          ${confirmed ? '✓' : ''}
+        </button>
+        <div class="prep-check-text">
+          ${confirmed ? 'تم تأكيد التجهيز' : 'تأكيد اكتمال التجهيز'}
+          <div class="prep-check-sub">${confirmed ? 'اضغط لإلغاء التأكيد' : 'اضغط عند الانتهاء من التجهيز'}</div>
+        </div>
+      </div>` : ''}
+    </article>`;
+  }).join('');
 
-    document.querySelectorAll('[data-order-id]').forEach((btn) => {
-      btn.addEventListener('click', () => openOrder(Number(btn.dataset.orderId)));
+  listEl.querySelectorAll('[data-open-order]').forEach((btn) => {
+    btn.addEventListener('click', () => void openOrder(Number(btn.dataset.openOrder)));
+  });
+  listEl.querySelectorAll('[data-prep-toggle]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      void togglePrepConfirm(Number(btn.dataset.prepToggle), btn.dataset.prepState !== '1');
     });
-    document.querySelectorAll('[data-prep-toggle]').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        void togglePrepConfirm(Number(btn.dataset.prepToggle), btn.dataset.prepState !== '1');
-      });
-    });
+  });
 }
 
 function lineTotals(lines = []) {
@@ -530,7 +734,7 @@ function renderLines(lines = [], { editable = false, orderId = 0 } = {}) {
           ${hasGift ? `<span class="gift-tag">+${gift} هدية</span>` : ''}
           ${hasTester ? `<span class="tester-tag">+${tester} تيستر</span>` : ''}
         </div>
-        ${l.barcode ? `<span class="prep-line-code" dir="ltr">${esc(l.barcode)}</span>` : ''}
+        ${l.barcode ? `<button type="button" class="prep-line-code tappable" dir="ltr" data-barcode="${esc(l.barcode)}" data-line-name="${name}" data-line-no="${idx + 1}">${esc(l.barcode)}</button>` : ''}
         <div class="prep-line-stats">
           <span><em dir="ltr">${qty}</em> بيع</span>
           <span class="${hasGift ? 'gift-stat' : ''}"><em dir="ltr">${gift}</em> هدية</span>
@@ -571,25 +775,77 @@ function bindLineActions(root) {
   });
 }
 
-async function editLine(orderId, line) {
-  const qty = prompt('كمية البيع:', String(line.quant ?? 0));
-  if (qty === null) return;
-  const bonus = prompt('كمية الهدية:', String(line.bonus ?? 0));
-  if (bonus === null) return;
-  const tester = prompt('كمية التيستر:', String(line.tester ?? 0));
-  if (tester === null) return;
+function openBarcodeModal(line, idx) {
+  const code = String(line.barcode || '').trim();
+  if (!code) return;
+  const dlg = document.getElementById('barcodeModal');
+  const svg = document.getElementById('barcodeSvg');
+  const nameEl = document.getElementById('barcodeProductName');
+  const codeEl = document.getElementById('barcodeCode');
+  const noEl = document.getElementById('barcodeLineNo');
+  if (!dlg || !svg) return;
+  if (nameEl) nameEl.textContent = line.matName || 'منتج';
+  if (codeEl) codeEl.textContent = code;
+  if (noEl) noEl.textContent = `بند ${idx + 1}`;
+  svg.innerHTML = '';
+  try {
+    const format = /^\d{13}$/.test(code) ? 'EAN13' : 'CODE128';
+    window.JsBarcode(svg, code, { format, displayValue: false, margin: 8, height: 70 });
+  } catch {
+    svg.innerHTML = `<text x="10" y="40">${esc(code)}</text>`;
+  }
+  dlg.showModal();
+  dlg.dataset.copyCode = code;
+}
+
+function bindBarcodeActions(root) {
+  root?.querySelectorAll('[data-barcode]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openBarcodeModal({
+        barcode: btn.dataset.barcode,
+        matName: btn.dataset.lineName
+      }, Number(btn.dataset.lineNo) - 1);
+    });
+  });
+}
+
+function openLineEditModal(orderId, line) {
+  state.lineEditCtx = { orderId, lineId: line.id };
+  const dlg = document.getElementById('lineEditModal');
+  document.getElementById('lineEditName').textContent = line.matName || '—';
+  document.getElementById('lineEditQty').value = String(line.quant ?? 0);
+  document.getElementById('lineEditBonus').value = String(line.bonus ?? 0);
+  document.getElementById('lineEditTester').value = String(line.tester ?? 0);
+  dlg?.showModal();
+}
+
+async function submitLineEdit(e) {
+  e?.preventDefault();
+  const ctx = state.lineEditCtx;
+  if (!ctx) return;
+  const quant = Number(document.getElementById('lineEditQty')?.value || 0);
+  const bonus = Number(document.getElementById('lineEditBonus')?.value || 0);
+  const tester = Number(document.getElementById('lineEditTester')?.value || 0);
   setOverlay(true);
   try {
-    await api(`/orders/${orderId}/lines/${line.id}`, {
+    await api(`/orders/${ctx.orderId}/lines/${ctx.lineId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ quant: Number(qty), bonus: Number(bonus), tester: Number(tester) })
+      body: JSON.stringify({ quant, bonus, tester })
     });
-    await openOrder(orderId);
-  } catch (e) {
-    alert(e.message);
+    document.getElementById('lineEditModal')?.close();
+    state.lineEditCtx = null;
+    toast('تم حفظ التعديل');
+    await openOrder(ctx.orderId);
+  } catch (err) {
+    toast(err.message);
   } finally {
     setOverlay(false);
   }
+}
+
+async function editLine(orderId, line) {
+  openLineEditModal(orderId, line);
 }
 
 async function deleteLine(orderId, lineId) {
@@ -597,9 +853,10 @@ async function deleteLine(orderId, lineId) {
   setOverlay(true);
   try {
     await api(`/orders/${orderId}/lines/${lineId}`, { method: 'DELETE' });
+    toast('تم حذف البند');
     await openOrder(orderId);
   } catch (e) {
-    alert(e.message);
+    toast(e.message);
   } finally {
     setOverlay(false);
   }
@@ -614,19 +871,87 @@ function bindLineThumbs(root) {
   });
 }
 
+function renderEventTimeline(events = []) {
+  if (!events.length) return '<p class="empty-state">لا يوجد سجل بعد</p>';
+  const rows = [...events].reverse();
+  return `<div class="event-timeline">${rows.map((ev) => {
+    const label = ev.toStatus ? statusLabel(canonicalStatusFromEvent(ev.toStatus)) : 'حدث';
+    const actor = ev.actorType || '—';
+    return `
+    <div class="event-item">
+      <strong>${esc(label)}</strong>
+      <span>${esc(actor)} · ${formatTimeAgo(ev.createdAt)}</span>
+      ${ev.note ? `<p style="margin:6px 0 0;font-size:0.75rem">${esc(ev.note)}</p>` : ''}
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function canonicalStatusFromEvent(s) {
+  const map = {
+    draft: 'pending', submitted: 'pending', under_review: 'pending', pending: 'pending',
+    approved: 'processing', processing: 'processing', delivered: 'processing',
+    rejected: 'rejected', cancelled: 'rejected'
+  };
+  return map[String(s)] || s;
+}
+
+function renderOrderInfoPanel(o) {
+  const rows = [
+    ['رقم الطلب', o.orderNo],
+    ['الزبون', o.customerName],
+    ['رقم الزبون', o.customerNum],
+    ['المندوب', o.agentName],
+    ['الفرع', o.catalogBranchName || o.shorjaBranchName],
+    ['المصدر', o.sourceType === 'shorja' ? 'شورجة' : 'مندوبين'],
+    ['فاتورة الشورجة', o.shorjaInvoiceNo],
+    ['تاريخ الإرسال', formatWhen(o)],
+    ['الحالة', statusLabel(o.status)],
+    ['المبلغ', fmtMoney(o.totalAmount)]
+  ];
+  return `<div class="profile-card">${rows.filter((r) => r[1]).map(([k, v]) => `
+    <div class="profile-row"><span class="ico">•</span><span>${esc(k)}</span><b>${esc(String(v))}</b></div>`).join('')}
+    ${o.notes ? `<div class="order-notes" style="margin-top:10px"><strong>ملاحظات:</strong> ${esc(o.notes)}</div>` : ''}
+  </div>`;
+}
+
+function renderDetailTabContent(o, lines, totals) {
+  const tab = state.detailTab;
+  if (tab === 'info') return renderOrderInfoPanel(o);
+  if (tab === 'events') return renderEventTimeline(o.events || []);
+  return `
+    ${totals.gifts ? `<p class="gift-hint">⚠ يحتوي الطلب على <b dir="ltr">${totals.gifts}</b> قطعة هدية</p>` : ''}
+    ${orderEditable(o) ? '<p class="edit-hint">يمكنك تعديل الكميات أو حذف منتج من الطلب</p>' : ''}
+    ${renderLines(lines, { editable: orderEditable(o), orderId: o.id })}`;
+}
+
+function bindDetailTabs(root, o, lines, totals) {
+  root?.querySelectorAll('[data-detail-tab]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.detailTab = btn.dataset.detailTab || 'lines';
+      root.querySelectorAll('[data-detail-tab]').forEach((b) => b.classList.toggle('active', b === btn));
+      const panel = root.querySelector('#detailPanel');
+      if (panel) panel.innerHTML = renderDetailTabContent(o, lines, totals);
+      bindLineThumbs(panel);
+      bindLineActions(panel);
+      bindBarcodeActions(panel);
+    });
+  });
+}
+
 async function openOrder(id) {
   setOverlay(true);
   try {
     const data = await api(`/orders/${id}`);
     const o = data.order;
     state.selectedOrder = o;
+    state.detailTab = state.detailTab || 'lines';
     const lines = o.lines || [];
     const totals = lineTotals(lines);
-    const actions = [
-      { id: 'pending', label: 'قيد الانتظار', cls: 'soft' },
-      { id: 'processing', label: 'تم التجهيز', cls: 'primary' },
-      { id: 'rejected', label: 'مرفوض', cls: 'danger' }
-    ];
+    const confirmed = o.status === 'processing' && o.prepConfirmed;
+    const sourceAlert = o.sourceType === 'shorja'
+      ? '<div class="alert-banner shorja">طلب من فرع الشورجة — سيُرحّل للأدمن بعد التجهيز</div>'
+      : '<div class="alert-banner delegate">طلب مندوب — سيصل لتطبيق الأدمن بعد «تم التجهيز»</div>';
+
     document.getElementById('orderDetail').innerHTML = `
       <div class="order-hero">
         <div class="order-hero-top">
@@ -639,45 +964,48 @@ async function openOrder(id) {
         <div class="order-hero-info">
           <span><b>${esc(o.customerName || 'بدون زبون')}</b>${o.customerNum ? ` · ${esc(o.customerNum)}` : ''}</span>
           <span>${esc(o.agentName || '—')}${o.catalogBranchName ? ` · ${esc(o.catalogBranchName)}` : ''}</span>
-          <span dir="ltr">${esc(formatWhen(o))}</span>
+          <span class="time-ago">${formatTimeAgo(o.submittedAt || o.updatedAt)}</span>
         </div>
-        <div class="order-hero-chips">
-          <span>${lines.length} بند</span>
-          <span>${totals.qty} بيع</span>
-          ${totals.gifts ? `<span class="chip-gift">${totals.gifts} هدية</span>` : ''}
-          <span class="chip-amount" dir="ltr">${fmtMoney(o.totalAmount || totals.amount)}</span>
+        <div class="metric-row">
+          <div class="metric-tile"><em>${lines.length}</em><span>بند</span></div>
+          <div class="metric-tile"><em dir="ltr">${totals.qty}</em><span>بيع</span></div>
+          <div class="metric-tile"><em dir="ltr">${fmtMoney(o.totalAmount || totals.amount)}</em><span>المبلغ</span></div>
         </div>
       </div>
 
-      ${totals.gifts ? `<p class="gift-hint">⚠ يحتوي الطلب على <b dir="ltr">${totals.gifts}</b> قطعة هدية</p>` : ''}
-      ${o.notes ? `<div class="order-notes"><strong>ملاحظات:</strong> ${esc(o.notes)}</div>` : ''}
+      ${sourceAlert}
+
+      <div class="quick-status">
+        ${[
+          { id: 'pending', label: 'انتظار' },
+          { id: 'processing', label: 'تم التجهيز' },
+          { id: 'rejected', label: 'مرفوض' }
+        ].map((a) => `
+          <button type="button" class="quick-status-btn${o.status === a.id ? ' current active' : ''}"
+            data-set-status="${a.id}" ${o.status === a.id ? 'disabled' : ''}>${esc(a.label)}</button>`).join('')}
+      </div>
 
       ${o.status === 'processing' ? `
-      <div class="prep-confirm-panel${o.prepConfirmed ? ' confirmed' : ''}">
-        <p>${o.prepConfirmed ? '✓ تم تأكيد اكتمال التجهيز' : 'بعد الانتهاء، أكّد التجهيز بوضع علامة ✓'}</p>
-        <button type="button" class="btn ${o.prepConfirmed ? 'ghost' : 'primary'} full" data-detail-prep="${o.id}" data-prep-state="${o.prepConfirmed ? '1' : '0'}">
-          ${o.prepConfirmed ? 'إلغاء التأكيد' : 'تأكيد اكتمال التجهيز ✓'}
-        </button>
+      <div class="prep-confirm-bar-v3${confirmed ? ' confirmed' : ''}" data-detail-prep="${o.id}" data-prep-state="${confirmed ? '1' : '0'}">
+        <div>
+          <strong>${confirmed ? '✓ تم تأكيد التجهيز' : 'تأكيد اكتمال التجهيز'}</strong>
+          <p style="margin:4px 0 0;font-size:0.72rem;color:var(--muted)">${confirmed ? 'اضغط لإلغاء' : 'بعد الانتهاء من التجهيز'}</p>
+        </div>
+        <span style="font-size:1.4rem">${confirmed ? '✓' : '○'}</span>
       </div>` : ''}
 
-      <h3 class="section-title">المنتجات <span>${lines.length}</span></h3>
-      ${orderEditable(o) ? '<p class="edit-hint">يمكنك تعديل الكميات أو حذف منتج من الطلب</p>' : ''}
-      ${renderLines(lines, { editable: orderEditable(o), orderId: o.id })}
-
-      <div class="status-bar">
-        <p class="status-bar-label">تغيير الحالة</p>
-        <div class="status-actions">
-          ${actions.map((a) => `
-            <button type="button" class="btn ${a.cls}${o.status === a.id ? ' active' : ''}"
-              data-set-status="${a.id}" ${o.status === a.id ? 'disabled' : ''}>
-              ${esc(a.label)}
-            </button>`).join('')}
-        </div>
-      </div>`;
+      <div class="detail-tabs">
+        <button type="button" class="detail-tab${state.detailTab === 'lines' ? ' active' : ''}" data-detail-tab="lines">البنود</button>
+        <button type="button" class="detail-tab${state.detailTab === 'info' ? ' active' : ''}" data-detail-tab="info">التفاصيل</button>
+        <button type="button" class="detail-tab${state.detailTab === 'events' ? ' active' : ''}" data-detail-tab="events">السجل</button>
+      </div>
+      <div id="detailPanel" class="detail-panel active">${renderDetailTabContent(o, lines, totals)}</div>`;
 
     const detailRoot = document.getElementById('orderDetail');
-    bindLineThumbs(detailRoot);
-    bindLineActions(detailRoot);
+    bindLineThumbs(detailRoot.querySelector('#detailPanel'));
+    bindLineActions(detailRoot.querySelector('#detailPanel'));
+    bindBarcodeActions(detailRoot.querySelector('#detailPanel'));
+    bindDetailTabs(detailRoot, o, lines, totals);
     detailRoot.querySelectorAll('[data-set-status]').forEach((btn) => {
       btn.addEventListener('click', () => void setOrderStatus(o.id, btn.dataset.setStatus));
     });
@@ -686,7 +1014,7 @@ async function openOrder(id) {
     });
     goToScreen('detail');
   } catch (e) {
-    alert(e.message);
+    toast(e.message);
   } finally {
     setOverlay(false);
   }
@@ -698,7 +1026,7 @@ async function setOrderStatus(id, status) {
     const input = prompt('سبب الرفض (اختياري):');
     if (input == null) return;
     note = input;
-  } else {
+  } else if (status !== 'processing') {
     const label = statusLabel(status);
     if (!confirm(`تغيير حالة الطلب إلى «${label}»؟`)) return;
   }
@@ -709,25 +1037,41 @@ async function setOrderStatus(id, status) {
       body: JSON.stringify({ status, note })
     });
     state.selectedOrder = data.order;
+    if (status === 'processing') {
+      toast('تم التجهيز — الطلب يُرسل الآن لتطبيق الأدمن للترحيل');
+      pushNotification('تم التجهيز', `الطلب ${data.order?.orderNo || id} جاهز للأدمن`, { tag: `done-${id}` });
+    } else {
+      toast(`تم تحديث الحالة: ${statusLabel(status)}`);
+    }
     await openOrder(id);
+    void loadOrders({ keepScreen: true });
   } catch (e) {
-    alert(e.message);
+    toast(e.message);
   } finally {
     setOverlay(false);
   }
+}
+
+function afterLogin() {
+  showApp();
+  initTheme();
+  void requestNotifyPermission().then((ok) => {
+    if (ok) startNotifications();
+  });
 }
 
 async function tryRestoreSession() {
   const token = getToken();
   if (!token) {
     showLogin();
+    initTheme();
     return;
   }
   try {
     const saved = JSON.parse(localStorage.getItem(EMP_KEY) || '{}');
     const data = await api('/me');
     state.employee = data.employee || saved;
-    showApp();
+    afterLogin();
     await loadOrders();
   } catch {
     clearSession();
@@ -756,7 +1100,7 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
       return body;
     });
     setSession(data.token, data.employee);
-    showApp();
+    afterLogin();
     await loadOrders();
   } catch (err) {
     showLogin(err.message);
@@ -766,6 +1110,7 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
 });
 
 document.getElementById('btnLogout')?.addEventListener('click', () => {
+  stopNotifications();
   clearSession();
   showLogin();
 });
@@ -784,8 +1129,65 @@ document.getElementById('btnBack')?.addEventListener('click', () => {
 
 document.getElementById('orderSearch')?.addEventListener('input', (e) => {
   state.search = e.target.value || '';
+  const clearBtn = document.getElementById('btnClearSearch');
+  clearBtn?.classList.toggle('hidden', !state.search);
   if (state.orders.length) renderOrdersList();
 });
+
+document.getElementById('btnClearSearch')?.addEventListener('click', () => {
+  const input = document.getElementById('orderSearch');
+  if (input) input.value = '';
+  state.search = '';
+  document.getElementById('btnClearSearch')?.classList.add('hidden');
+  renderOrdersList();
+});
+
+document.getElementById('btnListRefresh')?.addEventListener('click', () => void loadOrders());
+document.getElementById('btnEmptyRetry')?.addEventListener('click', () => void loadOrders());
+
+document.getElementById('btnEnableNotify')?.addEventListener('click', async () => {
+  const ok = await requestNotifyPermission();
+  if (ok) {
+    startNotifications();
+    toast('تم تفعيل الإشعارات');
+  }
+});
+
+document.getElementById('darkModeToggle')?.addEventListener('change', (e) => {
+  applyTheme(e.target.checked);
+});
+
+document.getElementById('lineEditForm')?.addEventListener('submit', submitLineEdit);
+document.getElementById('btnLineEditCancel')?.addEventListener('click', () => {
+  document.getElementById('lineEditModal')?.close();
+  state.lineEditCtx = null;
+});
+
+document.getElementById('btnBarcodeClose')?.addEventListener('click', () => {
+  document.getElementById('barcodeModal')?.close();
+});
+document.getElementById('btnCopyBarcode')?.addEventListener('click', async () => {
+  const code = document.getElementById('barcodeModal')?.dataset.copyCode || '';
+  if (!code) return;
+  try {
+    await navigator.clipboard.writeText(code);
+    toast('تم نسخ الباركود');
+  } catch {
+    toast(code);
+  }
+});
+
+document.getElementById('btnTogglePassword')?.addEventListener('click', () => {
+  const input = document.getElementById('loginPassword');
+  const btn = document.getElementById('btnTogglePassword');
+  if (!input) return;
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  if (btn) btn.textContent = show ? '🙈' : '👁';
+});
+
+const loginServer = document.getElementById('loginServer');
+if (loginServer) loginServer.textContent = window.location.origin;
 
 document.querySelectorAll('.bottom-nav-item').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -795,6 +1197,7 @@ document.querySelectorAll('.bottom-nav-item').forEach((btn) => {
 });
 
 document.getElementById('btnLogoutProfile')?.addEventListener('click', () => {
+  stopNotifications();
   clearSession();
   showLogin();
 });
@@ -804,10 +1207,14 @@ document.getElementById('imageLightbox')?.addEventListener('click', (e) => {
   if (e.target.id === 'imageLightbox') closeImageLightbox();
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeImageLightbox();
+  if (e.key === 'Escape') {
+    closeImageLightbox();
+    document.getElementById('barcodeModal')?.close();
+  }
 });
 
 registerServiceWorker();
 bindPwaUi();
 bindPullToRefresh();
+initTheme();
 void tryRestoreSession();

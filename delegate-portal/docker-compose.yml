@@ -16,6 +16,7 @@ services:
       ADMIN_PASS: ${ADMIN_PASS:-admin123}
       EMP_USER: ${EMP_USER:-allemp}
       EMP_PASS: ${EMP_PASS:-000000}
+      FCM_SERVER_KEY: ${FCM_SERVER_KEY:-}
     volumes:
       - portal_data:/app/data
       - portal_uploads:/app/uploads

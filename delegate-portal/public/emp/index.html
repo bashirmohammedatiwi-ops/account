@@ -8,15 +8,15 @@
   <meta name="apple-mobile-web-app-title" content="تجهيز">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="application-name" content="تجهيز الطلبات">
-  <meta name="theme-color" content="#0f766e">
+  <meta name="theme-color" content="#0f766e" id="themeColorMeta">
   <title>Edari — تجهيز الطلبات</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260715v4">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=20260716v2">
 </head>
 <body>
   <div id="offlineBanner" class="offline-banner hidden" role="status">لا يوجد اتصال بالإنترنت</div>
@@ -24,13 +24,14 @@
   <div id="installBanner" class="install-banner hidden">
     <div class="install-banner-copy">
       <strong>ثبّت التطبيق على الهاتف</strong>
-      <p>للوصول السريع من الشاشة الرئيسية</p>
+      <p>للوصول السريع والإشعارات</p>
     </div>
     <button type="button" class="btn primary sm" id="btnInstallApp">تثبيت</button>
     <button type="button" class="install-dismiss" id="btnDismissInstall" aria-label="إغلاق">×</button>
   </div>
 
   <div id="loginScreen" class="login-screen">
+    <div class="login-orbs" aria-hidden="true"></div>
     <div class="login-card">
       <div class="login-brand">
         <div class="login-logo" aria-hidden="true">E</div>
@@ -41,14 +42,18 @@
       </div>
       <h1>دخول الموظفين</h1>
       <p class="login-sub">حساب موحّد لموظفي التجهيز</p>
+      <p class="login-server" id="loginServer"></p>
       <form id="loginForm">
         <label class="field">
           <span>اسم المستخدم</span>
-          <input type="text" id="loginUsername" autocomplete="username" value="allemp" required>
+          <input type="text" id="loginUsername" autocomplete="username" required>
         </label>
         <label class="field">
           <span>كلمة المرور</span>
-          <input type="password" id="loginPassword" autocomplete="current-password" required>
+          <div class="password-wrap">
+            <input type="password" id="loginPassword" autocomplete="current-password" required>
+            <button type="button" class="pw-toggle" id="btnTogglePassword" aria-label="إظهار كلمة المرور">👁</button>
+          </div>
         </label>
         <p class="login-error hidden" id="loginError"></p>
         <button type="submit" class="btn primary full" id="btnLogin">دخول</button>
@@ -57,7 +62,7 @@
   </div>
 
   <div id="appShell" class="app-shell hidden">
-    <header class="app-header">
+    <header class="app-header hidden" id="subHeader">
       <button type="button" class="icon-btn hidden" id="btnBack" aria-label="رجوع">‹</button>
       <div class="header-copy">
         <p class="header-kicker" id="headerKicker">تجهيز الطلبات</p>
@@ -71,24 +76,40 @@
 
     <main class="app-main">
       <section class="screen active" id="screen-list">
-        <div class="pull-hint hidden" id="pullHint" aria-hidden="true">اسحب للتحديث</div>
-        <div class="list-toolbar">
-          <div class="search-wrap">
-            <input type="search" id="orderSearch" class="search-input" placeholder="بحث برقم الطلب، الزبون، الفرع…" autocomplete="off">
-          </div>
-          <div class="filter-panel">
-            <p class="filter-label">حالة الطلب</p>
-            <div class="filters status-filters" id="orderFilters" role="tablist" aria-label="تصفية الحالة"></div>
-            <div class="prep-hint hidden" id="prepHint" role="note">
-              <span class="prep-hint-icon" aria-hidden="true">✓</span>
-              <span>البطاقة الخضراء = طلب مؤكّد · البيضاء = بانتظار التأكيد</span>
+        <div class="pull-hint hidden" id="pullHint">اسحب للتحديث</div>
+        <div class="list-hero" id="listHero">
+          <div class="list-hero-inner">
+            <div class="list-hero-row">
+              <div class="emp-avatar" id="heroAvatar">م</div>
+              <div class="list-hero-text">
+                <h2 id="heroName">موظف التجهيز</h2>
+                <p id="heroToday">— طلب ورد اليوم</p>
+              </div>
+              <button type="button" class="icon-btn light" id="btnListRefresh" aria-label="تحديث">↻</button>
             </div>
-            <p class="filter-label">مصدر الطلب</p>
-            <div class="filters source-filters" id="orderSourceFilters" role="tablist" aria-label="مصدر الطلب"></div>
           </div>
         </div>
-        <p class="list-meta" id="ordersMeta">—</p>
-        <div class="order-list" id="ordersList"></div>
+        <div class="list-filter-card" id="listFilterCard">
+          <div class="status-segments" id="orderFilters" role="tablist"></div>
+          <div class="prep-hint hidden" id="prepHint" role="note">
+            <span class="prep-hint-icon">✓</span>
+            <span>البطاقة الخضراء = طلب مؤكّد · البيضاء = بانتظار التأكيد</span>
+          </div>
+          <div class="search-field">
+            <span class="search-ico">⌕</span>
+            <input type="search" id="orderSearch" placeholder="بحث برقم الطلب، الزبون، الفرع…" autocomplete="off">
+            <button type="button" class="search-clear hidden" id="btnClearSearch" aria-label="مسح">×</button>
+          </div>
+          <div class="source-tabs" id="orderSourceFilters"></div>
+        </div>
+        <div class="list-body">
+          <div class="order-list" id="ordersList"></div>
+          <div class="empty-state hidden" id="ordersEmpty">
+            <div class="empty-ico">📭</div>
+            <p>لا توجد طلبات</p>
+            <button type="button" class="btn ghost sm" id="btnEmptyRetry">إعادة المحاولة</button>
+          </div>
+        </div>
       </section>
 
       <section class="screen" id="screen-stats">
@@ -97,7 +118,15 @@
           <p>ملخص أداء التجهيز</p>
         </div>
         <div class="stats-grid" id="statsGrid"></div>
-        <div class="stats-chart" id="statsChart"></div>
+        <div class="stats-overview" id="statsOverview"></div>
+        <div class="tips-banner" id="statsTips">
+          <strong>💡 نصيحة</strong>
+          <p>فعّل الإشعارات من المتصفح لتصلك تنبيهات الطلبات الجديدة فوراً.</p>
+        </div>
+        <div class="stats-chart-card">
+          <h3>توزيع الحالات</h3>
+          <div class="stats-chart" id="statsChart"></div>
+        </div>
       </section>
 
       <section class="screen" id="screen-profile">
@@ -107,8 +136,10 @@
           <p id="profileUser">—</p>
         </div>
         <div class="profile-card">
-          <p><span>الخادم</span><b id="profileServer">—</b></p>
-          <p><span>الإصدار</span><b>3.0 ويب</b></p>
+          <div class="profile-row"><span class="ico">🌐</span><span>الخادم</span><b id="profileServer">—</b></div>
+          <div class="profile-row"><span class="ico">🔔</span><span>الإشعارات</span><button type="button" class="btn ghost sm" id="btnEnableNotify">تفعيل</button></div>
+          <div class="profile-row"><span class="ico">🌙</span><span>الوضع الداكن</span><label class="switch"><input type="checkbox" id="darkModeToggle"><span class="slider"></span></label></div>
+          <div class="profile-row"><span class="ico">ℹ️</span><span>الإصدار</span><b>3.7 ويب</b></div>
         </div>
         <button type="button" class="btn danger full" id="btnLogoutProfile">تسجيل الخروج</button>
       </section>
@@ -118,32 +149,57 @@
       </section>
     </main>
 
-    <nav class="bottom-nav hidden" id="bottomNav" aria-label="التنقل الرئيسي">
+    <nav class="bottom-nav hidden" id="bottomNav">
       <button type="button" class="bottom-nav-item active" data-tab="list">
-        <span class="bn-icon">📥</span><span>الطلبات</span><em class="bn-badge hidden" id="pendingBadge">0</em>
+        <span class="bn-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V6h5.2l2 2H20v10z"/></svg></span>
+        <span>الطلبات</span><em class="bn-badge hidden" id="pendingBadge">0</em>
       </button>
       <button type="button" class="bottom-nav-item" data-tab="stats">
-        <span class="bn-icon">📊</span><span>الإحصائيات</span>
+        <span class="bn-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v8H3v-8zm4-6h2v14H7V7zm4-4h2v18h-2V3zm4 8h2v10h-2V11zm4-4h2v14h-2V7z"/></svg></span>
+        <span>الإحصائيات</span>
       </button>
       <button type="button" class="bottom-nav-item" data-tab="profile">
-        <span class="bn-icon">👤</span><span>حسابي</span>
+        <span class="bn-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></span>
+        <span>حسابي</span>
       </button>
     </nav>
   </div>
 
-  <div class="overlay hidden" id="overlay">
-    <div class="loader-card">
-      <div class="spinner"></div>
-      <p>جاري التحميل...</p>
-    </div>
-  </div>
+  <div class="overlay hidden" id="overlay"><div class="loader-card"><div class="spinner"></div><p>جاري التحميل...</p></div></div>
+  <div id="toast" class="toast hidden" role="status"></div>
 
-  <div id="imageLightbox" class="img-lightbox hidden" role="dialog" aria-modal="true" aria-label="عرض الصورة">
-    <button type="button" class="img-lightbox-close" id="btnLightboxClose" aria-label="إغلاق">×</button>
-    <img id="lightboxImg" src="" alt="">
+  <div id="imageLightbox" class="img-lightbox hidden" role="dialog" aria-modal="true">
+    <button type="button" class="img-lightbox-close" id="btnLightboxClose">×</button>
+    <div class="lightbox-zoom"><img id="lightboxImg" src="" alt=""></div>
     <p class="img-lightbox-caption" id="lightboxCaption"></p>
   </div>
 
-  <script src="app.js?v=20260715v4"></script>
+  <dialog id="lineEditModal" class="modal">
+    <form id="lineEditForm" method="dialog">
+      <h3>تعديل البند</h3>
+      <p class="modal-sub" id="lineEditName"></p>
+      <label class="field"><span>كمية البيع</span><input type="number" id="lineEditQty" min="0" step="1" required></label>
+      <label class="field"><span>الهدية</span><input type="number" id="lineEditBonus" min="0" step="1" required></label>
+      <label class="field"><span>التيستر</span><input type="number" id="lineEditTester" min="0" step="1" required></label>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="btnLineEditCancel">إلغاء</button>
+        <button type="submit" class="btn primary">حفظ</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="barcodeModal" class="modal modal-barcode">
+    <div class="barcode-sheet">
+      <button type="button" class="modal-close" id="btnBarcodeClose">×</button>
+      <p class="barcode-line-no" id="barcodeLineNo"></p>
+      <h3 id="barcodeProductName"></h3>
+      <svg id="barcodeSvg"></svg>
+      <p class="barcode-code" id="barcodeCode" dir="ltr"></p>
+      <button type="button" class="btn ghost full" id="btnCopyBarcode">نسخ الباركود</button>
+    </div>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+  <script src="app.js?v=20260716v2"></script>
 </body>
 </html>
