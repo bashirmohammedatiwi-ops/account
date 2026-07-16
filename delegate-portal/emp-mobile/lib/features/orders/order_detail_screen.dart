@@ -87,11 +87,12 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
     }
     setState(() => _busy = true);
     try {
-      final result = await ref.read(apiClientProvider).setPrepConfirmed(widget.orderId, confirmed: next);
+      await ref.read(apiClientProvider).setPrepConfirmed(widget.orderId, confirmed: next);
       await _reload();
       if (mounted) {
-        final msg = next ? notifyUserMessage(result.notify) : 'تم إلغاء التأكيد';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg.isNotEmpty ? msg : 'تم تأكيد التجهيز ✓')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(next ? 'تم تأكيد التجهيز ✓' : 'تم إلغاء التأكيد')),
+        );
       }
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
@@ -467,7 +468,7 @@ class _InfoTab extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 24),
-        if (order.status == 'processing' || order.status == 'pending') ...[
+        if (order.status == 'processing') ...[
           PrepConfirmBar(confirmed: order.prepConfirmed, busy: busy, onToggle: onTogglePrep),
           const SizedBox(height: 16),
         ],

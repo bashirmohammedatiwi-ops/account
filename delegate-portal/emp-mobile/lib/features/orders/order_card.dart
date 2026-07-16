@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
-import '../../core/api/order_action_result.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/models.dart';
 import '../../widgets/app_widgets.dart';
@@ -27,7 +26,7 @@ class OrderCard extends ConsumerWidget {
     final testerCount = order.lines.fold<num>(0, (s, l) => s + l.tester);
     final muted = themed(context, light: AppColors.muted, dark: AppColors.mutedDark);
     final confirmed = order.prepConfirmed && order.status == 'processing';
-    final showPrepCheck = order.status == 'processing' || order.status == 'pending';
+    final showPrepCheck = order.status == 'processing';
     final borderColor = confirmed
         ? AppColors.confirmed
         : themed(context, light: AppColors.border, dark: AppColors.borderDark);
@@ -161,15 +160,14 @@ class _PrepCheckRowState extends ConsumerState<_PrepCheckRow> {
     setState(() => _busy = true);
     try {
       HapticFeedback.mediumImpact();
-      final result = await ref.read(apiClientProvider).setPrepConfirmed(widget.order.id, confirmed: next);
+      await ref.read(apiClientProvider).setPrepConfirmed(widget.order.id, confirmed: next);
       ref.invalidate(ordersListProvider);
       ref.invalidate(pendingCountProvider);
       ref.invalidate(orderStatsProvider);
       widget.onChanged?.call();
       if (mounted) {
-        final msg = next ? notifyUserMessage(result.notify) : 'تم إلغاء التأكيد';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg.isNotEmpty ? msg : 'تم تأكيد التجهيز ✓')),
+          SnackBar(content: Text(next ? 'تم تأكيد التجهيز ✓' : 'تم إلغاء التأكيد')),
         );
       }
     } on ApiException catch (e) {
@@ -207,7 +205,7 @@ class _PrepCheckRowState extends ConsumerState<_PrepCheckRow> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                          confirmed ? 'تم تأكيد التجهيز' : 'تم التجهيز — إرسال للأدمن',
+                          confirmed ? 'تم تأكيد التجهيز' : 'تأكيد اكتمال التجهيز',
                       style: TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: 13,
@@ -215,7 +213,7 @@ class _PrepCheckRowState extends ConsumerState<_PrepCheckRow> {
                       ),
                     ),
                     Text(
-                      confirmed ? 'اضغط لإلغاء التأكيد' : 'اضغط عند الانتهاء لإرسال الفاتورة للأدمن',
+                      confirmed ? 'اضغط لإلغاء التأكيد' : 'اضغط عند الانتهاء من التجهيز',
                       style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark)),
                     ),
                   ],

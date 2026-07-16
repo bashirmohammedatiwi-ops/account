@@ -110,12 +110,9 @@ class ApiClient {
     );
   }
 
-  Future<OrderActionResult> setPrepConfirmed(int id, {bool confirmed = true}) async {
+  Future<PurchaseOrder> setPrepConfirmed(int id, {bool confirmed = true}) async {
     final data = await _json('PATCH', '/orders/$id/prep-confirm', body: {'confirmed': confirmed});
-    return OrderActionResult(
-      order: PurchaseOrder.fromJson(Map<String, dynamic>.from(data['order'] as Map), serverUrl: serverUrl),
-      notify: data['notify'] is Map ? Map<String, dynamic>.from(data['notify'] as Map) : null,
-    );
+    return PurchaseOrder.fromJson(Map<String, dynamic>.from(data['order'] as Map), serverUrl: serverUrl);
   }
 
   Future<PurchaseOrder> updateLine(int orderId, int lineId, {required num quant, required num bonus, required num tester}) async {

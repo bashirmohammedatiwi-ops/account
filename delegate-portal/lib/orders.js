@@ -516,55 +516,22 @@ function setOrderStatus(orderId, newStatus, { actorType = 'admin', actorId = '',
 function setPrepConfirmed(orderId, confirmed, { actorType = 'employee', actorId = '', note = '' } = {}) {
   const row = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
   if (!row) return null;
-
-  if (!confirmed) {
-    if (canonicalStatus(row.status) !== 'processing') {
-      throw new Error('يمكن إلغاء التأكيد فقط للطلبات في حالة «تم التجهيز»');
-    }
-    db.prepare(`
-      UPDATE orders SET prep_confirmed = 0, prep_confirmed_at = NULL, updated_at = datetime('now') WHERE id = ?
-    `).run(orderId);
-    logEvent(orderId, {
-      fromStatus: row.status,
-      toStatus: row.status,
-      actorType,
-      actorId,
-      note: note || 'إلغاء تأكيد التجهيز'
-    });
-    return loadOrder(orderId);
+  if (canonicalStatus(row.status) !== 'processing') {
+    throw new Error('يمكن تأكيد التجهيز فقط للطلبات في حالة «تم التجهيز»');
   }
-
-  const uiStatus = canonicalStatus(row.status);
-  if (uiStatus === 'rejected') {
-    throw new Error('لا يمكن تأكيد تجهيز طلب مرفوض');
-  }
-
-  if (uiStatus === 'pending') {
-    db.prepare(`
-      UPDATE orders SET status = 'processing', updated_at = datetime('now') WHERE id = ?
-    `).run(orderId);
-    logEvent(orderId, {
-      fromStatus: row.status,
-      toStatus: 'processing',
-      actorType,
-      actorId,
-      note: note || 'تم التجهيز'
-    });
-  }
-
-  const at = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  const flag = confirmed ? 1 : 0;
+  const at = confirmed ? new Date().toISOString().slice(0, 19).replace('T', ' ') : null;
   db.prepare(`
-    UPDATE orders SET prep_confirmed = 1, prep_confirmed_at = ?, updated_at = datetime('now') WHERE id = ?
-  `).run(at, orderId);
+    UPDATE orders SET prep_confirmed = ?, prep_confirmed_at = ?, updated_at = datetime('now') WHERE id = ?
+  `).run(flag, at, orderId);
   logEvent(orderId, {
-    fromStatus: uiStatus === 'pending' ? row.status : row.status,
-    toStatus: 'processing',
+    fromStatus: row.status,
+    toStatus: row.status,
     actorType,
     actorId,
-    note: note || 'تأكيد اكتمال التجهيز ✓'
+    note: note || (confirmed ? 'تأكيد اكتمال التجهيز ✓' : 'إلغاء تأكيد التجهيز')
   });
-  const order = loadOrder(orderId);
-  return order;
+  return loadOrder(orderId);
 }
 
 function listOrders({ agentId, status, sourceType, limit = 50, offset = 0 } = {}) {

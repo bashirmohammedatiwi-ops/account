@@ -249,12 +249,12 @@ class PrepConfirmBar extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          confirmed ? 'تم تأكيد اكتمال التجهيز' : 'تم التجهيز — إرسال للأدمن',
+                          confirmed ? 'تم تأكيد اكتمال التجهيز' : 'تأكيد اكتمال التجهيز',
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          confirmed ? 'اضغط لإلغاء التأكيد' : 'اضغط بعد الانتهاء لإرسال الفاتورة للأدمن',
+                          confirmed ? 'اضغط لإلغاء التأكيد' : 'اضغط بعد الانتهاء من تجهيز كل البنود',
                           style: TextStyle(color: Colors.white.withValues(alpha: 0.88), fontWeight: FontWeight.w600, fontSize: 12),
                         ),
                       ],
@@ -279,7 +279,7 @@ class QuickStatusBar extends StatelessWidget {
 
   static const _options = [
     _StatusOption('pending', 'قيد الانتظار', 'إرجاع للانتظار', Icons.schedule_rounded, AppColors.pending),
-    _StatusOption('processing', 'تم التجهيز', 'تحديد كمجهّز', Icons.inventory_2_rounded, AppColors.processing),
+    _StatusOption('processing', 'تم التجهيز', 'إرسال الفاتورة لتطبيق الأدمن', Icons.inventory_2_rounded, AppColors.processing),
     _StatusOption('rejected', 'مرفوض', 'رفض الطلب', Icons.block_rounded, AppColors.rejected),
   ];
 
