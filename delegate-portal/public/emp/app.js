@@ -16,12 +16,6 @@ const FILTERS = [
   { id: '', label: 'الكل' }
 ];
 
-const PREP_FILTERS = [
-  { id: '', label: 'الكل' },
-  { id: 'confirmed', label: 'مؤكد ✓' },
-  { id: 'pending_confirm', label: 'بانتظار التأكيد' }
-];
-
 const SOURCE_FILTERS = [
   { id: '', label: 'كل المصادر' },
   { id: 'delegate', label: 'طلبات المندوبين' },
@@ -34,7 +28,6 @@ const state = {
   tab: 'list',
   filter: new URLSearchParams(window.location.search).get('filter') || 'pending',
   sourceFilter: new URLSearchParams(window.location.search).get('source') || '',
-  prepFilter: '',
   search: '',
   orders: [],
   stats: null,
@@ -309,15 +302,10 @@ function goToScreen(name) {
 
 function filterOrders(list) {
   let rows = list;
-  if (state.filter === 'processing' && state.prepFilter === 'confirmed') {
-    rows = rows.filter((o) => o.prepConfirmed);
-  } else if (state.filter === 'processing' && state.prepFilter === 'pending_confirm') {
-    rows = rows.filter((o) => !o.prepConfirmed);
-  }
   if (state.filter === 'processing') {
     rows = [...rows].sort((a, b) => {
       if (!!a.prepConfirmed === !!b.prepConfirmed) return Number(b.id) - Number(a.id);
-      return a.prepConfirmed ? -1 : 1;
+      return a.prepConfirmed ? 1 : -1;
     });
   }
   const q = String(state.search || '').trim().toLowerCase();
@@ -389,31 +377,14 @@ function renderFilters() {
   el.querySelectorAll('[data-filter]').forEach((btn) => {
     btn.addEventListener('click', () => {
       state.filter = btn.dataset.filter || '';
-      if (state.filter !== 'processing') state.prepFilter = '';
       renderFilters();
       void loadOrders();
     });
   });
 
-  const prepEl = document.getElementById('orderPrepFilters');
-  if (prepEl) {
-    if (state.filter === 'processing') {
-      prepEl.classList.remove('hidden');
-      prepEl.innerHTML = PREP_FILTERS.map((f) => `
-        <button type="button" class="filter-chip prep-chip${state.prepFilter === f.id ? ' active' : ''}"
-          data-prep="${esc(f.id)}" role="tab" aria-selected="${state.prepFilter === f.id}">
-          ${esc(f.label)}
-        </button>`).join('');
-      prepEl.querySelectorAll('[data-prep]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          state.prepFilter = btn.dataset.prep || '';
-          renderOrdersList();
-        });
-      });
-    } else {
-      prepEl.classList.add('hidden');
-      prepEl.innerHTML = '';
-    }
+  const prepHint = document.getElementById('prepHint');
+  if (prepHint) {
+    prepHint.classList.toggle('hidden', state.filter !== 'processing');
   }
 
   const srcEl = document.getElementById('orderSourceFilters');

@@ -10,6 +10,7 @@ import '../../core/theme/app_theme.dart';
 import '../../models/models.dart';
 import '../../widgets/app_widgets.dart';
 import '../../widgets/premium_widgets.dart';
+import '../../widgets/product_barcode_sheet.dart';
 import 'orders_providers.dart';
 
 final orderDetailProvider = FutureProvider.autoDispose.family<PurchaseOrder, int>((ref, id) async {
@@ -224,11 +225,8 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
           error: (e, _) => Center(child: Text(e is ApiException ? e.message : 'خطأ')),
           data: (order) => DefaultTabController(
             length: 3,
-            child: Column(
-              children: [
-                Expanded(
-                  child: NestedScrollView(
-                    headerSliverBuilder: (context, innerBoxIsScrolled) => [
+            child: NestedScrollView(
+              headerSliverBuilder: (context, innerBoxIsScrolled) => [
                       SliverAppBar(
                         expandedHeight: 188,
                         pinned: true,
@@ -306,22 +304,23 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
                     ],
                     body: TabBarView(
                       children: [
-                        _LinesTab(order: order, onEdit: _editLine, onDelete: _deleteLine, onImage: _showImage),
-                        _InfoTab(order: order),
+                        _LinesTab(
+                          order: order,
+                          onEdit: _editLine,
+                          onDelete: _deleteLine,
+                          onImage: _showImage,
+                          onBarcode: (line, lineNo) => showProductBarcodeSheet(context, line, lineNo: lineNo),
+                        ),
+                        _InfoTab(
+                          order: order,
+                          busy: _busy,
+                          onSetStatus: _setStatus,
+                          onTogglePrep: () => _togglePrepConfirm(order),
+                        ),
                         ListView(padding: const EdgeInsets.all(16), children: [EventTimeline(events: order.events)]),
                       ],
                     ),
                   ),
-                ),
-                if (order.status == 'processing')
-                  PrepConfirmBar(
-                    confirmed: order.prepConfirmed,
-                    busy: _busy,
-                    onToggle: () => _togglePrepConfirm(order),
-                  ),
-                QuickStatusBar(current: order.status, busy: _busy, onSelect: _setStatus),
-              ],
-            ),
           ),
         ),
       ),
@@ -350,12 +349,19 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
 }
 
 class _LinesTab extends StatelessWidget {
-  const _LinesTab({required this.order, required this.onEdit, required this.onDelete, required this.onImage});
+  const _LinesTab({
+    required this.order,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onImage,
+    required this.onBarcode,
+  });
 
   final PurchaseOrder order;
   final void Function(OrderLine) onEdit;
   final void Function(OrderLine) onDelete;
   final void Function(String?, String) onImage;
+  final void Function(OrderLine line, int lineNo) onBarcode;
 
   @override
   Widget build(BuildContext context) {
@@ -367,13 +373,25 @@ class _LinesTab extends StatelessWidget {
         if (order.editable)
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: Text('اضغط على البند لتعديل الكمية أو الحذف', style: TextStyle(color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark), fontSize: 12, fontWeight: FontWeight.w600)),
+            child: Text(
+              'اضغط على البند لعرض الباركود · التعديل والحذف من القائمة ⋮',
+              style: TextStyle(color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark), fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              'اضغط على البند لعرض باركود المنتج',
+              style: TextStyle(color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark), fontSize: 12, fontWeight: FontWeight.w600),
+            ),
           ),
         ...order.lines.asMap().entries.map((entry) => _LineCard(
               lineNo: entry.key + 1,
               line: entry.value,
               editable: order.editable,
               onTapImage: () => onImage(entry.value.imageUrl, entry.value.matName),
+              onShowBarcode: () => onBarcode(entry.value, entry.key + 1),
               onEdit: () => onEdit(entry.value),
               onDelete: () => onDelete(entry.value),
             )),
@@ -383,14 +401,22 @@ class _LinesTab extends StatelessWidget {
 }
 
 class _InfoTab extends StatelessWidget {
-  const _InfoTab({required this.order});
+  const _InfoTab({
+    required this.order,
+    required this.busy,
+    required this.onSetStatus,
+    required this.onTogglePrep,
+  });
 
   final PurchaseOrder order;
+  final bool busy;
+  final ValueChanged<String> onSetStatus;
+  final VoidCallback onTogglePrep;
 
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [
         if (order.isShorja)
           _AlertBanner(
@@ -437,6 +463,12 @@ class _InfoTab extends StatelessWidget {
             ),
           ),
         ],
+        const SizedBox(height: 24),
+        if (order.status == 'processing') ...[
+          PrepConfirmBar(confirmed: order.prepConfirmed, busy: busy, onToggle: onTogglePrep),
+          const SizedBox(height: 16),
+        ],
+        QuickStatusBar(current: order.status, busy: busy, onSelect: onSetStatus),
       ],
     );
   }
@@ -523,6 +555,7 @@ class _LineCard extends StatelessWidget {
     required this.line,
     required this.editable,
     required this.onTapImage,
+    required this.onShowBarcode,
     required this.onEdit,
     required this.onDelete,
   });
@@ -531,6 +564,7 @@ class _LineCard extends StatelessWidget {
   final OrderLine line;
   final bool editable;
   final VoidCallback onTapImage;
+  final VoidCallback onShowBarcode;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -538,6 +572,14 @@ class _LineCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasGift = line.bonus > 0;
     final hasTester = line.tester > 0;
+    final hasBarcode = line.barcode != null && line.barcode!.trim().isNotEmpty;
+    void onCardTap() {
+      if (hasBarcode) {
+        onShowBarcode();
+      } else if (editable) {
+        onEdit();
+      }
+    }
     Color? tint;
     if (hasGift) tint = AppColors.giftSoft;
     if (hasTester) tint = AppColors.testerSoft;
@@ -546,7 +588,7 @@ class _LineCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       color: isDark(context) ? null : tint,
       child: InkWell(
-        onTap: editable ? onEdit : null,
+        onTap: onCardTap,
         borderRadius: BorderRadius.circular(AppColors.radius),
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -594,7 +636,18 @@ class _LineCard extends StatelessWidget {
                       ],
                     ),
                     if (line.barcode != null && line.barcode!.isNotEmpty)
-                      Text(line.barcode!, style: TextStyle(color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark), fontSize: 12)),
+                      Row(
+                        children: [
+                          Icon(Icons.qr_code_2_rounded, size: 14, color: themed(context, light: AppColors.primary, dark: AppColors.primary)),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              line.barcode!,
+                              style: TextStyle(color: themed(context, light: AppColors.primary, dark: AppColors.primary), fontSize: 12, fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                        ],
+                      ),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 6,

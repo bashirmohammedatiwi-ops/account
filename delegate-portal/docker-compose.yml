@@ -10,6 +10,7 @@ services:
       DATABASE_PATH: /app/data/portal.db
       PUBLIC_URL: ${PUBLIC_URL:-http://187.124.23.65:5005}
       SYNC_API_KEY: ${SYNC_API_KEY:-edari-sync-local-key-2025}
+      SHORJA_HUB_URL: ${SHORJA_HUB_URL:-http://187.124.23.65:5007}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_PASS: ${ADMIN_PASS:-admin123}

@@ -7,7 +7,6 @@ import '../../models/models.dart';
 final ordersFilterProvider = StateProvider<String>((ref) => 'pending');
 final ordersSourceFilterProvider = StateProvider<String>((ref) => '');
 final ordersSearchProvider = StateProvider<String>((ref) => '');
-final ordersPrepFilterProvider = StateProvider<String>((ref) => '');
 
 final ordersListProvider = FutureProvider.autoDispose<List<PurchaseOrder>>((ref) async {
   final auth = ref.watch(authProvider);
@@ -15,22 +14,16 @@ final ordersListProvider = FutureProvider.autoDispose<List<PurchaseOrder>>((ref)
 
   final filter = ref.watch(ordersFilterProvider);
   final source = ref.watch(ordersSourceFilterProvider);
-  final prepFilter = ref.watch(ordersPrepFilterProvider);
   final orders = await ref.read(apiClientProvider).listOrders(
     status: filter.isEmpty ? null : filter,
     sourceType: source.isEmpty ? null : source,
   );
   final q = ref.watch(ordersSearchProvider).trim().toLowerCase();
   var result = orders;
-  if (filter == 'processing' && prepFilter == 'confirmed') {
-    result = result.where((o) => o.prepConfirmed).toList();
-  } else if (filter == 'processing' && prepFilter == 'pending_confirm') {
-    result = result.where((o) => !o.prepConfirmed).toList();
-  }
   if (filter == 'processing') {
     result = [...result]..sort((a, b) {
-        if (a.prepConfirmed == b.prepConfirmed) return b.id.compareTo(a.id);
-        return a.prepConfirmed ? -1 : 1;
+        if (a.prepConfirmed != b.prepConfirmed) return a.prepConfirmed ? 1 : -1;
+        return b.id.compareTo(a.id);
       });
   }
   if (q.isEmpty) return result;

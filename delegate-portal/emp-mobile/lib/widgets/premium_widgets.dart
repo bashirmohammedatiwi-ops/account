@@ -214,45 +214,58 @@ class PrepConfirmBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-      color: themed(context, light: confirmed ? AppColors.confirmedSoft : AppColors.processingSoft, dark: AppColors.surfaceDark),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  confirmed ? Icons.verified_rounded : Icons.fact_check_outlined,
-                  color: confirmed ? AppColors.confirmed : AppColors.processing,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    confirmed ? 'تم تأكيد اكتمال التجهيز' : 'بعد الانتهاء، أكّد التجهيز بوضع علامة ✓',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      color: confirmed ? AppColors.confirmed : AppColors.processing,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: themed(context, light: confirmed ? AppColors.confirmedSoft : AppColors.processingSoft, dark: AppColors.surfaceAltDark),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: themed(context, light: AppColors.border, dark: AppColors.borderDark)),
+      ),
+      child: Material(
+          color: confirmed ? AppColors.confirmed : AppColors.processing,
+          borderRadius: BorderRadius.circular(16),
+          child: InkWell(
+            onTap: busy ? null : onToggle,
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      busy ? Icons.hourglass_top_rounded : (confirmed ? Icons.verified_rounded : Icons.check_circle_rounded),
+                      color: Colors.white,
+                      size: 26,
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            FilledButton.icon(
-              onPressed: busy ? null : onToggle,
-              icon: Icon(confirmed ? Icons.undo_rounded : Icons.check_circle_rounded),
-              label: Text(confirmed ? 'إلغاء التأكيد' : 'تأكيد اكتمال التجهيز ✓'),
-              style: FilledButton.styleFrom(
-                backgroundColor: confirmed ? AppColors.confirmed : AppColors.processing,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          confirmed ? 'تم تأكيد اكتمال التجهيز' : 'تأكيد اكتمال التجهيز',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          confirmed ? 'اضغط لإلغاء التأكيد' : 'اضغط بعد الانتهاء من تجهيز كل البنود',
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.88), fontWeight: FontWeight.w600, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(confirmed ? Icons.undo_rounded : Icons.chevron_left_rounded, color: Colors.white),
+                ],
               ),
             ),
-          ],
+          ),
         ),
-      ),
     );
   }
 }
@@ -264,71 +277,139 @@ class QuickStatusBar extends StatelessWidget {
   final bool busy;
   final ValueChanged<String> onSelect;
 
+  static const _options = [
+    _StatusOption('pending', 'قيد الانتظار', 'إرجاع للانتظار', Icons.schedule_rounded, AppColors.pending),
+    _StatusOption('processing', 'تم التجهيز', 'تحديد كمجهّز', Icons.inventory_2_rounded, AppColors.processing),
+    _StatusOption('rejected', 'مرفوض', 'رفض الطلب', Icons.block_rounded, AppColors.rejected),
+  ];
+
   @override
   Widget build(BuildContext context) {
+    final currentOpt = _options.firstWhere((o) => o.status == current, orElse: () => _options.first);
+    final others = _options.where((o) => o.status != current).toList();
+    final border = themed(context, light: AppColors.border, dark: AppColors.borderDark);
+    final surface = themed(context, light: AppColors.surface, dark: AppColors.surfaceDark);
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: themed(context, light: AppColors.surface, dark: AppColors.surfaceDark),
-        border: Border(top: BorderSide(color: themed(context, light: AppColors.border, dark: AppColors.borderDark))),
-        boxShadow: [BoxShadow(color: AppColors.shadow, blurRadius: 20, offset: const Offset(0, -4))],
+        color: surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: border),
       ),
-      child: SafeArea(
-        top: false,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('تحديث سريع للحالة', style: TextStyle(fontWeight: FontWeight.w900)),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                _QuickBtn(label: 'انتظار', status: 'pending', current: current, busy: busy, color: AppColors.pending, onSelect: onSelect),
-                const SizedBox(width: 8),
-                _QuickBtn(label: 'مجهّز ✓', status: 'processing', current: current, busy: busy, color: AppColors.processing, onSelect: onSelect),
-                const SizedBox(width: 8),
-                _QuickBtn(label: 'مرفوض', status: 'rejected', current: current, busy: busy, color: AppColors.rejected, onSelect: onSelect),
-              ],
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+            Text('حالة الطلب', style: TextStyle(fontWeight: FontWeight.w900, color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark), fontSize: 12)),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: currentOpt.color.withValues(alpha: isDark(context) ? 0.15 : 0.1),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: currentOpt.color.withValues(alpha: 0.35)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(color: currentOpt.color, borderRadius: BorderRadius.circular(12)),
+                    child: Icon(currentOpt.icon, color: Colors.white, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('الحالة الحالية', style: TextStyle(color: currentOpt.color, fontWeight: FontWeight.w700, fontSize: 11)),
+                        Text(currentOpt.label, style: TextStyle(color: currentOpt.color, fontWeight: FontWeight.w900, fontSize: 17)),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.check_circle_rounded, color: currentOpt.color, size: 24),
+                ],
+              ),
             ),
-          ],
+            if (others.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text('تغيير إلى', style: TextStyle(fontWeight: FontWeight.w900, color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark), fontSize: 12)),
+              const SizedBox(height: 8),
+              ...others.map((opt) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _StatusActionTile(option: opt, busy: busy, onTap: () => onSelect(opt.status)),
+                  )),
+            ],
+        ],
         ),
       ),
     );
   }
 }
 
-class _QuickBtn extends StatelessWidget {
-  const _QuickBtn({
-    required this.label,
-    required this.status,
-    required this.current,
-    required this.busy,
-    required this.color,
-    required this.onSelect,
-  });
-
-  final String label;
+class _StatusOption {
+  const _StatusOption(this.status, this.label, this.hint, this.icon, this.color);
   final String status;
-  final String current;
-  final bool busy;
+  final String label;
+  final String hint;
+  final IconData icon;
   final Color color;
-  final ValueChanged<String> onSelect;
+}
+
+class _StatusActionTile extends StatelessWidget {
+  const _StatusActionTile({required this.option, required this.busy, required this.onTap});
+
+  final _StatusOption option;
+  final bool busy;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final active = current == status;
-    return Expanded(
-      child: FilledButton(
-        onPressed: busy || active ? null : () {
-          HapticFeedback.mediumImpact();
-          onSelect(status);
-        },
-        style: FilledButton.styleFrom(
-          backgroundColor: active ? color : color.withValues(alpha: 0.12),
-          foregroundColor: active ? Colors.white : color,
-          padding: const EdgeInsets.symmetric(vertical: 14),
+    return Material(
+      color: themed(context, light: AppColors.surfaceAlt, dark: AppColors.surfaceAltDark),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: busy
+            ? null
+            : () {
+                HapticFeedback.mediumImpact();
+                onTap();
+              },
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: themed(context, light: AppColors.border, dark: AppColors.borderDark)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: option.color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(option.icon, color: option.color, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(option.label, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: option.color)),
+                    Text(option.hint, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 11, color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark))),
+                  ],
+                ),
+              ),
+              Icon(Icons.arrow_back_ios_new_rounded, size: 16, color: option.color),
+            ],
+          ),
         ),
-        child: Text(active ? '$label ✓' : label, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
       ),
     );
   }

@@ -1,6 +1,7 @@
 const db = require('./db');
 const bcrypt = require('bcryptjs');
 const { notifyNewOrder } = require('./push');
+const { notifyShorjaOrderProcessed } = require('./shorja-notify');
 
 /** Canonical UI statuses: pending | processing | rejected */
 const STATUS_LABELS = {
@@ -493,7 +494,11 @@ function setOrderStatus(orderId, newStatus, { actorType = 'admin', actorId = '',
     actorId,
     note
   });
-  return loadOrder(orderId);
+  const order = loadOrder(orderId);
+  if (canonicalStatus(storeStatus) === 'processing' && canonicalStatus(row.status) !== 'processing') {
+    void notifyShorjaOrderProcessed(order).catch(() => {});
+  }
+  return order;
 }
 
 function setPrepConfirmed(orderId, confirmed, { actorType = 'employee', actorId = '', note = '' } = {}) {

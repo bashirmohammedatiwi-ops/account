@@ -110,7 +110,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                           color: Colors.transparent,
                           child: OrderCard(
                             order: orders[i],
-                            onPrepToggled: _refresh,
+                            onChanged: _refresh,
                           ),
                         ),
                       ),

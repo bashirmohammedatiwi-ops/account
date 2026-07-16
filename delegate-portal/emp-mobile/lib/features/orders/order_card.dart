@@ -14,11 +14,11 @@ class OrderCard extends ConsumerWidget {
   const OrderCard({
     super.key,
     required this.order,
-    this.onPrepToggled,
+    this.onChanged,
   });
 
   final PurchaseOrder order;
-  final VoidCallback? onPrepToggled;
+  final VoidCallback? onChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -26,6 +26,7 @@ class OrderCard extends ConsumerWidget {
     final testerCount = order.lines.fold<num>(0, (s, l) => s + l.tester);
     final muted = themed(context, light: AppColors.muted, dark: AppColors.mutedDark);
     final confirmed = order.prepConfirmed && order.status == 'processing';
+    final showPrepCheck = order.status == 'processing';
     final borderColor = confirmed
         ? AppColors.confirmed
         : themed(context, light: AppColors.border, dark: AppColors.borderDark);
@@ -37,65 +38,41 @@ class OrderCard extends ConsumerWidget {
       color: surface,
       elevation: 0,
       borderRadius: BorderRadius.circular(AppColors.radius),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppColors.radius),
-        onTap: () => context.push('/orders/${order.id}'),
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppColors.radius),
-            border: Border.all(color: borderColor, width: confirmed ? 2 : 1),
-            boxShadow: isDark(context)
-                ? null
-                : [
-                    BoxShadow(
-                      color: confirmed ? AppColors.confirmed.withValues(alpha: 0.18) : AppColors.shadow,
-                      blurRadius: confirmed ? 20 : 16,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-          ),
-          child: Stack(
-            children: [
-              if (confirmed)
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: Container(
-                    height: 4,
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(colors: [AppColors.confirmed, Color(0xFF34D399)]),
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(AppColors.radius)),
-                    ),
+      clipBehavior: Clip.antiAlias,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppColors.radius),
+          border: Border.all(color: borderColor, width: confirmed ? 2 : 1),
+          boxShadow: isDark(context)
+              ? null
+              : [
+                  BoxShadow(
+                    color: confirmed ? AppColors.confirmed.withValues(alpha: 0.18) : AppColors.shadow,
+                    blurRadius: confirmed ? 20 : 16,
+                    offset: const Offset(0, 6),
                   ),
+                ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (confirmed)
+              Container(
+                height: 4,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(colors: [AppColors.confirmed, Color(0xFF34D399)]),
                 ),
-              Padding(
-                padding: const EdgeInsets.all(16),
+              ),
+            InkWell(
+              onTap: () => context.push('/orders/${order.id}'),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, showPrepCheck ? 10 : 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
                         Expanded(child: Text(order.orderNo, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17))),
-                        if (confirmed) ...[
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: AppColors.confirmed,
-                              borderRadius: BorderRadius.circular(999),
-                              boxShadow: [BoxShadow(color: AppColors.confirmed.withValues(alpha: 0.35), blurRadius: 8, offset: const Offset(0, 2))],
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.check_rounded, color: Colors.white, size: 14),
-                                SizedBox(width: 4),
-                                Text('مؤكد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 11)),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
                         SourceBadge(isShorja: order.isShorja),
                         const SizedBox(width: 8),
                         StatusBadge(status: order.status, compact: true),
@@ -134,32 +111,33 @@ class OrderCard extends ConsumerWidget {
                         Text(formatTimeAgo(order.submittedAt), style: TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w600)),
                       ],
                     ),
-                    if (order.status == 'processing') ...[
-                      const SizedBox(height: 12),
-                      _PrepConfirmButton(order: order, onDone: onPrepToggled),
-                    ],
                   ],
                 ),
               ),
-            ],
-          ),
+            ),
+            if (showPrepCheck)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: _PrepCheckRow(order: order, onChanged: onChanged),
+              ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _PrepConfirmButton extends ConsumerStatefulWidget {
-  const _PrepConfirmButton({required this.order, this.onDone});
+class _PrepCheckRow extends ConsumerStatefulWidget {
+  const _PrepCheckRow({required this.order, this.onChanged});
 
   final PurchaseOrder order;
-  final VoidCallback? onDone;
+  final VoidCallback? onChanged;
 
   @override
-  ConsumerState<_PrepConfirmButton> createState() => _PrepConfirmButtonState();
+  ConsumerState<_PrepCheckRow> createState() => _PrepCheckRowState();
 }
 
-class _PrepConfirmButtonState extends ConsumerState<_PrepConfirmButton> {
+class _PrepCheckRowState extends ConsumerState<_PrepCheckRow> {
   bool _busy = false;
 
   Future<void> _toggle() async {
@@ -170,7 +148,7 @@ class _PrepConfirmButtonState extends ConsumerState<_PrepConfirmButton> {
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('إلغاء التأكيد'),
-          content: const Text('إلغاء علامة تأكيد التجهيز عن هذا الطلب؟'),
+          content: const Text('إلغاء علامة تأكيد التجهيز؟'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('لا')),
             FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('نعم')),
@@ -184,8 +162,9 @@ class _PrepConfirmButtonState extends ConsumerState<_PrepConfirmButton> {
       HapticFeedback.mediumImpact();
       await ref.read(apiClientProvider).setPrepConfirmed(widget.order.id, confirmed: next);
       ref.invalidate(ordersListProvider);
+      ref.invalidate(pendingCountProvider);
       ref.invalidate(orderStatsProvider);
-      widget.onDone?.call();
+      widget.onChanged?.call();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(next ? 'تم تأكيد التجهيز ✓' : 'تم إلغاء التأكيد')),
@@ -201,20 +180,80 @@ class _PrepConfirmButtonState extends ConsumerState<_PrepConfirmButton> {
   @override
   Widget build(BuildContext context) {
     final confirmed = widget.order.prepConfirmed;
-    return SizedBox(
-      width: double.infinity,
-      child: FilledButton.tonalIcon(
-        onPressed: _busy ? null : _toggle,
-        icon: _busy
-            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-            : Icon(confirmed ? Icons.undo_rounded : Icons.check_circle_rounded),
-        label: Text(confirmed ? 'إلغاء تأكيد التجهيز' : 'تأكيد اكتمال التجهيز ✓'),
-        style: FilledButton.styleFrom(
-          backgroundColor: confirmed ? AppColors.confirmed.withValues(alpha: 0.14) : AppColors.processing.withValues(alpha: 0.12),
-          foregroundColor: confirmed ? AppColors.confirmed : AppColors.processing,
-          padding: const EdgeInsets.symmetric(vertical: 12),
+    final border = themed(context, light: AppColors.border, dark: AppColors.borderDark);
+
+    return Material(
+      color: confirmed
+          ? AppColors.confirmed.withValues(alpha: isDark(context) ? 0.15 : 0.1)
+          : themed(context, light: AppColors.surfaceAlt, dark: AppColors.surfaceAltDark),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: _busy ? null : _toggle,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: confirmed ? AppColors.confirmed.withValues(alpha: 0.4) : border),
+          ),
+          child: Row(
+            children: [
+              _CheckCircle(busy: _busy, confirmed: confirmed),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      confirmed ? 'تم تأكيد التجهيز' : 'تأكيد اكتمال التجهيز',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 13,
+                        color: confirmed ? AppColors.confirmed : themed(context, light: AppColors.text, dark: AppColors.textDark),
+                      ),
+                    ),
+                    Text(
+                      confirmed ? 'اضغط لإلغاء التأكيد' : 'اضغط عند الانتهاء من التجهيز',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _CheckCircle extends StatelessWidget {
+  const _CheckCircle({required this.busy, required this.confirmed});
+
+  final bool busy;
+  final bool confirmed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: confirmed ? AppColors.confirmed : Colors.white,
+        shape: BoxShape.circle,
+        border: Border.all(color: confirmed ? AppColors.confirmed : AppColors.confirmed.withValues(alpha: 0.35), width: 2),
+        boxShadow: confirmed ? [BoxShadow(color: AppColors.confirmed.withValues(alpha: 0.25), blurRadius: 6, offset: const Offset(0, 2))] : null,
+      ),
+      child: busy
+          ? Padding(
+              padding: const EdgeInsets.all(8),
+              child: CircularProgressIndicator(strokeWidth: 2, color: confirmed ? Colors.white : AppColors.confirmed),
+            )
+          : Icon(
+              Icons.check_rounded,
+              size: 22,
+              color: confirmed ? Colors.white : AppColors.confirmed.withValues(alpha: 0.5),
+            ),
     );
   }
 }
