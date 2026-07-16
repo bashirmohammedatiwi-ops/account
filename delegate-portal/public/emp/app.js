@@ -587,11 +587,24 @@ async function togglePrepConfirm(orderId, confirmed) {
   if (!confirmed && !confirm('إلغاء علامة تأكيد التجهيز عن هذا الطلب؟')) return;
   setOverlay(true);
   try {
-    await api(`/orders/${orderId}/prep-confirm`, {
+    const data = await api(`/orders/${orderId}/prep-confirm`, {
       method: 'PATCH',
       body: JSON.stringify({ confirmed })
     });
-    toast(confirmed ? 'تم تأكيد التجهيز ✓' : 'أُلغي تأكيد التجهيز');
+    if (confirmed) {
+      const notify = data.notify || {};
+      if (notify.ok && !notify.skipped && !notify.alreadyNotified) {
+        toast('تم تأكيد التجهيز — أُرسل الطلب لتطبيق الأدمن ✓');
+      } else if (notify.alreadyNotified) {
+        toast('تم تأكيد التجهيز — الطلب مُرسل مسبقاً للأدمن');
+      } else if (notify.error) {
+        toast(`تم تأكيد التجهيز لكن تعذّر الإرسال للأدمن: ${notify.error}`);
+      } else {
+        toast('تم تأكيد التجهيز ✓');
+      }
+    } else {
+      toast('أُلغي تأكيد التجهيز');
+    }
     await loadOrders({ keepScreen: state.screen === 'detail' });
     if (state.selectedOrder?.id === orderId) await openOrder(orderId);
   } catch (e) {

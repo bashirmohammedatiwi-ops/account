@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/api/order_action_result.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/models.dart';
 import '../../widgets/app_widgets.dart';
@@ -27,6 +28,7 @@ class OrderCard extends ConsumerWidget {
     final muted = themed(context, light: AppColors.muted, dark: AppColors.mutedDark);
     final confirmed = order.prepConfirmed && order.status == 'processing';
     final showPrepCheck = order.status == 'processing';
+    final showMarkProcessed = order.status == 'pending';
     final borderColor = confirmed
         ? AppColors.confirmed
         : themed(context, light: AppColors.border, dark: AppColors.borderDark);
@@ -66,7 +68,7 @@ class OrderCard extends ConsumerWidget {
             InkWell(
               onTap: () => context.push('/orders/${order.id}'),
               child: Padding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, showPrepCheck ? 10 : 16),
+                padding: EdgeInsets.fromLTRB(16, 16, 16, (showPrepCheck || showMarkProcessed) ? 10 : 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -115,12 +117,102 @@ class OrderCard extends ConsumerWidget {
                 ),
               ),
             ),
+            if (showMarkProcessed)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: _MarkProcessedRow(order: order, onChanged: onChanged),
+              ),
             if (showPrepCheck)
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                 child: _PrepCheckRow(order: order, onChanged: onChanged),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MarkProcessedRow extends ConsumerStatefulWidget {
+  const _MarkProcessedRow({required this.order, this.onChanged});
+
+  final PurchaseOrder order;
+  final VoidCallback? onChanged;
+
+  @override
+  ConsumerState<_MarkProcessedRow> createState() => _MarkProcessedRowState();
+}
+
+class _MarkProcessedRowState extends ConsumerState<_MarkProcessedRow> {
+  bool _busy = false;
+
+  Future<void> _markProcessed() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      HapticFeedback.mediumImpact();
+      final result = await ref.read(apiClientProvider).setOrderStatus(widget.order.id, 'processing');
+      ref.invalidate(ordersListProvider);
+      ref.invalidate(pendingCountProvider);
+      ref.invalidate(orderStatsProvider);
+      widget.onChanged?.call();
+      if (mounted) {
+        final notifyMsg = notifyUserMessage(result.notify);
+        final isError = result.notify != null && result.notify!['ok'] != true;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(notifyMsg.isNotEmpty ? notifyMsg : 'تم التجهيز'),
+            duration: Duration(seconds: isError ? 6 : 3),
+            backgroundColor: isError ? AppColors.rejected : AppColors.processing,
+          ),
+        );
+      }
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.processing.withValues(alpha: isDark(context) ? 0.15 : 0.1),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: _busy ? null : _markProcessed,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.processing.withValues(alpha: 0.45)),
+          ),
+          child: Row(
+            children: [
+              if (_busy)
+                const SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 2))
+              else
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(color: AppColors.processing, borderRadius: BorderRadius.circular(8)),
+                  child: const Icon(Icons.inventory_2_rounded, color: Colors.white, size: 16),
+                ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('تم التجهيز', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: AppColors.processing)),
+                    Text('إرسال الفاتورة لتطبيق الأدمن', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.processing)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_left_rounded, color: AppColors.processing),
+            ],
+          ),
         ),
       ),
     );
@@ -160,14 +252,20 @@ class _PrepCheckRowState extends ConsumerState<_PrepCheckRow> {
     setState(() => _busy = true);
     try {
       HapticFeedback.mediumImpact();
-      await ref.read(apiClientProvider).setPrepConfirmed(widget.order.id, confirmed: next);
+      final result = await ref.read(apiClientProvider).setPrepConfirmed(widget.order.id, confirmed: next);
       ref.invalidate(ordersListProvider);
       ref.invalidate(pendingCountProvider);
       ref.invalidate(orderStatsProvider);
       widget.onChanged?.call();
       if (mounted) {
+        final notifyMsg = next ? notifyUserMessage(result.notify) : '';
+        final isError = next && result.notify != null && result.notify!['ok'] != true;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(next ? 'تم تأكيد التجهيز ✓' : 'تم إلغاء التأكيد')),
+          SnackBar(
+            content: Text(notifyMsg.isNotEmpty ? notifyMsg : (next ? 'تم تأكيد التجهيز ✓' : 'تم إلغاء التأكيد')),
+            duration: Duration(seconds: isError ? 6 : 3),
+            backgroundColor: isError ? AppColors.rejected : null,
+          ),
         );
       }
     } on ApiException catch (e) {
@@ -205,7 +303,7 @@ class _PrepCheckRowState extends ConsumerState<_PrepCheckRow> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                          confirmed ? 'تم تأكيد التجهيز' : 'تأكيد اكتمال التجهيز',
+                      confirmed ? 'تم تأكيد التجهيز' : 'تأكيد اكتمال التجهيز',
                       style: TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: 13,
@@ -213,7 +311,7 @@ class _PrepCheckRowState extends ConsumerState<_PrepCheckRow> {
                       ),
                     ),
                     Text(
-                      confirmed ? 'اضغط لإلغاء التأكيد' : 'اضغط عند الانتهاء من التجهيز',
+                      confirmed ? 'اضغط لإلغاء التأكيد' : 'تأكيد وإرسال للأدمن إن لم يُرسل',
                       style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark)),
                     ),
                   ],

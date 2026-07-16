@@ -39,19 +39,21 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
 
   Future<void> _setStatus(String status) async {
     final label = statusLabelAr(status);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('تغيير الحالة', style: TextStyle(fontWeight: FontWeight.w900)),
-        content: Text('تغيير حالة الطلب إلى «$label»؟'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('تأكيد')),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
+    if (status != 'processing') {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('تغيير الحالة', style: TextStyle(fontWeight: FontWeight.w900)),
+          content: Text('تغيير حالة الطلب إلى «$label»؟'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('تأكيد')),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
     setState(() => _busy = true);
     try {
       final result = await ref.read(apiClientProvider).setOrderStatus(widget.orderId, status);
@@ -92,11 +94,17 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
     }
     setState(() => _busy = true);
     try {
-      await ref.read(apiClientProvider).setPrepConfirmed(widget.orderId, confirmed: next);
+      final result = await ref.read(apiClientProvider).setPrepConfirmed(widget.orderId, confirmed: next);
       await _reload();
       if (mounted) {
+        final notifyMsg = next ? notifyUserMessage(result.notify) : '';
+        final isError = next && result.notify != null && result.notify!['ok'] != true;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(next ? 'تم تأكيد التجهيز ✓' : 'تم إلغاء التأكيد')),
+          SnackBar(
+            content: Text(notifyMsg.isNotEmpty ? notifyMsg : (next ? 'تم تأكيد التجهيز ✓' : 'تم إلغاء التأكيد')),
+            duration: Duration(seconds: isError ? 6 : 3),
+            backgroundColor: isError ? AppColors.rejected : null,
+          ),
         );
       }
     } on ApiException catch (e) {
@@ -296,6 +304,21 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
                           ),
                         ),
                       ),
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              QuickStatusBar(current: order.status, busy: _busy, onSelect: _setStatus),
+                              if (order.status == 'processing') ...[
+                                const SizedBox(height: 12),
+                                PrepConfirmBar(confirmed: order.prepConfirmed, busy: _busy, onToggle: () => _togglePrepConfirm(order)),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
                       SliverPersistentHeader(
                         pinned: true,
                         delegate: _TabBarDelegate(
@@ -320,12 +343,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
                           onImage: _showImage,
                           onBarcode: (line, lineNo) => showProductBarcodeSheet(context, line, lineNo: lineNo),
                         ),
-                        _InfoTab(
-                          order: order,
-                          busy: _busy,
-                          onSetStatus: _setStatus,
-                          onTogglePrep: () => _togglePrepConfirm(order),
-                        ),
+                        _InfoTab(order: order),
                         ListView(padding: const EdgeInsets.all(16), children: [EventTimeline(events: order.events)]),
                       ],
                     ),
@@ -410,17 +428,9 @@ class _LinesTab extends StatelessWidget {
 }
 
 class _InfoTab extends StatelessWidget {
-  const _InfoTab({
-    required this.order,
-    required this.busy,
-    required this.onSetStatus,
-    required this.onTogglePrep,
-  });
+  const _InfoTab({required this.order});
 
   final PurchaseOrder order;
-  final bool busy;
-  final ValueChanged<String> onSetStatus;
-  final VoidCallback onTogglePrep;
 
   @override
   Widget build(BuildContext context) {
@@ -473,11 +483,15 @@ class _InfoTab extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 24),
-        if (order.status == 'processing') ...[
-          PrepConfirmBar(confirmed: order.prepConfirmed, busy: busy, onToggle: onTogglePrep),
-          const SizedBox(height: 16),
-        ],
-        QuickStatusBar(current: order.status, busy: busy, onSelect: onSetStatus),
+        Text(
+          'معلومات إضافية',
+          style: TextStyle(fontWeight: FontWeight.w900, color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark), fontSize: 12),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'تغيير الحالة وإرسال الطلب للأدمن من الشريط أعلى الشاشة.',
+          style: TextStyle(color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark), fontWeight: FontWeight.w600, fontSize: 13, height: 1.5),
+        ),
       ],
     );
   }

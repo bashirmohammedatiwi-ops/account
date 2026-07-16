@@ -119,16 +119,21 @@ router.post('/orders/:id/retry-admin-sync', authEmployee, async (req, res) => {
   }
 });
 
-router.patch('/orders/:id/prep-confirm', authEmployee, (req, res) => {
+router.patch('/orders/:id/prep-confirm', authEmployee, async (req, res) => {
   try {
     const confirmed = req.body?.confirmed !== false;
-    const order = setPrepConfirmed(Number(req.params.id), confirmed, {
+    const orderId = Number(req.params.id);
+    const order = setPrepConfirmed(orderId, confirmed, {
       actorType: 'employee',
       actorId: String(req.employee.username || EMP_USER),
       note: req.body?.note || ''
     });
     if (!order) return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
-    res.json({ ok: true, order });
+    let notify = null;
+    if (confirmed && canonicalStatus(order.status) === 'processing') {
+      notify = await maybeNotifyOrderProcessed(orderId);
+    }
+    res.json({ ok: true, order: loadOrder(orderId), notify });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
