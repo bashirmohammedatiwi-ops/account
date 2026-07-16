@@ -8,6 +8,7 @@ import '../../models/models.dart';
 import '../auth/auth_provider.dart';
 import 'api_exception.dart';
 import 'login_api.dart';
+import 'order_action_result.dart';
 
 final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(BaseOptions(
@@ -98,17 +99,23 @@ class ApiClient {
     return PurchaseOrder.fromJson(Map<String, dynamic>.from(data['order'] as Map), serverUrl: serverUrl);
   }
 
-  Future<PurchaseOrder> setOrderStatus(int id, String status, {String? note}) async {
+  Future<OrderActionResult> setOrderStatus(int id, String status, {String? note}) async {
     final data = await _json('PATCH', '/orders/$id/status', body: {
       'status': status,
       if (note != null) 'note': note,
     });
-    return PurchaseOrder.fromJson(Map<String, dynamic>.from(data['order'] as Map), serverUrl: serverUrl);
+    return OrderActionResult(
+      order: PurchaseOrder.fromJson(Map<String, dynamic>.from(data['order'] as Map), serverUrl: serverUrl),
+      notify: data['notify'] is Map ? Map<String, dynamic>.from(data['notify'] as Map) : null,
+    );
   }
 
-  Future<PurchaseOrder> setPrepConfirmed(int id, {bool confirmed = true}) async {
+  Future<OrderActionResult> setPrepConfirmed(int id, {bool confirmed = true}) async {
     final data = await _json('PATCH', '/orders/$id/prep-confirm', body: {'confirmed': confirmed});
-    return PurchaseOrder.fromJson(Map<String, dynamic>.from(data['order'] as Map), serverUrl: serverUrl);
+    return OrderActionResult(
+      order: PurchaseOrder.fromJson(Map<String, dynamic>.from(data['order'] as Map), serverUrl: serverUrl),
+      notify: data['notify'] is Map ? Map<String, dynamic>.from(data['notify'] as Map) : null,
+    );
   }
 
   Future<PurchaseOrder> updateLine(int orderId, int lineId, {required num quant, required num bonus, required num tester}) async {

@@ -249,12 +249,12 @@ class PrepConfirmBar extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          confirmed ? 'تم تأكيد اكتمال التجهيز' : 'تأكيد اكتمال التجهيز',
+                          confirmed ? 'تم تأكيد اكتمال التجهيز' : 'تم التجهيز — إرسال للأدمن',
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          confirmed ? 'اضغط لإلغاء التأكيد' : 'اضغط بعد الانتهاء من تجهيز كل البنود',
+                          confirmed ? 'اضغط لإلغاء التأكيد' : 'اضغط بعد الانتهاء لإرسال الفاتورة للأدمن',
                           style: TextStyle(color: Colors.white.withValues(alpha: 0.88), fontWeight: FontWeight.w600, fontSize: 12),
                         ),
                       ],

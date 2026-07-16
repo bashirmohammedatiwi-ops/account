@@ -9,6 +9,7 @@
     "sync": "node sync-client/sync.js",
     "init-db": "node scripts/init-db.js",
     "extract-logo": "node scripts/extract-logo.js",
+    "generate-emp-icons": "node scripts/generate-emp-icons.js",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",

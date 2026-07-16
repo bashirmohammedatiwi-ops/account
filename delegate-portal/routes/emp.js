@@ -6,6 +6,7 @@ const {
   loadOrder,
   setOrderStatus,
   setPrepConfirmed,
+  maybeNotifyOrderProcessed,
   updateOrderLineByEmployee,
   deleteOrderLineByEmployee,
   orderFeed,
@@ -82,7 +83,7 @@ router.get('/orders/:id', authEmployee, (req, res) => {
   res.json({ ok: true, order });
 });
 
-router.patch('/orders/:id/status', authEmployee, (req, res) => {
+router.patch('/orders/:id/status', authEmployee, async (req, res) => {
   try {
     const status = String(req.body?.status || '').trim();
     if (!ALLOWED_STATUSES.has(status) && !ALLOWED_STATUSES.has(canonicalStatus(status))) {
@@ -95,13 +96,17 @@ router.patch('/orders/:id/status', authEmployee, (req, res) => {
       note: req.body?.note || ''
     });
     if (!order) return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
-    res.json({ ok: true, order });
+    let notify = null;
+    if (uiStatus === 'processing') {
+      notify = await maybeNotifyOrderProcessed(order.id);
+    }
+    res.json({ ok: true, order: loadOrder(order.id), notify });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
 });
 
-router.patch('/orders/:id/prep-confirm', authEmployee, (req, res) => {
+router.patch('/orders/:id/prep-confirm', authEmployee, async (req, res) => {
   try {
     const confirmed = req.body?.confirmed !== false;
     const order = setPrepConfirmed(Number(req.params.id), confirmed, {
@@ -110,7 +115,11 @@ router.patch('/orders/:id/prep-confirm', authEmployee, (req, res) => {
       note: req.body?.note || ''
     });
     if (!order) return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
-    res.json({ ok: true, order });
+    let notify = null;
+    if (confirmed) {
+      notify = await maybeNotifyOrderProcessed(order.id);
+    }
+    res.json({ ok: true, order: loadOrder(order.id), notify });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }

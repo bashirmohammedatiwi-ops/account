@@ -172,6 +172,7 @@ function mapOrder(row, lines = [], events = []) {
     updatedAt: row.updated_at,
     prepConfirmed: Boolean(row.prep_confirmed),
     prepConfirmedAt: row.prep_confirmed_at || null,
+    processedNotifiedAt: row.processed_notified_at || null,
     lines: lines.map(mapLine),
     events: events.map((e) => ({
       id: e.id,
@@ -454,6 +455,20 @@ function submitOrder(orderId, agentId) {
   return order;
 }
 
+async function maybeNotifyOrderProcessed(orderId) {
+  const row = db.prepare('SELECT id, processed_notified_at FROM orders WHERE id = ?').get(orderId);
+  if (!row) return { ok: false, error: 'الطلب غير موجود' };
+  if (row.processed_notified_at) {
+    return { ok: true, skipped: true, alreadyNotified: true };
+  }
+  const order = loadOrder(orderId);
+  const result = await notifyShorjaOrderProcessed(order);
+  if (result.ok) {
+    db.prepare(`UPDATE orders SET processed_notified_at = datetime('now') WHERE id = ?`).run(orderId);
+  }
+  return result;
+}
+
 function setOrderStatus(orderId, newStatus, { actorType = 'admin', actorId = '', note = '' } = {}) {
   const row = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
   if (!row) return null;
@@ -495,31 +510,61 @@ function setOrderStatus(orderId, newStatus, { actorType = 'admin', actorId = '',
     note
   });
   const order = loadOrder(orderId);
-  if (canonicalStatus(storeStatus) === 'processing' && canonicalStatus(row.status) !== 'processing') {
-    void notifyShorjaOrderProcessed(order).catch(() => {});
-  }
   return order;
 }
 
 function setPrepConfirmed(orderId, confirmed, { actorType = 'employee', actorId = '', note = '' } = {}) {
   const row = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
   if (!row) return null;
-  if (canonicalStatus(row.status) !== 'processing') {
-    throw new Error('يمكن تأكيد التجهيز فقط للطلبات في حالة «تم التجهيز»');
+
+  if (!confirmed) {
+    if (canonicalStatus(row.status) !== 'processing') {
+      throw new Error('يمكن إلغاء التأكيد فقط للطلبات في حالة «تم التجهيز»');
+    }
+    db.prepare(`
+      UPDATE orders SET prep_confirmed = 0, prep_confirmed_at = NULL, updated_at = datetime('now') WHERE id = ?
+    `).run(orderId);
+    logEvent(orderId, {
+      fromStatus: row.status,
+      toStatus: row.status,
+      actorType,
+      actorId,
+      note: note || 'إلغاء تأكيد التجهيز'
+    });
+    return loadOrder(orderId);
   }
-  const flag = confirmed ? 1 : 0;
-  const at = confirmed ? new Date().toISOString().slice(0, 19).replace('T', ' ') : null;
+
+  const uiStatus = canonicalStatus(row.status);
+  if (uiStatus === 'rejected') {
+    throw new Error('لا يمكن تأكيد تجهيز طلب مرفوض');
+  }
+
+  if (uiStatus === 'pending') {
+    db.prepare(`
+      UPDATE orders SET status = 'processing', updated_at = datetime('now') WHERE id = ?
+    `).run(orderId);
+    logEvent(orderId, {
+      fromStatus: row.status,
+      toStatus: 'processing',
+      actorType,
+      actorId,
+      note: note || 'تم التجهيز'
+    });
+  }
+
+  const at = new Date().toISOString().slice(0, 19).replace('T', ' ');
   db.prepare(`
-    UPDATE orders SET prep_confirmed = ?, prep_confirmed_at = ?, updated_at = datetime('now') WHERE id = ?
-  `).run(flag, at, orderId);
+    UPDATE orders SET prep_confirmed = 1, prep_confirmed_at = ?, updated_at = datetime('now') WHERE id = ?
+  `).run(at, orderId);
   logEvent(orderId, {
-    fromStatus: row.status,
-    toStatus: row.status,
+    fromStatus: uiStatus === 'pending' ? row.status : row.status,
+    toStatus: 'processing',
     actorType,
     actorId,
-    note: note || (confirmed ? 'تأكيد اكتمال التجهيز ✓' : 'إلغاء تأكيد التجهيز')
+    note: note || 'تأكيد اكتمال التجهيز ✓'
   });
-  return loadOrder(orderId);
+  const order = loadOrder(orderId);
+  return order;
 }
 
 function listOrders({ agentId, status, sourceType, limit = 50, offset = 0 } = {}) {
@@ -625,6 +670,7 @@ module.exports = {
   submitOrder,
   setOrderStatus,
   setPrepConfirmed,
+  maybeNotifyOrderProcessed,
   updateOrderLineByEmployee,
   deleteOrderLineByEmployee,
   orderFeed,

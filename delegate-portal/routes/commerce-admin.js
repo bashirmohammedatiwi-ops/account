@@ -51,7 +51,9 @@ const {
   loadOrder,
   setOrderStatus,
   deleteOrderByAdmin,
-  orderStats
+  orderStats,
+  maybeNotifyOrderProcessed,
+  canonicalStatus
 } = require('../lib/orders');
 const { buildInvoicePdf, buildOrderPdf } = require('../lib/pdf-export');
 
@@ -487,7 +489,7 @@ router.get('/orders/:id', (req, res) => {
   res.json({ ok: true, order });
 });
 
-router.patch('/orders/:id/status', (req, res) => {
+router.patch('/orders/:id/status', async (req, res) => {
   try {
     const order = setOrderStatus(Number(req.params.id), req.body?.status, {
       actorType: 'admin',
@@ -495,7 +497,11 @@ router.patch('/orders/:id/status', (req, res) => {
       note: req.body?.note || ''
     });
     if (!order) return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
-    res.json({ ok: true, order });
+    let notify = null;
+    if (canonicalStatus(req.body?.status) === 'processing') {
+      notify = await maybeNotifyOrderProcessed(order.id);
+    }
+    res.json({ ok: true, order: loadOrder(order.id), notify });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }

@@ -587,11 +587,27 @@ async function togglePrepConfirm(orderId, confirmed) {
   if (!confirmed && !confirm('إلغاء علامة تأكيد التجهيز عن هذا الطلب؟')) return;
   setOverlay(true);
   try {
-    await api(`/orders/${orderId}/prep-confirm`, {
+    const data = await api(`/orders/${orderId}/prep-confirm`, {
       method: 'PATCH',
       body: JSON.stringify({ confirmed })
     });
-    toast(confirmed ? 'تم تأكيد التجهيز ✓' : 'أُلغي تأكيد التجهيز');
+    if (confirmed) {
+      const notify = data.notify || {};
+      if (notify.ok && !notify.skipped && !notify.alreadyNotified) {
+        toast('تم التجهيز — أُرسل الطلب لتطبيق الأدمن ✓');
+        pushNotification('تم التجهيز', `الطلب ${data.order?.orderNo || orderId} جاهز للأدمن`, { tag: `done-${orderId}` });
+      } else if (notify.alreadyNotified) {
+        toast('تم تأكيد التجهيز — الطلب مُرسل مسبقاً للأدمن');
+      } else if (notify.skipped) {
+        toast('تم التجهيز — إرسال الأدمن غير مفعّل على الخادم');
+      } else if (notify.error) {
+        toast(`تم التجهيز لكن تعذّر الإرسال للأدمن: ${notify.error}`);
+      } else {
+        toast('تم تأكيد التجهيز ✓');
+      }
+    } else {
+      toast('أُلغي تأكيد التجهيز');
+    }
     await loadOrders({ keepScreen: state.screen === 'detail' });
     if (state.selectedOrder?.id === orderId) await openOrder(orderId);
   } catch (e) {
@@ -677,14 +693,14 @@ function renderOrdersList() {
           <span class="time-ago">${formatTimeAgo(o.submittedAt || o.updatedAt)}</span>
         </div>
       </button>
-      ${o.status === 'processing' ? `
+      ${o.status === 'processing' || o.status === 'pending' ? `
       <div class="prep-check-row${confirmed ? ' confirmed' : ''}" data-prep-row="${o.id}">
         <button type="button" class="prep-check-circle" data-prep-toggle="${o.id}" data-prep-state="${confirmed ? '1' : '0'}" aria-label="تأكيد التجهيز">
           ${confirmed ? '✓' : ''}
         </button>
         <div class="prep-check-text">
-          ${confirmed ? 'تم تأكيد التجهيز' : 'تأكيد اكتمال التجهيز'}
-          <div class="prep-check-sub">${confirmed ? 'اضغط لإلغاء التأكيد' : 'اضغط عند الانتهاء من التجهيز'}</div>
+          ${confirmed ? 'تم تأكيد التجهيز' : 'تم التجهيز — إرسال للأدمن'}
+          <div class="prep-check-sub">${confirmed ? 'اضغط لإلغاء التأكيد' : 'اضغط عند الانتهاء لإرسال الفاتورة للأدمن'}</div>
         </div>
       </div>` : ''}
     </article>`;
@@ -985,11 +1001,11 @@ async function openOrder(id) {
             data-set-status="${a.id}" ${o.status === a.id ? 'disabled' : ''}>${esc(a.label)}</button>`).join('')}
       </div>
 
-      ${o.status === 'processing' ? `
+      ${o.status === 'processing' || o.status === 'pending' ? `
       <div class="prep-confirm-bar-v3${confirmed ? ' confirmed' : ''}" data-detail-prep="${o.id}" data-prep-state="${confirmed ? '1' : '0'}">
         <div>
-          <strong>${confirmed ? '✓ تم تأكيد التجهيز' : 'تأكيد اكتمال التجهيز'}</strong>
-          <p style="margin:4px 0 0;font-size:0.72rem;color:var(--muted)">${confirmed ? 'اضغط لإلغاء' : 'بعد الانتهاء من التجهيز'}</p>
+          <strong>${confirmed ? '✓ تم تأكيد التجهيز' : 'تم التجهيز — إرسال للأدمن'}</strong>
+          <p style="margin:4px 0 0;font-size:0.72rem;color:var(--muted)">${confirmed ? 'اضغط لإلغاء' : 'اضغط بعد الانتهاء لإرسال الفاتورة للأدمن'}</p>
         </div>
         <span style="font-size:1.4rem">${confirmed ? '✓' : '○'}</span>
       </div>` : ''}
@@ -1038,8 +1054,20 @@ async function setOrderStatus(id, status) {
     });
     state.selectedOrder = data.order;
     if (status === 'processing') {
-      toast('تم التجهيز — الطلب يُرسل الآن لتطبيق الأدمن للترحيل');
-      pushNotification('تم التجهيز', `الطلب ${data.order?.orderNo || id} جاهز للأدمن`, { tag: `done-${id}` });
+      const notify = data.notify || {};
+      if (notify.ok && !notify.skipped && !notify.alreadyNotified) {
+        toast('تم التجهيز — أُرسل الطلب لتطبيق الأدمن ✓');
+        pushNotification('تم التجهيز', `الطلب ${data.order?.orderNo || id} جاهز للأدمن`, { tag: `done-${id}` });
+      } else if (notify.alreadyNotified) {
+        toast('تم التجهيز — الطلب مُرسل مسبقاً للأدمن');
+      } else if (notify.skipped) {
+        toast('تم التجهيز — إرسال الأدمن غير مفعّل على الخادم');
+      } else if (notify.error) {
+        toast(`تم التجهيز لكن تعذّر الإرسال للأدمن: ${notify.error}`);
+      } else {
+        toast('تم التجهيز — الطلب يُرسل الآن لتطبيق الأدمن للترحيل');
+        pushNotification('تم التجهيز', `الطلب ${data.order?.orderNo || id} جاهز للأدمن`, { tag: `done-${id}` });
+      }
     } else {
       toast(`تم تحديث الحالة: ${statusLabel(status)}`);
     }

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/api/order_action_result.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/models.dart';
 import '../../widgets/app_widgets.dart';
@@ -53,10 +54,13 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
     if (ok != true || !mounted) return;
     setState(() => _busy = true);
     try {
-      await ref.read(apiClientProvider).setOrderStatus(widget.orderId, status);
+      final result = await ref.read(apiClientProvider).setOrderStatus(widget.orderId, status);
       await _reload();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم التحديث إلى $label')));
+        final notifyMsg = status == 'processing' ? notifyUserMessage(result.notify) : '';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(notifyMsg.isNotEmpty ? notifyMsg : 'تم التحديث إلى $label')),
+        );
       }
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
@@ -83,12 +87,11 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
     }
     setState(() => _busy = true);
     try {
-      await ref.read(apiClientProvider).setPrepConfirmed(widget.orderId, confirmed: next);
+      final result = await ref.read(apiClientProvider).setPrepConfirmed(widget.orderId, confirmed: next);
       await _reload();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(next ? 'تم تأكيد التجهيز ✓' : 'تم إلغاء التأكيد')),
-        );
+        final msg = next ? notifyUserMessage(result.notify) : 'تم إلغاء التأكيد';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg.isNotEmpty ? msg : 'تم تأكيد التجهيز ✓')));
       }
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
@@ -464,7 +467,7 @@ class _InfoTab extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 24),
-        if (order.status == 'processing') ...[
+        if (order.status == 'processing' || order.status == 'pending') ...[
           PrepConfirmBar(confirmed: order.prepConfirmed, busy: busy, onToggle: onTogglePrep),
           const SizedBox(height: 16),
         ],

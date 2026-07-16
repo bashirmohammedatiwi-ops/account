@@ -249,6 +249,9 @@ function migratePrepConfirmField(db) {
   if (!columnExists(db, 'orders', 'prep_confirmed_at')) {
     db.exec('ALTER TABLE orders ADD COLUMN prep_confirmed_at TEXT');
   }
+  if (!columnExists(db, 'orders', 'processed_notified_at')) {
+    db.exec('ALTER TABLE orders ADD COLUMN processed_notified_at TEXT');
+  }
   db.exec('CREATE INDEX IF NOT EXISTS idx_orders_prep_confirmed ON orders(prep_confirmed)');
 }
 
