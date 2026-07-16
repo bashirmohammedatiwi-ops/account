@@ -148,15 +148,17 @@ html.standalone .install-banner { display: none !important; }
 }
 
 .login-logo {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 14px;
   display: grid;
   place-items: center;
-  background: var(--primary);
-  color: #fff;
-  font-weight: 800;
+  background: #fff;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  flex-shrink: 0;
 }
+.login-logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
 
 .brand-name { margin: 0; font-weight: 800; font-size: 1.1rem; }
 .brand-tag { margin: 0; color: var(--muted); font-size: 0.82rem; }

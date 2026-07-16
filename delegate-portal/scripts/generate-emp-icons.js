@@ -1,78 +1,80 @@
+/**
+ * Generate Android mipmap + PWA icons from source PNG (white bg + red logo).
+ * Usage: node scripts/generate-emp-icons.js [source.png]
+ */
 const fs = require('fs');
 const path = require('path');
-const { createCanvas } = require('canvas');
 
-const OUT = path.join(__dirname, '..', 'public', 'emp', 'icons');
+const root = path.join(__dirname, '..');
+const source = process.argv[2] || path.join(root, 'emp-mobile', 'assets', 'app_icon_source.png');
 
-function roundRect(ctx, x, y, w, h, r) {
-  const radius = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.arcTo(x + w, y, x + w, y + h, radius);
-  ctx.arcTo(x + w, y + h, x, y + h, radius);
-  ctx.arcTo(x, y + h, x, y, radius);
-  ctx.arcTo(x, y, x + w, y, radius);
-  ctx.closePath();
-}
-
-function drawIcon(size, maskable = false) {
-  const canvas = createCanvas(size, size);
-  const ctx = canvas.getContext('2d');
-  const pad = maskable ? size * 0.18 : 0;
-
-  const bg = ctx.createLinearGradient(0, 0, size, size);
-  bg.addColorStop(0, '#134e4a');
-  bg.addColorStop(1, '#0f766e');
-  ctx.fillStyle = bg;
-  if (maskable) {
-    ctx.fillRect(0, 0, size, size);
-    roundRect(ctx, pad, pad, size - pad * 2, size - pad * 2, size * 0.18);
-    ctx.fill();
-  } else {
-    roundRect(ctx, 0, 0, size, size, size * 0.22);
-    ctx.fill();
+async function main() {
+  let sharp;
+  try {
+    sharp = require('sharp');
+  } catch {
+    console.error('Run: npm install sharp (in delegate-portal folder)');
+    process.exit(1);
   }
 
-  const cx = size / 2;
-  const cy = size / 2;
-  const box = size * (maskable ? 0.34 : 0.38);
-  const bx = cx - box / 2;
-  const by = cy - box / 2 + size * 0.02;
+  if (!fs.existsSync(source)) {
+    console.error('Source not found:', source);
+    process.exit(1);
+  }
 
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = size * 0.045;
-  ctx.lineJoin = 'round';
-  roundRect(ctx, bx, by, box, box * 0.72, size * 0.08);
-  ctx.stroke();
+  const androidSizes = {
+    'mipmap-mdpi': 48,
+    'mipmap-hdpi': 72,
+    'mipmap-xhdpi': 96,
+    'mipmap-xxhdpi': 144,
+    'mipmap-xxxhdpi': 192
+  };
 
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath();
-  ctx.moveTo(bx + box * 0.22, by + box * 0.36);
-  ctx.lineTo(cx, by + box * 0.58);
-  ctx.lineTo(bx + box * 0.78, by + box * 0.36);
-  ctx.stroke();
+  const resRoot = path.join(root, 'emp-mobile', 'android', 'app', 'src', 'main', 'res');
+  for (const [folder, size] of Object.entries(androidSizes)) {
+    const dir = path.join(resRoot, folder);
+    fs.mkdirSync(dir, { recursive: true });
+  }
 
-  ctx.fillStyle = 'rgba(255,255,255,0.92)';
-  ctx.font = `800 ${size * 0.11}px Cairo, sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('تجهيز', cx, by + box * 0.9);
+  const pwaDir = path.join(root, 'public', 'emp', 'icons');
+  fs.mkdirSync(pwaDir, { recursive: true });
 
-  return canvas;
+  const base = sharp(source).ensureAlpha();
+
+  for (const [folder, size] of Object.entries(androidSizes)) {
+    const out = path.join(resRoot, folder, 'ic_launcher.png');
+    await base.clone().resize(size, size, { fit: 'contain', background: '#ffffff' }).png().toFile(out);
+    console.log('wrote', out);
+  }
+
+  const pwaSizes = [
+    ['icon-192.png', 192],
+    ['icon-512.png', 512],
+    ['icon-maskable-192.png', 192, true],
+    ['icon-maskable-512.png', 512, true]
+  ];
+
+  for (const [name, size, maskable] of pwaSizes) {
+    const out = path.join(pwaDir, name);
+    if (maskable) {
+      const inner = Math.round(size * 0.72);
+      const logo = await base.clone().resize(inner, inner, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } }).png().toBuffer();
+      await sharp({
+        create: { width: size, height: size, channels: 4, background: '#ffffff' }
+      }).composite([{ input: logo, gravity: 'centre' }]).png().toFile(out);
+    } else {
+      await base.clone().resize(size, size, { fit: 'contain', background: '#ffffff' }).png().toFile(out);
+    }
+    console.log('wrote', out);
+  }
+
+  const assetsDir = path.join(root, 'emp-mobile', 'assets');
+  fs.mkdirSync(assetsDir, { recursive: true });
+  fs.copyFileSync(source, path.join(assetsDir, 'app_icon_source.png'));
+  console.log('Done.');
 }
 
-fs.mkdirSync(OUT, { recursive: true });
-
-const files = [
-  ['icon-192.png', 192, false],
-  ['icon-512.png', 512, false],
-  ['icon-maskable-192.png', 192, true],
-  ['icon-maskable-512.png', 512, true]
-];
-
-for (const [name, size, maskable] of files) {
-  const out = path.join(OUT, name);
-  const buf = drawIcon(size, maskable).toBuffer('image/png');
-  fs.writeFileSync(out, buf);
-  console.log('Wrote', out);
-}
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

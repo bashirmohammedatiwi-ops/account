@@ -1,4 +1,4 @@
-const CACHE = 'emp-prep-v3';
+const CACHE = 'emp-prep-v4';
 const SHELL = [
   './',
   './index.html',
