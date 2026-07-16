@@ -455,16 +455,25 @@ function submitOrder(orderId, agentId) {
   return order;
 }
 
-async function maybeNotifyOrderProcessed(orderId) {
+async function maybeNotifyOrderProcessed(orderId, { force = false } = {}) {
   const row = db.prepare('SELECT id, processed_notified_at FROM orders WHERE id = ?').get(orderId);
   if (!row) return { ok: false, error: 'الطلب غير موجود' };
-  if (row.processed_notified_at) {
+  if (row.processed_notified_at && !force) {
     return { ok: true, skipped: true, alreadyNotified: true };
   }
   const order = loadOrder(orderId);
+  if (!order) return { ok: false, error: 'الطلب غير موجود' };
+  if (canonicalStatus(order.rawStatus || order.status) !== 'processing') {
+    return { ok: false, error: 'الطلب ليس في حالة تم التجهيز' };
+  }
   const result = await notifyShorjaOrderProcessed(order);
   if (result.ok) {
     db.prepare(`UPDATE orders SET processed_notified_at = datetime('now') WHERE id = ?`).run(orderId);
+    console.log('[orders] admin notify ok:', order.orderNo, order.id);
+  } else if (!result.skipped) {
+    console.error('[orders] admin notify failed:', order.orderNo, result.error || 'unknown');
+  } else {
+    console.warn('[orders] admin notify skipped:', order.orderNo, result.error || 'config');
   }
   return result;
 }

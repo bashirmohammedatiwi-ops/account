@@ -91,7 +91,6 @@ router.patch('/orders/:id/status', authEmployee, async (req, res) => {
     }
     const uiStatus = ALLOWED_STATUSES.has(status) ? status : canonicalStatus(status);
     const orderId = Number(req.params.id);
-    const before = loadOrder(orderId);
     const order = setOrderStatus(orderId, uiStatus, {
       actorType: 'employee',
       actorId: String(req.employee.username || EMP_USER),
@@ -99,10 +98,22 @@ router.patch('/orders/:id/status', authEmployee, async (req, res) => {
     });
     if (!order) return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
     let notify = null;
-    if (uiStatus === 'processing' && before?.status !== 'processing') {
+    if (uiStatus === 'processing') {
       notify = await maybeNotifyOrderProcessed(order.id);
     }
     res.json({ ok: true, order: loadOrder(order.id), notify });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/orders/:id/retry-admin-sync', authEmployee, async (req, res) => {
+  try {
+    const orderId = Number(req.params.id);
+    const order = loadOrder(orderId);
+    if (!order) return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
+    const notify = await maybeNotifyOrderProcessed(orderId, { force: true });
+    res.json({ ok: true, order: loadOrder(orderId), notify });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }

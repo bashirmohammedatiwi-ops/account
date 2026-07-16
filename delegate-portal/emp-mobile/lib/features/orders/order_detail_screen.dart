@@ -58,8 +58,13 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
       await _reload();
       if (mounted) {
         final notifyMsg = status == 'processing' ? notifyUserMessage(result.notify) : '';
+        final isError = status == 'processing' && result.notify != null && result.notify!['ok'] != true;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(notifyMsg.isNotEmpty ? notifyMsg : 'تم التحديث إلى $label')),
+          SnackBar(
+            content: Text(notifyMsg.isNotEmpty ? notifyMsg : 'تم التحديث إلى $label'),
+            duration: Duration(seconds: isError ? 6 : 3),
+            backgroundColor: isError ? AppColors.rejected : null,
+          ),
         );
       }
     } on ApiException catch (e) {

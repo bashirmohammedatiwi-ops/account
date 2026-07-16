@@ -80,9 +80,16 @@ app.use((err, _req, res, _next) => {
 });
 
 app.listen(PORT, HOST, () => {
+  const shorjaUrl = String(process.env.SHORJA_HUB_URL || '').trim();
+  const syncKey = String(process.env.SYNC_API_KEY || '').trim();
   console.log(`Edari Delegate Portal: http://${HOST}:${PORT}/admin`);
   console.log(`Delegate mobile: http://${HOST}:${PORT}/m`);
   console.log(`Employee prep: http://${HOST}:${PORT}/emp`);
   console.log(`Employee Flutter app API: http://${HOST}:${PORT}/api/emp`);
-  console.log(`Sync API key: ${process.env.SYNC_API_KEY || '(default)'}`);
+  console.log(`Sync API key: ${syncKey || '(default)'}`);
+  if (!shorjaUrl) {
+    console.warn('[config] SHORJA_HUB_URL غير مضبوط — لن تصل طلبات «تم التجهيز» إلى أدمن الشورجة');
+  } else {
+    console.log(`Shorja hub (تم التجهيز → الأدمن): ${shorjaUrl}`);
+  }
 });

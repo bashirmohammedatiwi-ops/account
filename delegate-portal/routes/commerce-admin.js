@@ -492,7 +492,6 @@ router.get('/orders/:id', (req, res) => {
 router.patch('/orders/:id/status', async (req, res) => {
   try {
     const orderId = Number(req.params.id);
-    const before = loadOrder(orderId);
     const order = setOrderStatus(orderId, req.body?.status, {
       actorType: 'admin',
       actorId: 'admin',
@@ -501,7 +500,7 @@ router.patch('/orders/:id/status', async (req, res) => {
     if (!order) return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
     let notify = null;
     const uiStatus = canonicalStatus(req.body?.status);
-    if (uiStatus === 'processing' && before?.status !== 'processing') {
+    if (uiStatus === 'processing') {
       notify = await maybeNotifyOrderProcessed(order.id);
     }
     res.json({ ok: true, order: loadOrder(order.id), notify });
