@@ -211,40 +211,86 @@ function normalizeCode(code) {
   return String(code ?? '').trim();
 }
 
+function cleanEdariBarcode(raw) {
+  const bc = normalizeCode(raw);
+  if (!bc || bc === '0') return '';
+  return bc;
+}
+
+/** EAN/UPC-style retail barcode (8–14 digits). */
+function isRetailBarcode(code) {
+  const c = normalizeCode(code);
+  return /^\d{8,14}$/.test(c);
+}
+
+/** Short Edari internal article number (often 3–7 digits, sometimes equals num). */
+function isInternalSku(code, num = '') {
+  const c = normalizeCode(code);
+  const n = normalizeCode(num);
+  if (!c) return true;
+  if (n && c === n) return true;
+  return /^\d{1,7}$/.test(c);
+}
+
+/**
+ * Pick the best display/storage barcode: prefer retail EAN over internal Edari num.
+ */
+function pickBestCatalogBarcode(skuNum = '', ...codes) {
+  const num = normalizeCode(skuNum);
+  const unique = [...new Set(codes.map(normalizeCode).filter(Boolean))];
+  const retail = unique.filter(isRetailBarcode);
+  if (retail.length) {
+    retail.sort((a, b) => b.length - a.length);
+    return retail[0];
+  }
+  const nonInternal = unique.filter((c) => !isInternalSku(c, num));
+  if (nonInternal.length) {
+    nonInternal.sort((a, b) => b.length - a.length);
+    return nonInternal[0];
+  }
+  if (unique.length) {
+    unique.sort((a, b) => b.length - a.length);
+    return unique[0];
+  }
+  return num || '';
+}
+
 /**
  * Prefer the real scannable barcode over Edari internal material number (num).
  */
 function resolveProductBarcode(scannedCode = '', material = {}, existingBarcode = '') {
-  const scanned = normalizeCode(scannedCode);
-  const existing = normalizeCode(existingBarcode);
   const num = normalizeCode(material.num);
-  const edariBarcode = normalizeCode(material.barcode);
+  return pickBestCatalogBarcode(
+    num,
+    scannedCode,
+    existingBarcode,
+    material.barcode
+  );
+}
 
-  const candidates = [...new Set([scanned, existing, edariBarcode].filter(Boolean))];
-  const nonNum = candidates.filter((c) => !num || c !== num);
-  if (nonNum.length) {
-    nonNum.sort((a, b) => b.length - a.length);
-    return nonNum[0];
-  }
-  return scanned || edariBarcode || existing || num || '';
+function findEdariMaterialBySeq(seq) {
+  const raw = normalizeCode(seq);
+  if (!raw) return null;
+  const row = db.prepare('SELECT * FROM edari_materials WHERE seq = ?').get(raw);
+  return row ? mapEdariMaterial(row) : null;
 }
 
 function resolveStoredProductBarcode(row) {
   if (!row) return '';
   const stored = normalizeCode(row.barcode);
   const sku = normalizeCode(row.sku_num);
-  const material = findEdariMaterialByCode(row.edari_seq || stored || sku);
+  const material = findEdariMaterialBySeq(row.edari_seq)
+    || findEdariMaterialByCode(row.edari_seq || stored || sku);
   if (material) {
-    const resolved = resolveProductBarcode(stored, material, stored);
-    if (resolved) return resolved;
+    return pickBestCatalogBarcode(sku, stored, material.barcode);
   }
-  return stored || sku || '';
+  return pickBestCatalogBarcode(sku, stored);
 }
 
 function parseEdariSyncRow(row) {
   const seq = String(row.Seq ?? row.seq ?? '').trim();
   const num = String(row.Num ?? row.num ?? '').trim();
-  const barcode = String(row.Barcode ?? row.barcode ?? '').trim();
+  const barcode = cleanEdariBarcode(row.Barcode ?? row.barcode);
   const name1 = String(row.Name1 ?? row.name ?? '').trim();
   return {
     seq,
@@ -499,13 +545,16 @@ function findEdariMaterialByCode(code) {
     WHERE seq = ? OR num = ? OR barcode = ?
     ORDER BY
       CASE
-        WHEN barcode = ? THEN 0
-        WHEN num = ? THEN 1
-        WHEN seq = ? THEN 2
-        ELSE 3
-      END
+        WHEN seq = ? THEN 0
+        WHEN barcode = ? AND barcode != '' AND barcode != num THEN 1
+        WHEN barcode = ? THEN 2
+        WHEN num = ? THEN 3
+        ELSE 4
+      END,
+      CASE WHEN barcode != '' AND barcode != num AND length(barcode) >= 8 THEN 0 ELSE 1 END,
+      length(barcode) DESC
     LIMIT 1
-  `).get(raw, raw, raw, raw, raw, raw);
+  `).get(raw, raw, raw, raw, raw, raw, raw);
   return row ? mapEdariMaterial(row) : null;
 }
 
@@ -537,7 +586,7 @@ function createProduct(data) {
     data.sectionId,
     data.edariSeq || '',
     data.skuNum || '',
-    data.barcode || data.skuNum || '',
+    pickBestCatalogBarcode(data.skuNum, data.barcode) || data.skuNum || '',
     data.name,
     data.unit || '',
     Number(data.price || 0),
@@ -747,7 +796,7 @@ function refreshRegisteredProductFromEdari(parsed) {
   const wholesale = edariWholesalePrice(parsed.sellPr1, parsed.sellPr2, parsed.sellPr3, parsed.sellPr5);
   for (const id of findRegisteredProductIds(parsed)) {
     const current = getProduct(id);
-    const barcode = resolveProductBarcode(current?.barcode || '', parsed, current?.barcode);
+    const barcode = pickBestCatalogBarcode(parsed.num, current?.barcode, parsed.barcode);
     updateProduct(id, {
       edariSeq: parsed.seq,
       skuNum: parsed.num,
@@ -820,8 +869,31 @@ function materialRowToParsed(row) {
 
 /** Fix products stored with short sku_num as barcode when Edari has the real barcode. */
 function repairProductBarcodes() {
-  const rows = db.prepare('SELECT * FROM products').all();
   let fixed = 0;
+
+  // Fast path: copy retail barcode from edari_materials cache when linked by seq.
+  const bulk = db.prepare(`
+    UPDATE products
+    SET barcode = (
+      SELECT m.barcode FROM edari_materials m
+      WHERE m.seq = products.edari_seq
+        AND m.barcode != ''
+        AND m.barcode != m.num
+      LIMIT 1
+    ),
+    updated_at = datetime('now')
+    WHERE edari_seq != ''
+      AND EXISTS (
+        SELECT 1 FROM edari_materials m
+        WHERE m.seq = products.edari_seq
+          AND m.barcode != ''
+          AND m.barcode != m.num
+          AND products.barcode != m.barcode
+      )
+  `).run();
+  fixed += bulk.changes || 0;
+
+  const rows = db.prepare('SELECT * FROM products').all();
   const tx = db.transaction(() => {
     for (const row of rows) {
       const resolved = resolveStoredProductBarcode(row);
@@ -982,7 +1054,7 @@ function normalizeClientMaterial(material, code = '') {
   return {
     seq: String(material.seq),
     num: String(material.num || ''),
-    barcode: String(material.barcode || code).trim(),
+    barcode: cleanEdariBarcode(material.barcode),
     name: String(material.name || material.name1 || ''),
     name2: String(material.name2 || ''),
     unit: String(material.unit || ''),
@@ -1155,19 +1227,28 @@ function syncMaterialsFromEdari(rows = []) {
     for (const row of prepared) {
       const parsed = parseEdariSyncRow(row);
       if (!parsed?.seq) continue;
-      if (Number(parsed.subCount || 0) > 0) {
-        if (upsertMaterialNode(row)) nodes += 1;
+      const enrichedBarcode = pickBestCatalogBarcode(parsed.num, parsed.barcode);
+      const syncRow = enrichedBarcode && enrichedBarcode !== parsed.barcode
+        ? { ...row, Barcode: enrichedBarcode, barcode: enrichedBarcode }
+        : row;
+      const parsedFinal = parseEdariSyncRow(syncRow);
+      if (Number(parsedFinal.subCount || 0) > 0) {
+        if (upsertMaterialNode(syncRow)) nodes += 1;
         continue;
       }
-      const material = upsertEdariMaterial(row);
+      const material = upsertEdariMaterial(syncRow);
       if (!material) continue;
       materials += 1;
-      productsUpdated += refreshRegisteredProductFromEdari(material);
+      productsUpdated += refreshRegisteredProductFromEdari({
+        ...parsedFinal,
+        barcode: pickBestCatalogBarcode(parsedFinal.num, parsedFinal.barcode)
+      });
     }
   });
   tx();
+  const barcodesRepaired = repairProductBarcodes();
   const pricesApplied = applyWholesalePricesFromMaterials();
-  return { materials, nodes, productsUpdated, pricesApplied, scanned: rows.length };
+  return { materials, nodes, productsUpdated, barcodesRepaired, pricesApplied, scanned: rows.length };
 }
 
 function purgeAllCatalogProducts() {
@@ -1316,6 +1397,7 @@ module.exports = {
   resolveProductBarcode,
   resolveStoredProductBarcode,
   repairProductBarcodes,
+  pickBestCatalogBarcode,
   edariMaterialStats,
   cacheEdariMaterial,
   addProductByBarcode,

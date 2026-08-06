@@ -128,7 +128,16 @@ async function lookupEdariMaterialsByCodes(codes = []) {
     const result = await odbcBridge.runQuery({ ...getEdariConnection(), sql });
     if (!result.ok) throw new Error(result.error || 'فشل الاتصال بـ Edari');
     for (const row of result.rows || []) {
-      bySeq.set(String(row.Seq), row);
+      const seq = String(row.Seq ?? '');
+      const num = String(row.Num ?? '');
+      const edariBc = String(row.Barcode ?? '').trim();
+      const match = batch.find((c) => c === seq || c === num || c === edariBc) || '';
+      const mapped = mapMaterialRow(row, match);
+      bySeq.set(seq, {
+        ...row,
+        Barcode: mapped.barcode,
+        Num: mapped.num || num
+      });
     }
   }
 

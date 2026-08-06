@@ -445,7 +445,7 @@ function prepareEdariRowsForUpload(rows = []) {
 }
 
 async function uploadEdariMaterialRows(rows, onProgress) {
-  if (!rows.length) return { materials: 0, productsUpdated: 0 };
+  if (!rows.length) return { materials: 0, productsUpdated: 0, barcodesRepaired: { fixed: 0 } };
   const prepared = prepareEdariRowsForUpload(rows);
   const ADMIN_BATCH = Math.min(500, prepared.length);
   try {
@@ -460,7 +460,12 @@ async function uploadEdariMaterialRows(rows, onProgress) {
       materials += data.materials || 0;
       productsUpdated += data.productsUpdated || 0;
     }
-    return { materials, productsUpdated };
+    let barcodesRepaired = { fixed: 0 };
+    try {
+      const repair = await commerceApi('/products/repair-barcodes', { method: 'POST' });
+      barcodesRepaired = repair;
+    } catch { /* optional */ }
+    return { materials, productsUpdated, barcodesRepaired };
   } catch (err) {
     if (!isNotFoundError(err)) throw err;
   }
@@ -574,7 +579,9 @@ async function refreshCatalogPricesNow() {
       const result = await uploadEdariMaterialRows(rows, (done, total) => {
         if (btn) btn.textContent = `رفع ${done}/${total}...`;
       });
-      showToast(`تم — ${result.productsUpdated} منتج · سعر الجملة (SellPr1)`, 'ok');
+      const repaired = result.barcodesRepaired?.fixed;
+      const repairNote = repaired > 0 ? ` · ${repaired} باركود` : '';
+      showToast(`تم — ${result.productsUpdated} منتج · سعر الجملة${repairNote}`, 'ok');
     } else {
       const { body } = buildCatalogRefreshScope();
       let data;

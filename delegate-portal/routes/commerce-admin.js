@@ -41,6 +41,7 @@ const {
   syncSectionFromEdari,
   syncMaterialsFromEdari,
   refreshCatalogPricesFromCache,
+  repairProductBarcodes,
   listCatalogRefreshCodes,
   purgeAllCatalogProducts,
   reorderProducts,
@@ -239,7 +240,7 @@ router.post('/products/sync-materials', (req, res) => {
     res.json({
       ok: true,
       ...result,
-      message: `تم تحديث ${result.productsUpdated} منتج · ${result.pricesApplied ?? 0} سعر جملة (SellPr1) · ${result.materials} مادة`
+      message: `تم تحديث ${result.productsUpdated} منتج · ${result.pricesApplied ?? 0} سعر جملة · ${result.barcodesRepaired?.fixed ?? 0} باركود · ${result.materials} مادة`
     });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
@@ -251,10 +252,28 @@ router.post('/products/refresh-prices', (req, res) => {
     const sectionId = req.body?.sectionId != null ? Number(req.body.sectionId) : null;
     const branchId = req.body?.branchId != null ? Number(req.body.branchId) : null;
     const result = refreshCatalogPricesFromCache({ sectionId, branchId });
+    const repaired = result.barcodesRepaired?.fixed ?? 0;
     res.json({
       ok: true,
       ...result,
-      message: `تم تحديث ${result.updated} من ${result.total} منتج (اسم · عدد · سعر)`
+      message: repaired > 0
+        ? `تم تحديث ${result.updated} منتج · أُصلح ${repaired} باركود`
+        : `تم تحديث ${result.updated} من ${result.total} منتج (اسم · عدد · سعر · باركود)`
+    });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/products/repair-barcodes', (_req, res) => {
+  try {
+    const result = repairProductBarcodes();
+    res.json({
+      ok: true,
+      ...result,
+      message: result.fixed > 0
+        ? `تم إصلاح ${result.fixed} باركود من ${result.total} منتج`
+        : 'جميع الباركودات محدّثة — إن بقي باركود قصير، نفّذ «تحديث من Edari الآن» مع اتصال ODBC'
     });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
