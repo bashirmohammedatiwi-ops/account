@@ -190,8 +190,8 @@ function buildOrderLines() {
     if (!d || (!d.quant && !d.bonus && !d.tester)) continue;
     lines.push({
       productId: p.id,
-      barcode: p.barcode || p.skuNum || '',
-      matNum: p.barcode || p.skuNum || '',
+      barcode: productBarcode(p),
+      matNum: productBarcode(p),
       matName: p.name,
       quant: d.quant || 0,
       bonus: d.bonus || 0,
@@ -340,6 +340,14 @@ function displayProductName(p) {
   return p.name;
 }
 
+function productBarcode(p) {
+  if (!p) return '';
+  const bc = String(p.barcode || '').trim();
+  const sku = String(p.skuNum || '').trim();
+  if (bc && bc !== sku) return bc;
+  return bc || sku || '';
+}
+
 function renderShadeDots(p) {
   const g = findProductGroup(p.id);
   if (!g?.hasShades || (g.shades || []).length < 2) return '';
@@ -357,6 +365,7 @@ function renderProductGridCard(p) {
   const inCart = (d.quant || 0) > 0 || (d.bonus || 0) > 0 || (d.tester || 0) > 0;
   const img = productImageSrc(p);
   const label = displayProductName(p);
+  const barcode = productBarcode(p);
   return `
     <button type="button" class="shop-prod-card${selected ? ' shop-prod-card-active' : ''}${inCart ? ' shop-prod-card-in-cart' : ''}" data-product-id="${p.id}" data-select-product="${p.id}">
       <span class="shop-prod-card-media">
@@ -365,6 +374,7 @@ function renderProductGridCard(p) {
     : '<span class="shop-prod-card-empty" aria-hidden="true">📦</span>'}
       </span>
       <span class="shop-prod-card-name">${esc(label)}</span>
+      <span class="shop-prod-card-barcode" dir="ltr">${esc(barcode || '—')}</span>
       ${renderShadeDots(p)}
     </button>`;
 }
@@ -410,8 +420,11 @@ function renderProductDetailPanel() {
       ${img ? `<button type="button" class="shop-detail-hero" data-view-product-id="${p.id}" aria-label="عرض الصورة"><img src="${img}" alt=""></button>` : ''}
       <h3 class="shop-detail-name">${esc(title)}</h3>
       ${shadePicker}
+      <p class="shop-detail-barcode">
+        <span class="shop-detail-barcode-label">الباركود</span>
+        <span dir="ltr">${esc(productBarcode(p) || '—')}</span>
+      </p>
       <p class="shop-detail-meta">
-        <span dir="ltr">${esc(p.barcode || p.skuNum || '—')}</span>
         <span class="shop-detail-price" dir="ltr">${fmtInvInt(p.price)}</span>
       </p>
       <div class="shop-detail-qty">

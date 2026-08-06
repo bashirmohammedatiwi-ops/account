@@ -838,7 +838,7 @@ async function loadCatalogProducts() {
       <td class="col-check"><input type="checkbox" class="product-check" data-id="${p.id}"></td>
       <td class="col-drag">${dragEnabled ? `<span class="drag-handle" title="اسحب${commerce.selectedProductIds.has(p.id) && commerce.selectedProductIds.size > 1 ? ' المجموعة' : ''}">⠿</span>` : ''}</td>
       <td>${p.imageUrl ? `<img src="${getApiBase()}${p.imageUrl}" alt="" class="product-thumb">` : '<span class="product-thumb-empty">—</span>'}</td>
-      <td dir="ltr">${esc(p.barcode || p.skuNum || '—')}</td>
+      <td dir="ltr">${esc(p.barcode || '—')}</td>
       <td>
         <strong>${esc(p.name)}</strong>
         ${commerce.productFilters.showAllSections && p.sectionName ? `<div class="muted product-sub">${esc(p.sectionName)}</div>` : ''}
@@ -1216,10 +1216,19 @@ async function pushEdariMaterialToCache(material) {
   }
 }
 
-function fillProductFormFromEdari(m) {
+function pickDisplayBarcode(scannedCode, material) {
+  const scanned = String(scannedCode || '').trim();
+  const num = String(material?.num || '').trim();
+  const bc = String(material?.barcode || '').trim();
+  if (scanned && scanned !== num) return scanned;
+  if (bc && bc !== num) return bc;
+  return bc || scanned || num || '';
+}
+
+function fillProductFormFromEdari(m, scannedCode = '') {
   if (!m) return;
   document.getElementById('productName').value = m.name || '';
-  document.getElementById('productBarcode').value = m.barcode || m.num || '';
+  document.getElementById('productBarcode').value = pickDisplayBarcode(scannedCode, m);
   document.getElementById('productSkuNum').value = m.num || '';
   document.getElementById('productEdariSeq').value = m.seq || '';
   document.getElementById('productUnit').value = m.unit || '';
@@ -1308,7 +1317,7 @@ async function lookupEdariByBarcodeInput(code, { isEdit = false } = {}) {
       }
     }
     lastEdariMaterial = material;
-    fillProductFormFromEdari(material);
+    fillProductFormFromEdari(material, raw);
     renderEdariLivePreview(material, 'ok');
   } catch (err) {
     lastEdariMaterial = null;
@@ -1767,7 +1776,7 @@ async function searchEdariInModal(q) {
     box.innerHTML = edariSearchResults.map((m, i) => `
       <button type="button" class="edari-result-item" data-idx="${i}">
         <strong>${esc(m.name)}</strong>
-        <span dir="ltr">${esc(m.barcode || m.num)} · ${fmtMoney(m.price)}</span>
+        <span dir="ltr">${esc(pickDisplayBarcode('', m))} · ${fmtMoney(m.price)}</span>
       </button>`).join('') || '<p class="muted">لا توجد نتائج — نفّذ مزامنة Edari</p>';
 
     box.querySelectorAll('.edari-result-item').forEach((btn) => {
@@ -1775,7 +1784,7 @@ async function searchEdariInModal(q) {
         const m = edariSearchResults[Number(btn.dataset.idx)];
         if (!m) return;
         document.getElementById('productName').value = m.name;
-        document.getElementById('productBarcode').value = m.barcode || m.num;
+        document.getElementById('productBarcode').value = pickDisplayBarcode(m.barcode || m.num, m);
         document.getElementById('productSkuNum').value = m.num || '';
         document.getElementById('productEdariSeq').value = m.seq || '';
         document.getElementById('productUnit').value = m.unit || '';

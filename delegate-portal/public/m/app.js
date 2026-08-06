@@ -171,7 +171,7 @@ function fmtInvInt(v) {
 }
 
 function invBarcodeCell(line) {
-  const code = String(line.matNum || line.mat || '').trim().replace(/\s+/g, '');
+  const code = String(line.barcode || line.matNum || line.mat || '').trim().replace(/\s+/g, '');
   return code || '—';
 }
 

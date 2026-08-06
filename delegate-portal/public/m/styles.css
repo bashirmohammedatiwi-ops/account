@@ -3831,12 +3831,24 @@ body.inv-sheet-open { overflow: hidden; }
   -webkit-box-orient: vertical;
   overflow: hidden;
   flex-shrink: 0;
-  padding: 6px 8px 4px;
+  padding: 6px 8px 2px;
   font-size: clamp(0.68rem, 1.5vw, 0.82rem);
   font-weight: 700;
   line-height: 1.25;
   color: #222;
   min-height: 2.4em;
+}
+
+.shop-prod-card-barcode {
+  display: block;
+  flex-shrink: 0;
+  padding: 0 8px 4px;
+  font-size: clamp(0.58rem, 1.2vw, 0.72rem);
+  font-weight: 600;
+  line-height: 1.2;
+  color: #64748b;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
 .shop-shade-dots {
@@ -4016,6 +4028,23 @@ body.inv-sheet-open { overflow: hidden; }
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.shop-detail-barcode {
+  flex-shrink: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: #475569;
+  font-weight: 600;
+}
+
+.shop-detail-barcode-label {
+  color: #94a3b8;
+  font-weight: 700;
 }
 
 .shop-detail-meta {

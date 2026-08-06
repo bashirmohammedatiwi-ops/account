@@ -25,7 +25,7 @@ function mapProduct(row, extras = {}) {
     sectionId: row.section_id,
     edariSeq: row.edari_seq || '',
     skuNum: row.sku_num || '',
-    barcode: row.barcode || row.sku_num || '',
+    barcode: resolveStoredProductBarcode(row),
     name: row.name,
     unit: row.unit || '',
     price: Number(row.price || 0),
@@ -190,7 +190,7 @@ function mapEdariMaterial(row) {
   return {
     seq: String(row.seq || row.Seq || ''),
     num: String(row.num || row.Num || ''),
-    barcode: String(row.barcode || row.Barcode || row.num || row.Num || '').trim(),
+    barcode: String(row.barcode || row.Barcode || '').trim(),
     name: String(row.name1 || row.Name1 || ''),
     name2: String(row.name2 || row.Name2 || ''),
     unit: String(row.unit || row.DefUnit || ''),
@@ -211,10 +211,40 @@ function normalizeCode(code) {
   return String(code ?? '').trim();
 }
 
+/**
+ * Prefer the real scannable barcode over Edari internal material number (num).
+ */
+function resolveProductBarcode(scannedCode = '', material = {}, existingBarcode = '') {
+  const scanned = normalizeCode(scannedCode);
+  const existing = normalizeCode(existingBarcode);
+  const num = normalizeCode(material.num);
+  const edariBarcode = normalizeCode(material.barcode);
+
+  const candidates = [...new Set([scanned, existing, edariBarcode].filter(Boolean))];
+  const nonNum = candidates.filter((c) => !num || c !== num);
+  if (nonNum.length) {
+    nonNum.sort((a, b) => b.length - a.length);
+    return nonNum[0];
+  }
+  return scanned || edariBarcode || existing || num || '';
+}
+
+function resolveStoredProductBarcode(row) {
+  if (!row) return '';
+  const stored = normalizeCode(row.barcode);
+  const sku = normalizeCode(row.sku_num);
+  const material = findEdariMaterialByCode(row.edari_seq || stored || sku);
+  if (material) {
+    const resolved = resolveProductBarcode(stored, material, stored);
+    if (resolved) return resolved;
+  }
+  return stored || sku || '';
+}
+
 function parseEdariSyncRow(row) {
   const seq = String(row.Seq ?? row.seq ?? '').trim();
   const num = String(row.Num ?? row.num ?? '').trim();
-  const barcode = String(row.Barcode ?? row.barcode ?? num).trim();
+  const barcode = String(row.Barcode ?? row.barcode ?? '').trim();
   const name1 = String(row.Name1 ?? row.name ?? '').trim();
   return {
     seq,
@@ -678,7 +708,7 @@ function upsertEdariMaterial(row) {
   `).run(
     parsed.seq,
     parsed.num,
-    parsed.barcode || parsed.num,
+    parsed.barcode,
     parsed.name1,
     parsed.name2,
     parsed.unit,
@@ -716,10 +746,12 @@ function refreshRegisteredProductFromEdari(parsed) {
   let updated = 0;
   const wholesale = edariWholesalePrice(parsed.sellPr1, parsed.sellPr2, parsed.sellPr3, parsed.sellPr5);
   for (const id of findRegisteredProductIds(parsed)) {
+    const current = getProduct(id);
+    const barcode = resolveProductBarcode(current?.barcode || '', parsed, current?.barcode);
     updateProduct(id, {
       edariSeq: parsed.seq,
       skuNum: parsed.num,
-      barcode: parsed.barcode || parsed.num,
+      barcode,
       name: parsed.name1,
       unit: parsed.unit,
       price: wholesale,
@@ -737,10 +769,11 @@ function syncProductFromEdari(id) {
   if (!product) throw new Error('المنتج غير موجود');
   const material = findEdariMaterialByCode(product.edariSeq || product.barcode || product.skuNum);
   if (!material?.seq) throw new Error('المادة غير موجودة في Edari — نفّذ مزامنة كاملة أولاً');
+  const barcode = resolveProductBarcode(product.barcode || '', material, product.barcode);
   return updateProduct(id, {
     edariSeq: material.seq,
     skuNum: material.num,
-    barcode: material.barcode || material.num,
+    barcode,
     name: material.name,
     unit: material.unit,
     price: material.wholesalePrice ?? material.price,
@@ -785,6 +818,25 @@ function materialRowToParsed(row) {
   };
 }
 
+/** Fix products stored with short sku_num as barcode when Edari has the real barcode. */
+function repairProductBarcodes() {
+  const rows = db.prepare('SELECT * FROM products').all();
+  let fixed = 0;
+  const tx = db.transaction(() => {
+    for (const row of rows) {
+      const resolved = resolveStoredProductBarcode(row);
+      if (resolved && resolved !== normalizeCode(row.barcode)) {
+        db.prepare(
+          "UPDATE products SET barcode = ?, updated_at = datetime('now') WHERE id = ?"
+        ).run(resolved, row.id);
+        fixed += 1;
+      }
+    }
+  });
+  tx();
+  return { fixed, total: rows.length };
+}
+
 /** Re-apply SellPr1 wholesale + stock to every catalog product linked in edari_materials. */
 function refreshAllProductsFromEdariCache() {
   const materials = db.prepare('SELECT * FROM edari_materials').all();
@@ -795,9 +847,17 @@ function refreshAllProductsFromEdariCache() {
     }
   });
   tx();
+  const barcodesRepaired = repairProductBarcodes();
   const pricesApplied = applyWholesalePricesFromMaterials();
   const total = db.prepare('SELECT COUNT(*) AS c FROM products').get()?.c || 0;
-  return { updated: productsUpdated, pricesApplied, total, materials: materials.length, errors: [] };
+  return {
+    updated: productsUpdated,
+    barcodesRepaired,
+    pricesApplied,
+    total,
+    materials: materials.length,
+    errors: []
+  };
 }
 
 function refreshCatalogPricesFromCache({ sectionId, branchId } = {}) {
@@ -922,7 +982,7 @@ function normalizeClientMaterial(material, code = '') {
   return {
     seq: String(material.seq),
     num: String(material.num || ''),
-    barcode: String(material.barcode || material.num || code).trim(),
+    barcode: String(material.barcode || code).trim(),
     name: String(material.name || material.name1 || ''),
     name2: String(material.name2 || ''),
     unit: String(material.unit || ''),
@@ -985,7 +1045,7 @@ function addProductByBarcode(sectionId, code, options = {}) {
     sectionId,
     edariSeq: material.seq,
     skuNum: material.num,
-    barcode: material.barcode || material.num,
+    barcode: resolveProductBarcode(raw, material),
     name: finalName,
     unit: material.unit,
     price: resolvedPrice,
@@ -1066,7 +1126,7 @@ function cacheEdariMaterial(material) {
   upsertEdariMaterial({
     Seq: material.seq,
     Num: material.num,
-    Barcode: material.barcode || material.num,
+    Barcode: material.barcode || '',
     Name1: material.name,
     Name2: material.name2,
     Unt1: material.unit,
@@ -1253,6 +1313,9 @@ module.exports = {
   getProduct,
   lookupByBarcode,
   findEdariMaterialByCode,
+  resolveProductBarcode,
+  resolveStoredProductBarcode,
+  repairProductBarcodes,
   edariMaterialStats,
   cacheEdariMaterial,
   addProductByBarcode,

@@ -25,7 +25,7 @@ function stockQty(inTot, outTot) {
   return Number(inTot || 0) - Number(outTot || 0);
 }
 
-function mapMaterialRow(row) {
+function mapMaterialRow(row, scannedCode = '') {
   if (!row) return null;
   const sellPr1 = Number(row.SellPr1 ?? 0);
   const sellPr2 = Number(row.SellPr2 ?? 0);
@@ -36,10 +36,16 @@ function mapMaterialRow(row) {
   const qty = stockQty(inTot, outTot);
   const unitRaw = String(row.Unt1 ?? row.DefUnit ?? '').trim();
   const unit = unitRaw && unitRaw !== '0' ? unitRaw : '';
+  const num = String(row.Num ?? '');
+  const edariBarcode = String(row.Barcode ?? '').trim();
+  const scanned = String(scannedCode ?? '').trim();
+  let barcode = edariBarcode;
+  if ((!barcode || barcode === num) && scanned && scanned !== num) barcode = scanned;
+  else if (!barcode) barcode = scanned || num;
   return {
     seq: String(row.Seq ?? ''),
-    num: String(row.Num ?? ''),
-    barcode: String(row.Barcode || row.Num || '').trim(),
+    num,
+    barcode,
     name: String(row.Name1 ?? ''),
     name2: String(row.Name2 ?? ''),
     unit,
@@ -64,12 +70,9 @@ async function lookupEdariMaterial(code) {
   if (!raw) return null;
 
   const escaped = raw.replace(/'/g, "''");
-  const conditions = [`Num = '${escaped}'`];
+  const conditions = [`Num = '${escaped}'`, `Barcode = '${escaped}'`];
   if (/^\d+$/.test(raw) && raw.length <= 10) {
     conditions.push(`Seq = ${raw}`);
-  }
-  if (!/^\d+$/.test(raw)) {
-    conditions.push(`Barcode = '${escaped}'`);
   }
 
   const sql = `
@@ -81,7 +84,7 @@ async function lookupEdariMaterial(code) {
   const result = await odbcBridge.runQuery({ ...getEdariConnection(), sql });
   if (!result.ok) throw new Error(result.error || 'فشل الاتصال بـ Edari');
   if (!result.rows?.length) return null;
-  return mapMaterialRow(result.rows[0]);
+  return mapMaterialRow(result.rows[0], raw);
 }
 
 function sqlQuote(value) {
@@ -103,13 +106,11 @@ async function lookupEdariMaterialsByCodes(codes = []) {
     const barcodes = new Set();
 
     for (const code of batch) {
+      nums.add(sqlQuote(code));
+      barcodes.add(sqlQuote(code));
       if (/^\d+$/.test(code)) {
         const n = Number(code);
         if (Number.isFinite(n) && n > 0 && n <= 9999999999) seqs.add(String(n));
-        nums.add(sqlQuote(code));
-      } else {
-        barcodes.add(sqlQuote(code));
-        nums.add(sqlQuote(code));
       }
     }
 

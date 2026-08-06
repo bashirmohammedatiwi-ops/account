@@ -28,6 +28,7 @@ const {
   saveProductImage,
   lookupByBarcode,
   findEdariMaterialByCode,
+  resolveProductBarcode,
   edariMaterialStats,
   cacheEdariMaterial,
   addProductByBarcode,
@@ -206,6 +207,7 @@ router.get('/products/edari-lookup', (req, res) => {
   if (!material) {
     return res.status(404).json({ ok: false, error: 'المادة غير موجودة — نفّذ مزامنة كاملة من Edari أولاً' });
   }
+  material.barcode = resolveProductBarcode(code, material);
   res.json({ ok: true, material });
 });
 
