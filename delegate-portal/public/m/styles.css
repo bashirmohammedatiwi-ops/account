@@ -3842,13 +3842,17 @@ body.inv-sheet-open { overflow: hidden; }
 .shop-prod-card-barcode {
   display: block;
   flex-shrink: 0;
-  padding: 0 8px 4px;
-  font-size: clamp(0.58rem, 1.2vw, 0.72rem);
+  padding: 0 6px 4px;
+  font-size: clamp(0.55rem, 1.15vw, 0.68rem);
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.15;
   color: #64748b;
   letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .shop-shade-dots {

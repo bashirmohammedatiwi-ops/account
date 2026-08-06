@@ -135,7 +135,8 @@ function invoiceUnitsTotal() {
 
 function chunkArray(arr, size) {
   const out = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  const step = Math.max(1, Number(size) || 1);
+  for (let i = 0; i < arr.length; i += step) out.push(arr.slice(i, i + step));
   return out;
 }
 
@@ -497,20 +498,29 @@ function renderProductPages() {
 
   const items = filteredProducts();
   if (!items.length) {
-    track.innerHTML = '<div class="shop-pages-empty"><p>لا توجد منتجات</p></div>';
+    const emptyMsg = (commerce.products || []).length
+      ? 'تعذر عرض المنتجات — حدّث الصفحة'
+      : 'لا توجد منتجات';
+    track.innerHTML = `<div class="shop-pages-empty"><p>${emptyMsg}</p></div>`;
     renderPageDots(0);
+    renderProductDetailPanel();
     return;
   }
-  const pages = chunkArray(items, layout.perPage);
+  const pages = chunkArray(items, layout.perPage || 4);
   if (!commerce.selectedProductId || !items.some((p) => p.id === commerce.selectedProductId)) {
     commerce.selectedProductId = items[0].id;
   }
-  track.innerHTML = pages.map((pageItems) => `
+  try {
+    track.innerHTML = pages.map((pageItems) => `
     <div class="shop-page">
       <div class="shop-page-grid" style="--shop-cols:${layout.cols};--shop-rows:${layout.rows}">
         ${pageItems.map(renderProductGridCard).join('')}
       </div>
     </div>`).join('');
+  } catch (err) {
+    console.error(err);
+    track.innerHTML = '<div class="shop-pages-empty"><p>خطأ في عرض المنتجات</p></div>';
+  }
   renderPageDots(pages.length, 0);
   if (vp) vp.scrollLeft = 0;
   bindProductPagesScroll();
@@ -526,31 +536,41 @@ function renderProductShowcase() {
 /** One card per shade-group (primary product); search matches any shade. */
 function filteredProducts() {
   const q = commerce.productFilter.trim().toLowerCase();
-  const groups = commerce.productGroups?.length
-    ? commerce.productGroups
-    : (commerce.products || []).map((p) => ({
+  const rawProducts = Array.isArray(commerce.products) ? commerce.products : [];
+  let groups = Array.isArray(commerce.productGroups) ? commerce.productGroups : [];
+
+  // Fall back to flat product list if groups are missing / empty shades
+  const groupsHaveItems = groups.some((g) => Array.isArray(g?.shades) && g.shades.length);
+  if (!groupsHaveItems) {
+    groups = rawProducts.map((p) => ({
       groupKey: `solo-${p.id}`,
       hasShades: false,
       name: p.name,
       primary: p,
       shades: [p]
     }));
+  }
 
   const matched = [];
   for (const g of groups) {
-    const shades = g.shades || [];
+    const shades = Array.isArray(g.shades) ? g.shades : [];
     if (!shades.length) continue;
     if (!q) {
       matched.push(g.primary || shades[0]);
       continue;
     }
     const hit = shades.some((p) => {
-      const hay = `${g.name || ''} ${p.name} ${p.barcode} ${p.skuNum} ${p.shadeName || ''}`.toLowerCase();
+      const hay = `${g.name || ''} ${p?.name || ''} ${p?.barcode || ''} ${p?.skuNum || ''} ${p?.shadeName || ''}`.toLowerCase();
       return hay.includes(q);
     });
     if (hit) matched.push(g.primary || shades[0]);
   }
-  return matched;
+
+  // Final safety: never hide products when API returned them
+  if (!matched.length && rawProducts.length && !q) {
+    return rawProducts;
+  }
+  return matched.filter(Boolean);
 }
 
 function renderProductsList() {

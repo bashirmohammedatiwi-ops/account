@@ -20,12 +20,17 @@ function mapProduct(row, extras = {}) {
   const shadeName = String(row.shade_name || '').trim();
   const colorCode = String(row.color_code || '').trim();
   const groupKey = String(row.group_key || '').trim();
+  // Prefer stored scannable barcode; optional JOIN fields from list queries.
+  // Avoid N+1 on list endpoints; single-product paths may resolve via cache.
+  const barcode = (row.edari_barcode !== undefined || row.resolved_barcode !== undefined)
+    ? pickBestCatalogBarcode(row.sku_num, row.barcode, row.edari_barcode, row.resolved_barcode)
+    : resolveStoredProductBarcode(row);
   return {
     id: row.id,
     sectionId: row.section_id,
     edariSeq: row.edari_seq || '',
     skuNum: row.sku_num || '',
-    barcode: resolveStoredProductBarcode(row),
+    barcode,
     name: row.name,
     unit: row.unit || '',
     price: Number(row.price || 0),
@@ -277,14 +282,43 @@ function findEdariMaterialBySeq(seq) {
 
 function resolveStoredProductBarcode(row) {
   if (!row) return '';
-  const stored = normalizeCode(row.barcode);
-  const sku = normalizeCode(row.sku_num);
-  const material = findEdariMaterialBySeq(row.edari_seq)
-    || findEdariMaterialByCode(row.edari_seq || stored || sku);
-  if (material) {
-    return pickBestCatalogBarcode(sku, stored, material.barcode);
+  // Prefer already-joined fields first; only query cache when resolving a single product.
+  if (row.edari_barcode != null || row.resolved_barcode != null) {
+    return pickBestCatalogBarcode(row.sku_num, row.barcode, row.edari_barcode, row.resolved_barcode);
   }
-  return pickBestCatalogBarcode(sku, stored);
+  try {
+    const material = findEdariMaterialBySeq(row.edari_seq)
+      || findEdariMaterialByCode(row.edari_seq || row.barcode || row.sku_num);
+    if (material) {
+      return pickBestCatalogBarcode(row.sku_num, row.barcode, material.barcode);
+    }
+  } catch {
+    /* keep stored value */
+  }
+  return pickBestCatalogBarcode(row.sku_num, row.barcode);
+}
+
+const PRODUCT_LIST_SELECT = `
+  p.*, s.name AS section_name, s.branch_id, b.name AS branch_name,
+  m.barcode AS edari_barcode, m.num AS edari_num
+`;
+
+const PRODUCT_LIST_JOINS = `
+  FROM products p
+  JOIN catalog_sections s ON s.id = p.section_id
+  JOIN catalog_branches b ON b.id = s.branch_id
+  LEFT JOIN edari_materials m ON m.seq = p.edari_seq
+`;
+
+function listProducts(sectionId, { activeOnly = false } = {}) {
+  const rows = db.prepare(`
+    SELECT ${PRODUCT_LIST_SELECT}
+    ${PRODUCT_LIST_JOINS}
+    WHERE p.section_id = ?
+    ${activeOnly ? 'AND p.is_active = 1' : ''}
+    ORDER BY p.sort_order, p.name
+  `).all(sectionId);
+  return rows.map((r) => mapProduct(r));
 }
 
 function parseEdariSyncRow(row) {
@@ -393,19 +427,6 @@ function edariMaterialStats() {
   };
 }
 
-function listProducts(sectionId, { activeOnly = false } = {}) {
-  const rows = db.prepare(`
-    SELECT p.*, s.name AS section_name, s.branch_id, b.name AS branch_name
-    FROM products p
-    JOIN catalog_sections s ON s.id = p.section_id
-    JOIN catalog_branches b ON b.id = s.branch_id
-    WHERE p.section_id = ?
-    ${activeOnly ? 'AND p.is_active = 1' : ''}
-    ORDER BY p.sort_order, p.name
-  `).all(sectionId);
-  return rows.map((r) => mapProduct(r));
-}
-
 const SORT_COLUMNS = {
   name: 'p.name',
   price: 'p.price',
@@ -442,8 +463,8 @@ function queryProducts(filters = {}) {
   }
   if (q) {
     const like = `%${q}%`;
-    where.push('(p.name LIKE ? OR p.barcode LIKE ? OR p.sku_num LIKE ? OR p.edari_seq LIKE ?)');
-    params.push(like, like, like, like);
+    where.push('(p.name LIKE ? OR p.barcode LIKE ? OR p.sku_num LIKE ? OR p.edari_seq LIKE ? OR m.barcode LIKE ?)');
+    params.push(like, like, like, like, like);
   }
   if (activeOnly) where.push('p.is_active = 1');
   if (inactiveOnly) where.push('p.is_active = 0');
@@ -457,17 +478,14 @@ function queryProducts(filters = {}) {
   const off = Math.max(Number(offset) || 0, 0);
 
   const countRow = db.prepare(`
-    SELECT COUNT(*) AS total FROM products p
-    JOIN catalog_sections s ON s.id = p.section_id
-    JOIN catalog_branches b ON b.id = s.branch_id
+    SELECT COUNT(*) AS total
+    ${PRODUCT_LIST_JOINS}
     WHERE ${where.join(' AND ')}
   `).get(...params);
 
   const rows = db.prepare(`
-    SELECT p.*, s.name AS section_name, s.branch_id, b.name AS branch_name
-    FROM products p
-    JOIN catalog_sections s ON s.id = p.section_id
-    JOIN catalog_branches b ON b.id = s.branch_id
+    SELECT ${PRODUCT_LIST_SELECT}
+    ${PRODUCT_LIST_JOINS}
     WHERE ${where.join(' AND ')}
     ORDER BY ${orderCol} ${dir}, p.name ASC
     LIMIT ? OFFSET ?

@@ -31,9 +31,13 @@ router.get('/catalog/branches/:id/sections', authAgent, (req, res) => {
 });
 
 router.get('/catalog/sections/:id/products', authAgent, (req, res) => {
-  const products = listProducts(Number(req.params.id), { activeOnly: true });
-  const groups = groupProductsByShade(products);
-  res.json({ ok: true, products, groups });
+  try {
+    const products = listProducts(Number(req.params.id), { activeOnly: true });
+    const groups = groupProductsByShade(products);
+    res.json({ ok: true, products, groups });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'فشل تحميل المنتجات' });
+  }
 });
 
 router.get('/products/lookup', authAgent, (req, res) => {
