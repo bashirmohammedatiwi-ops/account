@@ -419,8 +419,10 @@ function updateUserChrome() {
   const initial = agentInitial(name);
   const avatar = document.getElementById('welcomeAvatar');
   if (avatar) avatar.textContent = initial;
-  document.getElementById('welcomeName').textContent = name ? `مرحباً، ${name}` : 'مرحباً';
-  document.getElementById('welcomeTreeCount').textContent = String(state.trees.length);
+  const welcomeName = document.getElementById('welcomeName');
+  if (welcomeName) welcomeName.textContent = name ? `مرحباً، ${name}` : 'مرحباً';
+  const treeCount = document.getElementById('welcomeTreeCount');
+  if (treeCount) treeCount.textContent = String(state.trees.length);
   const sub = document.getElementById('homeHeroSub');
   if (sub) {
     sub.textContent = state.trees.length
@@ -515,6 +517,11 @@ function showLogin() {
 function showApp() {
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('appShell').classList.remove('hidden');
+  if (state.screen !== 'home') goToScreen('home');
+  else {
+    renderHomeScreen();
+    updateUserChrome();
+  }
 }
 
 async function api(path, opts = {}) {
@@ -1358,10 +1365,13 @@ async function tryRestoreSession() {
 
   try {
     state.agent = JSON.parse(saved);
-    const data = await api('/me');
-    setSession(token, data.agent);
     showApp();
     updateUserChrome();
+    renderHomeScreen();
+    const data = await api('/me');
+    setSession(token, data.agent);
+    updateUserChrome();
+    renderHomeScreen();
     await loadTrees('home');
   } catch {
     showLogin();

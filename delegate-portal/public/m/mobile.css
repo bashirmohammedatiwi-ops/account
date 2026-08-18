@@ -71,11 +71,8 @@
 
   /* Home */
   .home-page {
-    align-items: flex-start;
-    justify-content: flex-start;
     min-height: auto;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow: visible;
     padding: 12px 12px calc(16px + var(--safe-bottom, 0px));
   }
 

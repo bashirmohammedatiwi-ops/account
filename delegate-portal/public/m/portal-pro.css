@@ -1137,16 +1137,18 @@
 #screen-home.active {
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .home-page {
   position: relative;
-  flex: 1;
+  flex: 1 0 auto;
   width: 100%;
-  min-height: calc(100dvh - 88px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  min-height: calc(100vh - 72px);
+  min-height: calc(100dvh - 72px);
+  display: block;
   padding: 12px 16px calc(20px + var(--safe-bottom, 0px));
 }
 
@@ -1161,8 +1163,7 @@
 .home-page-orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(48px);
-  opacity: 0.55;
+  opacity: 0.4;
 }
 
 .home-page-orb-1 {
@@ -1349,9 +1350,20 @@
   transform: scale(0.92);
 }
 
-.home-app-tile:nth-child(1) { animation: homeTileIn 0.45s ease 0.05s both; }
-.home-app-tile:nth-child(2) { animation: homeTileIn 0.45s ease 0.12s both; }
-.home-app-tile:nth-child(3) { animation: homeTileIn 0.45s ease 0.19s both; }
+.home-app-tile:nth-child(1) { animation: homeTileIn 0.45s ease 0.05s; }
+.home-app-tile:nth-child(2) { animation: homeTileIn 0.45s ease 0.12s; }
+.home-app-tile:nth-child(3) { animation: homeTileIn 0.45s ease 0.19s; }
+.home-app-tile:nth-child(4) { animation: homeTileIn 0.45s ease 0.26s; }
+.home-app-tile:nth-child(5) { animation: homeTileIn 0.45s ease 0.33s; }
+.home-app-tile:nth-child(6) { animation: homeTileIn 0.45s ease 0.40s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .home-app-tile {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
 
 @keyframes homeTileIn {
   from { opacity: 0; transform: translateY(12px); }

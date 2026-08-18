@@ -1044,8 +1044,14 @@ ipcMain.handle('search-edari-accounts', async (_e, params) => {
 ipcMain.handle('post-edari-receipt', async (_e, payload) => {
   try {
     Object.assign(process.env, { EDARI_READER_ROOT: getEdariReaderRoot() }, edariEnvExtra());
-    const postPath = path.join(getPortalDir(), 'sync-client', 'post-receipt.js');
-    delete require.cache[require.resolve(postPath)];
+    const portalDir = getPortalDir();
+    const postingPath = path.join(portalDir, 'lib', 'receipt-posting.js');
+    const postPath = path.join(portalDir, 'sync-client', 'post-receipt.js');
+    for (const modPath of [postingPath, postPath]) {
+      try {
+        delete require.cache[require.resolve(modPath)];
+      } catch (_) {}
+    }
     const { postReceiptToEdari } = require(postPath);
     const result = await postReceiptToEdari(payload || {});
     return { ok: true, ...result };
@@ -1057,8 +1063,14 @@ ipcMain.handle('post-edari-receipt', async (_e, payload) => {
 ipcMain.handle('post-edari-customer', async (_e, payload) => {
   try {
     Object.assign(process.env, { EDARI_READER_ROOT: getEdariReaderRoot() }, edariEnvExtra());
-    const postPath = path.join(getPortalDir(), 'sync-client', 'post-customer.js');
-    delete require.cache[require.resolve(postPath)];
+    const portalDir = getPortalDir();
+    const postingPath = path.join(portalDir, 'lib', 'customer-posting.js');
+    const postPath = path.join(portalDir, 'sync-client', 'post-customer.js');
+    for (const modPath of [postingPath, postPath]) {
+      try {
+        delete require.cache[require.resolve(modPath)];
+      } catch (_) {}
+    }
     const { postCustomerToEdari } = require(postPath);
     const result = await postCustomerToEdari(payload || {});
     return { ok: true, ...result };

@@ -11,6 +11,10 @@ const nxscriptBridge = require(path.join(edariRoot, 'lib', 'nxscript-bridge'));
 const { getEdariConnection } = require('./edari-connection');
 const {
   buildFile12nInsertSql,
+  buildReceiptRef,
+  clampEdariField,
+  EDARI_EXP1_MAX,
+  EDARI_REF_MAX,
   toIsoDate,
   sqlQuote
 } = require('../lib/receipt-posting');
@@ -106,18 +110,24 @@ async function lookupJournalSeq({ acc, amount, isDebit, bondNum }) {
   return 0;
 }
 
-async function insertJournalLine(ln, bondNum, dateStr) {
+async function insertJournalLine(ln, bondNum, dateStr, receiptRef) {
   const args = {
     acc: Number(ln.accSeq),
     amount: ln.amount,
     isDebit: ln.isDebit
   };
+  const safeLine = {
+    ...ln,
+    exp1: clampEdariField(ln.exp1 || 'سند قبض', EDARI_EXP1_MAX),
+    exp2: clampEdariField(receiptRef || ln.exp2 || ln.ref || '', EDARI_REF_MAX)
+  };
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const before = await maxJournalSeq();
     await execSql(buildFile12nInsertSql({
       num: bondNum,
-      line: ln,
-      dateStr
+      line: safeLine,
+      dateStr,
+      receiptRef
     }));
     await syncFile12nAutoInc();
     const after = await maxJournalSeq();
@@ -138,6 +148,7 @@ async function postReceiptToEdari(payload = {}) {
   const lines = Array.isArray(payload.lines) ? payload.lines : [];
   if (!lines.length) throw new Error('لا توجد بنود للترحيل');
   const dateStr = toIsoDate(payload.receiptDate || payload.date);
+  const receiptRef = buildReceiptRef(payload);
 
   const resolved = [];
   for (const ln of lines) {
@@ -146,14 +157,19 @@ async function postReceiptToEdari(payload = {}) {
     if (!oppositeAccSeq && ln.oppositeAcc) {
       oppositeAccSeq = await resolveAccSeq(ln.oppositeAcc);
     }
-    resolved.push({ ...ln, accSeq, oppositeAccSeq: oppositeAccSeq || 0 });
+    resolved.push({
+      ...ln,
+      accSeq,
+      oppositeAccSeq: oppositeAccSeq || 0,
+      exp2: receiptRef
+    });
   }
 
   await syncFile12nAutoInc();
   const journalNum = await nextJournalBondNum();
   const inserted = [];
   for (const ln of resolved) {
-    inserted.push(await insertJournalLine(ln, journalNum, dateStr));
+    inserted.push(await insertJournalLine(ln, journalNum, dateStr, receiptRef));
   }
   await syncFile12nAutoInc();
 

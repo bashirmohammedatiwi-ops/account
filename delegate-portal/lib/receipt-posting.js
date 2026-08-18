@@ -10,10 +10,12 @@ const EDARI_EXP1_MAX = 50;
 
 function buildReceiptRef(receipt) {
   const raw = String(receipt?.receiptNo || receipt?.receipt_no || '').trim();
-  if (!raw) return clampEdariField('R.V', EDARI_REF_MAX);
+  if (!raw) return 'R.V';
   const tail = raw.replace(/^RV[-\s]*/i, '');
-  const compact = tail.length > 22 ? tail.slice(-22) : tail;
-  return clampEdariField(`R.V ${compact}`.trim(), EDARI_REF_MAX);
+  const seq = tail.includes('-') ? tail.split('-').pop() : tail;
+  const digits = String(seq || '').replace(/\D/g, '').slice(-6);
+  const compact = digits || tail.slice(-8);
+  return clampEdariField(`R.V ${compact}`, EDARI_REF_MAX);
 }
 
 const WIN1256_AR = {
@@ -168,10 +170,13 @@ function formatEdariTimestamp(isoOrRaw) {
 }
 
 /** Same INSERT shape as shorja_app insertJournalEntry — Seq is AUTOINC, never set. */
-function buildFile12nInsertSql({ num: bondNum, line: ln, dateStr, billKind = 0 }) {
+function buildFile12nInsertSql({ num: bondNum, line: ln, dateStr, billKind = 0, receiptRef }) {
   const dept = ln.isDebit ? 'True' : 'False';
   const exp1 = clampEdariField(ln.exp1 || 'سند قبض', EDARI_EXP1_MAX);
-  const ref = clampEdariField(ln.exp2 || String(bondNum || ''), EDARI_REF_MAX);
+  const ref = clampEdariField(
+    receiptRef || ln.exp2 || ln.ref || String(bondNum || ''),
+    EDARI_REF_MAX
+  );
   const forBill = 0;
   return `
     INSERT INTO File12n (Num, Acc, "Date", Am, Dept, Exp1, Exp2, BillNum, BillSeq, BillKind, BillBook, Remarks, ForBill, Ref, Two)

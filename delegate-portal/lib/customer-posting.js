@@ -9,6 +9,10 @@ const {
   sqlQuote
 } = require('./receipt-posting');
 
+const EDARI_NAME1_MAX = 50;
+const EDARI_ADDRESS_MAX = 50;
+const EDARI_REMARKS_MAX = 50;
+
 function normalizeName(s) {
   return String(s || '').replace(/\s+/g, ' ').trim();
 }
@@ -28,18 +32,28 @@ function normalizeAddress(address, phone = '') {
 function buildEdariAccountName({ name, phone = '', address = '' }) {
   const displayName = normalizeName(name).replace(/^الزبون\s+/i, '');
   const ph = normalizePhone(phone);
-  const addr = normalizeName(address);
-  if (!displayName) return ph || addr;
+  const addr = normalizeAddress(address, phone);
+  if (!displayName) return clampEdariField(ph || addr, EDARI_NAME1_MAX);
 
-  const parts = [displayName];
-  if (addr && addr !== displayName) {
-    const shortLoc = addr.length > 45
-      ? (addr.split(' - ').filter(Boolean)[0] || addr.slice(0, 45))
-      : addr;
-    if (shortLoc && shortLoc !== displayName) parts.push(shortLoc);
+  if (ph) {
+    const suffix = ` - ${ph}`;
+    const maxName = EDARI_NAME1_MAX - suffix.length;
+    if (maxName >= 3) {
+      return clampEdariField(displayName.slice(0, maxName) + suffix, EDARI_NAME1_MAX);
+    }
+    return clampEdariField(ph, EDARI_NAME1_MAX);
   }
-  if (ph) parts.push(ph);
-  return parts.join(' - ');
+
+  if (addr && addr !== displayName) {
+    const shortAddr = addr.length > 18 ? addr.slice(0, 18) : addr;
+    const suffix = ` - ${shortAddr}`;
+    const maxName = EDARI_NAME1_MAX - suffix.length;
+    if (maxName >= 3) {
+      return clampEdariField(displayName.slice(0, maxName) + suffix, EDARI_NAME1_MAX);
+    }
+  }
+
+  return clampEdariField(displayName, EDARI_NAME1_MAX);
 }
 
 function buildFile11nInsertSql({
@@ -57,7 +71,7 @@ function buildFile11nInsertSql({
     INSERT INTO File11n (Num, Name1, Master, SubCount, Bal, Tot1, Tot2, Dept, Cod, Dest, Address, Remarks)
     VALUES (
       ${sqlQuote(accNum)},
-      ${edariSqlLiteral(clampEdariField(name1, 80))},
+      ${edariSqlLiteral(clampEdariField(name1, EDARI_NAME1_MAX))},
       ${seq},
       0,
       0,
@@ -66,8 +80,8 @@ function buildFile11nInsertSql({
       0,
       1,
       4,
-      ${edariSqlLiteral(clampEdariField(address, 50))},
-      ${edariSqlLiteral(clampEdariField(remarks, 50))}
+      ${edariSqlLiteral(clampEdariField(address, EDARI_ADDRESS_MAX))},
+      ${edariSqlLiteral(clampEdariField(remarks, EDARI_REMARKS_MAX))}
     )
   `.replace(/\s+/g, ' ').trim();
 }
@@ -118,5 +132,8 @@ module.exports = {
   buildFile11nInsertSql,
   nextChildNumFromRows,
   bumpChildNum,
-  buildSubHex
+  buildSubHex,
+  EDARI_NAME1_MAX,
+  EDARI_ADDRESS_MAX,
+  EDARI_REMARKS_MAX
 };
