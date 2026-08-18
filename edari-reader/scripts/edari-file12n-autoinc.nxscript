@@ -1,0 +1,79 @@
+<%
+function UrlDecode(const s: string): string;
+var
+  i: integer;
+  hex: string;
+begin
+  Result := '';
+  i := 1;
+  while i <= Length(s) do
+  begin
+    if s[i] = '+' then
+    begin
+      Result := Result + ' ';
+      Inc(i);
+    end
+    else if (s[i] = '%') and (i + 2 <= Length(s)) then
+    begin
+      hex := Copy(s, i + 1, 2);
+      Result := Result + Chr(StrToInt('$' + hex));
+      i := i + 3;
+    end
+    else
+    begin
+      Result := Result + s[i];
+      Inc(i);
+    end;
+  end;
+end;
+
+var
+  aSession: TnxSession;
+  adb: TnxDatabase;
+  aTable: TnxTable;
+  aliasName, maintKey: string;
+  autoIncVal: integer;
+begin
+  aliasName := UrlDecode(Trim(Request('alias')));
+  maintKey := UrlDecode(Trim(Request('key')));
+  autoIncVal := StrToIntDef(UrlDecode(Trim(Request('autoinc'))), -1);
+
+  if aliasName = '' then
+  begin
+    Output.Write('{"ok":false,"error":"alias required"}');
+    Exit;
+  end;
+
+  if maintKey <> 'edari-receipt-maint' then
+  begin
+    Output.Write('{"ok":false,"error":"maintenance key required"}');
+    Exit;
+  end;
+
+  if autoIncVal < 0 then
+  begin
+    Output.Write('{"ok":false,"error":"autoinc required"}');
+    Exit;
+  end;
+
+  aSession := TnxSession.Create(nil);
+  adb := TnxDatabase.Create(nil);
+  aTable := TnxTable.Create(nil);
+  try
+    aSession.ServerEngine := ServerEngine;
+    aSession.Active := true;
+    adb.AliasName := aliasName;
+    adb.Session := aSession;
+    adb.Open;
+    aTable.Database := adb;
+    aTable.TableName := 'File12n';
+    aTable.Open;
+    aTable.SetAutoIncValue(autoIncVal);
+    Output.Write('{"ok":true,"table":"File12n","autoinc":'+IntToStr(autoIncVal)+',"viaResetAutoInc":true}');
+  finally
+    aTable.Free;
+    adb.Free;
+    aSession.Free;
+  end;
+end.
+%>

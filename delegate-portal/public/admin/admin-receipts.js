@@ -97,6 +97,21 @@ async function saveReceiptSettings() {
   }
 }
 
+function canPostReceiptsFromDesktop() {
+  return !!window.edariDesktop?.postEdariReceipt;
+}
+
+function updateReceiptPostAlert() {
+  const box = document.getElementById('receiptPostAlert');
+  const text = document.getElementById('receiptPostAlertText');
+  if (!box || !text) return;
+  const ok = canPostReceiptsFromDesktop();
+  box.classList.toggle('ok', ok);
+  text.textContent = ok
+    ? 'الترحيل يتم من هذا الجهاز عبر اتصال EdariNX المحلي — نفس أسلوب الشورجة (سند قيد File12n).'
+    : 'افتح تطبيق الإدارة على Windows لتمكين أمر الترحيل إلى الإداري.';
+}
+
 function receiptBadgeClass(status) {
   return ({ pending: 'pending', reviewed: 'ok', posted: 'ok', rejected: 'off' })[status] || 'pending';
 }
@@ -126,11 +141,16 @@ async function loadReceiptsPage() {
       <td>${esc(r.submittedAt || r.createdAt || '—')}</td>
       <td>
         <button type="button" class="btn btn-soft btn-sm" data-receipt-id="${r.id}">عرض</button>
+        ${r.status !== 'posted' && r.status !== 'rejected' ? `
+        <button type="button" class="btn btn-primary btn-sm" data-post-receipt="${r.id}">ترحيل</button>` : ''}
       </td>
     </tr>`).join('') || '<tr><td colspan="9">لا توجد سندات قبض</td></tr>';
 
   document.querySelectorAll('[data-receipt-id]').forEach((btn) => {
     btn.addEventListener('click', () => openReceiptDetail(Number(btn.dataset.receiptId)));
+  });
+  document.querySelectorAll('[data-post-receipt]').forEach((btn) => {
+    btn.addEventListener('click', () => postReceiptToEdariUi(Number(btn.dataset.postReceipt)));
   });
 }
 
@@ -193,7 +213,8 @@ async function openReceiptDetail(id) {
       <button type="button" class="btn btn-soft" id="btnSaveReceiptEdit">حفظ التعديل</button>
       <button type="button" class="btn btn-soft" id="btnRejectReceipt">رفض</button>
       <button type="button" class="btn btn-primary" id="btnPostReceipt">ترحيل للإداري</button>
-    </div>`}
+    </div>
+    ${canPostReceiptsFromDesktop() ? '' : '<p class="muted">أمر الترحيل يظهر ويعمل من تطبيق الإدارة المكتبي فقط</p>'}`}
   `;
 
   document.getElementById('btnSaveReceiptEdit')?.addEventListener('click', () => saveReceiptEdit(r.id));
@@ -245,11 +266,15 @@ async function postReceiptToEdariUi(id) {
       showToast(posting.error, 'err');
       return;
     }
-    if (!window.edariDesktop?.postEdariReceipt) {
-      showToast('الترحيل يتم من تطبيق الإدارة المكتبي المتصل بـ Edari', 'err');
+    if (!canPostReceiptsFromDesktop()) {
+      showToast('افتح تطبيق الإدارة على Windows للترحيل', 'err');
       return;
     }
-    if (!confirm('ترحيل سند القبض إلى الإداري كسند قبض وسند قيد؟')) return;
+    if (data.receipt.status === 'posted') {
+      showToast('السند مُرحَّل مسبقاً');
+      return;
+    }
+    if (!confirm(`ترحيل سند ${data.receipt.receiptNo} إلى الإداري كسند قبض وسند قيد؟`)) return;
     const result = await window.edariDesktop.postEdariReceipt({
       receiptNo: data.receipt.receiptNo,
       receiptDate: data.receipt.receiptDate,
@@ -271,7 +296,7 @@ async function postReceiptToEdariUi(id) {
         lines: result.lines || posting.lines
       })
     });
-    showToast(`تم الترحيل · قيد ${result.journalNum}`);
+    showToast(`تم الترحيل · سند قيد ${result.journalNum}`);
     await loadReceiptsPage();
     await openReceiptDetail(id);
   } catch (err) {
@@ -286,6 +311,7 @@ function initReceiptsAdmin() {
 
 window.commercePages = window.commercePages || {};
 window.commercePages.receipts = async () => {
+  updateReceiptPostAlert();
   await loadReceiptSettings();
   await loadReceiptsPage();
 };

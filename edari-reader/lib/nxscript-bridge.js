@@ -4,8 +4,11 @@ const config = require('./config');
 
 const QUERY_SCRIPT = 'edari-query.nxscript';
 const EXEC_SCRIPT = 'edari-exec.nxscript';
+const AUTOINC_SCRIPT = 'edari-file12n-autoinc.nxscript';
+const MAINT_KEY = 'edari-receipt-maint';
 const BUNDLED_SCRIPT = path.join(__dirname, '..', 'scripts', QUERY_SCRIPT);
 const BUNDLED_EXEC_SCRIPT = path.join(__dirname, '..', 'scripts', EXEC_SCRIPT);
+const BUNDLED_AUTOINC_SCRIPT = path.join(__dirname, '..', 'scripts', AUTOINC_SCRIPT);
 
 /** @type {boolean | null} */
 let nxscriptAvailable = null;
@@ -19,11 +22,16 @@ function resolveAdminRoot() {
   if (process.env.NX_ADMIN_ROOT && fs.existsSync(process.env.NX_ADMIN_ROOT)) {
     return process.env.NX_ADMIN_ROOT;
   }
+  const dataRoot = process.env.EDARI_DATA_ROOT || config.dataRoot;
+  const nxRoot = dataRoot ? path.dirname(dataRoot) : '';
   const candidates = [
     path.join(config.edariRoot, 'nx4.7505', 'Adminroot'),
     path.join(config.edariRoot, 'nxServer', 'Adminroot'),
-    path.join(config.edariRoot, 'Adminroot')
-  ];
+    path.join(config.edariRoot, 'Adminroot'),
+    nxRoot ? path.join(nxRoot, 'nx4.7505', 'Adminroot') : '',
+    nxRoot ? path.join(nxRoot, 'nxServer', 'Adminroot') : '',
+    nxRoot ? path.join(nxRoot, 'Adminroot') : ''
+  ].filter(Boolean);
   for (const dir of candidates) {
     if (fs.existsSync(path.join(dir, 'index.nxscript'))) return dir;
   }
@@ -51,6 +59,14 @@ function ensureQueryScriptDeployed() {
 
 function ensureExecScriptDeployed() {
   return ensureScriptDeployed(EXEC_SCRIPT, BUNDLED_EXEC_SCRIPT);
+}
+
+function ensureAutoIncScriptDeployed() {
+  return ensureScriptDeployed(AUTOINC_SCRIPT, BUNDLED_AUTOINC_SCRIPT);
+}
+
+function sqlToHex(sqlText) {
+  return Buffer.from(String(sqlText || ''), 'latin1').toString('hex');
 }
 
 function extractJsonBody(textOrBuffer) {
@@ -225,7 +241,7 @@ async function runExecViaNxscript(options) {
     };
   }
 
-  const url = `${config.nexusAdminUrl}/${EXEC_SCRIPT}?alias=${encodeURIComponent(alias)}&sql=${encodeURIComponent(sql)}`;
+  const url = `${config.nexusAdminUrl}/${EXEC_SCRIPT}?alias=${encodeURIComponent(alias)}&sqlhex=${sqlToHex(sql)}`;
   let response;
   try {
     response = await fetch(url, { signal: AbortSignal.timeout(Number(options.timeoutMs) || 120000) });
@@ -241,6 +257,42 @@ async function runExecViaNxscript(options) {
   if (!parsed) {
     return { ok: false, error: 'Invalid nxServer exec response' };
   }
+  return parsed;
+}
+
+async function runFile12nAutoIncViaNxscript(options) {
+  const alias = String(options.alias || '').trim();
+  const autoinc = Number(options.autoinc);
+  if (!alias) throw new Error('Database alias is required for nxServer query bridge');
+  if (!Number.isFinite(autoinc) || autoinc < 0) {
+    return { ok: false, error: 'autoinc required' };
+  }
+  if (!ensureAutoIncScriptDeployed()) {
+    return {
+      ok: false,
+      error: 'Could not deploy edari-file12n-autoinc.nxscript to nxServer Adminroot.',
+      needsNxScript: true
+    };
+  }
+  const q = new URLSearchParams({
+    alias,
+    key: MAINT_KEY,
+    autoinc: String(autoinc)
+  });
+  const url = `${config.nexusAdminUrl}/${AUTOINC_SCRIPT}?${q.toString()}`;
+  let response;
+  try {
+    response = await fetch(url, { signal: AbortSignal.timeout(Number(options.timeoutMs) || 60000) });
+  } catch (err) {
+    return {
+      ok: false,
+      error: `nxServer admin unreachable (${config.nexusAdminUrl}): ${err.message}`,
+      needsNxServer: true
+    };
+  }
+  const bodyBuf = Buffer.from(await response.arrayBuffer());
+  const parsed = extractJsonBody(bodyBuf);
+  if (!parsed) return { ok: false, error: 'Invalid nxServer autoinc response' };
   return parsed;
 }
 
@@ -260,8 +312,10 @@ module.exports = {
   isNxscriptBridgeAvailable,
   ensureQueryScriptDeployed,
   ensureExecScriptDeployed,
+  ensureAutoIncScriptDeployed,
   runQueryViaNxscript,
   runExecViaNxscript,
+  runFile12nAutoIncViaNxscript,
   testConnectionViaNxscript,
   listTablesViaNxscript
 };

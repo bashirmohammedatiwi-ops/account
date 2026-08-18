@@ -4782,6 +4782,9 @@ tfoot .final { background: var(--primary-light); font-weight: 700; }
   .panel-row { grid-template-columns: 1fr; }
 }
 
+#receiptPostAlert.ok { border-color: #34d399; }
+#receiptPostAlert.ok .panel-desc { color: #065f46; }
+
 .rv-settings-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

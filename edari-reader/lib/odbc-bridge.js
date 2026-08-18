@@ -209,6 +209,14 @@ async function runExec(options) {
     throw new Error('Only INSERT INTO File12n is allowed');
   }
 
+  if (process.env.EDARI_WRITE_VIA_NXSCRIPT !== '0') {
+    const nx = await nxscriptBridge.runExecViaNxscript({ ...options, sql });
+    if (nx?.ok) return nx;
+    if (!nxscriptBridge.isTrialExpiredError(nx?.error) && !nx?.needsNxServer && !nx?.needsNxScript) {
+      return nx;
+    }
+  }
+
   return withNxscriptFallback(
     nxscriptBridge.runExecViaNxscript,
     options,
