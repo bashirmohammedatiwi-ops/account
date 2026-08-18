@@ -110,6 +110,8 @@ class EdHomePage extends StatelessWidget {
       );
     }
 
+    final pendingTotal = (int.tryParse(pendingReceipts ?? '') ?? 0) + (int.tryParse(pendingCustomers ?? '') ?? 0);
+
     return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
@@ -122,72 +124,69 @@ class EdHomePage extends StatelessWidget {
           ),
         ),
         SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 20, bottom: 16),
-            child: EdPhoneStatsRow(
-              treeCount: treeCount,
-              customerCount: customerCount,
-              orderCount: orderCount,
-              pendingTotal: (int.tryParse(pendingReceipts ?? '') ?? 0) + (int.tryParse(pendingCustomers ?? '') ?? 0),
+          child: Transform.translate(
+            offset: const Offset(0, -22),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: EdSpacing.page),
+              child: EdPhoneStatsCard(
+                treeCount: treeCount,
+                customerCount: customerCount,
+                orderCount: orderCount,
+                pendingTotal: pendingTotal,
+              ),
             ),
           ),
         ),
-        if ((int.tryParse(pendingReceipts ?? '') ?? 0) + (int.tryParse(pendingCustomers ?? '') ?? 0) > 0)
+        if (pendingTotal > 0)
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFFBEB),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFFDE68A)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.notifications_active_outlined, color: Color(0xFFB45309), size: 22),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _pendingMessage(pendingReceipts, pendingCustomers),
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFFB45309)),
-                      ),
-                    ),
-                  ],
-                ),
+              padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, 12),
+              child: _PendingBanner(
+                message: _pendingMessage(pendingReceipts, pendingCustomers),
               ),
             ),
           ),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(EdSpacing.page, EdSpacing.sm, EdSpacing.page, EdSpacing.md),
-            child: Row(
+            padding: EdgeInsets.fromLTRB(EdSpacing.page, pendingTotal > 0 ? 4 : 8, EdSpacing.page, EdSpacing.md),
+            child: const Row(
               children: [
-                Container(width: 4, height: 20, decoration: BoxDecoration(color: AppColors.accentTeal, borderRadius: BorderRadius.circular(2))),
-                const SizedBox(width: 10),
-                const Text('الخدمات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                _SectionAccent(),
+                SizedBox(width: 10),
+                Text('الخدمات', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.navy)),
               ],
             ),
           ),
         ),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, kPhoneBottomInset),
-          sliver: SliverList.separated(
-            itemCount: apps.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (_, i) => EdPhoneServiceTile(
-              app: EdPhoneAppData(
-                icon: apps[i].icon,
-                name: apps[i].name,
-                hint: apps[i].hint,
-                iconColor: apps[i].iconColor,
-                iconBg: apps[i].iconBg,
-                badge: apps[i].badge,
-                onTap: apps[i].onTap,
+          padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, kPhoneBottomInset),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 0.92,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, i) => EdPhoneServiceCard(
+                app: EdPhoneAppData(
+                  icon: apps[i].icon,
+                  name: apps[i].name,
+                  hint: apps[i].hint,
+                  iconColor: apps[i].iconColor,
+                  iconBg: apps[i].iconBg,
+                  badge: apps[i].badge,
+                  onTap: apps[i].onTap,
+                ),
               ),
+              childCount: apps.length,
             ),
           ),
+        ),
+        SliverFillRemaining(
+          hasScrollBody: false,
+          fillOverscroll: true,
+          child: const SizedBox.shrink(),
         ),
       ],
     );
@@ -804,4 +803,59 @@ abstract final class EdHomeThemes {
   static const reportsBg = Color(0xFFF5F3FF);
   static const receiptsBg = Color(0xFFECFDF5);
   static const customersBg = Color(0xFFFFF1F2);
+}
+
+class _SectionAccent extends StatelessWidget {
+  const _SectionAccent();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 4,
+      height: 18,
+      decoration: BoxDecoration(
+        color: AppColors.accentTeal,
+        borderRadius: BorderRadius.circular(2),
+      ),
+    );
+  }
+}
+
+class _PendingBanner extends StatelessWidget {
+  const _PendingBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.warningSoft,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFDE68A)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF3C7),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.notifications_active_outlined, color: Color(0xFFB45309), size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFFB45309), height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

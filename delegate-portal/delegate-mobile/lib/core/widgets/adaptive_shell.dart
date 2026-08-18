@@ -178,7 +178,7 @@ class AdaptiveShell extends StatelessWidget {
                   _TabletNavRail(selected: _tabletSelectedIndex(location)),
                 ],
               )
-            : child,
+            : SizedBox.expand(child: child),
         bottomNavigationBar: layout.isWide
             ? null
             : EdPhoneDock(

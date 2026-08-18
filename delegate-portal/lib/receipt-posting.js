@@ -8,6 +8,14 @@
 const EDARI_REF_MAX = 30;
 const EDARI_EXP1_MAX = 50;
 
+function buildReceiptRef(receipt) {
+  const raw = String(receipt?.receiptNo || receipt?.receipt_no || '').trim();
+  if (!raw) return clampEdariField('R.V', EDARI_REF_MAX);
+  const tail = raw.replace(/^RV[-\s]*/i, '');
+  const compact = tail.length > 22 ? tail.slice(-22) : tail;
+  return clampEdariField(`R.V ${compact}`.trim(), EDARI_REF_MAX);
+}
+
 const WIN1256_AR = {
   '،': 0xA1, '؛': 0xBA, '؟': 0xBF,
   'ء': 0xC1, 'آ': 0xC2, 'أ': 0xC3, 'ؤ': 0xC4, 'إ': 0xC5, 'ئ': 0xC6,
@@ -40,15 +48,13 @@ function encodeWin1256Bytes(value) {
   return Buffer.from(out);
 }
 
-function clampEdariField(value, maxBytes) {
+function clampEdariField(value, maxLen) {
   const s = String(value ?? '');
-  if (!maxBytes || maxBytes < 1) return s;
-  if (encodeWin1256Bytes(s).length <= maxBytes) return s;
-  let out = '';
-  for (const ch of s) {
-    const next = out + ch;
-    if (encodeWin1256Bytes(next).length > maxBytes) break;
-    out = next;
+  if (!maxLen || maxLen < 1) return '';
+  if (s.length <= maxLen && encodeWin1256Bytes(s).length <= maxLen) return s;
+  let out = s.length > maxLen ? s.slice(0, maxLen) : s;
+  while (out.length > 0 && encodeWin1256Bytes(out).length > maxLen) {
+    out = out.slice(0, -1);
   }
   return out;
 }
@@ -101,7 +107,7 @@ function buildReceiptJournalLines(receipt, accounts = {}) {
   const commission = num(receipt.commission);
   const discount = num(receipt.discount);
   const notes = String(receipt.notes || '').trim();
-  const rv = `R.V ${receipt.receiptNo || receipt.receipt_no || ''}`.trim();
+  const rv = buildReceiptRef(receipt);
   const customer = accRef(accounts.customer || {
     seq: receipt.customerAccSeq,
     num: receipt.customerNum,
@@ -191,6 +197,7 @@ function buildFile12nInsertSql({ num: bondNum, line: ln, dateStr, billKind = 0 }
 
 module.exports = {
   buildReceiptJournalLines,
+  buildReceiptRef,
   validatePostingAccounts,
   formatEdariDate,
   formatEdariTimestamp,
@@ -198,5 +205,7 @@ module.exports = {
   sqlQuote,
   edariSqlLiteral,
   clampEdariField,
-  toIsoDate
+  toIsoDate,
+  EDARI_REF_MAX,
+  EDARI_EXP1_MAX
 };

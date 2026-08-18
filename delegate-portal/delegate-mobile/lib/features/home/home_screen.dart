@@ -120,9 +120,37 @@ class HomeScreen extends ConsumerWidget {
     );
 
     if (layout.isPhone) {
+      ref.listen(authProvider, (prev, next) {
+        if (prev?.loading == true && !next.loading && next.isAuthenticated) {
+          refresh();
+        }
+      });
+
       return ColoredBox(
         color: AppColors.bg,
-        child: homeBody,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            const EdHomePageBackground(),
+            RefreshIndicator(
+              color: AppColors.accentTeal,
+              backgroundColor: AppColors.surface,
+              onRefresh: refresh,
+              child: EdHomePage(
+                agentName: agentName,
+                avatarText: agent?.name,
+                apps: apps,
+                treeCount: treeCount,
+                customerCount: customerCount,
+                orderCount: orderCount,
+                pendingReceipts: pendingReceipts,
+                pendingCustomers: pendingCustomers,
+                onRefresh: refresh,
+                onSettings: () => context.push('/settings'),
+              ),
+            ),
+          ],
+        ),
       );
     }
 
