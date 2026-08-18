@@ -291,7 +291,7 @@ function upsertLocalCustomer({ seq, num, name1, masterSeq, address, remarks }) {
     INSERT INTO accounts (
       seq, num, name1, name2, master_seq, sub_count, bal, tot1, tot2,
       address, remarks, official_name, fix_date, fix_bal, last_match_seq, last_match_date, synced_at
-    ) VALUES (?, ?, ?, '', ?, 0, 0, 0, 0, ?, ?, '', '', '', '', ?)
+    ) VALUES (?, ?, ?, '', ?, 0, 0, 0, 0, ?, ?, '', '', '', '', '', ?)
     ON CONFLICT(seq) DO UPDATE SET
       num=excluded.num,
       name1=excluded.name1,

@@ -111,6 +111,21 @@ function extractJsonBody(textOrBuffer) {
   return null;
 }
 
+function parseNxResponse(bodyBuf, fallbackMessage) {
+  const parsed = extractJsonBody(bodyBuf);
+  if (parsed) return parsed;
+  const bodyText = bodyBuf.toString('utf8');
+  const preMatch = bodyText.match(/<pre>([\s\S]*?)<\/pre>/i);
+  const errText = preMatch
+    ? preMatch[1].replace(/<BR>/gi, '\n').replace(/<[^>]+>/g, '').trim()
+    : bodyText.trim();
+  return {
+    ok: false,
+    error: errText || fallbackMessage,
+    raw: bodyText.slice(0, 500)
+  };
+}
+
 async function pingNxAdmin() {
   const response = await fetch(config.nexusAdminUrl, { signal: AbortSignal.timeout(4000) });
   return response.ok;
@@ -261,7 +276,7 @@ async function runExecViaNxscript(options) {
   const bodyBuf = Buffer.from(await response.arrayBuffer());
   const parsed = extractJsonBody(bodyBuf);
   if (!parsed) {
-    return { ok: false, error: 'Invalid nxServer exec response' };
+    return parseNxResponse(bodyBuf, 'Invalid nxServer exec response');
   }
   return parsed;
 }
@@ -303,7 +318,7 @@ async function runFile12nAutoIncViaNxscript(options) {
   }
   const bodyBuf = Buffer.from(await response.arrayBuffer());
   const parsed = extractJsonBody(bodyBuf);
-  if (!parsed) return { ok: false, error: 'Invalid nxServer autoinc response' };
+  if (!parsed) return parseNxResponse(bodyBuf, 'Invalid nxServer autoinc response');
   return parsed;
 }
 
@@ -346,7 +361,7 @@ async function runTreeRepairViaNxscript(options) {
   }
   const bodyBuf = Buffer.from(await response.arrayBuffer());
   const parsed = extractJsonBody(bodyBuf);
-  if (!parsed) return { ok: false, error: 'Invalid nxServer tree repair response' };
+  if (!parsed) return parseNxResponse(bodyBuf, 'Invalid nxServer tree repair response');
   return parsed;
 }
 

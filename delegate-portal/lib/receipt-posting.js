@@ -166,6 +166,7 @@ function buildFile12nInsertSql({ num: bondNum, line: ln, dateStr, billKind = 0 }
   const dept = ln.isDebit ? 'True' : 'False';
   const exp1 = clampEdariField(ln.exp1 || 'سند قبض', EDARI_EXP1_MAX);
   const ref = clampEdariField(ln.exp2 || String(bondNum || ''), EDARI_REF_MAX);
+  const forBill = 0;
   return `
     INSERT INTO File12n (Num, Acc, "Date", Am, Dept, Exp1, Exp2, BillNum, BillSeq, BillKind, BillBook, Remarks, ForBill, Ref, Two)
     VALUES (
@@ -175,13 +176,13 @@ function buildFile12nInsertSql({ num: bondNum, line: ln, dateStr, billKind = 0 }
       ${Math.round(num(ln.amount))},
       ${dept},
       ${edariSqlLiteral(exp1)},
-      ${edariSqlLiteral(ref)},
+      '',
       0,
       0,
       ${Number(billKind) || 0},
       0,
-      ${edariSqlLiteral(ref)},
-      0,
+      '',
+      ${forBill},
       ${edariSqlLiteral(ref)},
       ${Number(ln.oppositeAccSeq || ln.oppositeAcc || 0)}
     )
