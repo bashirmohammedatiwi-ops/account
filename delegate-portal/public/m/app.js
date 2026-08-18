@@ -498,6 +498,7 @@ function openHomeApp(app) {
   if (app === 'accounts') goToScreen('trees');
   else if (app === 'shop') goToScreen('shop');
   else if (app === 'orders') goToScreen('my-orders');
+  else if (app === 'receipts') goToScreen('receipts');
   else if (app === 'reports') goToScreen('reports');
 }
 
@@ -674,6 +675,8 @@ function goToScreen(name) {
     if (kicker) kicker.textContent = 'Edari · الفاتورة';
   } else if (window.reportsNav?.applyScreen?.(name, { backBtn, toolbarWrap, title, crumb })) {
     /* handled */
+  } else if (window.receiptsNav?.applyScreen?.(name, { backBtn, toolbarWrap, title, crumb })) {
+    /* handled */
   } else if (window.commerceNav?.applyScreen) {
     window.commerceNav.applyScreen(name, { backBtn, toolbarWrap, title, crumb });
   }
@@ -684,6 +687,7 @@ function goToScreen(name) {
 
   window.commerceNav?.onScreen?.(name);
   window.reportsNav?.onScreen?.(name);
+  window.receiptsNav?.onScreen?.(name);
 }
 
 function renderTreeContext() {
@@ -1235,6 +1239,7 @@ async function openInvoice(ref, by = 'auto', acc = '') {
 function goBack() {
   if (window.commerceNav?.handleBack?.()) return;
   if (window.reportsNav?.handleBack?.()) return;
+  if (window.receiptsNav?.handleBack?.()) return;
   if (state.screen === 'invoice') {
     goToScreen(state.invoiceFromScreen || 'statement');
     state.invoiceFromScreen = null;
@@ -1279,6 +1284,7 @@ async function loadTrees(goTo) {
 async function refresh() {
   if (window.commerceNav?.refresh?.()) return;
   if (window.reportsNav?.refresh?.()) return;
+  if (window.receiptsNav?.refresh?.()) return;
   if (state.screen === 'home') {
     await loadTrees('home');
   } else if (state.screen === 'trees') {

@@ -960,14 +960,20 @@ function confirmClearInvoice() {
   clearInvoiceDraft({ resetNotes: false });
 }
 
-async function openCustomerPicker() {
+async function openCustomerPicker(purpose = 'invoice') {
+  commerce.pickerPurpose = purpose;
   commerce.pickerTree = null;
   commerce.pickerBranches = [];
   commerce.pickerSearch = '';
   const searchEl = document.getElementById('customerPickerSearch');
   if (searchEl) searchEl.value = '';
-  document.getElementById('customerPickerTitle').textContent = 'اختر الشجرة';
-  document.getElementById('customerPickerCrumb').textContent = 'الفروع من كشوف الحساب — نفس الزبائن في الكشوفات';
+  const forReceipt = purpose === 'receipt';
+  document.getElementById('customerPickerTitle').textContent = forReceipt
+    ? 'سند قبض — اختر الشجرة'
+    : 'اختر الشجرة';
+  document.getElementById('customerPickerCrumb').textContent = forReceipt
+    ? 'اختر الشجرة ثم الزبون لإصدار سند القبض'
+    : 'الفروع من كشوف الحساب — نفس الزبائن في الكشوفات';
   document.getElementById('customerOverlay')?.classList.remove('hidden');
   document.body.classList.add('inv-sheet-open');
   await renderCustomerTrees();
@@ -1099,6 +1105,11 @@ function renderCustomerBranches() {
 }
 
 function selectInvoiceCustomer(branch) {
+  if (commerce.pickerPurpose === 'receipt' && typeof window.receiptsOnCustomer === 'function') {
+    window.receiptsOnCustomer(branch, commerce.pickerTree);
+    closeCustomerPicker();
+    return;
+  }
   commerce.invoiceCustomer = {
     seq: branch.seq,
     num: branch.num,
@@ -1331,7 +1342,7 @@ window.commerceNav = {
       goToScreen('shop');
       return true;
     }
-    if (state.screen === 'shop' || state.screen === 'my-orders') {
+    if (state.screen === 'shop' || state.screen === 'my-orders' || state.screen === 'receipts') {
       goToScreen('home');
       return true;
     }

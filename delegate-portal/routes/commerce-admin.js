@@ -540,4 +540,110 @@ router.delete('/orders/:id', (req, res) => {
   }
 });
 
+const {
+  listReceipts,
+  loadReceipt,
+  receiptStats,
+  getReceiptAccountSettings,
+  saveReceiptAccountSettings,
+  updateReceiptByAdmin,
+  setReceiptStatus,
+  markReceiptPosted,
+  deleteReceipt,
+  postingPayload
+} = require('../lib/receipts');
+
+router.get('/receipts/stats', (_req, res) => {
+  res.json({ ok: true, stats: receiptStats() });
+});
+
+router.get('/receipts/settings', (_req, res) => {
+  res.json({ ok: true, accounts: getReceiptAccountSettings() });
+});
+
+router.put('/receipts/settings', (req, res) => {
+  const accounts = saveReceiptAccountSettings(req.body || {});
+  res.json({ ok: true, accounts });
+});
+
+router.get('/receipts/accounts/search', (req, res) => {
+  const q = String(req.query.q || '').trim();
+  if (!q) return res.json({ ok: true, results: [] });
+  const db = require('../lib/db');
+  const rows = db.prepare(`
+    SELECT seq, num, name1 FROM accounts
+    WHERE num LIKE ? OR name1 LIKE ?
+    ORDER BY CASE WHEN CAST(sub_count AS INTEGER) = 0 THEN 0 ELSE 1 END, num
+    LIMIT 40
+  `).all(`%${q}%`, `%${q}%`);
+  res.json({
+    ok: true,
+    results: rows.map((r) => ({ seq: r.seq, num: r.num, name: r.name1 }))
+  });
+});
+
+router.get('/receipts', (req, res) => {
+  const status = String(req.query.status || '').trim();
+  res.json({
+    ok: true,
+    receipts: listReceipts({ status: status || undefined, limit: 300 })
+  });
+});
+
+router.get('/receipts/:id', (req, res) => {
+  const receipt = loadReceipt(Number(req.params.id));
+  if (!receipt) return res.status(404).json({ ok: false, error: 'سند القبض غير موجود' });
+  res.json({ ok: true, receipt, posting: postingPayload(receipt.id) });
+});
+
+router.patch('/receipts/:id', (req, res) => {
+  try {
+    const receipt = updateReceiptByAdmin(Number(req.params.id), req.body || {});
+    if (!receipt) return res.status(404).json({ ok: false, error: 'سند القبض غير موجود' });
+    res.json({ ok: true, receipt });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.patch('/receipts/:id/status', (req, res) => {
+  try {
+    const receipt = setReceiptStatus(Number(req.params.id), req.body?.status, {
+      actorType: 'admin',
+      actorId: 'admin',
+      note: req.body?.note || ''
+    });
+    if (!receipt) return res.status(404).json({ ok: false, error: 'سند القبض غير موجود' });
+    res.json({ ok: true, receipt });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/receipts/:id/posted', (req, res) => {
+  try {
+    const receipt = markReceiptPosted(Number(req.params.id), {
+      journalNum: req.body?.journalNum,
+      receiptNum: req.body?.receiptNum,
+      error: req.body?.error,
+      lines: req.body?.lines,
+      receiptDate: req.body?.receiptDate
+    });
+    if (!receipt) return res.status(404).json({ ok: false, error: 'سند القبض غير موجود' });
+    res.json({ ok: true, receipt });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.delete('/receipts/:id', (req, res) => {
+  try {
+    const result = deleteReceipt(Number(req.params.id));
+    if (!result) return res.status(404).json({ ok: false, error: 'سند القبض غير موجود' });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
 module.exports = router;

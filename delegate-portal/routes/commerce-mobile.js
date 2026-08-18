@@ -117,4 +117,54 @@ router.delete('/orders/:id', authAgent, (req, res) => {
   }
 });
 
+const {
+  createReceipt,
+  listReceipts,
+  loadReceipt,
+  deleteReceipt
+} = require('../lib/receipts');
+
+router.get('/receipts', authAgent, (req, res) => {
+  const status = String(req.query.status || '').trim();
+  res.json({
+    ok: true,
+    receipts: listReceipts({
+      agentId: req.agent.id,
+      status: status || undefined,
+      limit: 100
+    })
+  });
+});
+
+router.get('/receipts/:id', authAgent, (req, res) => {
+  const receipt = loadReceipt(Number(req.params.id));
+  if (!receipt || receipt.agentId !== req.agent.id) {
+    return res.status(404).json({ ok: false, error: 'سند القبض غير موجود' });
+  }
+  res.json({ ok: true, receipt });
+});
+
+router.post('/receipts', authAgent, (req, res) => {
+  const body = req.body || {};
+  if (body.customerAccSeq && !canAgentAccess(req.agent.id, body.customerAccSeq)) {
+    return res.status(403).json({ ok: false, error: 'لا تملك صلاحية هذا الزبون' });
+  }
+  try {
+    const receipt = createReceipt(req.agent.id, body);
+    res.json({ ok: true, receipt });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.delete('/receipts/:id', authAgent, (req, res) => {
+  try {
+    const result = deleteReceipt(Number(req.params.id), { agentId: req.agent.id });
+    if (!result) return res.status(404).json({ ok: false, error: 'سند القبض غير موجود' });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
 module.exports = router;

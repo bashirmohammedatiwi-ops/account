@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Edari Admin — لوحة التحكم</title>
-  <link rel="stylesheet" href="admin.css?v=20260709treeFix3">
+  <link rel="stylesheet" href="admin.css?v=20260818receipts">
 </head>
 <body>
   <div id="topLoader" class="top-loader" hidden aria-live="polite">
@@ -44,6 +44,10 @@
           <button type="button" class="nav-item" data-page="orders">
             <span class="nav-icon ic-orders" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></span>
             <span class="nav-text">طلبات الشراء</span>
+          </button>
+          <button type="button" class="nav-item" data-page="receipts">
+            <span class="nav-icon ic-receipts" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span>
+            <span class="nav-text">مبيعات المندوبين</span>
           </button>
         </div>
 
@@ -140,6 +144,10 @@
             <button type="button" class="module-card" data-goto="orders">
               <span class="module-icon tone-blue"><svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/></svg></span>
               <span class="module-body"><strong>طلبات الشراء</strong><span>مراجعة وموافقة</span></span>
+            </button>
+            <button type="button" class="module-card" data-goto="receipts">
+              <span class="module-icon tone-teal"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span>
+              <span class="module-body"><strong>مبيعات المندوبين</strong><span>سندات قبض وترحيل</span></span>
             </button>
             <button type="button" class="module-card" data-goto="salesReport">
               <span class="module-icon tone-indigo"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span>
@@ -297,6 +305,42 @@
             </div>
           </div>
           <div class="panel hidden" id="orderDetailPanel"></div>
+        </section>
+
+        <!-- Delegate receipts -->
+        <section class="page" id="page-receipts">
+          <div class="panel">
+            <div class="panel-head">
+              <h2 class="panel-title">حسابات الترحيل الثابتة</h2>
+              <button type="button" class="btn btn-primary btn-sm" id="btnSaveReceiptSettings">حفظ الحسابات</button>
+            </div>
+            <p class="panel-desc muted">صندوق المبلغ + حسابا العمولة + حساب الحسم — تُستخدم عند ترحيل سند القبض من تطبيق الإدارة المكتبي إلى الإداري كسند قيد مرتبط برقم سند القبض</p>
+            <div class="rv-settings-grid" id="receiptSettingsGrid"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head">
+              <h2 class="panel-title">سندات قبض المندوبين</h2>
+              <select id="receiptStatusFilter" class="search">
+                <option value="">كل الحالات</option>
+                <option value="pending">بانتظار المراجعة</option>
+                <option value="reviewed">جاهز للترحيل</option>
+                <option value="posted">مُرحَّل</option>
+                <option value="rejected">مرفوض</option>
+              </select>
+            </div>
+            <p id="receiptStats" class="panel-desc"></p>
+            <div class="table-scroll">
+              <table class="data-table compact">
+                <thead>
+                  <tr>
+                    <th>رقم</th><th>مندوب</th><th>زبون</th><th>مبلغ</th><th>عمولة</th><th>حسم</th><th>حالة</th><th>تاريخ</th><th></th>
+                  </tr>
+                </thead>
+                <tbody id="receiptsBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel hidden" id="receiptDetailPanel"></div>
         </section>
 
         <!-- Reports -->
@@ -998,8 +1042,9 @@
   </div>
 
   <script src="config.js"></script>
-  <script src="admin.js?v=20260709treeFix3"></script>
-  <script src="admin-commerce.js?v=20260709prepDone"></script>
+  <script src="admin.js?v=20260818receipts"></script>
+  <script src="admin-commerce.js?v=20260818receipts"></script>
+  <script src="admin-receipts.js?v=20260818receipts"></script>
   <script src="admin-sales-report.js?v=20260709treeFix3"></script>
   <script src="admin-account-statements.js?v=20260615kpi"></script>
   <script src="admin-price-sync.js?v=20260703"></script>

@@ -1029,6 +1029,19 @@ ipcMain.handle('lookup-edari-material', async (_e, code) => {
   }
 });
 
+ipcMain.handle('post-edari-receipt', async (_e, payload) => {
+  try {
+    Object.assign(process.env, { EDARI_READER_ROOT: getEdariReaderRoot() }, edariEnvExtra());
+    const postPath = path.join(getPortalDir(), 'sync-client', 'post-receipt.js');
+    delete require.cache[require.resolve(postPath)];
+    const { postReceiptToEdari } = require(postPath);
+    const result = await postReceiptToEdari(payload || {});
+    return { ok: true, ...result };
+  } catch (err) {
+    return { ok: false, error: err.message || 'فشل ترحيل سند القبض إلى الإداري' };
+  }
+});
+
 function showStartupError(err) {
   const message = String(err?.message || err || 'خطأ غير معروف');
   console.error(message);

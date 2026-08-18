@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260806barcode2">
+  <link rel="stylesheet" href="styles.css?v=20260818receipts">
   <link rel="stylesheet" href="portal-pro.css?v=20260709orders1">
   <link rel="stylesheet" href="mobile.css?v=20260709orders1">
   <script>
@@ -192,6 +192,20 @@
                   <span class="home-app-name">طلباتي</span>
                   <span class="home-app-hint">متابعة الطلبات</span>
                   <span class="home-app-badge hidden" id="homeBadgeOrders">0</span>
+                </button>
+
+                <button type="button" class="home-app-tile" data-app="receipts">
+                  <div class="home-app-icon-wrap home-app-theme-emerald">
+                    <div class="home-app-icon-circle">
+                      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <rect x="4" y="3" width="16" height="18" rx="2" stroke="currentColor" stroke-width="2"/>
+                        <path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                      </svg>
+                    </div>
+                  </div>
+                  <span class="home-app-name">سند قبض</span>
+                  <span class="home-app-hint">تحصيل من الزبون</span>
+                  <span class="home-app-badge hidden" id="homeBadgeReceipts">0</span>
                 </button>
 
                 <button type="button" class="home-app-tile" data-app="reports">
@@ -464,6 +478,47 @@
         </div>
       </section>
 
+      <!-- Receipts -->
+      <section class="screen" id="screen-receipts">
+        <div class="inv-page-head">
+          <div>
+            <h3 class="inv-page-title">سند قبض</h3>
+            <p class="inv-page-meta">اختر الشجرة ثم الزبون وأدخل المبلغ</p>
+          </div>
+        </div>
+        <form id="receiptForm" class="rv-form" autocomplete="off">
+          <button type="button" class="rv-customer-btn" id="btnReceiptPickCustomer">
+            <span class="muted" id="receiptCustomerLabel">اختر شجرة ثم زبوناً</span>
+          </button>
+          <label class="field">
+            <span class="field-label">المبلغ</span>
+            <input type="number" id="receiptAmount" min="0" step="1" inputmode="numeric" placeholder="0" required>
+          </label>
+          <div class="rv-field-row">
+            <label class="field">
+              <span class="field-label">العمولة</span>
+              <input type="number" id="receiptCommission" min="0" step="1" inputmode="numeric" placeholder="0">
+            </label>
+            <label class="field">
+              <span class="field-label">الحسم</span>
+              <input type="number" id="receiptDiscount" min="0" step="1" inputmode="numeric" placeholder="0">
+            </label>
+          </div>
+          <label class="field">
+            <span class="field-label">ملاحظات</span>
+            <textarea id="receiptNotes" rows="2" placeholder="البيان — يظهر في سند القيد"></textarea>
+          </label>
+          <button type="submit" class="btn primary full" id="btnSubmitReceipt">إرسال للوحة التحكم</button>
+        </form>
+        <div class="inv-page-head" style="margin-top:18px">
+          <div>
+            <h3 class="inv-page-title">سنداتي</h3>
+            <p class="inv-page-meta" id="myReceiptsMeta">—</p>
+          </div>
+        </div>
+        <div class="inv-order-list" id="myReceiptsList"></div>
+      </section>
+
       <!-- My orders -->
       <section class="screen" id="screen-my-orders">
         <div class="inv-page-head inv-orders-head">
@@ -555,8 +610,9 @@
       <p>جاري التحميل...</p>
     </div>
   </div>
-  <script src="app.js?v=20260806barcode2"></script>
+  <script src="app.js?v=20260818receipts"></script>
   <script src="app-reports.js?v=20260613rpt3"></script>
-  <script src="app-commerce.js?v=20260806barcode2"></script>
+  <script src="app-commerce.js?v=20260818receipts"></script>
+  <script src="app-receipts.js?v=20260818receipts"></script>
 </body>
 </html>

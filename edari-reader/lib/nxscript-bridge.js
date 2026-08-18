@@ -3,7 +3,9 @@ const path = require('path');
 const config = require('./config');
 
 const QUERY_SCRIPT = 'edari-query.nxscript';
+const EXEC_SCRIPT = 'edari-exec.nxscript';
 const BUNDLED_SCRIPT = path.join(__dirname, '..', 'scripts', QUERY_SCRIPT);
+const BUNDLED_EXEC_SCRIPT = path.join(__dirname, '..', 'scripts', EXEC_SCRIPT);
 
 /** @type {boolean | null} */
 let nxscriptAvailable = null;
@@ -27,16 +29,13 @@ function resolveAdminRoot() {
   }
   return null;
 }
-
-function ensureQueryScriptDeployed() {
+function ensureScriptDeployed(fileName, bundledPath) {
   const adminRoot = resolveAdminRoot();
   if (!adminRoot) return false;
-
-  const target = path.join(adminRoot, QUERY_SCRIPT);
-  if (!fs.existsSync(BUNDLED_SCRIPT)) return false;
-
+  const target = path.join(adminRoot, fileName);
+  if (!fs.existsSync(bundledPath)) return false;
   try {
-    const bundled = fs.readFileSync(BUNDLED_SCRIPT, 'utf8');
+    const bundled = fs.readFileSync(bundledPath, 'utf8');
     if (!fs.existsSync(target) || fs.readFileSync(target, 'utf8') !== bundled) {
       fs.writeFileSync(target, bundled, 'utf8');
     }
@@ -44,6 +43,14 @@ function ensureQueryScriptDeployed() {
   } catch {
     return false;
   }
+}
+
+function ensureQueryScriptDeployed() {
+  return ensureScriptDeployed(QUERY_SCRIPT, BUNDLED_SCRIPT);
+}
+
+function ensureExecScriptDeployed() {
+  return ensureScriptDeployed(EXEC_SCRIPT, BUNDLED_EXEC_SCRIPT);
 }
 
 function extractJsonBody(textOrBuffer) {
@@ -202,6 +209,41 @@ async function listTablesViaNxscript(options) {
   };
 }
 
+async function runExecViaNxscript(options) {
+  const sql = String(options.sql || '').trim();
+  const alias = String(options.alias || '').trim();
+  if (!sql) throw new Error('SQL query is required');
+  if (!alias) throw new Error('Database alias is required for nxServer query bridge');
+  if (!/^\s*INSERT\s+INTO\s+File12n\b/i.test(sql)) {
+    return { ok: false, error: 'Only INSERT INTO File12n is allowed' };
+  }
+  if (!ensureExecScriptDeployed()) {
+    return {
+      ok: false,
+      error: 'Could not deploy edari-exec.nxscript to nxServer Adminroot.',
+      needsNxScript: true
+    };
+  }
+
+  const url = `${config.nexusAdminUrl}/${EXEC_SCRIPT}?alias=${encodeURIComponent(alias)}&sql=${encodeURIComponent(sql)}`;
+  let response;
+  try {
+    response = await fetch(url, { signal: AbortSignal.timeout(Number(options.timeoutMs) || 120000) });
+  } catch (err) {
+    return {
+      ok: false,
+      error: `nxServer admin unreachable (${config.nexusAdminUrl}): ${err.message}`,
+      needsNxServer: true
+    };
+  }
+  const bodyBuf = Buffer.from(await response.arrayBuffer());
+  const parsed = extractJsonBody(bodyBuf);
+  if (!parsed) {
+    return { ok: false, error: 'Invalid nxServer exec response' };
+  }
+  return parsed;
+}
+
 async function isNxscriptBridgeAvailable() {
   if (nxscriptAvailable !== null) return nxscriptAvailable;
   try {
@@ -217,7 +259,9 @@ module.exports = {
   isTrialExpiredError,
   isNxscriptBridgeAvailable,
   ensureQueryScriptDeployed,
+  ensureExecScriptDeployed,
   runQueryViaNxscript,
+  runExecViaNxscript,
   testConnectionViaNxscript,
   listTablesViaNxscript
 };

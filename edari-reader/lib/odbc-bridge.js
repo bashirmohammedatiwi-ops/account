@@ -202,6 +202,26 @@ async function runBatchQuery(options) {
   }
 }
 
+async function runExec(options) {
+  const sql = String(options.sql || '').trim();
+  if (!sql) throw new Error('SQL query is required');
+  if (!/^\s*INSERT\s+INTO\s+File12n\b/i.test(sql)) {
+    throw new Error('Only INSERT INTO File12n is allowed');
+  }
+
+  return withNxscriptFallback(
+    nxscriptBridge.runExecViaNxscript,
+    options,
+    (opts) => runPowerShell({
+      action: 'exec',
+      ...opts,
+      driver: opts.driver || cachedDriver || undefined,
+      sql,
+      candidates: config.odbcDriverCandidates
+    })
+  );
+}
+
 async function listSqlTables(options) {
   return withNxscriptFallback(
     nxscriptBridge.listTablesViaNxscript,
@@ -218,6 +238,7 @@ module.exports = {
   detectDrivers,
   testConnection,
   runQuery,
+  runExec,
   runBatchQuery,
   listSqlTables
 };

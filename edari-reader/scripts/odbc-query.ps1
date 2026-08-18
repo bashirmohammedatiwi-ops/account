@@ -146,6 +146,27 @@ function Invoke-OdbcReader {
     }
 }
 
+function Invoke-OdbcExec {
+    param(
+        [string]$ConnectionString,
+        [string]$Sql
+    )
+
+    $connection = Open-OdbcConnection -ConnectionString $ConnectionString
+    try {
+        $command = $connection.CreateCommand()
+        $command.CommandText = $Sql
+        $affected = $command.ExecuteNonQuery()
+        $command.Dispose()
+        return @{
+            rowsAffected = [int]$affected
+        }
+    }
+    finally {
+        $connection.Close()
+    }
+}
+
 # Single-shot: open connection, run one query, close.
 function Invoke-OdbcAction {
     param(
@@ -293,6 +314,41 @@ try {
                 columns = $result.columns
                 rows = $result.rows
                 rowCount = $result.rowCount
+            }
+        }
+
+        'exec' {
+            $sql = [string]$payload.sql
+            if ($sql -notmatch '^\s*INSERT\s+INTO\s+File12n\b') {
+                Write-JsonResult @{
+                    ok = $false
+                    error = 'Only INSERT INTO File12n is allowed'
+                }
+                exit 0
+            }
+            $driver = Resolve-OdbcDriver -Candidates $candidates -Requested $payload.driver
+            if (-not $driver) {
+                Write-JsonResult @{
+                    ok = $false
+                    error = 'NexusDB ODBC driver is not installed on this machine.'
+                    needsDriver = $true
+                }
+                exit 0
+            }
+
+            $connectionString = Build-ConnectionString `
+                -Driver $driver `
+                -Mode $payload.mode `
+                -Server $payload.server `
+                -Port ([int]$payload.port) `
+                -Alias $payload.alias `
+                -DatabasePath $payload.databasePath
+
+            $result = Invoke-OdbcExec -ConnectionString $connectionString -Sql $sql
+            Write-JsonResult @{
+                ok = $true
+                driver = $driver
+                rowsAffected = $result.rowsAffected
             }
         }
 

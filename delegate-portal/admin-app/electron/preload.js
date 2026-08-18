@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld('edariDesktop', {
     return () => ipcRenderer.removeListener('sync-progress', listener);
   },
   lookupEdariMaterial: (code) => ipcRenderer.invoke('lookup-edari-material', code),
+  postEdariReceipt: (payload) => ipcRenderer.invoke('post-edari-receipt', payload || {}),
   onSyncProgress: (handler) => {
     const listener = (_event, line) => handler(line);
     ipcRenderer.on('sync-progress', listener);
