@@ -1,8 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:edari_delegate/config/app_config.dart';
-import 'package:edari_delegate/core/api/api_client.dart';
 import 'package:edari_delegate/core/auth/auth_provider.dart';
 import 'package:edari_delegate/main.dart';
 
@@ -13,7 +11,6 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          appConfigProvider.overrideWithValue(const AppConfig()),
           authProvider.overrideWith(() => _TestAuth()),
         ],
         child: const EdariDelegateApp(),

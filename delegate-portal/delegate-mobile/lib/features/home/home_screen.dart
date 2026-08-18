@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/api/api_client.dart';
+import '../../core/layout/breakpoints.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/adaptive_shell.dart';
@@ -19,6 +20,9 @@ class HomeScreen extends ConsumerWidget {
     final agent = ref.watch(authProvider).agent;
     final treesAsync = ref.watch(treesProvider);
     final ordersAsync = ref.watch(ordersProvider);
+    final receiptsAsync = ref.watch(receiptsListProvider);
+    final customersAsync = ref.watch(customerRequestsListProvider);
+    final layout = EdLayout.of(context);
 
     final treeCount = treesAsync.maybeWhen(data: (t) => '${t.length}', orElse: () => '—');
     final customerCount = treesAsync.maybeWhen(
@@ -26,11 +30,21 @@ class HomeScreen extends ConsumerWidget {
       orElse: () => '—',
     );
     final orderCount = ordersAsync.maybeWhen(data: (o) => '${o.length}', orElse: () => '—');
+    final pendingReceipts = receiptsAsync.maybeWhen(
+      data: (list) => '${list.where((r) => r.status == 'pending' || r.status == 'reviewed').length}',
+      orElse: () => null,
+    );
+    final pendingCustomers = customersAsync.maybeWhen(
+      data: (list) => '${list.where((r) => r.status == 'pending' || r.status == 'reviewed').length}',
+      orElse: () => null,
+    );
     final agentName = agent?.name ?? 'مندوب';
 
     Future<void> refresh() async {
       ref.invalidate(treesProvider);
       ref.invalidate(ordersProvider);
+      ref.invalidate(receiptsListProvider);
+      ref.invalidate(customerRequestsListProvider);
     }
 
     final apps = [
@@ -61,6 +75,24 @@ class HomeScreen extends ConsumerWidget {
         onTap: () => context.go('/orders'),
       ),
       EdHomeApp(
+        icon: Icons.receipt_long_rounded,
+        name: 'سند قبض',
+        hint: 'تحصيل من الزبون',
+        iconColor: AppColors.moduleReceipts,
+        iconBg: EdHomeThemes.receiptsBg,
+        badge: pendingReceipts,
+        onTap: () => context.go('/receipts'),
+      ),
+      EdHomeApp(
+        icon: Icons.person_add_alt_1_rounded,
+        name: 'زبون جديد',
+        hint: 'يُراجع ثم يُرحَّل',
+        iconColor: AppColors.moduleCustomers,
+        iconBg: EdHomeThemes.customersBg,
+        badge: pendingCustomers,
+        onTap: () => context.go('/customers'),
+      ),
+      EdHomeApp(
         icon: Icons.bar_chart_rounded,
         name: 'تقارير',
         hint: 'مبيعات الفترة',
@@ -69,6 +101,30 @@ class HomeScreen extends ConsumerWidget {
         onTap: () => context.go('/reports'),
       ),
     ];
+
+    final homeBody = RefreshIndicator(
+      color: AppColors.navy,
+      onRefresh: refresh,
+      child: EdHomePage(
+        agentName: agentName,
+        avatarText: agent?.name,
+        apps: apps,
+        treeCount: treeCount,
+        customerCount: customerCount,
+        orderCount: orderCount,
+        pendingReceipts: pendingReceipts,
+        pendingCustomers: pendingCustomers,
+        onRefresh: refresh,
+        onSettings: () => context.push('/settings'),
+      ),
+    );
+
+    if (layout.isPhone) {
+      return ColoredBox(
+        color: AppColors.bg,
+        child: homeBody,
+      );
+    }
 
     return AppPage(
       title: 'Edari',
@@ -93,18 +149,7 @@ class HomeScreen extends ConsumerWidget {
           fit: StackFit.expand,
           children: [
             const EdHomePageBackground(),
-            RefreshIndicator(
-              color: AppColors.navy,
-              onRefresh: refresh,
-              child: EdHomePage(
-                agentName: agentName,
-                avatarText: agent?.name,
-                apps: apps,
-                treeCount: treeCount,
-                customerCount: customerCount,
-                orderCount: orderCount,
-              ),
-            ),
+            homeBody,
           ],
         ),
       ),
@@ -120,4 +165,14 @@ final treesProvider = FutureProvider((ref) {
 final ordersProvider = FutureProvider((ref) {
   ref.keepAlive();
   return withAuth(ref, () => ref.read(apiClientProvider).getOrders());
+});
+
+final receiptsListProvider = FutureProvider((ref) {
+  ref.keepAlive();
+  return withAuth(ref, () => ref.read(apiClientProvider).getReceipts());
+});
+
+final customerRequestsListProvider = FutureProvider((ref) {
+  ref.keepAlive();
+  return withAuth(ref, () => ref.read(apiClientProvider).getCustomerRequests());
 });

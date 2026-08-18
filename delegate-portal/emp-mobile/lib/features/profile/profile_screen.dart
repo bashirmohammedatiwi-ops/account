@@ -93,7 +93,7 @@ class ProfileScreen extends ConsumerWidget {
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.info_outline_rounded, color: AppColors.primary),
                         title: const Text('إصدار التطبيق', style: TextStyle(fontWeight: FontWeight.w800)),
-                        subtitle: const Text('3.8.0 — إشعارات محسّنة + خلفية'),
+                        subtitle: const Text('3.8.5 — إصلاح أيقونة التطبيق والتعطل'),
                       ),
                     ],
                   ),

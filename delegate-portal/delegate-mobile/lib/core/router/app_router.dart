@@ -5,9 +5,11 @@ import 'package:go_router/go_router.dart';
 import '../../features/accounts/accounts_hub_screen.dart';
 import '../../features/auth/login_screen.dart';
 import '../../features/commerce/shop_hub_screen.dart';
+import '../../features/customers/customers_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/invoices/invoice_screen.dart';
 import '../../features/orders/orders_hub_screen.dart';
+import '../../features/receipts/receipts_screen.dart';
 import '../../features/reports/reports_screen.dart';
 import '../../features/settings/settings_screen.dart';
 import '../auth/auth_provider.dart';
@@ -102,6 +104,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
           GoRoute(path: '/reports', builder: (_, _) => const ReportsScreen()),
+          GoRoute(path: '/receipts', builder: (_, _) => const ReceiptsScreen()),
+          GoRoute(path: '/customers', builder: (_, _) => const CustomersScreen()),
           GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
         ],
       ),

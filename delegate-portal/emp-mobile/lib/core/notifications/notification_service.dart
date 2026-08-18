@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/api_client.dart';
 import '../auth/auth_provider.dart';
-import 'background_poll.dart';
 
 const _lastOrderIdKey = 'empLastSeenOrderId';
 const _lastReminderKey = 'empLastReminderAt';
@@ -51,9 +48,11 @@ class NotificationService {
     _reminderTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(seconds: 45), (_) => poll());
     _reminderTimer = Timer.periodic(const Duration(minutes: 1), (_) => checkReminder());
-    await poll(seed: true);
-    await _registerFcmIfAvailable();
-    await scheduleBackgroundPolling();
+    try {
+      await poll(seed: true);
+    } catch (e, st) {
+      debugPrint('poll seed failed: $e\n$st');
+    }
   }
 
   void stop() {
@@ -61,7 +60,6 @@ class NotificationService {
     _reminderTimer?.cancel();
     _pollTimer = null;
     _reminderTimer = null;
-    unawaited(cancelBackgroundPolling());
   }
 
   void dispose() => stop();
@@ -71,52 +69,14 @@ class NotificationService {
     await _notifications
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
-    await _registerFcmIfAvailable();
-    await scheduleBackgroundPolling();
-    await poll(seed: true);
-  }
-
-  Future<void> unregisterDeviceToken() async {
-    if (kIsWeb || Firebase.apps.isEmpty) return;
     try {
-      final token = await FirebaseMessaging.instance.getToken();
-      if (token != null && token.isNotEmpty) {
-        await _ref.read(apiClientProvider).unregisterDevice(token);
-      }
-    } catch (e) {
-      debugPrint('unregisterDevice: $e');
+      await poll(seed: true);
+    } catch (e, st) {
+      debugPrint('poll seed failed: $e\n$st');
     }
   }
 
-  Future<void> _registerFcmIfAvailable() async {
-    if (kIsWeb || Firebase.apps.isEmpty) return;
-    try {
-      final messaging = FirebaseMessaging.instance;
-      await messaging.requestPermission(alert: true, badge: true, sound: true);
-      final token = await messaging.getToken();
-      if (token != null && token.isNotEmpty && _ref.read(authProvider).isAuthenticated) {
-        await _ref.read(apiClientProvider).registerDevice(token);
-        debugPrint('[emp] FCM token registered');
-      } else if (token == null) {
-        debugPrint('[emp] FCM token unavailable — using polling notifications');
-      }
-      messaging.onTokenRefresh.listen((token) async {
-        if (_ref.read(authProvider).isAuthenticated) {
-          await _ref.read(apiClientProvider).registerDevice(token);
-        }
-      });
-      FirebaseMessaging.onMessage.listen((message) {
-        final n = message.notification;
-        showLocal(
-          title: n?.title ?? 'طلب جديد',
-          body: n?.body ?? '',
-          payload: message.data['orderId'] != null ? 'order:${message.data['orderId']}' : null,
-        );
-      });
-    } catch (e) {
-      debugPrint('FCM unavailable: $e');
-    }
-  }
+  Future<void> unregisterDeviceToken() async {}
 
   Future<void> poll({bool seed = false}) async {
     if (!_ref.read(authProvider).isAuthenticated) return;

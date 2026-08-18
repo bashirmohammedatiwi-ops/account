@@ -452,3 +452,108 @@ class SalesReportResult {
         limit: json['limit'] as int? ?? 100,
       );
 }
+
+class Receipt {
+  const Receipt({
+    required this.id,
+    required this.receiptNo,
+    required this.status,
+    required this.statusLabel,
+    required this.amount,
+    this.commission = 0,
+    this.discount = 0,
+    this.customerName,
+    this.customerNum,
+    this.treeName,
+    this.notes,
+    this.receiptDate,
+    this.createdAt,
+  });
+
+  final int id;
+  final String receiptNo;
+  final String status;
+  final String statusLabel;
+  final num amount;
+  final num commission;
+  final num discount;
+  final String? customerName;
+  final String? customerNum;
+  final String? treeName;
+  final String? notes;
+  final String? receiptDate;
+  final String? createdAt;
+
+  bool get canDelete => status != 'posted';
+
+  factory Receipt.fromJson(Map<String, dynamic> json) => Receipt(
+        id: json['id'] as int,
+        receiptNo: '${json['receiptNo'] ?? json['receipt_no'] ?? ''}',
+        status: '${json['status'] ?? ''}',
+        statusLabel: '${json['statusLabel'] ?? json['status_label'] ?? ''}',
+        amount: json['amount'] as num? ?? 0,
+        commission: json['commission'] as num? ?? 0,
+        discount: json['discount'] as num? ?? 0,
+        customerName: json['customerName'] as String? ?? json['customer_name'] as String?,
+        customerNum: json['customerNum'] as String? ?? json['customer_num'] as String?,
+        treeName: json['treeName'] as String? ?? json['tree_name'] as String?,
+        notes: json['notes'] as String?,
+        receiptDate: json['receiptDate'] as String? ?? json['receipt_date'] as String?,
+        createdAt: json['createdAt'] as String? ?? json['created_at'] as String?,
+      );
+}
+
+class CustomerRequest {
+  const CustomerRequest({
+    required this.id,
+    required this.requestNo,
+    required this.status,
+    required this.statusLabel,
+    required this.name,
+    this.phone,
+    this.address,
+    this.notes,
+    this.treeName,
+    this.treeNum,
+    this.edariNum,
+    this.createdAt,
+  });
+
+  final int id;
+  final String requestNo;
+  final String status;
+  final String statusLabel;
+  final String name;
+  final String? phone;
+  final String? address;
+  final String? notes;
+  final String? treeName;
+  final String? treeNum;
+  final String? edariNum;
+  final String? createdAt;
+
+  bool get canDelete => status != 'posted';
+
+  factory CustomerRequest.fromJson(Map<String, dynamic> json) => CustomerRequest(
+        id: json['id'] as int,
+        requestNo: '${json['requestNo'] ?? json['request_no'] ?? ''}',
+        status: '${json['status'] ?? ''}',
+        statusLabel: '${json['statusLabel'] ?? json['status_label'] ?? ''}',
+        name: '${json['name'] ?? ''}',
+        phone: json['phone'] as String?,
+        address: json['address'] as String?,
+        notes: json['notes'] as String?,
+        treeName: json['treeName'] as String? ?? json['tree_name'] as String?,
+        treeNum: json['treeNum'] as String? ?? json['tree_num'] as String?,
+        edariNum: json['edariNum'] as String? ?? json['edari_num'] as String?,
+        createdAt: json['createdAt'] as String? ?? json['created_at'] as String?,
+      );
+}
+
+/// نتيجة اختيار زبون من الشجرة
+class PickedCustomer {
+  const PickedCustomer({required this.customer, required this.tree});
+
+  final BranchAccount customer;
+  final AccountTree tree;
+}

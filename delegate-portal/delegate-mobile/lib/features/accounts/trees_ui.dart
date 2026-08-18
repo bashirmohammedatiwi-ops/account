@@ -4,6 +4,7 @@ import '../../core/layout/breakpoints.dart';
 import '../../core/layout/ed_table_wrap.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/widgets/phone_ui.dart';
 import '../../models/models.dart';
 import 'accounts_theme.dart';
 
@@ -24,81 +25,96 @@ class EdTreesPage extends StatelessWidget {
     final layout = EdLayout.of(context);
     final pad = edPageHorizontalPadding(context);
     final customers = trees.fold<int>(0, (s, t) => s + t.directChildren);
+    final bottomPad = layout.isPhone ? kPhoneBottomInset : 24.0;
 
     if (trees.isEmpty) {
       return LayoutBuilder(
-        builder: (context, constraints) => SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: Padding(
-              padding: EdgeInsets.all(pad),
-              child: const EdTreesEmptyState(),
+        builder: (context, constraints) {
+          final minH = constraints.maxHeight.isFinite && constraints.maxHeight > 0 ? constraints.maxHeight : 400.0;
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: minH),
+              child: Padding(
+                padding: EdgeInsets.all(pad),
+                child: const EdTreesEmptyState(),
+              ),
             ),
-          ),
-        ),
+          );
+        },
       );
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final body = layout.isTablet
-            ? Row(
-                textDirection: TextDirection.ltr,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(width: layout.isDesktop ? 300 : 280, child: sidePanel(agentName, trees.length, customers)),
-                  const SizedBox(width: 16),
-                  Expanded(child: mainGrid(context, layout, trees, customers, onTreeTap)),
-                ],
-              )
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  sidePanel(agentName, trees.length, customers),
-                  const SizedBox(height: 16),
-                  Expanded(child: mainGrid(context, layout, trees, customers, onTreeTap)),
-                ],
-              );
+    final gridDelegate = SliverGridDelegateWithFixedCrossAxisCount(
+      crossAxisCount: layout.gridColumns(phone: 1, tablet: 2, wide: 2, desktop: 3),
+      crossAxisSpacing: 10,
+      mainAxisSpacing: 10,
+      mainAxisExtent: layout.isPhone ? 200 : 210,
+    );
 
-        return Padding(
-          padding: EdgeInsets.fromLTRB(pad, layout.isTablet ? 18 : 12, pad, 24),
-          child: SizedBox(
-            height: constraints.maxHeight,
-            child: body,
+    final gridSliver = SliverPadding(
+      padding: EdgeInsets.fromLTRB(pad, 0, pad, bottomPad),
+      sliver: SliverGrid(
+        gridDelegate: gridDelegate,
+        delegate: SliverChildBuilderDelegate(
+          (context, i) => EdTreeCard(
+            index: i + 1,
+            tree: trees[i],
+            onTap: () => onTreeTap(trees[i]),
           ),
-        );
-      },
+          childCount: trees.length,
+        ),
+      ),
     );
-  }
 
-  Widget sidePanel(String agentName, int treeCount, int customerCount) {
-    return EdTreesSidePanel(
-      agentName: agentName,
-      treeCount: treeCount,
-      customerCount: customerCount,
-    );
-  }
+    if (layout.isTablet) {
+      return CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(pad, 18, pad, 0),
+            sliver: SliverToBoxAdapter(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                textDirection: TextDirection.ltr,
+                children: [
+                  SizedBox(
+                    width: layout.isDesktop ? 300 : 280,
+                    child: EdTreesSidePanel(
+                      agentName: agentName,
+                      treeCount: trees.length,
+                      customerCount: customers,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        EdTreesContentHead(treeCount: trees.length, customerCount: customers),
+                        const SizedBox(height: 12),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          gridSliver,
+        ],
+      );
+    }
 
-  Widget mainGrid(
-    BuildContext context,
-    EdLayoutData layout,
-    List<AccountTree> trees,
-    int customers,
-    ValueChanged<AccountTree> onTreeTap,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        EdTreesContentHead(treeCount: trees.length, customerCount: customers),
-        const SizedBox(height: 12),
-        Expanded(
-          child: EdTreesGrid(
-            trees: trees,
-            crossAxisCount: layout.gridColumns(phone: 1, tablet: 2, wide: 2, desktop: 3),
-            onTreeTap: onTreeTap,
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(pad, 8, pad, 12),
+          sliver: SliverToBoxAdapter(
+            child: EdTreesContentHead(treeCount: trees.length, customerCount: customers),
           ),
         ),
+        gridSliver,
       ],
     );
   }
@@ -123,16 +139,16 @@ class EdTreesSidePanel extends StatelessWidget {
     final initial = name.characters.first;
 
     return Container(
-      height: double.infinity,
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppColors.radius),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
+        borderRadius: BorderRadius.circular(AppColors.radiusLg),
+        border: Border.all(color: AppColors.borderLight),
+        boxShadow: AppColors.softShadow,
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -144,26 +160,18 @@ class EdTreesSidePanel extends StatelessWidget {
           ),
           Padding(
             padding: EdgeInsets.fromLTRB(18, layout.isTablet ? 22 : 20, 18, layout.isTablet ? 12 : 8),
-            child: layout.isTablet
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _avatar(initial),
-                      const SizedBox(height: 14),
-                      _welcomeText(name),
-                    ],
-                  )
-                : Column(
-                    children: [
-                      _avatar(initial),
-                      const SizedBox(height: 14),
-                      _welcomeText(name),
-                    ],
-                  ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _avatar(initial),
+                const SizedBox(height: 14),
+                _welcomeText(name),
+              ],
+            ),
           ),
           Container(
             decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: AppColors.border)),
+              border: Border(top: BorderSide(color: AppColors.borderLight)),
             ),
             child: IntrinsicHeight(
               child: Row(
@@ -269,38 +277,6 @@ class EdTreesContentHead extends StatelessWidget {
   }
 }
 
-class EdTreesGrid extends StatelessWidget {
-  const EdTreesGrid({
-    super.key,
-    required this.trees,
-    required this.crossAxisCount,
-    required this.onTreeTap,
-  });
-
-  final List<AccountTree> trees;
-  final int crossAxisCount;
-  final ValueChanged<AccountTree> onTreeTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.builder(
-      padding: EdgeInsets.zero,
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: crossAxisCount,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        mainAxisExtent: crossAxisCount == 1 ? 200 : 210,
-      ),
-      itemCount: trees.length,
-      itemBuilder: (context, i) => EdTreeCard(
-        index: i + 1,
-        tree: trees[i],
-        onTap: () => onTreeTap(trees[i]),
-      ),
-    );
-  }
-}
-
 class EdTreeCard extends StatelessWidget {
   const EdTreeCard({super.key, required this.index, required this.tree, required this.onTap});
 
@@ -324,8 +300,8 @@ class EdTreeCard extends StatelessWidget {
       color: AppColors.surface,
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppColors.radius),
-        side: const BorderSide(color: AppColors.border),
+        borderRadius: BorderRadius.circular(AppColors.radiusLg),
+        side: const BorderSide(color: AppColors.borderLight),
       ),
       child: InkWell(
         onTap: onTap,
@@ -398,8 +374,9 @@ class EdTreesEmptyState extends StatelessWidget {
       padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppColors.radius),
-        border: Border.all(color: AppColors.borderStrong, style: BorderStyle.solid, width: 1),
+        borderRadius: BorderRadius.circular(AppColors.radiusLg),
+        border: Border.all(color: AppColors.borderLight),
+        boxShadow: AppColors.softShadow,
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,

@@ -5,8 +5,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_provider.dart';
+import '../../core/layout/breakpoints.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/ed_components.dart';
+import '../../core/widgets/ed_form.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -61,7 +63,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 768;
+    final wide = EdLayout.of(context).isTablet;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -71,72 +73,121 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ? Row(
                 children: [
                   const Expanded(flex: 5, child: EdLoginAside()),
-                  Expanded(flex: 4, child: _form(context, showBrand: false)),
+                  Expanded(flex: 4, child: _tabletForm()),
                 ],
               )
-            : _form(context, showBrand: true),
+            : _phoneLayout(),
       ),
     );
   }
 
-  Widget _form(BuildContext context, {required bool showBrand}) {
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: Container(
-            padding: const EdgeInsets.all(24),
+  Widget _phoneLayout() {
+    final top = MediaQuery.paddingOf(context).top;
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: EdgeInsets.fromLTRB(EdSpacing.page, top + 40, EdSpacing.page, 56),
             decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(AppColors.radius),
-              border: Border.all(color: AppColors.border),
-              boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.06), blurRadius: 20, offset: const Offset(0, 8))],
+              gradient: AppColors.brandGradient,
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(36)),
+              boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.2), blurRadius: 32, offset: const Offset(0, 16))],
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (showBrand) ...[
-                  Center(child: Image.asset('assets/logo.png', width: 56, height: 56)),
-                  const SizedBox(height: 12),
-                  const Text('Edari — بوابة المندوب', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 20),
-                ],
-                const Text('تسجيل الدخول', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 4),
-                const Text('أدخل بيانات حساب المندوب', style: TextStyle(color: AppColors.muted, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 20),
-                TextField(
-                  controller: _userCtrl,
-                  decoration: const InputDecoration(labelText: 'اسم المستخدم', prefixIcon: Icon(Icons.person_outline)),
-                  textInputAction: TextInputAction.next,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _passCtrl,
-                  decoration: const InputDecoration(labelText: 'كلمة المرور', prefixIcon: Icon(Icons.lock_outline)),
-                  obscureText: true,
-                  onSubmitted: (_) => _submit(),
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.dangerSoft,
-                      borderRadius: BorderRadius.circular(AppColors.radiusSm),
-                      border: Border.all(color: AppColors.danger.withValues(alpha: 0.25)),
-                    ),
-                    child: Text(_error!, style: const TextStyle(color: AppColors.danger, fontWeight: FontWeight.w600)),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
                   ),
-                ],
-                const SizedBox(height: 20),
-                EdPrimaryButton(label: 'دخول', onPressed: _submit, loading: _loading),
+                  child: Image.asset('assets/logo.png', width: 64, height: 64),
+                ),
+                const SizedBox(height: EdSpacing.xl),
+                const Text('Edari', style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w800, letterSpacing: 1.2)),
+                const SizedBox(height: 8),
+                Text('بوابة المندوب', style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 16, fontWeight: FontWeight.w600)),
               ],
             ),
           ),
+          Transform.translate(
+            offset: const Offset(0, -32),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: EdSpacing.page),
+              child: EdFormCard(
+                title: 'تسجيل الدخول',
+                subtitle: 'أدخل بيانات حساب المندوب',
+                icon: Icons.lock_outline_rounded,
+                iconColor: AppColors.accentTeal,
+                child: _fields(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  Widget _tabletForm() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(EdSpacing.xxl),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: EdFormCard(
+            title: 'تسجيل الدخول',
+            subtitle: 'أدخل بيانات حساب المندوب',
+            icon: Icons.lock_outline_rounded,
+            child: _fields(),
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _fields() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        EdLabeledField(
+          label: 'اسم المستخدم',
+          controller: _userCtrl,
+          prefixIcon: Icons.person_outline_rounded,
+          onSubmitted: (_) => _submit(),
+        ),
+        const SizedBox(height: EdSpacing.lg),
+        EdLabeledField(
+          label: 'كلمة المرور',
+          controller: _passCtrl,
+          obscureText: true,
+          prefixIcon: Icons.lock_outline_rounded,
+          onSubmitted: (_) => _submit(),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: EdSpacing.md),
+          Container(
+            padding: const EdgeInsets.all(EdSpacing.md),
+            decoration: BoxDecoration(
+              color: AppColors.dangerSoft,
+              borderRadius: BorderRadius.circular(AppColors.radius),
+              border: Border.all(color: AppColors.danger.withValues(alpha: 0.2)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: AppColors.danger, size: 20),
+                const SizedBox(width: 10),
+                Expanded(child: Text(_error!, style: const TextStyle(color: AppColors.danger, fontWeight: FontWeight.w600, fontSize: 13))),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: EdSpacing.xl),
+        EdPrimaryButton(label: 'دخول', onPressed: _submit, loading: _loading, gradient: true, icon: Icons.login_rounded),
+      ],
     );
   }
 }

@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../config/app_config.dart';
 import '../../models/models.dart';
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
 import '../api/login_api.dart';
+import '../config/app_config_notifier.dart';
 
 const _tokenKey = 'delegateToken';
 const _agentKey = 'delegateAgent';

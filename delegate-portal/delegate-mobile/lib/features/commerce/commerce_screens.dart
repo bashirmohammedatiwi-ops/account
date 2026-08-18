@@ -10,10 +10,12 @@ import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/layout/breakpoints.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/debounce.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/adaptive_shell.dart';
+import '../../core/widgets/customer_picker.dart';
 import '../../core/widgets/ed_components.dart';
 import '../../models/models.dart';
 import '../home/home_screen.dart';
@@ -357,27 +359,7 @@ class _ShopProductsPanelState extends ConsumerState<ShopProductsPanel> {
   }
 
   Future<void> _pickCustomer() async {
-    final trees = await ref.read(apiClientProvider).getTrees();
-    if (!mounted || trees.isEmpty) return;
-    final tree = await showDialog<AccountTree>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('اختر الشجرة'),
-        children: trees.map((t) => SimpleDialogOption(onPressed: () => Navigator.pop(ctx, t), child: Text(t.name1))).toList(),
-      ),
-    );
-    if (tree == null) return;
-    final branches = await ref.read(apiClientProvider).getChildren(tree.seq);
-    if (!mounted) return;
-    final branch = await showDialog<BranchAccount>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('اختر الزبون'),
-        children: branches
-            .map((b) => SimpleDialogOption(onPressed: () => Navigator.pop(ctx, b), child: Text('${b.name1} (${b.accountNum})')))
-            .toList(),
-      ),
-    );
+    final branch = await pickBranchCustomer(context, ref);
     if (branch != null) {
       ref.read(invoiceDraftProvider.notifier).customer = branch;
       await _persistDraft();
@@ -630,27 +612,7 @@ class _EdOrderInvoiceSheetState extends ConsumerState<EdOrderInvoiceSheet> {
   }
 
   Future<void> _pickCustomer() async {
-    final trees = await ref.read(apiClientProvider).getTrees();
-    if (!mounted || trees.isEmpty) return;
-    final tree = await showDialog<AccountTree>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('اختر الشجرة'),
-        children: trees.map((t) => SimpleDialogOption(onPressed: () => Navigator.pop(ctx, t), child: Text(t.name1))).toList(),
-      ),
-    );
-    if (tree == null) return;
-    final branches = await ref.read(apiClientProvider).getChildren(tree.seq);
-    if (!mounted) return;
-    final branch = await showDialog<BranchAccount>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('اختر الزبون'),
-        children: branches
-            .map((b) => SimpleDialogOption(onPressed: () => Navigator.pop(ctx, b), child: Text('${b.name1} (${b.accountNum})')))
-            .toList(),
-      ),
-    );
+    final branch = await pickBranchCustomer(context, ref);
     if (branch != null) {
       ref.read(invoiceDraftProvider.notifier).customer = branch;
       await _persist();
@@ -815,11 +777,29 @@ final orderDetailProvider = FutureProvider.family<Order, int>((ref, id) {
   return withAuth(ref, () => ref.read(apiClientProvider).getOrder(id));
 });
 
-class OrdersScreen extends ConsumerWidget {
+class OrdersScreen extends ConsumerStatefulWidget {
   const OrdersScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<OrdersScreen> createState() => _OrdersScreenState();
+}
+
+class _OrdersScreenState extends ConsumerState<OrdersScreen> {
+  String _filter = 'all';
+
+  bool _matchesFilter(Order o) {
+    if (_filter == 'all') return true;
+    if (_filter == 'active') {
+      return o.status == 'submitted' || o.status == 'under_review' || o.status == 'pending' || o.status == 'processing' || o.status == 'approved';
+    }
+    if (_filter == 'done') {
+      return o.status == 'delivered' || o.status == 'rejected' || o.status == 'cancelled';
+    }
+    return o.status == _filter;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final ordersAsync = ref.watch(ordersProvider);
     return AppPage(
       title: 'طلباتي',
@@ -830,32 +810,70 @@ class OrdersScreen extends ConsumerWidget {
       actions: [
         EdHeaderIconButton(icon: Icons.refresh_rounded, tooltip: 'تحديث', onPressed: () => ref.invalidate(ordersProvider)),
       ],
+      toolbar: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _filterChip('الكل', 'all'),
+              _filterChip('نشطة', 'active'),
+              _filterChip('مُرسلة', 'submitted'),
+              _filterChip('مُسلّمة', 'delivered'),
+              _filterChip('مرفوضة', 'rejected'),
+            ],
+          ),
+        ),
+      ),
       child: ColoredBox(
         color: EdCommerceTheme.pageBg,
         child: ordersAsync.when(
           loading: () => const LoadingView(message: 'جاري تحميل الطلبات...'),
           error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(ordersProvider)),
           data: (orders) {
-            if (orders.isEmpty) return const EmptyState(message: 'لا توجد طلبات', icon: Icons.receipt_long_outlined);
-            return ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: orders.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (_, i) {
-                final o = orders[i];
-                return EdOrderCard(
-                  id: o.id,
-                  customer: o.customerName ?? '—',
-                  date: fmtDate(o.createdAt),
-                  amount: fmtMoney(o.totalAmount),
-                  statusLabel: orderStatusLabel(o.status),
-                  statusColor: AppTheme.orderStatusColor(o.status),
-                  onTap: () => context.go('/orders/${o.id}'),
-                );
-              },
+            final filtered = orders.where(_matchesFilter).toList();
+            if (filtered.isEmpty) {
+              return EmptyState(message: orders.isEmpty ? 'لا توجد طلبات' : 'لا توجد طلبات بهذا التصفية', icon: Icons.receipt_long_outlined);
+            }
+            return RefreshIndicator(
+              color: AppColors.navy,
+              onRefresh: () async => ref.invalidate(ordersProvider),
+              child: ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: filtered.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                itemBuilder: (_, i) {
+                  final o = filtered[i];
+                  return EdOrderCard(
+                    id: o.id,
+                    customer: o.customerName ?? '—',
+                    date: fmtDate(o.createdAt),
+                    amount: fmtMoney(o.totalAmount),
+                    statusLabel: orderStatusLabel(o.status),
+                    statusColor: AppTheme.orderStatusColor(o.status),
+                    onTap: () => context.go('/orders/${o.id}'),
+                  );
+                },
+              ),
             );
           },
         ),
+      ),
+    );
+  }
+
+  Widget _filterChip(String label, String value) {
+    final active = _filter == value;
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(end: 8),
+      child: FilterChip(
+        label: Text(label),
+        selected: active,
+        onSelected: (_) => setState(() => _filter = value),
+        selectedColor: AppColors.accentSoft,
+        checkmarkColor: AppColors.accentTeal,
+        labelStyle: TextStyle(fontWeight: FontWeight.w700, color: active ? AppColors.accentTeal : AppColors.text),
+        side: BorderSide(color: active ? AppColors.accentTeal : AppColors.border),
       ),
     );
   }
@@ -865,14 +883,68 @@ class OrderDetailScreen extends ConsumerWidget {
   const OrderDetailScreen({super.key, required this.id});
   final int id;
 
+  static const _cancellable = {'submitted', 'under_review', 'pending', 'processing'};
+  static const _deletable = {'draft', 'cancelled', 'rejected'};
+
+  Future<void> _deleteOrder(BuildContext context, WidgetRef ref, Order order) async {
+    final cancellable = _cancellable.contains(order.status);
+    final deletable = _deletable.contains(order.status);
+    if (!cancellable && !deletable) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(cancellable ? 'إلغاء الطلب' : 'حذف الطلب'),
+        content: Text(cancellable ? 'سيتم إلغاء الطلب ورفضه. هل تريد المتابعة؟' : 'هل تريد حذف هذا الطلب نهائياً؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('لا')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(cancellable ? 'إلغاء' : 'حذف')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    try {
+      await ref.read(apiClientProvider).deleteOrder(order.id);
+      ref.invalidate(ordersProvider);
+      ref.invalidate(orderDetailProvider(order.id));
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(cancellable ? 'تم إلغاء الطلب' : 'تم حذف الطلب'), backgroundColor: AppColors.success),
+      );
+      context.go('/orders');
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e is ApiException ? e.message : '$e'), backgroundColor: AppColors.danger),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final orderAsync = ref.watch(orderDetailProvider(id));
+
     return AppPage(
       title: 'تفاصيل الطلب',
       kicker: 'الطلبات',
       subtitle: '#$id',
       showBack: true,
       onBack: () => context.pop(),
+      actions: orderAsync.maybeWhen(
+        data: (order) {
+          final canAct = _cancellable.contains(order.status) || _deletable.contains(order.status);
+          if (!canAct) return null;
+          return [
+            EdHeaderIconButton(
+              icon: Icons.delete_outline_rounded,
+              tooltip: _cancellable.contains(order.status) ? 'إلغاء الطلب' : 'حذف الطلب',
+              onPressed: () => _deleteOrder(context, ref, order),
+            ),
+          ];
+        },
+        orElse: () => null,
+      ),
       child: OrderDetailBody(id: id),
     );
   }

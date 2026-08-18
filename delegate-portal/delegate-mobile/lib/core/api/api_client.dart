@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../config/app_config.dart';
+import '../config/app_config_notifier.dart';
 import '../../models/models.dart';
 import '../auth/auth_provider.dart';
 import 'api_exception.dart';
@@ -198,6 +198,72 @@ class ApiClient {
     });
     return SalesReportResult.fromJson(data);
   }
+
+  Future<List<Receipt>> getReceipts({String? status}) async {
+    final data = await _json('GET', '/receipts', query: status != null ? {'status': status} : null);
+    return (data['receipts'] as List)
+        .map((e) => Receipt.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  Future<Receipt> createReceipt({
+    required String customerAccSeq,
+    required String treeAccSeq,
+    required String treeName,
+    required num amount,
+    num commission = 0,
+    num discount = 0,
+    String? notes,
+  }) async {
+    final data = await _json('POST', '/receipts', body: {
+      'customerAccSeq': customerAccSeq,
+      'treeAccSeq': treeAccSeq,
+      'treeName': treeName,
+      'amount': amount,
+      'commission': commission,
+      'discount': discount,
+      'notes': notes ?? '',
+    });
+    return Receipt.fromJson(Map<String, dynamic>.from(data['receipt'] as Map));
+  }
+
+  Future<void> deleteReceipt(int id) async {
+    await _json('DELETE', '/receipts/$id');
+  }
+
+  Future<List<CustomerRequest>> getCustomerRequests({String? status}) async {
+    final data = await _json('GET', '/customer-requests', query: status != null ? {'status': status} : null);
+    return (data['requests'] as List)
+        .map((e) => CustomerRequest.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  Future<CustomerRequest> createCustomerRequest({
+    required String treeAccSeq,
+    required String treeName,
+    required String name,
+    String? phone,
+    String? address,
+    String? notes,
+  }) async {
+    final data = await _json('POST', '/customer-requests', body: {
+      'treeAccSeq': treeAccSeq,
+      'treeName': treeName,
+      'name': name,
+      'phone': phone ?? '',
+      'address': address ?? '',
+      'notes': notes ?? '',
+    });
+    return CustomerRequest.fromJson(Map<String, dynamic>.from(data['request'] as Map));
+  }
+
+  Future<void> deleteCustomerRequest(int id) async {
+    await _json('DELETE', '/customer-requests/$id');
+  }
+
+  Future<void> deleteOrder(int id) async {
+    await _json('DELETE', '/orders/$id');
+  }
 }
 
 final dioProvider = Provider<Dio>((ref) {
@@ -242,6 +308,3 @@ Map<String, dynamic> _parseResponseData(dynamic raw) {
   return {};
 }
 
-final appConfigProvider = Provider<AppConfig>((ref) {
-  throw UnimplementedError('AppConfig must be overridden');
-});

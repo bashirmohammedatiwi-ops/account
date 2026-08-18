@@ -184,19 +184,19 @@ class EdHeaderIconButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(10),
+        color: AppColors.surfaceAlt,
+        borderRadius: BorderRadius.circular(AppColors.radiusSm),
         child: InkWell(
           onTap: onPressed,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(AppColors.radiusSm),
           child: Ink(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: danger ? AppColors.danger.withValues(alpha: 0.25) : AppColors.border),
+              borderRadius: BorderRadius.circular(AppColors.radiusSm),
+              border: Border.all(color: danger ? AppColors.danger.withValues(alpha: 0.2) : AppColors.borderLight),
             ),
             child: SizedBox(
-              width: 40,
-              height: 40,
+              width: 42,
+              height: 42,
               child: Icon(icon, color: fg, size: 20),
             ),
           ),
@@ -890,21 +890,68 @@ class EdSideNavItem extends StatelessWidget {
 }
 
 class EdPrimaryButton extends StatelessWidget {
-  const EdPrimaryButton({super.key, required this.label, required this.onPressed, this.loading = false, this.fullWidth = true});
+  const EdPrimaryButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.loading = false,
+    this.fullWidth = true,
+    this.icon,
+    this.gradient = false,
+    this.height = 54,
+  });
 
   final String label;
   final VoidCallback? onPressed;
   final bool loading;
   final bool fullWidth;
+  final IconData? icon;
+  final bool gradient;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
-    final btn = FilledButton(
-      onPressed: loading ? null : onPressed,
-      child: loading
-          ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-          : Text(label),
+    final enabled = !loading && onPressed != null;
+
+    Widget child = loading
+        ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+        : DefaultTextStyle(
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 20, color: Colors.white),
+                  const SizedBox(width: 8),
+                ],
+                Text(label),
+              ],
+            ),
+          );
+
+    final btn = Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: enabled ? onPressed : null,
+        borderRadius: BorderRadius.circular(AppColors.radius),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppColors.radius),
+            gradient: enabled && gradient ? AppColors.buttonGradient : null,
+            color: enabled
+                ? (gradient ? null : AppColors.navy)
+                : AppColors.border,
+            boxShadow: enabled && gradient ? AppColors.buttonShadow : null,
+          ),
+          child: SizedBox(
+            height: height,
+            child: Center(child: child),
+          ),
+        ),
+      ),
     );
+
     return fullWidth ? SizedBox(width: double.infinity, child: btn) : btn;
   }
 }
@@ -1110,31 +1157,59 @@ class EdOrderCard extends StatelessWidget {
 }
 
 class EdPanelCard extends StatelessWidget {
-  const EdPanelCard({super.key, required this.title, required this.child, this.subtitle});
+  const EdPanelCard({super.key, required this.title, required this.child, this.subtitle, this.icon, this.iconColor});
 
   final String title;
   final String? subtitle;
   final Widget child;
+  final IconData? icon;
+  final Color? iconColor;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppColors.radius),
-        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(AppColors.radiusXl),
+        border: Border.all(color: AppColors.borderLight),
+        boxShadow: AppColors.softShadow,
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.navy)),
-          if (subtitle != null) ...[
-            const SizedBox(height: 4),
-            Text(subtitle!, style: const TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w600)),
-          ],
-          const Divider(height: 20, color: AppColors.border),
-          child,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(EdSpacing.xl, EdSpacing.lg, EdSpacing.xl, EdSpacing.md),
+            child: Row(
+              children: [
+                if (icon != null)
+                  Container(
+                    width: 40,
+                    height: 40,
+                    margin: const EdgeInsetsDirectional.only(end: EdSpacing.md),
+                    decoration: BoxDecoration(
+                      color: (iconColor ?? AppColors.accentTeal).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(AppColors.radiusSm),
+                    ),
+                    child: Icon(icon, color: iconColor ?? AppColors.accentTeal, size: 20),
+                  ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 2),
+                        Text(subtitle!, style: const TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w600)),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: AppColors.borderLight),
+          Padding(padding: const EdgeInsets.all(EdSpacing.xl), child: child),
         ],
       ),
     );

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppColors {
   // Brand
@@ -75,17 +74,21 @@ class AppTheme {
       scaffoldBackgroundColor: dark ? AppColors.bgDark : AppColors.bg,
     );
 
-    final cairo = GoogleFonts.cairoTextTheme(base.textTheme);
+    final textTheme = base.textTheme.apply(
+      fontFamily: 'sans-serif',
+      bodyColor: dark ? AppColors.textDark : AppColors.text,
+      displayColor: dark ? AppColors.textDark : AppColors.text,
+    );
 
     return base.copyWith(
-      textTheme: cairo,
+      textTheme: textTheme,
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
         foregroundColor: dark ? AppColors.textDark : AppColors.text,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        titleTextStyle: cairo.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+        titleTextStyle: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
       ),
       cardTheme: CardThemeData(
         color: dark ? AppColors.surfaceDark : AppColors.surface,

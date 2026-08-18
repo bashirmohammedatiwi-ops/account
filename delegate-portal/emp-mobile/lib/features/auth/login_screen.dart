@@ -50,12 +50,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
       ref.invalidate(ordersListProvider);
       ref.invalidate(pendingCountProvider);
       ref.invalidate(orderStatsProvider);
-      await ref.read(notificationServiceProvider).start();
+      try {
+        await ref.read(notificationServiceProvider).start();
+      } catch (_) {
+        // لا تمنع الدخول إذا فشلت الإشعارات
+      }
       if (mounted) context.go('/orders');
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
-    } on DioException catch (_) {
-      if (mounted) setState(() => _error = 'فشل الاتصال بالخادم');
+    } on DioException catch (e) {
+      if (mounted) {
+        final server = ref.read(appConfigProvider).serverUrl;
+        final msg = e.type == DioExceptionType.connectionError || e.type == DioExceptionType.connectionTimeout
+            ? 'فشل الاتصال بالخادم — تحقق من الإنترنت والعنوان: $server'
+            : 'فشل الاتصال بالخادم';
+        setState(() => _error = msg);
+      }
     } catch (_) {
       if (mounted) setState(() => _error = 'فشل تسجيل الدخول');
     } finally {
@@ -97,7 +107,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
                                 boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 24, offset: const Offset(0, 10))],
                               ),
                               padding: const EdgeInsets.all(10),
-                              child: Image.asset('assets/app_icon_source.png', fit: BoxFit.contain),
+                              child: Image.asset(
+                                'assets/app_icon_source.png',
+                                fit: BoxFit.contain,
+                                errorBuilder: (_, _, _) => const Icon(Icons.inventory_2_rounded, color: AppColors.primary, size: 40),
+                              ),
                             ),
                             const SizedBox(height: 22),
                             const Text('تجهيز الطلبات', style: TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w900)),
@@ -142,6 +156,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
                                       obscureText: _obscure,
                                       decoration: InputDecoration(
                                         labelText: 'كلمة المرور',
+                                        hintText: 'أدخل كلمة المرور',
                                         prefixIcon: const Icon(Icons.lock_outline_rounded),
                                         suffixIcon: IconButton(
                                           onPressed: () => setState(() => _obscure = !_obscure),

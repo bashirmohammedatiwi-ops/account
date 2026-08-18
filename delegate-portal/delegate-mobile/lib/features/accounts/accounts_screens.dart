@@ -32,7 +32,7 @@ class TreesScreen extends ConsumerWidget {
 
     return AppPage(
       title: 'كشوف الحساب',
-      kicker: 'Edari · الشجرات',
+      kicker: 'Edari',
       subtitle: 'اختر شجرة للمتابعة',
       showBack: true,
       onBack: () => context.go('/home'),

@@ -25,7 +25,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     super.initState();
     Future.microtask(() async {
       if (ref.read(authProvider).isAuthenticated) {
-        await ref.read(notificationServiceProvider).start();
+        try {
+          await ref.read(notificationServiceProvider).start();
+        } catch (_) {}
       }
     });
     _searchCtrl.addListener(() {

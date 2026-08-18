@@ -1,71 +1,59 @@
 # Edari Delegate — تطبيق المندوب (Flutter)
 
-تطبيق iOS/Android (مُحسّن للآيباد) يتصل بنفس واجهة ويب المندوب `/api/mobile`.
+تطبيق **Flutter** للهاتف والتابلت يتصل بنفس واجهة ويب المندوب `/api/mobile` — بتصميم مميز ومتجاوب.
 
-## الميزات
+## الميزات (مطابقة ويب المندوب + أكثر)
 
 | القسم | الوظائف |
 |--------|---------|
 | **كشوف الحساب** | الأشجار → الزبائن → كشف الحركات → PDF → تفاصيل الفاتورة |
-| **المنتجات** | فروع → أقسام → بطاقات منتجات + كمية/هدية → فاتورة حية → إرسال للإدارة |
+| **المنتجات** | فروع → أقسام → بطاقات منتجات + كمية/هدية → فاتورة حية → إرسال طلب |
 | **طلباتي** | قائمة الطلبات + تفاصيل + حالة |
-| **تقارير** | ملخص مبيعات/مردود/صافي + قائمة فواتير + تحميل المزيد |
+| **سند قبض** | اختيار زبون + مبلغ/عمولة/حسم → إرسال للمراجعة |
+| **زبون جديد** | اختيار شجرة + بيانات الزبون → إرسال للمراجعة |
+| **تقارير** | ملخص مبيعات/مردود/صافي + قائمة فواتير |
+
+## التصميم
+
+- واجهة عربية RTL + خط Cairo
+- **هاتف:** شبكة تطبيقات 2–3 أعمدة، بطاقات مميزة، سحب للتحديث
+- **تابلت (≥900px):** شريط تنقل جانبي ثابت + تخطيط عمودين للنماذج
+- **iPad كبير:** كشوف حساب بثلاثة أعمدة، منتجات بلوحة جانبية
 
 ## التشغيل
 
 ```bash
 cd delegate-portal/delegate-mobile
 flutter pub get
-flutter devices
-flutter run -d chrome    # Windows بدون Android/iOS
-# أو
-flutter run -d windows   # يتطلب تفعيل Developer Mode في Windows
+flutter run -d chrome      # Windows بدون محاكي
+flutter run -d windows     # يتطلب Developer Mode
+flutter run -d android     # هاتف أو محاكي
 ```
-
-### Windows (بدون هاتف أو محاكي)
-
-المشروع يدعم **Chrome** و **Windows desktop** بالإضافة إلى Android/iOS.
-
-| المنصة | الأمر | ملاحظة |
-|--------|-------|--------|
-| **Chrome** | `flutter run -d chrome` | يعمل مباشرة |
-| **Windows** | `flutter run -d windows` | فعّل **Developer Mode** من: الإعدادات → الخصوصية والأمان → للمطورين |
-| **Android** | `flutter run -d android` | يحتاج محاكي أو هاتف USB |
 
 ### تسجيل الدخول
 
-سجّل دخول بحساب **مندوب** من لوحة الإدارة (اسم مستخدم + كلمة مرور).
+حساب **مندوب** من لوحة الإدارة (اسم مستخدم + كلمة مرور).  
+الخادم الافتراضي: `http://187.124.23.65:5005` — يُغيّر من الإعدادات.
 
 ## البنية
 
 ```
 lib/
-├── core/          # API، Auth، Theme، Router
-├── features/      # الشاشات (auth, home, accounts, commerce, reports)
+├── core/          # API، Auth، Theme، Router، Widgets
+├── features/      # auth, home, accounts, commerce, orders, receipts, customers, reports
 ├── models/        # نماذج JSON
 └── config/        # عنوان الخادم
 ```
 
-## iPad
-
-- **≥1000px**: كشوف الحساب بثلاثة أعمدة (أشجار | زبائن | كشف)
-- **≥900px**: NavigationRail جانبي
-- RTL + خط Cairo
-
-## ميزات إضافية
-
-- بحث شامل في الحسابات (`/api/mobile/search`)
-- باركود المنتج (`/api/mobile/products/lookup`)
-- مسودة فاتورة محفوظة + متابعة
-- PDF لكل فاتورة من كشف الحساب
-- عرض الديون في الكشف
-
 ## البناء للإنتاج
 
 ```bash
-# iOS (يتطلب Mac + Xcode)
-flutter build ipa
-
-# Android
 flutter build apk --release
+flutter build appbundle --release   # Google Play
+# iOS (Mac + Xcode)
+flutter build ipa
 ```
+
+## الإصدار
+
+**1.1.0** — سند قبض، زبون جديد، شريط تنقل للتابلت، اختيار زبون محسّن.

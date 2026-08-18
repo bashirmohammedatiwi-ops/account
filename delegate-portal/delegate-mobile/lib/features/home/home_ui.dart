@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/phone_ui.dart';
 import '../accounts/accounts_theme.dart';
 
 abstract final class _Home {
@@ -49,6 +50,10 @@ class EdHomePage extends StatelessWidget {
     required this.customerCount,
     required this.orderCount,
     this.avatarText,
+    this.pendingReceipts,
+    this.pendingCustomers,
+    this.onRefresh,
+    this.onSettings,
   });
 
   final String agentName;
@@ -57,6 +62,10 @@ class EdHomePage extends StatelessWidget {
   final String treeCount;
   final String customerCount;
   final String orderCount;
+  final String? pendingReceipts;
+  final String? pendingCustomers;
+  final VoidCallback? onRefresh;
+  final VoidCallback? onSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -85,6 +94,8 @@ class EdHomePage extends StatelessWidget {
                           treeCount: treeCount,
                           customerCount: customerCount,
                           orderCount: orderCount,
+                          pendingReceipts: pendingReceipts,
+                          pendingCustomers: pendingCustomers,
                         ),
                       ),
                       const SizedBox(width: 20),
@@ -102,44 +113,93 @@ class EdHomePage extends StatelessWidget {
     return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate([
-              EdHomeHeroCard(agentName: agentName, avatarText: avatarText),
-              const SizedBox(height: 22),
-              const EdHomeSectionHead(),
-              const SizedBox(height: 14),
-            ]),
+        SliverToBoxAdapter(
+          child: EdPhoneHomeHero(
+            agentName: agentName,
+            avatarText: avatarText,
+            onRefresh: onRefresh,
+            onSettings: onSettings,
           ),
         ),
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              mainAxisExtent: 168,
-            ),
-            delegate: SliverChildBuilderDelegate(
-              (context, i) => EdHomeFeatureCard(app: apps[i]),
-              childCount: apps.length,
-            ),
-          ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 28),
-          sliver: SliverToBoxAdapter(
-            child: EdHomeStatsBar(
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 20, bottom: 16),
+            child: EdPhoneStatsRow(
               treeCount: treeCount,
               customerCount: customerCount,
               orderCount: orderCount,
+              pendingTotal: (int.tryParse(pendingReceipts ?? '') ?? 0) + (int.tryParse(pendingCustomers ?? '') ?? 0),
+            ),
+          ),
+        ),
+        if ((int.tryParse(pendingReceipts ?? '') ?? 0) + (int.tryParse(pendingCustomers ?? '') ?? 0) > 0)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFFBEB),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFFDE68A)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.notifications_active_outlined, color: Color(0xFFB45309), size: 22),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _pendingMessage(pendingReceipts, pendingCustomers),
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFFB45309)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(EdSpacing.page, EdSpacing.sm, EdSpacing.page, EdSpacing.md),
+            child: Row(
+              children: [
+                Container(width: 4, height: 20, decoration: BoxDecoration(color: AppColors.accentTeal, borderRadius: BorderRadius.circular(2))),
+                const SizedBox(width: 10),
+                const Text('الخدمات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.navy)),
+              ],
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, kPhoneBottomInset),
+          sliver: SliverList.separated(
+            itemCount: apps.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (_, i) => EdPhoneServiceTile(
+              app: EdPhoneAppData(
+                icon: apps[i].icon,
+                name: apps[i].name,
+                hint: apps[i].hint,
+                iconColor: apps[i].iconColor,
+                iconBg: apps[i].iconBg,
+                badge: apps[i].badge,
+                onTap: apps[i].onTap,
+              ),
             ),
           ),
         ),
       ],
     );
+  }
+
+  static String _pendingMessage(String? receipts, String? customers) {
+    final r = int.tryParse(receipts ?? '') ?? 0;
+    final c = int.tryParse(customers ?? '') ?? 0;
+    final parts = <String>[];
+    if (r > 0) parts.add('$r سند قبض');
+    if (c > 0) parts.add('$c زبون جديد');
+    return 'بانتظار المراجعة: ${parts.join(' · ')}';
   }
 }
 
@@ -160,7 +220,7 @@ class _HomeMainColumn extends StatelessWidget {
           child: GridView.builder(
             padding: EdgeInsets.zero,
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
+              crossAxisCount: apps.length > 4 ? 3 : 2,
               crossAxisSpacing: 14,
               mainAxisSpacing: 14,
               mainAxisExtent: compact ? 156 : 172,
@@ -182,6 +242,8 @@ class EdHomeSidePanel extends StatelessWidget {
     required this.customerCount,
     required this.orderCount,
     this.avatarText,
+    this.pendingReceipts,
+    this.pendingCustomers,
   });
 
   final String agentName;
@@ -189,6 +251,8 @@ class EdHomeSidePanel extends StatelessWidget {
   final String treeCount;
   final String customerCount;
   final String orderCount;
+  final String? pendingReceipts;
+  final String? pendingCustomers;
 
   @override
   Widget build(BuildContext context) {
@@ -248,24 +312,47 @@ class EdHomeSidePanel extends StatelessWidget {
           Container(
             decoration: const BoxDecoration(border: Border(top: BorderSide(color: AppColors.border))),
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-              child: Column(
-                children: [
-                  Text(
-                    treeCount == '—' || treeCount == '0' ? '—' : '●',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: treeCount == '—' || treeCount == '0' ? AppColors.muted : EdAccountsTheme.credit,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    treeCount == '—' || treeCount == '0' ? 'غير نشط' : 'نشط',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted),
-                  ),
-                ],
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+              child: Builder(
+                builder: (context) {
+                  final pendingR = int.tryParse(pendingReceipts ?? '') ?? 0;
+                  final pendingC = int.tryParse(pendingCustomers ?? '') ?? 0;
+                  final pendingTotal = pendingR + pendingC;
+                  if (pendingTotal > 0) {
+                    return Column(
+                      children: [
+                        Text(
+                          '$pendingTotal',
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFFD97706)),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'بانتظار المراجعة',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted),
+                        ),
+                      ],
+                    );
+                  }
+                  return Column(
+                    children: [
+                      Text(
+                        treeCount == '—' || treeCount == '0' ? '—' : '●',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: treeCount == '—' || treeCount == '0' ? AppColors.muted : EdAccountsTheme.credit,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        treeCount == '—' || treeCount == '0' ? 'غير نشط' : 'نشط',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
           ),
@@ -620,38 +707,69 @@ class EdHomeStatsBar extends StatelessWidget {
     required this.treeCount,
     required this.customerCount,
     required this.orderCount,
+    this.pendingReceipts,
+    this.pendingCustomers,
   });
 
   final String treeCount;
   final String customerCount;
   final String orderCount;
+  final String? pendingReceipts;
+  final String? pendingCustomers;
 
   @override
   Widget build(BuildContext context) {
     final active = treeCount != '—' && treeCount != '0';
+    final pendingR = int.tryParse(pendingReceipts ?? '') ?? 0;
+    final pendingC = int.tryParse(pendingCustomers ?? '') ?? 0;
+    final pendingTotal = pendingR + pendingC;
 
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: IntrinsicHeight(
-        child: Row(
-          children: [
-            _cell(treeCount, 'شجرة', AppColors.accentTeal),
-            _divider(),
-            _cell(customerCount, 'زبون', AppColors.navy),
-            _divider(),
-            _cell(orderCount, 'طلب', const Color(0xFFD97706)),
-            _divider(),
-            _cell(active ? '●' : '—', active ? 'نشط' : '—', active ? EdAccountsTheme.credit : AppColors.muted, compact: true),
-          ],
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.border),
+            boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: IntrinsicHeight(
+            child: Row(
+              children: [
+                _cell(treeCount, 'شجرة', AppColors.accentTeal),
+                _divider(),
+                _cell(customerCount, 'زبون', AppColors.navy),
+                _divider(),
+                _cell(orderCount, 'طلب', const Color(0xFFD97706)),
+                _divider(),
+                if (pendingTotal > 0)
+                  _cell('$pendingTotal', 'بانتظار', const Color(0xFFD97706))
+                else
+                  _cell(active ? '●' : '—', active ? 'نشط' : '—', active ? EdAccountsTheme.credit : AppColors.muted, compact: true),
+              ],
+            ),
+          ),
         ),
-      ),
+        if (pendingTotal > 0) ...[
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFBEB),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFFDE68A)),
+            ),
+            child: Text(
+              'بانتظار المراجعة: ${pendingR > 0 ? '$pendingR سند' : ''}${pendingR > 0 && pendingC > 0 ? ' · ' : ''}${pendingC > 0 ? '$pendingC زبون' : ''}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFFB45309)),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -680,8 +798,10 @@ class EdHomeStatsBar extends StatelessWidget {
 
 /// ألوان خلفية أيقونات التطبيقات
 abstract final class EdHomeThemes {
-  static const accountsBg = Color(0xFFECFDF5);
+  static const accountsBg = Color(0xFFE6F7F5);
   static const shopBg = Color(0xFFEFF6FF);
-  static const ordersBg = Color(0xFFFFFBEB);
+  static const ordersBg = Color(0xFFFFF7ED);
   static const reportsBg = Color(0xFFF5F3FF);
+  static const receiptsBg = Color(0xFFECFDF5);
+  static const customersBg = Color(0xFFFFF1F2);
 }

@@ -1,3 +1,5 @@
+import '../core/utils/json_utils.dart';
+
 class Employee {
   const Employee({required this.username, required this.name});
 
@@ -61,15 +63,15 @@ class OrderLine {
       imageUrl = '$serverUrl$imageUrl';
     }
     return OrderLine(
-      id: json['id'] as int?,
-      productId: json['productId'] as int? ?? 0,
+      id: json['id'] == null ? null : asInt(json['id']),
+      productId: asInt(json['productId']),
       matName: '${json['matName'] ?? ''}',
-      quant: json['quant'] as num? ?? 0,
-      bonus: json['bonus'] as num? ?? 0,
-      tester: json['tester'] as num? ?? 0,
-      unitPrice: json['unitPrice'] as num? ?? 0,
+      quant: asNum(json['quant']),
+      bonus: asNum(json['bonus']),
+      tester: asNum(json['tester']),
+      unitPrice: asNum(json['unitPrice']),
       barcode: json['barcode'] as String?,
-      lineTotal: json['lineTotal'] as num?,
+      lineTotal: json['lineTotal'] == null ? null : asNum(json['lineTotal']),
       imageUrl: imageUrl,
       remarks: json['remarks'] as String?,
     );
@@ -100,7 +102,7 @@ class OrderEvent {
   final String? createdAt;
 
   factory OrderEvent.fromJson(Map<String, dynamic> json) => OrderEvent(
-        id: json['id'] as int? ?? 0,
+        id: asInt(json['id']),
         fromStatus: '${json['fromStatus'] ?? ''}',
         toStatus: '${json['toStatus'] ?? ''}',
         note: '${json['note'] ?? ''}',
@@ -168,7 +170,7 @@ class PurchaseOrder {
   factory PurchaseOrder.fromJson(Map<String, dynamic> json, {String? serverUrl}) {
     final status = '${json['status'] ?? ''}';
     return PurchaseOrder(
-      id: (json['id'] as num).toInt(),
+      id: asInt(json['id']),
       orderNo: '${json['orderNo'] ?? ''}',
       status: status,
       statusLabel: '${json['statusLabel'] ?? status}',
