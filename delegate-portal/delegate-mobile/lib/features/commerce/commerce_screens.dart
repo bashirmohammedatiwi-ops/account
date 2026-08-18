@@ -88,6 +88,9 @@ class InvoiceDraftNotifier extends Notifier<Map<int, ({num quant, num bonus})>> 
               'name2': customer!.name2,
               'address': customer!.address,
               'bal': customer!.bal,
+              if (customer!.requestId != null) 'requestId': customer!.requestId,
+              if (customer!.isPending) 'isPending': true,
+              if (customer!.pendingLabel != null) 'pendingLabel': customer!.pendingLabel,
             },
       'draft': draft,
     }));
@@ -647,7 +650,7 @@ class _EdOrderInvoiceSheetState extends ConsumerState<EdOrderInvoiceSheet> {
   Future<void> _submit() async {
     final draftNotifier = ref.read(invoiceDraftProvider.notifier);
     final customer = draftNotifier.customer;
-    if (customer == null) {
+    if (customer == null || (!customer.hasPostedAccount && customer.requestId == null)) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('اختر الزبون أولاً')));
       return;
     }
@@ -671,7 +674,8 @@ class _EdOrderInvoiceSheetState extends ConsumerState<EdOrderInvoiceSheet> {
     setState(() => _submitting = true);
     try {
       await ref.read(apiClientProvider).submitOrder(
-            customerAccSeq: customer.seq,
+            customerAccSeq: customer.hasPostedAccount ? customer.seq : null,
+            customerRequestId: customer.requestId,
             catalogBranchId: widget.branchId,
             notes: draftNotifier.notes,
             lines: lines,

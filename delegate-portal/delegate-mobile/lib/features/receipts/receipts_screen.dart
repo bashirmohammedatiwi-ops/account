@@ -41,7 +41,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
   }
 
   Future<void> _pickCustomer() async {
-    final picked = await showCustomerPicker(context, ref);
+    final picked = await showCustomerPicker(context, ref, includePending: false);
     if (picked != null) setState(() => _picked = picked);
   }
 

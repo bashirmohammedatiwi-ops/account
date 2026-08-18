@@ -19,6 +19,7 @@ const {
   loadOrder,
   deleteOrderByAgent
 } = require('../lib/orders');
+const { resolveOrderCustomer } = require('../lib/customer-requests');
 
 const router = express.Router();
 
@@ -74,12 +75,14 @@ router.get('/orders/:id', authAgent, (req, res) => {
 });
 
 router.post('/orders', authAgent, (req, res) => {
-  const { customerAccSeq, catalogBranchId, notes, lines, submit } = req.body || {};
-  if (customerAccSeq && !canAgentAccess(req.agent.id, customerAccSeq)) {
-    return res.status(403).json({ ok: false, error: 'لا تملك صلاحية هذا الفرع/الزبون' });
+  const { customerAccSeq, customerRequestId, catalogBranchId, notes, lines, submit } = req.body || {};
+  try {
+    resolveOrderCustomer(req.agent.id, { customerAccSeq, customerRequestId });
+  } catch (err) {
+    return res.status(403).json({ ok: false, error: err.message });
   }
   try {
-    let order = createOrder(req.agent.id, { customerAccSeq, catalogBranchId, notes, lines });
+    let order = createOrder(req.agent.id, { customerAccSeq, customerRequestId, catalogBranchId, notes, lines });
     if (submit) order = submitOrder(order.id, req.agent.id);
     res.json({ ok: true, order });
   } catch (err) {

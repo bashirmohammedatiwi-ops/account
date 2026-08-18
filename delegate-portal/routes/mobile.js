@@ -108,6 +108,16 @@ router.get('/accounts/:seq/children', authAgent, (req, res) => {
   res.json({ ok: true, children, view: useLeaves ? 'leaves' : 'direct' });
 });
 
+router.get('/accounts/:seq/pickable-customers', authAgent, (req, res) => {
+  try {
+    const { listPickableCustomers } = require('../lib/customer-requests');
+    const customers = listPickableCustomers(req.agent.id, req.params.seq);
+    res.json({ ok: true, customers });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
 router.get('/accounts/:seq/statement.pdf', authAgent, async (req, res) => {
   if (!canAgentAccess(req.agent.id, req.params.seq)) {
     return res.status(403).json({ ok: false, error: 'لا تملك صلاحية هذا الحساب' });

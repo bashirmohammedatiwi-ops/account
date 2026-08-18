@@ -926,7 +926,9 @@ function openProductImage(productId) {
 async function submitInvoice() {
   const lines = buildOrderLines();
   if (!lines.length) return alert('الفاتورة فارغة');
-  if (!commerce.invoiceCustomer?.seq) return alert('اختر زبوناً من الكشوفات');
+  if (!commerce.invoiceCustomer?.seq && !commerce.invoiceCustomer?.requestId) {
+    return alert('اختر زبوناً');
+  }
   if (!commerce.selectedBranch?.id) return alert('اختر فرع منتجات');
 
   const btn = document.getElementById('btnSubmitInvoice');
@@ -935,7 +937,8 @@ async function submitInvoice() {
     const data = await commerceApi('/orders', {
       method: 'POST',
       body: JSON.stringify({
-        customerAccSeq: commerce.invoiceCustomer.seq,
+        customerAccSeq: commerce.invoiceCustomer.seq || null,
+        customerRequestId: commerce.invoiceCustomer.requestId || null,
         catalogBranchId: commerce.selectedBranch.id,
         notes: document.getElementById('invoiceNotes')?.value?.trim() || '',
         lines,
@@ -973,7 +976,7 @@ async function openCustomerPicker(purpose = 'invoice') {
     : 'اختر الشجرة';
   document.getElementById('customerPickerCrumb').textContent = forReceipt
     ? 'اختر الشجرة ثم الزبون لإصدار سند القبض'
-    : 'الفروع من كشوف الحساب — نفس الزبائن في الكشوفات';
+    : 'الزبائن المُرحّلون + طلبات بانتظار الترحيل (بدون كشف)';
   document.getElementById('customerOverlay')?.classList.remove('hidden');
   document.body.classList.add('inv-sheet-open');
   await renderCustomerTrees();
@@ -1069,8 +1072,11 @@ async function openCustomerTreeBranches(seq) {
   list.innerHTML = '<p class="muted">جاري التحميل...</p>';
   if (metaEl) metaEl.textContent = '';
   try {
-    const data = await commerceApi(`/accounts/${encodeURIComponent(seq)}/children?view=leaves`);
-    commerce.pickerBranches = data.children || [];
+    const endpoint = commerce.pickerPurpose === 'receipt'
+      ? `/accounts/${encodeURIComponent(seq)}/children?view=leaves`
+      : `/accounts/${encodeURIComponent(seq)}/pickable-customers`;
+    const data = await commerceApi(endpoint);
+    commerce.pickerBranches = data.children || data.customers || [];
     renderCustomerBranches();
     searchEl?.focus();
   } catch (e) {
@@ -1094,11 +1100,12 @@ function renderCustomerBranches() {
     return;
   }
   list.innerHTML = filtered.map((b) => `
-    <button type="button" class="inv-picker-item" data-pick-customer="${esc(b.seq)}">
+    <button type="button" class="inv-picker-item" data-pick-customer="${esc(b.seq || '')}" data-request-id="${b.requestId || ''}">
       <span class="inv-picker-icon">${ICONS.branch}</span>
       <span class="inv-picker-copy">
         <strong>${esc(b.name1 || '—')}</strong>
-        <span dir="ltr">${esc(b.num || b.seq)}</span>
+        <span dir="ltr">${esc(b.num || b.seq || '')}</span>
+        ${b.isPending ? `<span class="inv-picker-sub inv-picker-pending">بانتظار الترحيل · ${esc(b.pendingLabel || 'طلب جديد')}</span>` : ''}
         ${b.groupPath ? `<span class="inv-picker-sub">${esc(b.groupPath)}</span>` : ''}
       </span>
     </button>`).join('');
@@ -1111,10 +1118,12 @@ function selectInvoiceCustomer(branch) {
     return;
   }
   commerce.invoiceCustomer = {
-    seq: branch.seq,
+    seq: branch.seq || '',
     num: branch.num,
     name1: branch.name1,
-    treeName: commerce.pickerTree?.name1 || ''
+    treeName: commerce.pickerTree?.name1 || '',
+    requestId: branch.requestId || null,
+    isPending: Boolean(branch.isPending)
   };
   closeCustomerPicker();
   updateInvoiceUI();
@@ -1469,7 +1478,10 @@ function initCommerceMobile() {
     }
     const custBtn = e.target.closest('[data-pick-customer]');
     if (custBtn) {
-      const branch = commerce.pickerBranches.find((b) => String(b.seq) === custBtn.dataset.pickCustomer);
+      const reqId = custBtn.dataset.requestId ? Number(custBtn.dataset.requestId) : 0;
+      const branch = commerce.pickerBranches.find((b) => (
+        reqId ? Number(b.requestId) === reqId : String(b.seq) === custBtn.dataset.pickCustomer
+      ));
       if (branch) selectInvoiceCustomer(branch);
     }
   });

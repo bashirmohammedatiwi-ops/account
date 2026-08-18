@@ -55,6 +55,9 @@ class BranchAccount {
     this.debtAmount,
     this.debtStatus,
     this.summary,
+    this.requestId,
+    this.isPending = false,
+    this.pendingLabel,
   });
 
   final String seq;
@@ -66,6 +69,11 @@ class BranchAccount {
   final num? debtAmount;
   final String? debtStatus;
   final Map<String, dynamic>? summary;
+  final int? requestId;
+  final bool isPending;
+  final String? pendingLabel;
+
+  bool get hasPostedAccount => seq.isNotEmpty && !isPending;
 
   String? get summaryLabel => summary?['label']?.toString();
 
@@ -78,7 +86,7 @@ class BranchAccount {
   }
 
   factory BranchAccount.fromJson(Map<String, dynamic> json) => BranchAccount(
-        seq: '${json['seq']}',
+        seq: '${json['seq'] ?? ''}',
         accountNum: '${json['num'] ?? ''}',
         name1: '${json['name1'] ?? ''}',
         name2: json['name2']?.toString(),
@@ -87,6 +95,9 @@ class BranchAccount {
         debtAmount: json['debtAmount'] as num?,
         debtStatus: json['debtStatus']?.toString(),
         summary: json['summary'] is Map ? Map<String, dynamic>.from(json['summary'] as Map) : null,
+        requestId: json['requestId'] as int? ?? (json['request_id'] as int?),
+        isPending: json['isPending'] == true,
+        pendingLabel: json['pendingLabel']?.toString() ?? json['pending_label']?.toString(),
       );
 }
 

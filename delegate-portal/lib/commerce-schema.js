@@ -154,6 +154,7 @@ function migrateCommerceSchema(db) {
   migrateProductExtras(db);
   migrateOrderLineExtras(db);
   migrateShorjaOrderFields(db);
+  migrateOrderCustomerRequestField(db);
   migrateReceipts(db);
   migrateCustomerRequests(db);
 
@@ -242,6 +243,13 @@ function migrateShorjaOrderFields(db) {
   db.exec('CREATE INDEX IF NOT EXISTS idx_orders_source_type ON orders(source_type)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_orders_shorja_invoice ON orders(shorja_invoice_id)');
   migratePrepConfirmField(db);
+}
+
+function migrateOrderCustomerRequestField(db) {
+  if (!columnExists(db, 'orders', 'customer_request_id')) {
+    db.exec('ALTER TABLE orders ADD COLUMN customer_request_id INTEGER');
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_orders_customer_request ON orders(customer_request_id)');
 }
 
 function migratePrepConfirmField(db) {

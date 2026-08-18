@@ -8,26 +8,35 @@ import '../../models/models.dart';
 import 'adaptive_shell.dart';
 
 /// اختيار شجرة ثم زبون — واجهة مميزة للهاتف والتابلت
-Future<PickedCustomer?> showCustomerPicker(BuildContext context, WidgetRef ref) {
+Future<PickedCustomer?> showCustomerPicker(
+  BuildContext context,
+  WidgetRef ref, {
+  bool includePending = true,
+}) {
   return showModalBottomSheet<PickedCustomer>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => _CustomerPickerSheet(ref: ref),
+    builder: (_) => _CustomerPickerSheet(ref: ref, includePending: includePending),
   );
 }
 
 /// اختصار لاختيار زبون فقط (للفواتير والطلبات)
-Future<BranchAccount?> pickBranchCustomer(BuildContext context, WidgetRef ref) async {
-  final picked = await showCustomerPicker(context, ref);
+Future<BranchAccount?> pickBranchCustomer(
+  BuildContext context,
+  WidgetRef ref, {
+  bool includePending = true,
+}) async {
+  final picked = await showCustomerPicker(context, ref, includePending: includePending);
   return picked?.customer;
 }
 
 class _CustomerPickerSheet extends ConsumerStatefulWidget {
-  const _CustomerPickerSheet({required this.ref});
+  const _CustomerPickerSheet({required this.ref, required this.includePending});
 
   final WidgetRef ref;
+  final bool includePending;
 
   @override
   ConsumerState<_CustomerPickerSheet> createState() => _CustomerPickerSheetState();
@@ -86,7 +95,10 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
       _searchCtrl.clear();
     });
     try {
-      final branches = await ref.read(apiClientProvider).getChildren(tree.seq);
+      final api = ref.read(apiClientProvider);
+      final branches = widget.includePending
+          ? await api.getPickableCustomers(tree.seq)
+          : await api.getChildren(tree.seq);
       if (!mounted) return;
       setState(() {
         _branches = branches;
@@ -292,7 +304,10 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
-            onTap: () => Navigator.pop(context, PickedCustomer(customer: b, tree: _tree!)),
+            onTap: () {
+              if (!widget.includePending && b.isPending) return;
+              Navigator.pop(context, PickedCustomer(customer: b, tree: _tree!));
+            },
             child: Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -315,6 +330,11 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(b.name1, style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.navy)),
+                        if (b.isPending)
+                          Text(
+                            'بانتظار الترحيل${b.pendingLabel != null ? ' · ${b.pendingLabel}' : ''}',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.warning),
+                          ),
                         if (b.address != null && b.address!.isNotEmpty)
                           Text(b.address!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
                         Text(b.accountNum, textDirection: TextDirection.ltr, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.moduleAccounts)),

@@ -2,6 +2,7 @@ const db = require('./db');
 const bcrypt = require('bcryptjs');
 const { notifyNewOrder } = require('./push');
 const { notifyShorjaOrderProcessed } = require('./shorja-notify');
+const { resolveOrderCustomer } = require('./customer-requests');
 
 /** Canonical UI statuses: pending | processing | rejected */
 const STATUS_LABELS = {
@@ -136,9 +137,17 @@ function mapOrder(row, lines = [], events = []) {
 
   const rawStatus = row.status;
   const uiStatus = canonicalStatus(rawStatus);
-  const customerName = sourceType === 'shorja'
+  let customerName = sourceType === 'shorja'
     ? (row.customer_display_name || row.shorja_branch_name || 'فرع الشورجة')
     : (account?.name1 || '');
+  let customerNum = account?.num || '';
+  if (sourceType !== 'shorja' && row.customer_request_id) {
+    const req = db.prepare('SELECT name, request_no FROM customer_requests WHERE id = ?').get(row.customer_request_id);
+    customerName = req?.name || row.customer_display_name || customerName;
+    customerNum = req?.request_no || customerNum;
+  } else if (sourceType !== 'shorja' && !customerName && row.customer_display_name) {
+    customerName = row.customer_display_name;
+  }
   const agentName = sourceType === 'shorja'
     ? 'فرع الشورجة'
     : (agent?.name || '');
@@ -157,8 +166,9 @@ function mapOrder(row, lines = [], events = []) {
     agentId: row.agent_id,
     agentName,
     customerAccSeq: row.customer_acc_seq || '',
+    customerRequestId: row.customer_request_id != null ? Number(row.customer_request_id) : null,
     customerName,
-    customerNum: account?.num || '',
+    customerNum: customerNum || '',
     catalogBranchId: row.catalog_branch_id,
     catalogBranchName,
     shorjaInvoiceId: row.shorja_invoice_id != null ? Number(row.shorja_invoice_id) : null,
@@ -395,15 +405,18 @@ function createShorjaOrder(data) {
 }
 
 function createOrder(agentId, data) {
+  const customer = resolveOrderCustomer(agentId, data);
   const orderNo = nextOrderNo();
   const r = db.prepare(`
     INSERT INTO orders
-      (order_no, agent_id, customer_acc_seq, catalog_branch_id, status, notes)
-    VALUES (?, ?, ?, ?, 'draft', ?)
+      (order_no, agent_id, customer_acc_seq, customer_request_id, customer_display_name, catalog_branch_id, status, notes)
+    VALUES (?, ?, ?, ?, ?, ?, 'draft', ?)
   `).run(
     orderNo,
     agentId,
-    data.customerAccSeq || '',
+    customer.customerAccSeq,
+    customer.customerRequestId,
+    customer.customerDisplayName || null,
     data.catalogBranchId || null,
     data.notes || ''
   );
@@ -418,12 +431,31 @@ function updateOrder(orderId, agentId, data) {
   if (!row) return null;
   if (!AGENT_EDITABLE.has(row.status)) throw new Error('لا يمكن تعديل الطلب في هذه الحالة');
 
+  const hasCustomerPatch = data.customerAccSeq != null || data.customerRequestId != null;
+  const customer = hasCustomerPatch
+    ? resolveOrderCustomer(agentId, {
+      customerAccSeq: data.customerAccSeq,
+      customerRequestId: data.customerRequestId
+    })
+    : {
+      customerAccSeq: row.customer_acc_seq,
+      customerRequestId: row.customer_request_id,
+      customerDisplayName: row.customer_display_name
+    };
+
   db.prepare(`
     UPDATE orders SET
-      customer_acc_seq = ?, catalog_branch_id = ?, notes = ?, updated_at = datetime('now')
+      customer_acc_seq = ?,
+      customer_request_id = ?,
+      customer_display_name = ?,
+      catalog_branch_id = ?,
+      notes = ?,
+      updated_at = datetime('now')
     WHERE id = ?
   `).run(
-    data.customerAccSeq ?? row.customer_acc_seq,
+    customer.customerAccSeq,
+    customer.customerRequestId,
+    customer.customerDisplayName || null,
     data.catalogBranchId ?? row.catalog_branch_id,
     data.notes ?? row.notes,
     orderId

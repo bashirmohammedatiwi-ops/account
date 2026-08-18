@@ -5,6 +5,13 @@ const {
   normalizeAddress,
   buildEdariAccountName
 } = require('./customer-posting');
+const {
+  canAgentAccess,
+  getLeafDescendants,
+  getGroupPath
+} = require('./accounts');
+
+const PICKABLE_REQUEST_STATUSES = new Set(['pending', 'reviewed']);
 
 const STATUS_LABELS = {
   pending: 'بانتظار المراجعة',
@@ -351,6 +358,7 @@ function markCustomerRequestPosted(id, {
       address: address != null ? address : row.address,
       remarks: remarks != null ? remarks : row.notes
     });
+    linkOrdersToPostedCustomer(id, { edariSeq, name1: name1 || buildEdariAccountName(row) });
   }
   logEvent(id, {
     actorType: 'admin',
@@ -388,6 +396,106 @@ function postingPayload(id) {
   };
 }
 
+function mapPickableFromAccount(c, rootSeq) {
+  return {
+    seq: String(c.seq),
+    num: String(c.num || ''),
+    name1: String(c.name1 || ''),
+    name2: String(c.name2 || ''),
+    address: String(c.address || ''),
+    remarks: String(c.remarks || ''),
+    bal: Number(c.bal || 0),
+    subCount: Number(c.sub_count || 0),
+    groupPath: getGroupPath(c.seq, rootSeq),
+    source: 'account',
+    isPending: false,
+    requestId: null,
+    pendingLabel: ''
+  };
+}
+
+function mapPickableFromRequest(row) {
+  return {
+    seq: '',
+    num: String(row.request_no || ''),
+    name1: String(row.name || ''),
+    name2: '',
+    address: String(row.address || ''),
+    remarks: String(row.notes || ''),
+    bal: 0,
+    subCount: 0,
+    groupPath: '',
+    source: 'request',
+    isPending: true,
+    requestId: Number(row.id),
+    pendingLabel: statusLabel(row.status)
+  };
+}
+
+function listPendingPickableForTree(agentId, treeAccSeq) {
+  return db.prepare(`
+    SELECT * FROM customer_requests
+    WHERE agent_id = ?
+      AND tree_acc_seq = ?
+      AND status IN ('pending', 'reviewed')
+      AND (edari_seq IS NULL OR trim(edari_seq) = '')
+    ORDER BY name COLLATE NOCASE
+  `).all(agentId, String(treeAccSeq));
+}
+
+/** زبائن الشجرة للفواتير: حسابات مُرحّلة + طلبات بانتظار الترحيل */
+function listPickableCustomers(agentId, treeAccSeq) {
+  assertAgentAssignedTree(agentId, treeAccSeq);
+  const rootSeq = String(treeAccSeq);
+  const accounts = getLeafDescendants(rootSeq).map((c) => mapPickableFromAccount(c, rootSeq));
+  const pending = listPendingPickableForTree(agentId, rootSeq).map(mapPickableFromRequest);
+  return [...accounts, ...pending].sort((a, b) => String(a.name1).localeCompare(String(b.name1), 'ar'));
+}
+
+function loadAgentCustomerRequest(id, agentId) {
+  const row = db.prepare('SELECT * FROM customer_requests WHERE id = ? AND agent_id = ?').get(id, agentId);
+  return row ? mapRequest(row) : null;
+}
+
+function resolveOrderCustomer(agentId, { customerAccSeq, customerRequestId } = {}) {
+  const requestId = customerRequestId ? Number(customerRequestId) : 0;
+  if (requestId) {
+    const request = loadAgentCustomerRequest(requestId, agentId);
+    if (!request) throw new Error('طلب الزبون غير موجود');
+    if (!PICKABLE_REQUEST_STATUSES.has(request.status)) {
+      throw new Error('الزبون غير متاح للطلبات في هذه الحالة');
+    }
+    return {
+      customerAccSeq: '',
+      customerRequestId: requestId,
+      customerDisplayName: request.name
+    };
+  }
+  const seq = String(customerAccSeq || '').trim();
+  if (!seq) throw new Error('اختر زبوناً');
+  if (!canAgentAccess(agentId, seq)) throw new Error('لا تملك صلاحية هذا الزبون');
+  return {
+    customerAccSeq: seq,
+    customerRequestId: null,
+    customerDisplayName: ''
+  };
+}
+
+function linkOrdersToPostedCustomer(requestId, { edariSeq, name1 } = {}) {
+  if (!requestId || !edariSeq) return;
+  db.prepare(`
+    UPDATE orders SET
+      customer_acc_seq = ?,
+      customer_request_id = NULL,
+      customer_display_name = CASE
+        WHEN customer_display_name IS NULL OR trim(customer_display_name) = '' THEN ?
+        ELSE customer_display_name
+      END,
+      updated_at = datetime('now')
+    WHERE customer_request_id = ?
+  `).run(String(edariSeq), String(name1 || ''), Number(requestId));
+}
+
 function listPostableTrees() {
   const bySeq = new Map();
   const add = (r) => {
@@ -423,5 +531,8 @@ module.exports = {
   markCustomerRequestPosted,
   deleteCustomerRequest,
   postingPayload,
-  listPostableTrees
+  listPostableTrees,
+  listPickableCustomers,
+  resolveOrderCustomer,
+  loadAgentCustomerRequest
 };

@@ -43,15 +43,22 @@ async function searchEdariAccounts({ q = '', kind = '' } = {}) {
     SELECT TOP 80 Seq, Num, Name1, SubCount
     FROM File11n
     WHERE ${where}
-    ORDER BY CASE WHEN SubCount = 0 THEN 0 ELSE 1 END, Num
+    ORDER BY Num
   `.replace(/\s+/g, ' ').trim();
 
   const r = await odbcBridge.runQuery({ ...getEdariConnection(), sql });
   if (!r.ok) throw new Error(r.error || 'فشل قراءة حسابات الإداري');
+  const results = (r.rows || []).map(mapRow).filter((a) => a.seq);
+  results.sort((a, b) => {
+    const leafA = a.subCount === 0 ? 0 : 1;
+    const leafB = b.subCount === 0 ? 0 : 1;
+    if (leafA !== leafB) return leafA - leafB;
+    return String(a.num).localeCompare(String(b.num), 'ar', { numeric: true });
+  });
   return {
     ok: true,
     source: 'edari',
-    results: (r.rows || []).map(mapRow).filter((a) => a.seq)
+    results
   };
 }
 
