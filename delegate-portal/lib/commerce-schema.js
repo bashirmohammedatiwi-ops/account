@@ -155,6 +155,7 @@ function migrateCommerceSchema(db) {
   migrateOrderLineExtras(db);
   migrateShorjaOrderFields(db);
   migrateReceipts(db);
+  migrateCustomerRequests(db);
 
   const branchCount = db.prepare('SELECT COUNT(*) AS c FROM catalog_branches').get().c;
   if (!branchCount) {
@@ -310,4 +311,46 @@ function migrateReceipts(db) {
   `);
 }
 
-module.exports = { migrateCommerceSchema, migrateShorjaOrderFields, migrateReceipts };
+function migrateCustomerRequests(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS customer_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      request_no TEXT NOT NULL UNIQUE,
+      agent_id INTEGER NOT NULL,
+      tree_acc_seq TEXT NOT NULL,
+      tree_num TEXT DEFAULT '',
+      tree_name TEXT DEFAULT '',
+      name TEXT NOT NULL,
+      phone TEXT DEFAULT '',
+      address TEXT DEFAULT '',
+      notes TEXT DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'pending',
+      edari_seq TEXT DEFAULT '',
+      edari_num TEXT DEFAULT '',
+      edari_posted_at TEXT,
+      posted_error TEXT DEFAULT '',
+      admin_note TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now')),
+      submitted_at TEXT,
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (agent_id) REFERENCES agents(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_customer_requests_agent ON customer_requests(agent_id);
+    CREATE INDEX IF NOT EXISTS idx_customer_requests_status ON customer_requests(status);
+
+    CREATE TABLE IF NOT EXISTS customer_request_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      request_id INTEGER NOT NULL,
+      actor_type TEXT,
+      actor_id TEXT,
+      from_status TEXT,
+      to_status TEXT,
+      note TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (request_id) REFERENCES customer_requests(id) ON DELETE CASCADE
+    );
+  `);
+}
+
+module.exports = { migrateCommerceSchema, migrateShorjaOrderFields, migrateReceipts, migrateCustomerRequests };

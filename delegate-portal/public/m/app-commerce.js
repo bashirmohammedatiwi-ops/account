@@ -1342,7 +1342,7 @@ window.commerceNav = {
       goToScreen('shop');
       return true;
     }
-    if (state.screen === 'shop' || state.screen === 'my-orders' || state.screen === 'receipts') {
+    if (state.screen === 'shop' || state.screen === 'my-orders' || state.screen === 'receipts' || state.screen === 'customers') {
       goToScreen('home');
       return true;
     }

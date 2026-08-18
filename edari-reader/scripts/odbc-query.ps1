@@ -319,10 +319,10 @@ try {
 
         'exec' {
             $sql = [string]$payload.sql
-            if ($sql -notmatch '^\s*INSERT\s+INTO\s+File12n\b') {
+            if ($sql -notmatch '^\s*INSERT\s+INTO\s+File1[12]n\b') {
                 Write-JsonResult @{
                     ok = $false
-                    error = 'Only INSERT INTO File12n is allowed'
+                    error = 'Only INSERT INTO File11n or File12n is allowed'
                 }
                 exit 0
             }

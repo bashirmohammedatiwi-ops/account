@@ -64,9 +64,9 @@ begin
   end;
 
   upperSql := UpperCase(Trim(sqlText));
-  if Pos('INSERT INTO FILE12N', upperSql) <> 1 then
+  if (Pos('INSERT INTO FILE12N', upperSql) <> 1) and (Pos('INSERT INTO FILE11N', upperSql) <> 1) then
   begin
-    Output.Write('{"ok":false,"error":"Only INSERT INTO File12n is allowed"}');
+    Output.Write('{"ok":false,"error":"Only INSERT INTO File11n or File12n is allowed"}');
     Exit;
   end;
 

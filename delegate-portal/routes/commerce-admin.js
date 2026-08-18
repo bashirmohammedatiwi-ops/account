@@ -568,17 +568,40 @@ router.put('/receipts/settings', (req, res) => {
 
 router.get('/receipts/accounts/search', (req, res) => {
   const q = String(req.query.q || '').trim();
-  if (!q) return res.json({ ok: true, results: [] });
+  const kind = String(req.query.kind || '').trim();
   const db = require('../lib/db');
-  const rows = db.prepare(`
-    SELECT seq, num, name1 FROM accounts
-    WHERE num LIKE ? OR name1 LIKE ?
-    ORDER BY CASE WHEN CAST(sub_count AS INTEGER) = 0 THEN 0 ELSE 1 END, num
-    LIMIT 40
-  `).all(`%${q}%`, `%${q}%`);
+  const isCash = kind === 'cash' || kind === 'box';
+  const vagueCash = !q || q === 'صندوق' || q === 'الصندوق' || q === 'صناديق';
+  if (!isCash && !q) return res.json({ ok: true, results: [], source: 'local' });
+  const like = `%${q}%`;
+  let rows;
+  if (isCash && vagueCash) {
+    rows = db.prepare(`
+      SELECT seq, num, name1, sub_count FROM accounts
+      WHERE name1 LIKE '%صندوق%' OR name1 LIKE '%صناديق%'
+      ORDER BY CASE WHEN CAST(sub_count AS INTEGER) = 0 THEN 0 ELSE 1 END, num
+      LIMIT 80
+    `).all();
+  } else if (isCash) {
+    rows = db.prepare(`
+      SELECT seq, num, name1, sub_count FROM accounts
+      WHERE name1 LIKE '%صندوق%' OR name1 LIKE '%صناديق%'
+         OR num LIKE ? OR name1 LIKE ?
+      ORDER BY CASE WHEN CAST(sub_count AS INTEGER) = 0 THEN 0 ELSE 1 END, num
+      LIMIT 80
+    `).all(like, like);
+  } else {
+    rows = db.prepare(`
+      SELECT seq, num, name1, sub_count FROM accounts
+      WHERE num LIKE ? OR name1 LIKE ?
+      ORDER BY CASE WHEN CAST(sub_count AS INTEGER) = 0 THEN 0 ELSE 1 END, num
+      LIMIT 40
+    `).all(like, like);
+  }
   res.json({
     ok: true,
-    results: rows.map((r) => ({ seq: r.seq, num: r.num, name: r.name1 }))
+    source: 'local',
+    results: rows.map((r) => ({ seq: r.seq, num: r.num, name: r.name1, subCount: r.sub_count }))
   });
 });
 
@@ -640,6 +663,91 @@ router.delete('/receipts/:id', (req, res) => {
   try {
     const result = deleteReceipt(Number(req.params.id));
     if (!result) return res.status(404).json({ ok: false, error: 'سند القبض غير موجود' });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+const {
+  listCustomerRequests,
+  loadCustomerRequest,
+  customerRequestStats,
+  updateCustomerRequestByAdmin,
+  setCustomerRequestStatus,
+  markCustomerRequestPosted,
+  deleteCustomerRequest,
+  postingPayload: customerPostingPayload,
+  listPostableTrees
+} = require('../lib/customer-requests');
+
+router.get('/customer-requests/stats', (_req, res) => {
+  res.json({ ok: true, stats: customerRequestStats() });
+});
+
+router.get('/customer-requests/trees', (_req, res) => {
+  res.json({ ok: true, trees: listPostableTrees() });
+});
+
+router.get('/customer-requests', (req, res) => {
+  const status = String(req.query.status || '').trim();
+  res.json({
+    ok: true,
+    requests: listCustomerRequests({ status: status || undefined, limit: 300 })
+  });
+});
+
+router.get('/customer-requests/:id', (req, res) => {
+  const request = loadCustomerRequest(Number(req.params.id));
+  if (!request) return res.status(404).json({ ok: false, error: 'طلب الزبون غير موجود' });
+  res.json({ ok: true, request, posting: customerPostingPayload(request.id) });
+});
+
+router.patch('/customer-requests/:id', (req, res) => {
+  try {
+    const request = updateCustomerRequestByAdmin(Number(req.params.id), req.body || {});
+    if (!request) return res.status(404).json({ ok: false, error: 'طلب الزبون غير موجود' });
+    res.json({ ok: true, request });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.patch('/customer-requests/:id/status', (req, res) => {
+  try {
+    const request = setCustomerRequestStatus(Number(req.params.id), req.body?.status, {
+      actorType: 'admin',
+      actorId: 'admin',
+      note: req.body?.note || ''
+    });
+    if (!request) return res.status(404).json({ ok: false, error: 'طلب الزبون غير موجود' });
+    res.json({ ok: true, request });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/customer-requests/:id/posted', (req, res) => {
+  try {
+    const request = markCustomerRequestPosted(Number(req.params.id), {
+      edariSeq: req.body?.edariSeq || req.body?.seq,
+      edariNum: req.body?.edariNum || req.body?.num,
+      name1: req.body?.name1,
+      error: req.body?.error,
+      address: req.body?.address,
+      remarks: req.body?.remarks
+    });
+    if (!request) return res.status(404).json({ ok: false, error: 'طلب الزبون غير موجود' });
+    res.json({ ok: true, request });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.delete('/customer-requests/:id', (req, res) => {
+  try {
+    const result = deleteCustomerRequest(Number(req.params.id));
+    if (!result) return res.status(404).json({ ok: false, error: 'طلب الزبون غير موجود' });
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });

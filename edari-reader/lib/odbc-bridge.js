@@ -205,8 +205,8 @@ async function runBatchQuery(options) {
 async function runExec(options) {
   const sql = String(options.sql || '').trim();
   if (!sql) throw new Error('SQL query is required');
-  if (!/^\s*INSERT\s+INTO\s+File12n\b/i.test(sql)) {
-    throw new Error('Only INSERT INTO File12n is allowed');
+  if (!/^\s*INSERT\s+INTO\s+File1[12]n\b/i.test(sql)) {
+    throw new Error('Only INSERT INTO File11n or File12n is allowed');
   }
 
   if (process.env.EDARI_WRITE_VIA_NXSCRIPT !== '0') {

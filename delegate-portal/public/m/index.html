@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260818receipts">
-  <link rel="stylesheet" href="portal-pro.css?v=20260709orders1">
+  <link rel="stylesheet" href="styles.css?v=20260818cust">
+  <link rel="stylesheet" href="portal-pro.css?v=20260818cust">
   <link rel="stylesheet" href="mobile.css?v=20260709orders1">
   <script>
     // Early orientation class for first paint (iPad)
@@ -206,6 +206,21 @@
                   <span class="home-app-name">سند قبض</span>
                   <span class="home-app-hint">تحصيل من الزبون</span>
                   <span class="home-app-badge hidden" id="homeBadgeReceipts">0</span>
+                </button>
+
+                <button type="button" class="home-app-tile" data-app="customers">
+                  <div class="home-app-icon-wrap home-app-theme-rose">
+                    <div class="home-app-icon-circle">
+                      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
+                        <path d="M19 8v6M22 11h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                      </svg>
+                    </div>
+                  </div>
+                  <span class="home-app-name">زبون جديد</span>
+                  <span class="home-app-hint">يُراجع ثم يُرحَّل</span>
+                  <span class="home-app-badge hidden" id="homeBadgeCustomers">0</span>
                 </button>
 
                 <button type="button" class="home-app-tile" data-app="reports">
@@ -519,6 +534,48 @@
         <div class="inv-order-list" id="myReceiptsList"></div>
       </section>
 
+      <!-- New customer -->
+      <section class="screen" id="screen-customers">
+        <div class="inv-page-head">
+          <div>
+            <h3 class="inv-page-title">زبون جديد</h3>
+            <p class="inv-page-meta">حدد الشجرة ثم أدخل بيانات الزبون — يُراجع في لوحة التحكم قبل الترحيل</p>
+          </div>
+        </div>
+        <form id="newCustomerForm" class="rv-form" autocomplete="off">
+          <label class="field">
+            <span class="field-label">الشجرة</span>
+            <select id="newCustomerTree" required>
+              <option value="">اختر الشجرة</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="field-label">اسم الزبون</span>
+            <input type="text" id="newCustomerName" required placeholder="الاسم">
+          </label>
+          <label class="field">
+            <span class="field-label">الهاتف</span>
+            <input type="tel" id="newCustomerPhone" inputmode="tel" placeholder="07xxxxxxxxx">
+          </label>
+          <label class="field">
+            <span class="field-label">العنوان / المنطقة</span>
+            <input type="text" id="newCustomerAddress" placeholder="المنطقة أو العنوان">
+          </label>
+          <label class="field">
+            <span class="field-label">ملاحظات</span>
+            <textarea id="newCustomerNotes" rows="2" placeholder="اختياري"></textarea>
+          </label>
+          <button type="submit" class="btn primary full" id="btnSubmitCustomer">إرسال للوحة التحكم</button>
+        </form>
+        <div class="inv-page-head" style="margin-top:18px">
+          <div>
+            <h3 class="inv-page-title">طلباتي</h3>
+            <p class="inv-page-meta" id="myCustomerReqsMeta">—</p>
+          </div>
+        </div>
+        <div class="inv-order-list" id="myCustomerReqsList"></div>
+      </section>
+
       <!-- My orders -->
       <section class="screen" id="screen-my-orders">
         <div class="inv-page-head inv-orders-head">
@@ -610,9 +667,10 @@
       <p>جاري التحميل...</p>
     </div>
   </div>
-  <script src="app.js?v=20260818receipts"></script>
+  <script src="app.js?v=20260818cust"></script>
   <script src="app-reports.js?v=20260613rpt3"></script>
-  <script src="app-commerce.js?v=20260818receipts"></script>
-  <script src="app-receipts.js?v=20260818receipts"></script>
+  <script src="app-commerce.js?v=20260818cust"></script>
+  <script src="app-receipts.js?v=20260818cust"></script>
+  <script src="app-customers.js?v=20260818cust"></script>
 </body>
 </html>

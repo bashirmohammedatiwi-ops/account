@@ -318,7 +318,7 @@ function updateReceiptByAdmin(id, patch = {}) {
       notes = ?,
       receipt_date = ?,
       admin_note = ?,
-      status = CASE WHEN status = 'rejected' THEN status ELSE 'reviewed' END,
+      status = 'reviewed',
       updated_at = datetime('now')
     WHERE id = ?
   `).run(
@@ -337,7 +337,7 @@ function updateReceiptByAdmin(id, patch = {}) {
     actorType: 'admin',
     actorId: 'admin',
     fromStatus: row.status,
-    toStatus: row.status === 'rejected' ? row.status : 'reviewed',
+    toStatus: 'reviewed',
     note: 'تعديل قبل الترحيل'
   });
   return loadReceipt(id);

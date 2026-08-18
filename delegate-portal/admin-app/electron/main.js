@@ -1029,6 +1029,18 @@ ipcMain.handle('lookup-edari-material', async (_e, code) => {
   }
 });
 
+ipcMain.handle('search-edari-accounts', async (_e, params) => {
+  try {
+    Object.assign(process.env, { EDARI_READER_ROOT: getEdariReaderRoot() }, edariEnvExtra());
+    const searchPath = path.join(getPortalDir(), 'sync-client', 'search-edari-accounts.js');
+    delete require.cache[require.resolve(searchPath)];
+    const { searchEdariAccounts } = require(searchPath);
+    return await searchEdariAccounts(params || {});
+  } catch (err) {
+    return { ok: false, error: err.message || 'فشل البحث في حسابات الإداري' };
+  }
+});
+
 ipcMain.handle('post-edari-receipt', async (_e, payload) => {
   try {
     Object.assign(process.env, { EDARI_READER_ROOT: getEdariReaderRoot() }, edariEnvExtra());
@@ -1039,6 +1051,19 @@ ipcMain.handle('post-edari-receipt', async (_e, payload) => {
     return { ok: true, ...result };
   } catch (err) {
     return { ok: false, error: err.message || 'فشل ترحيل سند القبض إلى الإداري' };
+  }
+});
+
+ipcMain.handle('post-edari-customer', async (_e, payload) => {
+  try {
+    Object.assign(process.env, { EDARI_READER_ROOT: getEdariReaderRoot() }, edariEnvExtra());
+    const postPath = path.join(getPortalDir(), 'sync-client', 'post-customer.js');
+    delete require.cache[require.resolve(postPath)];
+    const { postCustomerToEdari } = require(postPath);
+    const result = await postCustomerToEdari(payload || {});
+    return { ok: true, ...result };
+  } catch (err) {
+    return { ok: false, error: err.message || 'فشل ترحيل الزبون إلى الإداري' };
   }
 });
 

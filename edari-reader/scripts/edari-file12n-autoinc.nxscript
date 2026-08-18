@@ -31,11 +31,12 @@ var
   aSession: TnxSession;
   adb: TnxDatabase;
   aTable: TnxTable;
-  aliasName, maintKey: string;
+  aliasName, maintKey, tableName, tableUpper: string;
   autoIncVal: integer;
 begin
   aliasName := UrlDecode(Trim(Request('alias')));
   maintKey := UrlDecode(Trim(Request('key')));
+  tableName := UrlDecode(Trim(Request('table')));
   autoIncVal := StrToIntDef(UrlDecode(Trim(Request('autoinc'))), -1);
 
   if aliasName = '' then
@@ -56,6 +57,18 @@ begin
     Exit;
   end;
 
+  if tableName = '' then tableName := 'File12n';
+  tableUpper := UpperCase(tableName);
+  if tableUpper = 'FILE11N' then
+    tableName := 'File11n'
+  else if tableUpper = 'FILE12N' then
+    tableName := 'File12n'
+  else
+  begin
+    Output.Write('{"ok":false,"error":"table not allowed"}');
+    Exit;
+  end;
+
   aSession := TnxSession.Create(nil);
   adb := TnxDatabase.Create(nil);
   aTable := TnxTable.Create(nil);
@@ -66,10 +79,10 @@ begin
     adb.Session := aSession;
     adb.Open;
     aTable.Database := adb;
-    aTable.TableName := 'File12n';
+    aTable.TableName := tableName;
     aTable.Open;
     aTable.SetAutoIncValue(autoIncVal);
-    Output.Write('{"ok":true,"table":"File12n","autoinc":'+IntToStr(autoIncVal)+',"viaResetAutoInc":true}');
+    Output.Write('{"ok":true,"table":"'+tableName+'","autoinc":'+IntToStr(autoIncVal)+',"viaResetAutoInc":true}');
   finally
     aTable.Free;
     adb.Free;

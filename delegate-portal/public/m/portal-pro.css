@@ -1398,6 +1398,11 @@
   box-shadow: 0 12px 28px rgba(4, 120, 87, 0.38);
 }
 
+.home-app-theme-rose {
+  background: linear-gradient(145deg, #be123c, #f43f5e 50%, #fda4af);
+  box-shadow: 0 12px 28px rgba(225, 29, 72, 0.38);
+}
+
 .home-app-icon-circle {
   width: 100%;
   height: 100%;
@@ -1413,6 +1418,7 @@
 .home-app-theme-amber .home-app-icon-circle { color: #d97706; }
 .home-app-theme-violet .home-app-icon-circle { color: #7c3aed; }
 .home-app-theme-emerald .home-app-icon-circle { color: #047857; }
+.home-app-theme-rose .home-app-icon-circle { color: #e11d48; }
 
 .home-app-name {
   font-size: 0.78rem;

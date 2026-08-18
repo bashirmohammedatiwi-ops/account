@@ -167,4 +167,50 @@ router.delete('/receipts/:id', authAgent, (req, res) => {
   }
 });
 
+const {
+  createCustomerRequest,
+  listCustomerRequests,
+  loadCustomerRequest,
+  deleteCustomerRequest
+} = require('../lib/customer-requests');
+
+router.get('/customer-requests', authAgent, (req, res) => {
+  const status = String(req.query.status || '').trim();
+  res.json({
+    ok: true,
+    requests: listCustomerRequests({
+      agentId: req.agent.id,
+      status: status || undefined,
+      limit: 100
+    })
+  });
+});
+
+router.get('/customer-requests/:id', authAgent, (req, res) => {
+  const request = loadCustomerRequest(Number(req.params.id));
+  if (!request || request.agentId !== req.agent.id) {
+    return res.status(404).json({ ok: false, error: 'طلب الزبون غير موجود' });
+  }
+  res.json({ ok: true, request });
+});
+
+router.post('/customer-requests', authAgent, (req, res) => {
+  try {
+    const request = createCustomerRequest(req.agent.id, req.body || {});
+    res.json({ ok: true, request });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.delete('/customer-requests/:id', authAgent, (req, res) => {
+  try {
+    const result = deleteCustomerRequest(Number(req.params.id), { agentId: req.agent.id });
+    if (!result) return res.status(404).json({ ok: false, error: 'طلب الزبون غير موجود' });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
 module.exports = router;

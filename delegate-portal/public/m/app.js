@@ -499,6 +499,7 @@ function openHomeApp(app) {
   else if (app === 'shop') goToScreen('shop');
   else if (app === 'orders') goToScreen('my-orders');
   else if (app === 'receipts') goToScreen('receipts');
+  else if (app === 'customers') goToScreen('customers');
   else if (app === 'reports') goToScreen('reports');
 }
 
@@ -677,6 +678,8 @@ function goToScreen(name) {
     /* handled */
   } else if (window.receiptsNav?.applyScreen?.(name, { backBtn, toolbarWrap, title, crumb })) {
     /* handled */
+  } else if (window.customersNav?.applyScreen?.(name, { backBtn, toolbarWrap, title, crumb })) {
+    /* handled */
   } else if (window.commerceNav?.applyScreen) {
     window.commerceNav.applyScreen(name, { backBtn, toolbarWrap, title, crumb });
   }
@@ -688,6 +691,7 @@ function goToScreen(name) {
   window.commerceNav?.onScreen?.(name);
   window.reportsNav?.onScreen?.(name);
   window.receiptsNav?.onScreen?.(name);
+  window.customersNav?.onScreen?.(name);
 }
 
 function renderTreeContext() {
@@ -1240,6 +1244,7 @@ function goBack() {
   if (window.commerceNav?.handleBack?.()) return;
   if (window.reportsNav?.handleBack?.()) return;
   if (window.receiptsNav?.handleBack?.()) return;
+  if (window.customersNav?.handleBack?.()) return;
   if (state.screen === 'invoice') {
     goToScreen(state.invoiceFromScreen || 'statement');
     state.invoiceFromScreen = null;
@@ -1285,6 +1290,7 @@ async function refresh() {
   if (window.commerceNav?.refresh?.()) return;
   if (window.reportsNav?.refresh?.()) return;
   if (window.receiptsNav?.refresh?.()) return;
+  if (window.customersNav?.refresh?.()) return;
   if (state.screen === 'home') {
     await loadTrees('home');
   } else if (state.screen === 'trees') {

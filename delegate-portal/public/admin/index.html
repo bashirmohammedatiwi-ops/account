@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Edari Admin — لوحة التحكم</title>
-  <link rel="stylesheet" href="admin.css?v=20260818post1">
+  <link rel="stylesheet" href="admin.css?v=20260818cust">
 </head>
 <body>
   <div id="topLoader" class="top-loader" hidden aria-live="polite">
@@ -147,7 +147,7 @@
             </button>
             <button type="button" class="module-card" data-goto="receipts">
               <span class="module-icon tone-teal"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span>
-              <span class="module-body"><strong>مبيعات المندوبين</strong><span>سندات قبض وترحيل</span></span>
+              <span class="module-body"><strong>مبيعات المندوبين</strong><span>سندات قبض وزبائن جدد</span></span>
             </button>
             <button type="button" class="module-card" data-goto="salesReport">
               <span class="module-icon tone-indigo"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span>
@@ -307,23 +307,37 @@
           <div class="panel hidden" id="orderDetailPanel"></div>
         </section>
 
-        <!-- Delegate receipts -->
-        <section class="page" id="page-receipts">
-          <div class="panel" id="receiptPostAlert">
+        <!-- Delegate receipts + new customers -->
+        <section class="page rv-page" id="page-receipts">
+          <div class="rv-banner" id="receiptPostAlert">
+            <span class="rv-banner-dot" aria-hidden="true"></span>
             <p class="panel-desc muted" id="receiptPostAlertText">الترحيل إلى الإداري يتم من تطبيق الإدارة المكتبي المتصل بـ Edari</p>
           </div>
-          <div class="panel">
-            <div class="panel-head">
-              <h2 class="panel-title">حسابات الترحيل الثابتة</h2>
-              <button type="button" class="btn btn-primary btn-sm" id="btnSaveReceiptSettings">حفظ الحسابات</button>
+
+          <div class="rv-tabs" role="tablist">
+            <button type="button" class="rv-tab active" data-rv-tab="receipts">سندات قبض</button>
+            <button type="button" class="rv-tab" data-rv-tab="customers">زبائن جدد</button>
+          </div>
+
+          <div id="rvTabReceipts">
+          <div class="rv-card">
+            <div class="rv-card-head">
+              <div>
+                <h2 class="rv-card-title">حسابات الترحيل من الإداري</h2>
+                <p class="rv-card-sub">اختر الصندوق وحسابات العمولة والحسم من دليل الإداري — تُحفظ هنا وتُستخدم عند الترحيل</p>
+              </div>
+              <button type="button" class="btn btn-primary" id="btnSaveReceiptSettings">حفظ الحسابات</button>
             </div>
-            <p class="panel-desc muted">صندوق المبلغ + حسابا العمولة + حساب الحسم — تُستخدم عند ترحيل سند القبض من تطبيق الإدارة المكتبي إلى الإداري كسند قيد مرتبط برقم سند القبض</p>
             <div class="rv-settings-grid" id="receiptSettingsGrid"></div>
           </div>
-          <div class="panel">
-            <div class="panel-head">
-              <h2 class="panel-title">سندات قبض المندوبين</h2>
-              <select id="receiptStatusFilter" class="search">
+
+          <div class="rv-card rv-card-list">
+            <div class="rv-card-head">
+              <div>
+                <h2 class="rv-card-title">سندات قبض المندوبين</h2>
+                <p class="rv-card-sub">راجع وعدّل ثم احذف أو رحّل قبل الإرسال للإداري</p>
+              </div>
+              <select id="receiptStatusFilter" class="search rv-filter">
                 <option value="">كل الحالات</option>
                 <option value="pending">بانتظار المراجعة</option>
                 <option value="reviewed">جاهز للترحيل</option>
@@ -331,7 +345,7 @@
                 <option value="rejected">مرفوض</option>
               </select>
             </div>
-            <p id="receiptStats" class="panel-desc"></p>
+            <div class="rv-kpis" id="receiptStats"></div>
             <div class="table-scroll">
               <table class="data-table compact">
                 <thead>
@@ -343,7 +357,38 @@
               </table>
             </div>
           </div>
-          <div class="panel hidden" id="receiptDetailPanel"></div>
+          <div class="rv-card hidden" id="receiptDetailPanel"></div>
+          </div>
+
+          <div id="rvTabCustomers" class="hidden">
+          <div class="rv-card rv-card-list">
+            <div class="rv-card-head">
+              <div>
+                <h2 class="rv-card-title">زبائن جدد من المندوبين</h2>
+                <p class="rv-card-sub">راجع الاسم والشجرة ثم رحّل فرعاً جديداً إلى الإداري</p>
+              </div>
+              <select id="customerReqStatusFilter" class="search rv-filter">
+                <option value="">كل الحالات</option>
+                <option value="pending">بانتظار المراجعة</option>
+                <option value="reviewed">جاهز للترحيل</option>
+                <option value="posted">مُرحَّل</option>
+                <option value="rejected">مرفوض</option>
+              </select>
+            </div>
+            <div class="rv-kpis" id="customerReqStats"></div>
+            <div class="table-scroll">
+              <table class="data-table compact">
+                <thead>
+                  <tr>
+                    <th>رقم</th><th>مندوب</th><th>الشجرة</th><th>الاسم</th><th>الهاتف</th><th>حالة</th><th>تاريخ</th><th></th>
+                  </tr>
+                </thead>
+                <tbody id="customerReqsBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="rv-card hidden" id="customerReqDetailPanel"></div>
+          </div>
         </section>
 
         <!-- Reports -->
@@ -1045,9 +1090,10 @@
   </div>
 
   <script src="config.js"></script>
-  <script src="admin.js?v=20260818receipts"></script>
-  <script src="admin-commerce.js?v=20260818receipts"></script>
-  <script src="admin-receipts.js?v=20260818post1"></script>
+  <script src="admin.js?v=20260818cust"></script>
+  <script src="admin-commerce.js?v=20260818cust"></script>
+  <script src="admin-receipts.js?v=20260818cust"></script>
+  <script src="admin-customers.js?v=20260818cust"></script>
   <script src="admin-sales-report.js?v=20260709treeFix3"></script>
   <script src="admin-account-statements.js?v=20260615kpi"></script>
   <script src="admin-price-sync.js?v=20260703"></script>

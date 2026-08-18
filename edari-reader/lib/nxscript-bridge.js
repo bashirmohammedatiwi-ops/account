@@ -5,10 +5,12 @@ const config = require('./config');
 const QUERY_SCRIPT = 'edari-query.nxscript';
 const EXEC_SCRIPT = 'edari-exec.nxscript';
 const AUTOINC_SCRIPT = 'edari-file12n-autoinc.nxscript';
+const TREE_SCRIPT = 'edari-file11n-tree.nxscript';
 const MAINT_KEY = 'edari-receipt-maint';
 const BUNDLED_SCRIPT = path.join(__dirname, '..', 'scripts', QUERY_SCRIPT);
 const BUNDLED_EXEC_SCRIPT = path.join(__dirname, '..', 'scripts', EXEC_SCRIPT);
 const BUNDLED_AUTOINC_SCRIPT = path.join(__dirname, '..', 'scripts', AUTOINC_SCRIPT);
+const BUNDLED_TREE_SCRIPT = path.join(__dirname, '..', 'scripts', TREE_SCRIPT);
 
 /** @type {boolean | null} */
 let nxscriptAvailable = null;
@@ -63,6 +65,10 @@ function ensureExecScriptDeployed() {
 
 function ensureAutoIncScriptDeployed() {
   return ensureScriptDeployed(AUTOINC_SCRIPT, BUNDLED_AUTOINC_SCRIPT);
+}
+
+function ensureTreeScriptDeployed() {
+  return ensureScriptDeployed(TREE_SCRIPT, BUNDLED_TREE_SCRIPT);
 }
 
 function sqlToHex(sqlText) {
@@ -230,8 +236,8 @@ async function runExecViaNxscript(options) {
   const alias = String(options.alias || '').trim();
   if (!sql) throw new Error('SQL query is required');
   if (!alias) throw new Error('Database alias is required for nxServer query bridge');
-  if (!/^\s*INSERT\s+INTO\s+File12n\b/i.test(sql)) {
-    return { ok: false, error: 'Only INSERT INTO File12n is allowed' };
+  if (!/^\s*INSERT\s+INTO\s+File1[12]n\b/i.test(sql)) {
+    return { ok: false, error: 'Only INSERT INTO File11n or File12n is allowed' };
   }
   if (!ensureExecScriptDeployed()) {
     return {
@@ -274,10 +280,15 @@ async function runFile12nAutoIncViaNxscript(options) {
       needsNxScript: true
     };
   }
+  const table = String(options.table || 'File12n').trim();
+  if (!/^File1[12]n$/i.test(table)) {
+    return { ok: false, error: 'table not allowed' };
+  }
   const q = new URLSearchParams({
     alias,
     key: MAINT_KEY,
-    autoinc: String(autoinc)
+    autoinc: String(autoinc),
+    table
   });
   const url = `${config.nexusAdminUrl}/${AUTOINC_SCRIPT}?${q.toString()}`;
   let response;
@@ -293,6 +304,49 @@ async function runFile12nAutoIncViaNxscript(options) {
   const bodyBuf = Buffer.from(await response.arrayBuffer());
   const parsed = extractJsonBody(bodyBuf);
   if (!parsed) return { ok: false, error: 'Invalid nxServer autoinc response' };
+  return parsed;
+}
+
+async function runTreeRepairViaNxscript(options) {
+  const alias = String(options.alias || '').trim();
+  const seq = Number(options.seq);
+  const subCount = Number(options.subCount);
+  const subHex = String(options.subHex || '').trim();
+  if (!alias) throw new Error('Database alias is required for nxServer query bridge');
+  if (!Number.isFinite(seq) || seq <= 0) {
+    return { ok: false, error: 'seq required' };
+  }
+  if (!Number.isFinite(subCount) || subCount < 0) {
+    return { ok: false, error: 'subcount required' };
+  }
+  if (!ensureTreeScriptDeployed()) {
+    return {
+      ok: false,
+      error: 'Could not deploy edari-file11n-tree.nxscript to nxServer Adminroot.',
+      needsNxScript: true
+    };
+  }
+  const q = new URLSearchParams({
+    alias,
+    key: MAINT_KEY,
+    seq: String(seq),
+    subcount: String(subCount)
+  });
+  if (subHex) q.set('subhex', subHex);
+  const url = `${config.nexusAdminUrl}/${TREE_SCRIPT}?${q.toString()}`;
+  let response;
+  try {
+    response = await fetch(url, { signal: AbortSignal.timeout(Number(options.timeoutMs) || 60000) });
+  } catch (err) {
+    return {
+      ok: false,
+      error: `nxServer admin unreachable (${config.nexusAdminUrl}): ${err.message}`,
+      needsNxServer: true
+    };
+  }
+  const bodyBuf = Buffer.from(await response.arrayBuffer());
+  const parsed = extractJsonBody(bodyBuf);
+  if (!parsed) return { ok: false, error: 'Invalid nxServer tree repair response' };
   return parsed;
 }
 
@@ -313,9 +367,11 @@ module.exports = {
   ensureQueryScriptDeployed,
   ensureExecScriptDeployed,
   ensureAutoIncScriptDeployed,
+  ensureTreeScriptDeployed,
   runQueryViaNxscript,
   runExecViaNxscript,
   runFile12nAutoIncViaNxscript,
+  runTreeRepairViaNxscript,
   testConnectionViaNxscript,
   listTablesViaNxscript
 };
