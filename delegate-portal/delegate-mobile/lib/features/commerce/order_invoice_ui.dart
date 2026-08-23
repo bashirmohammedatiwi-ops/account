@@ -249,8 +249,8 @@ class EdOrderInvoiceDocPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            height: 5,
-            decoration: const BoxDecoration(gradient: EdCommerceTheme.accentGradient),
+            height: 4,
+            color: EdCommerceTheme.accent,
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),

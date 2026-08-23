@@ -221,9 +221,9 @@ class EdHeroCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        gradient: AppColors.heroGradient,
+        color: AppColors.navy,
         borderRadius: BorderRadius.circular(AppColors.radiusLg),
-        boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.18), blurRadius: 24, offset: const Offset(0, 8))],
+        boxShadow: AppColors.cardShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -554,9 +554,7 @@ class EdTreeCard extends StatelessWidget {
             children: [
               Container(
                 height: 4,
-                decoration: BoxDecoration(
-                  gradient: selected ? AppColors.accentGradient : LinearGradient(colors: [AppColors.accentTeal.withValues(alpha: 0.35), AppColors.accentTeal.withValues(alpha: 0.05)]),
-                ),
+                color: selected ? AppColors.accentTeal : AppColors.accentTeal.withValues(alpha: 0.25),
               ),
               Padding(
                 padding: const EdgeInsets.all(14),
@@ -568,8 +566,9 @@ class EdTreeCard extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                           decoration: BoxDecoration(
-                            gradient: AppColors.moduleSoftGradient(AppColors.accentTeal),
+                            color: AppColors.accentTeal.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.accentTeal.withValues(alpha: 0.2)),
                           ),
                           child: Text('#$index', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.accentTeal)),
                         ),
@@ -578,7 +577,7 @@ class EdTreeCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 10),
-                    Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                    Text(name, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.navy)),
                     const SizedBox(height: 6),
                     Text(meta, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 12),
@@ -647,7 +646,7 @@ class EdBranchCard extends StatelessWidget {
             children: [
               Container(
                 height: 4,
-                decoration: BoxDecoration(gradient: AppColors.moduleGradient(accent)),
+                color: accent,
               ),
               Padding(
                 padding: const EdgeInsets.all(14),
@@ -661,7 +660,7 @@ class EdBranchCard extends StatelessWidget {
                           height: 44,
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
-                            gradient: AppColors.moduleSoftGradient(accent),
+                            color: accent.withValues(alpha: 0.1),
                             shape: BoxShape.circle,
                             border: Border.all(color: accent.withValues(alpha: 0.15)),
                           ),
@@ -672,7 +671,7 @@ class EdBranchCard extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppColors.navy)),
+                              Text(name, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppColors.navy)),
                               const SizedBox(height: 4),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -692,11 +691,7 @@ class EdBranchCard extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topRight,
-                          end: Alignment.bottomLeft,
-                          colors: [accent.withValues(alpha: 0.06), AppColors.surfaceAlt],
-                        ),
+                        color: accent.withValues(alpha: 0.06),
                         borderRadius: BorderRadius.circular(AppColors.radiusSm),
                         border: Border.all(color: accent.withValues(alpha: 0.12)),
                       ),
@@ -768,11 +763,9 @@ class EdFilterChips extends StatelessWidget {
                   borderRadius: BorderRadius.circular(999),
                   child: Ink(
                     decoration: BoxDecoration(
-                      gradient: selected == value ? AppColors.buttonGradient : null,
-                      color: selected == value ? null : AppColors.surface,
+                      color: selected == value ? AppColors.navy : AppColors.surface,
                       borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: selected == value ? Colors.transparent : AppColors.borderLight),
-                      boxShadow: selected == value ? AppColors.softShadow : null,
+                      border: Border.all(color: selected == value ? AppColors.navy : AppColors.borderLight),
                     ),
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     child: Text(
@@ -1187,7 +1180,7 @@ class EdOrderCard extends StatelessWidget {
             children: [
               Container(
                 height: 4,
-                decoration: BoxDecoration(gradient: AppColors.moduleGradient(statusColor)),
+                color: statusColor,
               ),
               Padding(
                 padding: const EdgeInsets.all(16),
@@ -1197,8 +1190,9 @@ class EdOrderCard extends StatelessWidget {
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        gradient: AppColors.moduleSoftGradient(statusColor),
+                        color: statusColor.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: statusColor.withValues(alpha: 0.15)),
                       ),
                       child: Icon(Icons.shopping_bag_outlined, color: statusColor, size: 22),
                     ),
@@ -1275,7 +1269,7 @@ class EdPanelCard extends StatelessWidget {
         children: [
           Container(
             height: 4,
-            decoration: BoxDecoration(gradient: AppColors.moduleGradient(iconColor ?? AppColors.accentTeal)),
+            color: iconColor ?? AppColors.accentTeal,
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(EdSpacing.xl, EdSpacing.lg, EdSpacing.xl, EdSpacing.md),
@@ -1287,9 +1281,9 @@ class EdPanelCard extends StatelessWidget {
                     height: 44,
                     margin: const EdgeInsetsDirectional.only(end: EdSpacing.md),
                     decoration: BoxDecoration(
-                      gradient: AppColors.moduleSoftGradient(iconColor ?? AppColors.accentTeal),
+                      color: (iconColor ?? AppColors.accentTeal).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(AppColors.radiusSm),
-                      boxShadow: [BoxShadow(color: (iconColor ?? AppColors.accentTeal).withValues(alpha: 0.15), blurRadius: 8, offset: const Offset(0, 3))],
+                      border: Border.all(color: AppColors.borderLight),
                     ),
                     child: Icon(icon, color: iconColor ?? AppColors.accentTeal, size: 22),
                   ),
@@ -1393,56 +1387,39 @@ class EdLoginAside extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        gradient: AppColors.brandGradient,
-        boxShadow: AppColors.elevatedShadow,
+      decoration: const BoxDecoration(
+        color: AppColors.navy,
       ),
       padding: const EdgeInsets.all(40),
-      child: Stack(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Positioned(
-            top: -20,
-            right: -20,
-            child: Container(
-              width: 140,
-              height: 140,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.06)),
+          Container(
+            width: 56,
+            height: 4,
+            color: AppColors.goldLine,
+          ),
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
             ),
+            child: Image.asset('assets/logo.png', width: 56, height: 56),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 56,
-                height: 4,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: [AppColors.goldLine, AppColors.gold.withValues(alpha: 0.5)]),
-                  borderRadius: BorderRadius.circular(99),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-                ),
-                child: Image.asset('assets/logo.png', width: 56, height: 56),
-              ),
-              const SizedBox(height: 20),
-              Text('Edari', style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 1)),
-              const SizedBox(height: 8),
-              const Text('بوابة المندوب', style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-              const SizedBox(height: 12),
-              Text('كشوف حساب · منتجات · طلبات · تقارير', style: TextStyle(color: Colors.white.withValues(alpha: 0.78), fontWeight: FontWeight.w600, fontSize: 14)),
-              const SizedBox(height: 32),
-              _feature(Icons.account_tree_rounded, 'كشوف حساب تفصيلية'),
-              _feature(Icons.storefront_rounded, 'طلبات وفواتير'),
-              _feature(Icons.bar_chart_rounded, 'تقارير مبيعات'),
-            ],
-          ),
+          const SizedBox(height: 20),
+          Text('Edari', style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 1)),
+          const SizedBox(height: 8),
+          const Text('بوابة المندوب', style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+          const SizedBox(height: 12),
+          Text('كشوف حساب · منتجات · طلبات · تقارير', style: TextStyle(color: Colors.white.withValues(alpha: 0.78), fontWeight: FontWeight.w600, fontSize: 14)),
+          const SizedBox(height: 32),
+          _feature(Icons.account_tree_rounded, 'كشوف حساب تفصيلية'),
+          _feature(Icons.storefront_rounded, 'طلبات وفواتير'),
+          _feature(Icons.bar_chart_rounded, 'تقارير مبيعات'),
         ],
       ),
     );

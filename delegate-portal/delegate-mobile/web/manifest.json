@@ -1,11 +1,11 @@
 {
-    "name": "edari_delegate",
-    "short_name": "edari_delegate",
+    "name": "Edari Delegate",
+    "short_name": "Edari",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FFFFFF",
+    "theme_color": "#0055D4",
+    "description": "بوابة المندوب — Edari Delegate",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

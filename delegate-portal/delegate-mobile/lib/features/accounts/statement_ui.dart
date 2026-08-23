@@ -24,13 +24,9 @@ class EdStatementExportBar extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: Ink(
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [EdAccountsTheme.accentSoft, EdAccountsTheme.card],
-            ),
+            color: EdAccountsTheme.accentSoft,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: EdAccountsTheme.accent.withValues(alpha: 0.35)),
+            border: Border.all(color: EdAccountsTheme.accent.withValues(alpha: 0.25)),
             boxShadow: AppColors.softShadow,
           ),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -77,7 +73,7 @@ class EdStatementDebtField extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [EdAccountsTheme.debitSoft, EdAccountsTheme.debit.withValues(alpha: 0.08)]),
+              color: EdAccountsTheme.debitSoft,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: EdAccountsTheme.debit.withValues(alpha: 0.15)),
             ),
@@ -123,7 +119,7 @@ class EdStatementDocPanel extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        gradient: EdAccountsTheme.heroGradient,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppColors.radiusLg),
         border: Border.all(color: EdAccountsTheme.line),
         boxShadow: AppColors.cardShadow,
@@ -133,8 +129,21 @@ class EdStatementDocPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            height: 5,
-            decoration: const BoxDecoration(gradient: AppColors.accentGradient),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.centerRight,
+                end: Alignment.centerLeft,
+                colors: [Color(0xFF0A1020), Color(0xFF152238), Color(0xFF1A3352)],
+              ),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.receipt_long_rounded, size: 14, color: Colors.white70),
+                SizedBox(width: 8),
+                Text('كشف حساب', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white70)),
+              ],
+            ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
@@ -148,9 +157,9 @@ class EdStatementDocPanel extends StatelessWidget {
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        gradient: AppColors.moduleSoftGradient(EdAccountsTheme.accent),
+                        color: EdAccountsTheme.accentSoft,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: EdAccountsTheme.accent.withValues(alpha: 0.15)),
+                        border: Border.all(color: EdAccountsTheme.line),
                       ),
                       child: const Icon(Icons.receipt_long_rounded, color: EdAccountsTheme.accent, size: 24),
                     ),
@@ -163,7 +172,7 @@ class EdStatementDocPanel extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             name,
-                            maxLines: 2,
+                            maxLines: 3,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, height: 1.3, color: AppColors.navy),
                           ),
@@ -185,7 +194,7 @@ class EdStatementDocPanel extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(
                     address,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: AppColors.textSecondary),
                   ),

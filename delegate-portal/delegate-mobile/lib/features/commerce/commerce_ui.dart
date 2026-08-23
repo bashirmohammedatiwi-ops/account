@@ -92,7 +92,7 @@ class EdShopPickerCard extends StatelessWidget {
                         child: Icon(icon, color: EdCommerceTheme.accent, size: 22),
                       ),
                       const Spacer(),
-                      Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.3)),
+                      Text(title, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.3)),
                       if (subtitle != null && subtitle!.isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Text(subtitle!, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted)),
@@ -150,7 +150,7 @@ class EdShopCustomerBar extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              gradient: customer != null ? EdCommerceTheme.accentGradient : LinearGradient(colors: [AppColors.surfaceAlt, AppColors.surfaceAlt]),
+              color: customer != null ? EdCommerceTheme.accent : AppColors.surfaceAlt,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
@@ -166,7 +166,7 @@ class EdShopCustomerBar extends StatelessWidget {
               children: [
                 const Text('اسم الزبون', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted)),
                 const SizedBox(height: 2),
-                Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.navy)),
                 if (meta.isNotEmpty)
                   Text(meta, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
               ],
@@ -181,9 +181,8 @@ class EdShopCustomerBar extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               child: Ink(
                 decoration: BoxDecoration(
-                  gradient: EdCommerceTheme.accentGradient,
+                  color: AppColors.navy,
                   borderRadius: BorderRadius.circular(12),
-                  boxShadow: [BoxShadow(color: EdCommerceTheme.accent.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))],
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 child: const Text('اختيار', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: Colors.white)),
@@ -272,9 +271,8 @@ class EdShopToolbar extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               child: Ink(
                 decoration: BoxDecoration(
-                  gradient: EdCommerceTheme.accentGradient,
+                  color: AppColors.navy,
                   borderRadius: BorderRadius.circular(12),
-                  boxShadow: [BoxShadow(color: EdCommerceTheme.accent.withValues(alpha: 0.25), blurRadius: 8, offset: const Offset(0, 3))],
                 ),
                 child: const SizedBox(
                   width: 46,
@@ -394,9 +392,7 @@ class EdShopProductDetailPanel extends StatelessWidget {
           Container(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [EdCommerceTheme.panelHeader, AppColors.surface],
-              ),
+              color: Colors.white,
               border: Border(bottom: BorderSide(color: EdCommerceTheme.line.withValues(alpha: 0.6))),
             ),
             child: Row(
@@ -447,7 +443,7 @@ class EdShopProductDetailPanel extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Text(product.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1E293B), height: 1.35)),
+                  Text(product.name, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1E293B), height: 1.35)),
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 6,
@@ -783,7 +779,7 @@ class EdShopProductTile extends StatelessWidget {
                 Container(
                   height: 3,
                   decoration: const BoxDecoration(
-                    gradient: EdCommerceTheme.accentGradient,
+                    color: EdCommerceTheme.accent,
                     borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
                   ),
                 ),
@@ -974,9 +970,8 @@ class EdShopOrderDock extends StatelessWidget {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                gradient: EdCommerceTheme.accentGradient,
+                color: AppColors.navy,
                 borderRadius: BorderRadius.circular(14),
-                boxShadow: [BoxShadow(color: EdCommerceTheme.accent.withValues(alpha: 0.25), blurRadius: 10, offset: const Offset(0, 4))],
               ),
               alignment: Alignment.center,
               child: Text('$lineCount', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18)),
@@ -999,9 +994,8 @@ class EdShopOrderDock extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
                 child: Ink(
                   decoration: BoxDecoration(
-                    gradient: EdCommerceTheme.accentGradient,
+                    color: AppColors.navy,
                     borderRadius: BorderRadius.circular(14),
-                    boxShadow: [BoxShadow(color: EdCommerceTheme.accent.withValues(alpha: 0.3), blurRadius: 12, offset: const Offset(0, 4))],
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                   child: const Row(

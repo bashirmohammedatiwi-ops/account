@@ -70,38 +70,58 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         padding: const EdgeInsets.all(20),
         children: [
           Container(
-            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              gradient: AppColors.brandGradient,
+              color: AppColors.surface,
               borderRadius: BorderRadius.circular(AppColors.radiusLg),
-              boxShadow: AppColors.elevatedShadow,
+              border: Border.all(color: AppColors.borderLight),
+              boxShadow: AppColors.cardShadow,
             ),
-            child: Row(
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Container(
-                  width: 56,
-                  height: 56,
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: AppColors.avatarRingGradient,
-                  ),
-                  child: Container(
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: 0.14),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerRight,
+                      end: Alignment.centerLeft,
+                      colors: [Color(0xFF0A1020), Color(0xFF152238), Color(0xFF1A3352)],
                     ),
-                    child: Text(initial, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.person_outline_rounded, size: 16, color: Colors.white70),
+                      SizedBox(width: 8),
+                      Text('حساب المندوب', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white70)),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
                     children: [
-                      Text(agent?.name ?? '—', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
-                      Text(agent?.username ?? '', style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontWeight: FontWeight.w600)),
+                      Container(
+                        width: 52,
+                        height: 52,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.surfaceAlt,
+                          border: Border.all(color: AppColors.accentTeal.withValues(alpha: 0.35)),
+                        ),
+                        child: Text(initial, style: const TextStyle(color: AppColors.navy, fontSize: 20, fontWeight: FontWeight.w800)),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(agent?.name ?? '—', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.navy, fontSize: 17, fontWeight: FontWeight.w800)),
+                            Text(agent?.username ?? '', style: const TextStyle(color: AppColors.muted, fontWeight: FontWeight.w600, fontSize: 13)),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),

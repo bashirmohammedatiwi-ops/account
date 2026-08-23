@@ -94,10 +94,8 @@ class EdShopSwipeProductCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
-                height: 5,
-                decoration: BoxDecoration(
-                  gradient: inDraft ? EdCommerceTheme.accentGradient : LinearGradient(colors: [EdCommerceTheme.accent.withValues(alpha: 0.35), EdCommerceTheme.accent.withValues(alpha: 0.08)]),
-                ),
+                height: 4,
+                color: inDraft ? EdCommerceTheme.accent : EdCommerceTheme.accent.withValues(alpha: 0.35),
               ),
               Expanded(
                 child: wide
@@ -154,14 +152,9 @@ class _ProductImageBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [EdCommerceTheme.accentSoft, EdCommerceTheme.cardTint],
-        ),
+        color: EdCommerceTheme.accentSoft,
         borderRadius: BorderRadius.circular(wide ? AppColors.radiusLg : AppColors.radius),
         border: Border.all(color: EdCommerceTheme.line.withValues(alpha: 0.8)),
-        boxShadow: [BoxShadow(color: EdCommerceTheme.accent.withValues(alpha: 0.06), blurRadius: 12, offset: const Offset(0, 4))],
       ),
       padding: EdgeInsets.all(wide ? 16 : 10),
       child: product.imageUrl != null
@@ -202,13 +195,12 @@ class _ProductInfoBlock extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 8),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              gradient: EdCommerceTheme.accentGradient,
+              color: EdCommerceTheme.accent,
               borderRadius: BorderRadius.circular(999),
-              boxShadow: [BoxShadow(color: EdCommerceTheme.accent.withValues(alpha: 0.25), blurRadius: 8, offset: const Offset(0, 3))],
             ),
             child: const Text('في الفاتورة', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white)),
           ),
-        Text(product.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.35)),
+        Text(product.name, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.35)),
         const SizedBox(height: 8),
         Wrap(
           spacing: 6,

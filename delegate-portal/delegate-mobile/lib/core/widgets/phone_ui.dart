@@ -114,7 +114,6 @@ class EdPhoneHeader extends StatelessWidget {
             ),
           ),
         ),
-      ),
     );
   }
 }
@@ -179,7 +178,7 @@ class EdPhoneServiceCard extends StatelessWidget {
               children: [
                 Container(
                   height: 4,
-                  decoration: BoxDecoration(gradient: AppColors.moduleGradient(app.iconColor)),
+                  color: app.iconColor,
                 ),
                 Expanded(
                   child: Padding(
@@ -193,10 +192,9 @@ class EdPhoneServiceCard extends StatelessWidget {
                               width: 48,
                               height: 48,
                               decoration: BoxDecoration(
-                                gradient: AppColors.moduleSoftGradient(app.iconColor),
+                                color: app.iconColor.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(color: app.iconColor.withValues(alpha: 0.12)),
-                                boxShadow: [BoxShadow(color: app.iconColor.withValues(alpha: 0.12), blurRadius: 10, offset: const Offset(0, 4))],
                               ),
                               child: Icon(app.icon, color: app.iconColor, size: 24),
                             ),
@@ -205,7 +203,7 @@ class EdPhoneServiceCard extends StatelessWidget {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                                 decoration: BoxDecoration(
-                                  gradient: AppColors.moduleSoftGradient(app.iconColor),
+                                  color: app.iconColor.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(999),
                                   border: Border.all(color: app.iconColor.withValues(alpha: 0.2)),
                                 ),
@@ -216,7 +214,7 @@ class EdPhoneServiceCard extends StatelessWidget {
                         const Spacer(),
                         Text(
                           app.name,
-                          maxLines: 2,
+                          maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.3),
                         ),
@@ -273,11 +271,7 @@ class EdPhoneServiceTile extends StatelessWidget {
                   width: 54,
                   height: 54,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topRight,
-                      end: Alignment.bottomLeft,
-                      colors: [app.iconBg, app.iconBg.withValues(alpha: 0.5)],
-                    ),
+                    color: app.iconBg,
                     borderRadius: BorderRadius.circular(AppColors.radius),
                     border: Border.all(color: app.iconColor.withValues(alpha: 0.12)),
                   ),
@@ -288,7 +282,7 @@ class EdPhoneServiceTile extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(app.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.25)),
+                      Text(app.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.25)),
                       const SizedBox(height: 3),
                       Text(app.hint, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted)),
                     ],
@@ -370,7 +364,7 @@ class EdPhoneStatsCard extends StatelessWidget {
         children: [
           Container(
             height: 3,
-            decoration: const BoxDecoration(gradient: AppColors.accentGradient),
+            decoration: const BoxDecoration(color: AppColors.accentTeal),
           ),
           IntrinsicHeight(
             child: Row(
@@ -402,10 +396,7 @@ class EdPhoneStatsCard extends StatelessWidget {
             width: 32,
             height: 32,
             margin: const EdgeInsets.only(bottom: 6),
-            decoration: BoxDecoration(
-              gradient: AppColors.moduleSoftGradient(color),
-              borderRadius: BorderRadius.circular(10),
-            ),
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
             child: Icon(icon, size: 16, color: color),
           ),
           Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: color, height: 1)),
@@ -515,123 +506,82 @@ class EdPhoneHomeHero extends StatelessWidget {
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(EdSpacing.page, top + 10, EdSpacing.page, 20),
       decoration: const BoxDecoration(
-        gradient: AppColors.homeSkyGradient,
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
       ),
-      child: Stack(
-        clipBehavior: Clip.none,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Positioned(
-            top: 0,
-            right: -24,
-            child: IgnorePointer(
-              child: Container(
-                width: 110,
-                height: 110,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.accentTeal.withValues(alpha: 0.1),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: -10,
-            left: -16,
-            child: IgnorePointer(
-              child: Container(
-                width: 90,
-                height: 90,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.accentBlue.withValues(alpha: 0.08),
-                ),
-              ),
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          Row(
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.borderLight),
-                      boxShadow: AppColors.softShadow,
-                    ),
-                    child: Image.asset('assets/logo.png', width: 26, height: 26),
-                  ),
-                  const SizedBox(width: 10),
-                  const Text(
-                    'Edari',
-                    style: TextStyle(color: Color(0xFF334155), fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 0.4),
-                  ),
-                  const Spacer(),
-                  if (onRefresh != null) _heroBtn(Icons.refresh_rounded, onRefresh!),
-                  if (onSettings != null) ...[
-                    const SizedBox(width: 8),
-                    _heroBtn(Icons.settings_outlined, onSettings!),
-                  ],
-                ],
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceAlt,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.borderLight),
+                ),
+                child: Image.asset('assets/logo.png', width: 26, height: 26),
               ),
-              const SizedBox(height: 24),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 64,
-                    height: 64,
-                    padding: const EdgeInsets.all(3),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: AppColors.homeSunGradient,
-                      boxShadow: [BoxShadow(color: AppColors.accentTeal.withValues(alpha: 0.18), blurRadius: 14, offset: const Offset(0, 5))],
+              const SizedBox(width: 10),
+              const Text(
+                'Edari',
+                style: TextStyle(color: AppColors.navy, fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 0.4),
+              ),
+              const Spacer(),
+              if (onRefresh != null) _heroBtn(Icons.refresh_rounded, onRefresh!),
+              if (onSettings != null) ...[
+                const SizedBox(width: 8),
+                _heroBtn(Icons.settings_outlined, onSettings!),
+              ],
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.surfaceAlt,
+                  border: Border.all(color: AppColors.accentTeal.withValues(alpha: 0.35), width: 2),
+                ),
+                child: Text(initial, style: const TextStyle(color: AppColors.navy, fontSize: 24, fontWeight: FontWeight.w800)),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'مرحباً بك',
+                      style: TextStyle(color: AppColors.muted, fontSize: 13, fontWeight: FontWeight.w600),
                     ),
-                    child: Container(
-                      alignment: Alignment.center,
+                    const SizedBox(height: 4),
+                    Text(
+                      name,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: AppColors.navy, fontSize: 26, fontWeight: FontWeight.w800, height: 1.2, letterSpacing: -0.3),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                       decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: AppColors.surface,
-                        border: Border.all(color: AppColors.borderLight),
+                        color: AppColors.accentTeal.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: AppColors.accentTeal.withValues(alpha: 0.18)),
                       ),
-                      child: Text(initial, style: const TextStyle(color: AppColors.accentTeal, fontSize: 24, fontWeight: FontWeight.w800)),
+                      child: const Text(
+                        'بوابة المندوب',
+                        style: TextStyle(color: AppColors.accentTeal, fontSize: 11, fontWeight: FontWeight.w800),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'مرحباً بك',
-                          style: TextStyle(color: AppColors.muted, fontSize: 13, fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Color(0xFF1E293B), fontSize: 26, fontWeight: FontWeight.w800, height: 1.2, letterSpacing: -0.3),
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: AppColors.accentTeal.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: AppColors.accentTeal.withValues(alpha: 0.18)),
-                          ),
-                          child: const Text(
-                            'بوابة المندوب',
-                            style: TextStyle(color: AppColors.accentTeal, fontSize: 11, fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),

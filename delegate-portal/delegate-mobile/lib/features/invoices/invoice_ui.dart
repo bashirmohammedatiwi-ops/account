@@ -25,13 +25,9 @@ class EdInvoiceExportBar extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           child: Ink(
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [EdAccountsTheme.accentSoft, EdAccountsTheme.card],
-            ),
+            color: EdAccountsTheme.accentSoft,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: EdAccountsTheme.accent.withValues(alpha: 0.35)),
+            border: Border.all(color: EdAccountsTheme.accent.withValues(alpha: 0.25)),
             boxShadow: AppColors.softShadow,
           ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -79,8 +75,8 @@ class EdInvoiceDocPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            height: 5,
-            decoration: const BoxDecoration(gradient: AppColors.accentGradient),
+            height: 4,
+            color: EdAccountsTheme.accent,
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),

@@ -483,11 +483,7 @@ class ErrorView extends StatelessWidget {
                 width: 64,
                 height: 64,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topRight,
-                    end: Alignment.bottomLeft,
-                    colors: [AppColors.dangerSoft, AppColors.danger.withValues(alpha: 0.08)],
-                  ),
+                  color: AppColors.dangerSoft,
                   shape: BoxShape.circle,
                   border: Border.all(color: AppColors.danger.withValues(alpha: 0.15)),
                 ),
@@ -497,7 +493,7 @@ class ErrorView extends StatelessWidget {
               Text(message, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.navy)),
               if (onRetry != null) ...[
                 const SizedBox(height: 18),
-                EdPrimaryButton(label: 'إعادة المحاولة', onPressed: onRetry, fullWidth: false, gradient: true, icon: Icons.refresh_rounded),
+                EdPrimaryButton(label: 'إعادة المحاولة', onPressed: onRetry, fullWidth: false, gradient: false, icon: Icons.refresh_rounded),
               ],
             ],
           ),
@@ -534,7 +530,7 @@ class StatCard extends StatelessWidget {
             height: 4,
             margin: const EdgeInsets.only(bottom: 10),
             decoration: BoxDecoration(
-              gradient: AppColors.moduleGradient(c),
+              color: c,
               borderRadius: BorderRadius.circular(99),
             ),
           ),
@@ -578,7 +574,7 @@ class EmptyState extends StatelessWidget {
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  gradient: AppColors.moduleSoftGradient(AppColors.muted),
+                  color: AppColors.surfaceAlt,
                   borderRadius: BorderRadius.circular(AppColors.radiusLg),
                   border: Border.all(color: AppColors.borderLight),
                 ),

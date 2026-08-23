@@ -424,11 +424,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
           borderRadius: BorderRadius.circular(999),
           child: Ink(
             decoration: BoxDecoration(
-              gradient: active ? AppColors.buttonGradient : null,
-              color: active ? null : AppColors.surface,
+              color: active ? AppColors.navy : AppColors.surface,
               borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: active ? Colors.transparent : AppColors.borderLight),
-              boxShadow: active ? AppColors.softShadow : null,
+              border: Border.all(color: active ? AppColors.navy : AppColors.borderLight),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Text(

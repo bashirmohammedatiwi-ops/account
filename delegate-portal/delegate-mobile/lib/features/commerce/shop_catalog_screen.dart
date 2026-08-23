@@ -38,11 +38,23 @@ class _ShopCatalogScreenState extends ConsumerState<ShopCatalogScreen> {
   final _barcodeCtrl = TextEditingController();
   final _debouncer = Debouncer();
   bool _ready = false;
+  String? _bootstrapError;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
+  }
+
+  @override
+  void didUpdateWidget(ShopCatalogScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialBranchId != widget.initialBranchId ||
+        oldWidget.initialSectionId != widget.initialSectionId) {
+      _ready = false;
+      _bootstrapError = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
+    }
   }
 
   @override
@@ -53,34 +65,43 @@ class _ShopCatalogScreenState extends ConsumerState<ShopCatalogScreen> {
   }
 
   Future<void> _bootstrap() async {
-    final agentId = ref.read(authProvider).agent?.id;
-    final notifier = ref.read(invoiceDraftProvider.notifier);
-    if (agentId != null) await notifier.load(agentId);
+    try {
+      final agentId = ref.read(authProvider).agent?.id;
+      final notifier = ref.read(invoiceDraftProvider.notifier);
+      if (agentId != null) await notifier.load(agentId);
 
-    var branchId = widget.initialBranchId ?? notifier.branchId;
-    var sectionId = widget.initialSectionId ?? notifier.sectionId;
+      var branchId = widget.initialBranchId ?? notifier.branchId;
+      var sectionId = widget.initialSectionId ?? notifier.sectionId;
 
-    if (branchId == null) {
-      if (mounted) context.go('/shop');
-      return;
+      if (branchId == null) {
+        if (mounted) context.go('/shop');
+        return;
+      }
+
+      final branches = await ref.read(catalogBranchesProvider.future);
+      final sections = await ref.read(catalogSectionsProvider(branchId).future);
+      if (sectionId == null && sections.isNotEmpty) sectionId = sections.first.id;
+
+      notifier.branchId = branchId;
+      notifier.sectionId = sectionId;
+      notifier.branchName = branches.where((b) => b.id == branchId).map((b) => b.name).firstOrNull;
+      notifier.sectionName = sections.where((s) => s.id == sectionId).map((s) => s.name).firstOrNull;
+      if (agentId != null) await notifier.persist(agentId);
+
+      if (!mounted) return;
+      setState(() {
+        _branchId = branchId;
+        _sectionId = sectionId;
+        _ready = true;
+        _bootstrapError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _ready = true;
+        _bootstrapError = e.toString();
+      });
     }
-
-    final branches = await ref.read(catalogBranchesProvider.future);
-    final sections = await ref.read(catalogSectionsProvider(branchId).future);
-    if (sectionId == null && sections.isNotEmpty) sectionId = sections.first.id;
-
-    notifier.branchId = branchId;
-    notifier.sectionId = sectionId;
-    notifier.branchName = branches.where((b) => b.id == branchId).map((b) => b.name).firstOrNull;
-    notifier.sectionName = sections.where((s) => s.id == sectionId).map((s) => s.name).firstOrNull;
-    if (agentId != null) await notifier.persist(agentId);
-
-    if (!mounted) return;
-    setState(() {
-      _branchId = branchId;
-      _sectionId = sectionId;
-      _ready = true;
-    });
   }
 
   Future<void> _persistDraft() async {
@@ -242,7 +263,7 @@ class _ShopCatalogScreenState extends ConsumerState<ShopCatalogScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_ready || _branchId == null || _sectionId == null) {
+    if (!_ready || _branchId == null) {
       return AppPage(
         title: 'المنتجات',
         showBack: true,
@@ -251,10 +272,38 @@ class _ShopCatalogScreenState extends ConsumerState<ShopCatalogScreen> {
       );
     }
 
+    if (_bootstrapError != null) {
+      return AppPage(
+        title: 'المنتجات',
+        showBack: true,
+        onBack: () => context.go('/shop'),
+        child: ErrorView(message: _bootstrapError!, onRetry: () {
+          setState(() {
+            _ready = false;
+            _bootstrapError = null;
+          });
+          _bootstrap();
+        }),
+      );
+    }
+
+    if (_sectionId == null) {
+      return AppPage(
+        title: 'المنتجات',
+        showBack: true,
+        onBack: () => context.go('/shop'),
+        child: const EmptyState(
+          message: 'لا توجد أقسام فرعية في هذا القسم الرئيسي',
+          icon: Icons.category_outlined,
+        ),
+      );
+    }
+
     final branchesAsync = ref.watch(catalogBranchesProvider);
     final sectionsAsync = ref.watch(catalogSectionsProvider(_branchId!));
     final productsAsync = ref.watch(catalogProductsProvider(_sectionId!));
     final draft = ref.watch(invoiceDraftProvider);
+    final lineCount = ref.watch(invoiceDraftProvider.select((d) => d.values.where(draftLineActive).length));
     final customer = ref.read(invoiceDraftProvider.notifier).customer;
     final layout = EdLayout.of(context);
 
@@ -376,7 +425,7 @@ class _ShopCatalogScreenState extends ConsumerState<ShopCatalogScreen> {
             ),
             productsAsync.maybeWhen(
               data: (products) => EdShopOrderDock(
-                lineCount: _lineCount(draft),
+                lineCount: lineCount,
                 totalLabel: fmtMoney(_total(products, draft)),
                 onPressed: () => _openInvoiceSheet(products),
               ),

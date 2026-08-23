@@ -202,21 +202,37 @@ function loadReceipt(id) {
   return mapReceipt(row, events);
 }
 
-function listReceipts({ agentId, status, limit = 200 } = {}) {
+function listReceipts({ agentId, status, fromDate, toDate, q, limit = 200 } = {}) {
   const where = [];
   const params = [];
   if (agentId) {
-    where.push('agent_id = ?');
+    where.push('r.agent_id = ?');
     params.push(agentId);
   }
   if (status && AGENT_VISIBLE.has(status)) {
-    where.push('status = ?');
+    where.push('r.status = ?');
     params.push(status);
   }
+  if (fromDate) {
+    where.push('date(r.receipt_date) >= date(?)');
+    params.push(fromDate);
+  }
+  if (toDate) {
+    where.push('date(r.receipt_date) <= date(?)');
+    params.push(toDate);
+  }
+  const query = String(q || '').trim();
+  if (query) {
+    const like = `%${query}%`;
+    where.push('(r.receipt_no LIKE ? OR ac.name1 LIKE ? OR ac.num LIKE ? OR a.name LIKE ?)');
+    params.push(like, like, like, like);
+  }
   const sql = `
-    SELECT * FROM receipts
+    SELECT r.* FROM receipts r
+    LEFT JOIN agents a ON a.id = r.agent_id
+    LEFT JOIN accounts ac ON ac.seq = r.customer_acc_seq
     ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-    ORDER BY id DESC
+    ORDER BY r.id DESC
     LIMIT ?
   `;
   params.push(Math.min(Math.max(Number(limit) || 200, 1), 500));
@@ -231,7 +247,16 @@ function receiptStats() {
       SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
       SUM(CASE WHEN status = 'reviewed' THEN 1 ELSE 0 END) AS reviewed,
       SUM(CASE WHEN status = 'posted' THEN 1 ELSE 0 END) AS posted,
-      SUM(CASE WHEN date(submitted_at) = date(?) OR date(created_at) = date(?) THEN 1 ELSE 0 END) AS today
+      SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected,
+      SUM(CASE WHEN date(submitted_at) = date(?) OR date(created_at) = date(?) THEN 1 ELSE 0 END) AS today,
+      SUM(amount) AS totalAmount,
+      SUM(CASE WHEN status = 'posted' THEN amount ELSE 0 END) AS postedAmount,
+      SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END) AS pendingAmount,
+      SUM(CASE WHEN status = 'reviewed' THEN amount ELSE 0 END) AS reviewedAmount,
+      SUM(CASE WHEN status NOT IN ('posted', 'rejected') THEN amount ELSE 0 END) AS unpostedAmount,
+      SUM(CASE WHEN status NOT IN ('posted', 'rejected') THEN 1 ELSE 0 END) AS unpostedCount,
+      SUM(commission) AS totalCommission,
+      SUM(discount) AS totalDiscount
     FROM receipts
   `).get(today, today);
   return {
@@ -239,7 +264,16 @@ function receiptStats() {
     pending: row?.pending || 0,
     reviewed: row?.reviewed || 0,
     posted: row?.posted || 0,
-    today: row?.today || 0
+    rejected: row?.rejected || 0,
+    today: row?.today || 0,
+    totalAmount: Number(row?.totalAmount || 0),
+    postedAmount: Number(row?.postedAmount || 0),
+    pendingAmount: Number(row?.pendingAmount || 0),
+    reviewedAmount: Number(row?.reviewedAmount || 0),
+    unpostedAmount: Number(row?.unpostedAmount || 0),
+    unpostedCount: row?.unpostedCount || 0,
+    totalCommission: Number(row?.totalCommission || 0),
+    totalDiscount: Number(row?.totalDiscount || 0)
   };
 }
 

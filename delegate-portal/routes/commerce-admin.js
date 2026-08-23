@@ -607,9 +607,20 @@ router.get('/receipts/accounts/search', (req, res) => {
 
 router.get('/receipts', (req, res) => {
   const status = String(req.query.status || '').trim();
+  const agentId = req.query.agentId ? Number(req.query.agentId) : undefined;
+  const fromDate = String(req.query.from || '').trim();
+  const toDate = String(req.query.to || '').trim();
+  const q = String(req.query.q || '').trim();
   res.json({
     ok: true,
-    receipts: listReceipts({ status: status || undefined, limit: 300 })
+    receipts: listReceipts({
+      status: status || undefined,
+      agentId: agentId && !Number.isNaN(agentId) ? agentId : undefined,
+      fromDate: fromDate || undefined,
+      toDate: toDate || undefined,
+      q: q || undefined,
+      limit: 300
+    })
   });
 });
 

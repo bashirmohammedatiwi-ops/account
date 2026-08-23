@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Edari Admin — لوحة التحكم</title>
-  <link rel="stylesheet" href="admin.css?v=20260818cust">
+  <link rel="stylesheet" href="admin.css?v=20260824admin">
 </head>
 <body>
   <div id="topLoader" class="top-loader" hidden aria-live="polite">
@@ -48,6 +48,10 @@
           <button type="button" class="nav-item" data-page="receipts">
             <span class="nav-icon ic-receipts" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span>
             <span class="nav-text">مبيعات المندوبين</span>
+          </button>
+          <button type="button" class="nav-item" data-page="receipts" data-rv-tab="delivery">
+            <span class="nav-icon ic-receipts" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8M10 9H8"/></svg></span>
+            <span class="nav-text">وصول استلام</span>
           </button>
           <button type="button" class="nav-item" data-page="promotionalVisits">
             <span class="nav-icon ic-promo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></span>
@@ -152,6 +156,14 @@
             <button type="button" class="module-card" data-goto="receipts">
               <span class="module-icon tone-teal"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span>
               <span class="module-body"><strong>مبيعات المندوبين</strong><span>سندات قبض وزبائن جدد</span></span>
+            </button>
+            <button type="button" class="module-card" data-goto="receipts" data-rv-tab="delivery">
+              <span class="module-icon tone-cyan"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+              <span class="module-body"><strong>وصول استلام</strong><span>وصولات المبلغ للزبون</span></span>
+            </button>
+            <button type="button" class="module-card" data-goto="promotionalVisits">
+              <span class="module-icon tone-violet"><svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg></span>
+              <span class="module-body"><strong>الزيادات الترويجية</strong><span>زيارات المندوبين للمحلات</span></span>
             </button>
             <button type="button" class="module-card" data-goto="salesReport">
               <span class="module-icon tone-indigo"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span>
@@ -350,7 +362,16 @@
                 <option value="rejected">مرفوض</option>
               </select>
             </div>
-            <div class="rv-kpis" id="receiptStats"></div>
+            <div class="rv-filter-bar">
+              <input type="search" id="receiptSearchFilter" class="search" placeholder="بحث: رقم السند، زبون، مندوب..." autocomplete="off">
+              <select id="receiptAgentFilter" class="search rv-filter">
+                <option value="">كل المندوبين</option>
+              </select>
+              <input type="date" id="receiptFromFilter" class="search rv-filter" title="من تاريخ">
+              <input type="date" id="receiptToFilter" class="search rv-filter" title="حتى تاريخ">
+              <button type="button" class="btn btn-soft btn-sm" id="btnReceiptFilterReset">مسح الفلاتر</button>
+            </div>
+            <div class="rv-kpis rv-kpis-wide" id="receiptStats"></div>
             <div class="table-scroll">
               <table class="data-table compact">
                 <thead>
@@ -1158,12 +1179,12 @@
   </div>
 
   <script src="config.js"></script>
-  <script src="admin.js?v=20260818cust"></script>
-  <script src="admin-commerce.js?v=20260818cust"></script>
-  <script src="admin-receipts.js?v=20260818cust"></script>
-  <script src="admin-delivery-receipts.js?v=20260823dr"></script>
-  <script src="admin-customers.js?v=20260818cust"></script>
-  <script src="admin-promotional-visits.js?v=20260823promo"></script>
+  <script src="admin.js?v=20260824admin"></script>
+  <script src="admin-commerce.js?v=20260824admin"></script>
+  <script src="admin-receipts.js?v=20260824admin"></script>
+  <script src="admin-delivery-receipts.js?v=20260824admin"></script>
+  <script src="admin-customers.js?v=20260824admin"></script>
+  <script src="admin-promotional-visits.js?v=20260824admin"></script>
   <script src="admin-sales-report.js?v=20260709treeFix3"></script>
   <script src="admin-account-statements.js?v=20260615kpi"></script>
   <script src="admin-price-sync.js?v=20260703"></script>

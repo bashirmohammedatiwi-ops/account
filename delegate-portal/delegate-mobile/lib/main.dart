@@ -32,7 +32,7 @@ class EdariDelegateApp extends ConsumerWidget {
     ref.listen(authProvider, (prev, next) {
       if (prev?.isAuthenticated != true && next.isAuthenticated) {
         ref.read(delegateDataRefreshProvider)();
-        Future.microtask(() => ref.read(syncEngineProvider).fullSync());
+        Future.microtask(() => ref.read(syncEngineProvider).fullSync(deepCatalog: false));
       }
     });
 

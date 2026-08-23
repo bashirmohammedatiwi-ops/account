@@ -14,7 +14,6 @@ final delegateDataRefreshProvider = Provider<void Function()>((ref) {
     ref.invalidate(deliveryReceiptsListProvider);
     ref.invalidate(customerRequestsListProvider);
     ref.invalidate(promotionalVisitsListProvider);
-    ref.invalidate(catalogBranchesProvider);
     ref.read(syncStatusProvider.notifier).refreshPendingCount();
   };
 });

@@ -69,7 +69,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: AppColors.bg,
+        backgroundColor: Colors.white,
         body: wide
             ? Row(
                 children: [
@@ -90,11 +90,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            padding: EdgeInsets.fromLTRB(EdSpacing.page, top + 40, EdSpacing.page, 56),
-            decoration: BoxDecoration(
-              gradient: AppColors.brandGradient,
-              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(AppColors.radius2xl)),
-              boxShadow: AppColors.elevatedShadow,
+            padding: EdgeInsets.fromLTRB(EdSpacing.page, top + 40, EdSpacing.page, 48),
+            decoration: const BoxDecoration(
+              color: AppColors.navy,
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(AppColors.radius2xl)),
             ),
             child: Column(
               children: [
@@ -187,7 +186,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
         ],
         const SizedBox(height: EdSpacing.xl),
-        EdPrimaryButton(label: 'دخول', onPressed: _submit, loading: _loading, gradient: true, icon: Icons.login_rounded),
+        EdPrimaryButton(label: 'دخول', onPressed: _submit, loading: _loading, icon: Icons.login_rounded),
       ],
     );
   }

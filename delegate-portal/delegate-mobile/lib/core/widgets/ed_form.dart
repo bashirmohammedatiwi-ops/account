@@ -40,17 +40,13 @@ class EdFormCard extends StatelessWidget {
         children: [
           Container(
             height: 4,
-            decoration: const BoxDecoration(gradient: AppColors.accentGradient),
+            color: AppColors.navy,
           ),
           Container(
             padding: const EdgeInsets.fromLTRB(EdSpacing.xl, EdSpacing.lg, EdSpacing.xl, EdSpacing.md),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topRight,
-                end: Alignment.bottomLeft,
-                colors: [AppColors.surfaceMuted, AppColors.surface],
-              ),
-              border: const Border(bottom: BorderSide(color: AppColors.borderLight)),
+            decoration: const BoxDecoration(
+              color: AppColors.surfaceAlt,
+              border: Border(bottom: BorderSide(color: AppColors.borderLight)),
             ),
             child: Row(
               children: [
@@ -60,9 +56,9 @@ class EdFormCard extends StatelessWidget {
                     height: 48,
                     margin: const EdgeInsetsDirectional.only(end: EdSpacing.md),
                     decoration: BoxDecoration(
-                      gradient: AppColors.moduleSoftGradient(iconColor ?? AppColors.accentTeal),
+                      color: (iconColor ?? AppColors.accentTeal).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(AppColors.radiusSm),
-                      boxShadow: [BoxShadow(color: (iconColor ?? AppColors.accentTeal).withValues(alpha: 0.15), blurRadius: 10, offset: const Offset(0, 4))],
+                      border: Border.all(color: AppColors.borderLight),
                     ),
                     child: Icon(icon, color: iconColor ?? AppColors.accentTeal, size: 24),
                   ),
@@ -440,7 +436,7 @@ class EdSubmitButton extends StatelessWidget {
       onPressed: onPressed,
       loading: loading,
       icon: icon ?? Icons.send_rounded,
-      gradient: true,
+      gradient: false,
     );
   }
 }

@@ -42,21 +42,22 @@ class ShopBranchPickerScreen extends ConsumerWidget {
   ];
 
   Future<void> _openBranch(BuildContext context, WidgetRef ref, CatalogBranch branch) async {
-    final sections = await ref.read(catalogSectionsProvider(branch.id).future);
-    final sectionId = sections.isNotEmpty ? sections.first.id : null;
-    final agentId = ref.read(authProvider).agent?.id;
-    final notifier = ref.read(invoiceDraftProvider.notifier);
-    notifier.branchId = branch.id;
-    notifier.sectionId = sectionId;
-    notifier.branchName = branch.name;
-    notifier.sectionName = sections.isNotEmpty ? sections.first.name : null;
-    if (agentId != null) await notifier.persist(agentId);
-    if (!context.mounted) return;
-
-    if (sectionId != null) {
-      context.go('/shop/${branch.id}/sections/$sectionId/products');
-    } else {
+    try {
+      final agentId = ref.read(authProvider).agent?.id;
+      final notifier = ref.read(invoiceDraftProvider.notifier);
+      notifier.branchId = branch.id;
+      notifier.branchName = branch.name;
+      notifier.sectionId = null;
+      notifier.sectionName = null;
+      if (agentId != null) await notifier.persist(agentId);
+      if (!context.mounted) return;
       context.go('/shop/${branch.id}/sections');
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذّر فتح القسم: $e'), behavior: SnackBarBehavior.floating),
+        );
+      }
     }
   }
 
@@ -90,8 +91,8 @@ class ShopBranchPickerScreen extends ConsumerWidget {
                     child: Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        gradient: AppColors.homeSkyGradient,
-                        borderRadius: BorderRadius.circular(24),
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(20),
                         border: Border.all(color: AppColors.borderLight),
                         boxShadow: AppColors.softShadow,
                       ),
@@ -136,7 +137,7 @@ class ShopBranchPickerScreen extends ConsumerWidget {
                       crossAxisCount: layout.isDesktop ? 3 : layout.isTablet ? 2 : 2,
                       crossAxisSpacing: 14,
                       mainAxisSpacing: 14,
-                      childAspectRatio: layout.isTablet ? 1.15 : 0.92,
+                      childAspectRatio: layout.isTablet ? 1.05 : 0.85,
                     ),
                     delegate: SliverChildBuilderDelegate(
                       (context, i) {
@@ -199,10 +200,7 @@ class _BranchCard extends StatelessWidget {
             children: [
               Container(
                 height: 4,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: [color, color.withValues(alpha: 0.4)]),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                ),
+                color: color,
               ),
               Expanded(
                 child: Padding(
@@ -223,7 +221,7 @@ class _BranchCard extends StatelessWidget {
                       const Spacer(),
                       Text(
                         branch.name,
-                        maxLines: 2,
+                        maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Color(0xFF1E293B), height: 1.3),
                       ),

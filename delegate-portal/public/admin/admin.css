@@ -342,13 +342,10 @@ body {
 
 .page {
   display: none;
-  content-visibility: hidden;
-  contain-intrinsic-size: 800px;
 }
 
 .page.active {
   display: block;
-  content-visibility: visible;
 }
 
 /* Panels */
@@ -1196,7 +1193,7 @@ body {
   display: grid;
   grid-template-columns: 240px 280px 1fr;
   gap: 14px;
-  min-height: calc(100vh - 200px);
+  min-height: auto;
 }
 
 .explorer-col {
@@ -4874,6 +4871,31 @@ td.row-actions .btn { margin-inline-start: 4px; }
 .rv-kpi.pending { background: #fff7ed; color: #9a3412; }
 .rv-kpi.ok { background: #ecfdf5; color: #047857; }
 .rv-kpi.posted { background: #eff6ff; color: #1d4ed8; }
+.rv-kpi.warn { background: #fef3c7; color: #92400e; }
+.rv-kpi small { display: block; font-size: 0.78rem; font-weight: 600; opacity: 0.9; margin-top: 2px; }
+
+.rv-kpis-wide {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rv-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.rv-filter-bar .search {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.rv-filter-bar .rv-filter {
+  flex: 0 1 auto;
+  min-width: 120px;
+}
 
 .rv-empty {
   text-align: center;

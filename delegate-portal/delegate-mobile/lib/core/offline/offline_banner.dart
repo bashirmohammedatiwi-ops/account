@@ -30,7 +30,7 @@ class OfflineBanner extends ConsumerWidget {
       color: color.withValues(alpha: 0.12),
       child: InkWell(
         onTap: () {
-          if (!offline) ref.read(syncEngineProvider).fullSync();
+          if (!offline) ref.read(syncEngineProvider).fullSync(deepCatalog: true);
         },
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -73,7 +73,7 @@ class _SyncBootstrapState extends ConsumerState<SyncBootstrap> {
   Widget build(BuildContext context) {
     ref.listen(connectivityProvider, (prev, next) {
       if (!_wasOnline && next.isOnline) {
-        ref.read(syncEngineProvider).fullSync();
+        ref.read(syncEngineProvider).fullSync(deepCatalog: true);
       }
       _wasOnline = next.isOnline;
     });

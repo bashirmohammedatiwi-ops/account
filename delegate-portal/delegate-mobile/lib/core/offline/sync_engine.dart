@@ -88,32 +88,26 @@ class SyncEngine {
     }
   }
 
-  Future<void> refreshCache() async {
+  Future<void> refreshCache({bool deepCatalog = false}) async {
     if (!_ref.read(connectivityProvider).isOnline) return;
     final client = _ref.read(apiClientProvider);
     final notifier = _ref.read(syncStatusProvider.notifier);
     notifier.setSyncing(true);
     try {
-      await client.getTrees();
-      await client.getOrders();
-      await client.getReceipts();
-      await client.getDeliveryReceipts();
-      await client.getCustomerRequests();
-      await client.getPromotionalVisits();
-      await client.getGovernorates();
-      await client.getVisitOutcomes();
+      await Future.wait([
+        client.getTrees(),
+        client.getOrders(),
+        client.getReceipts(),
+        client.getDeliveryReceipts(),
+        client.getCustomerRequests(),
+        client.getPromotionalVisits(),
+        client.getGovernorates(),
+        client.getVisitOutcomes(),
+        client.getCatalogBranches(),
+      ]);
 
-      final branches = await client.getCatalogBranches();
-      for (final branch in branches) {
-        final sections = await client.getCatalogSections(branch.id);
-        for (final section in sections) {
-          await client.getProducts(section.id);
-        }
-      }
-
-      final trees = await client.getTrees();
-      for (final tree in trees) {
-        await client.getPickableCustomers(tree.seq);
+      if (deepCatalog) {
+        await _refreshCatalogDeep();
       }
 
       notifier.markSynced();
@@ -125,9 +119,23 @@ class SyncEngine {
     }
   }
 
-  Future<void> fullSync() async {
+  Future<void> _refreshCatalogDeep() async {
+    final client = _ref.read(apiClientProvider);
+    final branches = await client.getCatalogBranches();
+    for (final branch in branches) {
+      final sections = await client.getCatalogSections(branch.id);
+      for (final section in sections) {
+        await client.getProducts(section.id);
+      }
+    }
+
+    final trees = await client.getTrees();
+    await Future.wait(trees.map((tree) => client.getPickableCustomers(tree.seq)));
+  }
+
+  Future<void> fullSync({bool deepCatalog = true}) async {
     await syncPending();
-    await refreshCache();
+    await refreshCache(deepCatalog: deepCatalog);
   }
 
   Future<void> _processEntry(ApiClient api, OutboxEntry entry) async {

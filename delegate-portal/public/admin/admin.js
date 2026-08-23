@@ -181,8 +181,21 @@ const PAGE_META = {
   agents: { title: 'المندوبون', sub: 'حسابات الدخول وصلاحيات الشجرات' }
 };
 
-function showPage(name) {
-  document.querySelectorAll('.nav-item').forEach((n) => n.classList.toggle('active', n.dataset.page === name));
+let pendingRvTab = null;
+
+function showPage(name, opts = {}) {
+  if (opts.rvTab) pendingRvTab = opts.rvTab;
+  else if (name === 'receipts') pendingRvTab = 'receipts';
+  else pendingRvTab = null;
+  const rvTab = opts.rvTab || pendingRvTab;
+  document.querySelectorAll('.nav-item').forEach((n) => {
+    const page = n.dataset.page;
+    const tab = n.dataset.rvTab;
+    let active = page === name;
+    if (active && tab) active = tab === rvTab;
+    if (active && name === 'receipts' && !tab && rvTab && rvTab !== 'receipts') active = false;
+    n.classList.toggle('active', active);
+  });
   document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p.id === `page-${name}`));
   const meta = PAGE_META[name] || { title: '', sub: '' };
   const titleEl = document.getElementById('pageTitle');
@@ -201,8 +214,15 @@ function showPage(name) {
   } else {
     stopSyncLogPolling();
   }
-  if (window.commercePages?.[name]) void window.commercePages[name]();
-  if (window.adminPages?.[name]) void window.adminPages[name]();
+  const loadPage = async () => {
+    if (window.commercePages?.[name]) await window.commercePages[name]();
+    if (window.adminPages?.[name]) await window.adminPages[name]();
+    if (name === 'receipts' && pendingRvTab && typeof setRvTab === 'function') {
+      setRvTab(pendingRvTab);
+      pendingRvTab = null;
+    }
+  };
+  void loadPage();
 }
 
 async function loadDashboard() {
@@ -1474,11 +1494,11 @@ document.getElementById('agentSaveBtn')?.addEventListener('click', (e) => {
 });
 
 document.querySelectorAll('.nav-item').forEach((btn) => {
-  btn.addEventListener('click', () => showPage(btn.dataset.page));
+  btn.addEventListener('click', () => showPage(btn.dataset.page, { rvTab: btn.dataset.rvTab }));
 });
 
 document.querySelectorAll('.quick-card[data-goto], .shortcut[data-goto], .module-card[data-goto]').forEach((btn) => {
-  btn.addEventListener('click', () => showPage(btn.dataset.goto));
+  btn.addEventListener('click', () => showPage(btn.dataset.goto, { rvTab: btn.dataset.rvTab }));
 });
 
 async function loadConfig() {

@@ -8,7 +8,9 @@ const receiptAdmin = {
     discount: { seq: '', num: '', name: '' }
   },
   searchTimers: {},
-  selected: null
+  selected: null,
+  agents: [],
+  filterTimer: null
 };
 
 const RECEIPT_SETTING_FIELDS = [
@@ -164,18 +166,71 @@ function receiptRowActions(r) {
     <button type="button" class="btn btn-primary btn-sm" data-post-receipt="${r.id}">ترحيل</button>` : ''}`;
 }
 
-async function loadReceiptsPage() {
+function receiptFilterQuery() {
   const status = document.getElementById('receiptStatusFilter')?.value || '';
+  const agentId = document.getElementById('receiptAgentFilter')?.value || '';
+  const from = document.getElementById('receiptFromFilter')?.value || '';
+  const to = document.getElementById('receiptToFilter')?.value || '';
+  const q = document.getElementById('receiptSearchFilter')?.value?.trim() || '';
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (agentId) params.set('agentId', agentId);
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  if (q) params.set('q', q);
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
+async function loadReceiptAgents() {
+  if (receiptAdmin.agents.length) return receiptAdmin.agents;
+  try {
+    const data = await api('/api/admin/agents');
+    receiptAdmin.agents = data.agents || [];
+    const sel = document.getElementById('receiptAgentFilter');
+    if (sel && sel.options.length <= 1) {
+      receiptAdmin.agents.forEach((a) => {
+        const opt = document.createElement('option');
+        opt.value = String(a.id);
+        opt.textContent = a.name || a.username || `#${a.id}`;
+        sel.appendChild(opt);
+      });
+    }
+  } catch (_) {
+    receiptAdmin.agents = [];
+  }
+  return receiptAdmin.agents;
+}
+
+function resetReceiptFilters() {
+  const ids = ['receiptSearchFilter', 'receiptFromFilter', 'receiptToFilter'];
+  ids.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const status = document.getElementById('receiptStatusFilter');
+  if (status) status.value = '';
+  const agent = document.getElementById('receiptAgentFilter');
+  if (agent) agent.value = '';
+  void loadReceiptsPage();
+}
+
+async function loadReceiptsPage() {
+  const qs = receiptFilterQuery();
   const [list, stats] = await Promise.all([
-    commerceApi(`/receipts${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+    commerceApi(`/receipts${qs}`),
     commerceApi('/receipts/stats')
   ]);
   const s = stats.stats || {};
   document.getElementById('receiptStats').innerHTML = `
-    <span class="rv-kpi pending">انتظار <strong>${s.pending || 0}</strong></span>
-    <span class="rv-kpi ok">جاهز <strong>${s.reviewed || 0}</strong></span>
-    <span class="rv-kpi posted">مُرحَّل <strong>${s.posted || 0}</strong></span>
-    <span class="rv-kpi">اليوم <strong>${s.today || 0}</strong></span>`;
+    <span class="rv-kpi pending">انتظار <strong>${s.pending || 0}</strong> <small dir="ltr">${fmtMoney(s.pendingAmount || 0)}</small></span>
+    <span class="rv-kpi ok">جاهز <strong>${s.reviewed || 0}</strong> <small dir="ltr">${fmtMoney(s.reviewedAmount || 0)}</small></span>
+    <span class="rv-kpi posted">مُرحَّل <strong>${s.posted || 0}</strong> <small dir="ltr">${fmtMoney(s.postedAmount || 0)}</small></span>
+    <span class="rv-kpi warn">غير مُرحَّل <strong>${s.unpostedCount || 0}</strong> <small dir="ltr">${fmtMoney(s.unpostedAmount || 0)}</small></span>
+    <span class="rv-kpi">اليوم <strong>${s.today || 0}</strong></span>
+    <span class="rv-kpi">إجمالي <strong>${s.total || 0}</strong> <small dir="ltr">${fmtMoney(s.totalAmount || 0)}</small></span>
+    <span class="rv-kpi">عمولة <strong dir="ltr">${fmtMoney(s.totalCommission || 0)}</strong></span>
+    <span class="rv-kpi">حسم <strong dir="ltr">${fmtMoney(s.totalDiscount || 0)}</strong></span>`;
 
   document.getElementById('receiptsBody').innerHTML = (list.receipts || []).map((r) => `
     <tr>
@@ -438,6 +493,14 @@ async function postReceiptToEdariUi(id) {
 function initReceiptsAdmin() {
   document.getElementById('btnSaveReceiptSettings')?.addEventListener('click', () => saveReceiptSettings());
   document.getElementById('receiptStatusFilter')?.addEventListener('change', () => loadReceiptsPage());
+  document.getElementById('receiptAgentFilter')?.addEventListener('change', () => loadReceiptsPage());
+  document.getElementById('receiptFromFilter')?.addEventListener('change', () => loadReceiptsPage());
+  document.getElementById('receiptToFilter')?.addEventListener('change', () => loadReceiptsPage());
+  document.getElementById('btnReceiptFilterReset')?.addEventListener('click', () => resetReceiptFilters());
+  document.getElementById('receiptSearchFilter')?.addEventListener('input', () => {
+    clearTimeout(receiptAdmin.filterTimer);
+    receiptAdmin.filterTimer = setTimeout(() => loadReceiptsPage(), 280);
+  });
   document.addEventListener('click', (e) => {
     if (e.target.closest('[data-rv-acc], [data-rv-browse], .rv-acc-results')) return;
     document.querySelectorAll('.rv-acc-results').forEach((el) => { el.innerHTML = ''; });
@@ -447,6 +510,7 @@ function initReceiptsAdmin() {
 window.commercePages = window.commercePages || {};
 window.commercePages.receipts = async () => {
   updateReceiptPostAlert();
+  await loadReceiptAgents();
   await loadReceiptSettings();
   await loadReceiptsPage();
   if (typeof window.loadCustomerRequestsPage === 'function') {

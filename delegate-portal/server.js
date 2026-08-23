@@ -43,7 +43,15 @@ app.use(priceAppRoutes);
 
 app.use('/uploads', express.static(UPLOAD_ROOT, { maxAge: '7d' }));
 
-app.use('/admin', express.static(path.join(__dirname, 'public', 'admin')));
+app.use('/admin', (req, res, next) => {
+  if (/\.(css|js|html)$/i.test(req.path)) {
+    res.set('Cache-Control', 'no-cache, must-revalidate');
+  }
+  next();
+}, express.static(path.join(__dirname, 'public', 'admin'), {
+  etag: false,
+  lastModified: false
+}));
 app.get('/admin/*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin', 'index.html'));
 });

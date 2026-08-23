@@ -9,7 +9,7 @@ class AuthBootScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: Colors.white,
       body: EdPageBackground(
         child: Center(
           child: Container(
@@ -28,8 +28,9 @@ class AuthBootScreen extends StatelessWidget {
                   height: 56,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    gradient: AppColors.moduleSoftGradient(AppColors.accentTeal),
+                    color: AppColors.accentSoft,
                     borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.borderLight),
                   ),
                   child: const CircularProgressIndicator(strokeWidth: 3, color: AppColors.accentTeal),
                 ),

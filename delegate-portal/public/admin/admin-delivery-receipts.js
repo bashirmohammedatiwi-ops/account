@@ -102,7 +102,7 @@ async function saveDeliveryReceiptNote(id) {
     method: 'PATCH',
     body: JSON.stringify({ adminNote: note })
   });
-  toast('تم حفظ الملاحظة');
+  showToast('تم حفظ الملاحظة');
   await loadDeliveryReceiptsPage();
   await openDeliveryReceiptDetail(id);
 }
@@ -111,7 +111,7 @@ async function deleteDeliveryReceiptUi(id) {
   if (!confirm('حذف وصل الاستلام؟')) return;
   await commerceApi(`/delivery-receipts/${id}`, { method: 'DELETE' });
   document.getElementById('deliveryReceiptDetailPanel')?.classList.add('hidden');
-  toast('تم الحذف');
+  showToast('تم الحذف');
   await loadDeliveryReceiptsPage();
 }
 

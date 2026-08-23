@@ -16,6 +16,10 @@ class ShopHubScreen extends ConsumerWidget {
     if (branchId == null) {
       return const ShopBranchPickerScreen();
     }
-    return ShopCatalogScreen(initialBranchId: branchId, initialSectionId: sectionId);
+    return ShopCatalogScreen(
+      key: ValueKey('catalog-$branchId-${sectionId ?? 0}'),
+      initialBranchId: branchId,
+      initialSectionId: sectionId,
+    );
   }
 }
