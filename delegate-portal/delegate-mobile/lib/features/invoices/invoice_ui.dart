@@ -24,11 +24,16 @@ class EdInvoiceExportBar extends StatelessWidget {
           onTap: loading ? null : onExport,
           borderRadius: BorderRadius.circular(10),
           child: Ink(
-            decoration: BoxDecoration(
-              color: EdAccountsTheme.card,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: EdAccountsTheme.accent.withValues(alpha: 0.35)),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+              colors: [EdAccountsTheme.accentSoft, EdAccountsTheme.card],
             ),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: EdAccountsTheme.accent.withValues(alpha: 0.35)),
+            boxShadow: AppColors.softShadow,
+          ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -65,15 +70,18 @@ class EdInvoiceDocPanel extends StatelessWidget {
       width: double.infinity,
       decoration: BoxDecoration(
         color: EdAccountsTheme.card,
-        borderRadius: BorderRadius.circular(AppColors.radiusSm),
+        borderRadius: BorderRadius.circular(AppColors.radiusLg),
         border: Border.all(color: EdAccountsTheme.line),
-        boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
+        boxShadow: AppColors.cardShadow,
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(height: 3, color: EdAccountsTheme.accent),
+          Container(
+            height: 5,
+            decoration: const BoxDecoration(gradient: AppColors.accentGradient),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
             child: Row(

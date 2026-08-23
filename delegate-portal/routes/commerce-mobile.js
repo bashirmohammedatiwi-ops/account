@@ -216,4 +216,63 @@ router.delete('/customer-requests/:id', authAgent, (req, res) => {
   }
 });
 
+const { listGovernorates } = require('../lib/iraq-governorates');
+const {
+  createPromotionalVisit,
+  listPromotionalVisits,
+  loadPromotionalVisit,
+  deletePromotionalVisit,
+  OUTCOME_LABELS
+} = require('../lib/promotional-visits');
+
+router.get('/governorates', authAgent, (_req, res) => {
+  res.json({ ok: true, governorates: listGovernorates() });
+});
+
+router.get('/promotional-visits/outcomes', authAgent, (_req, res) => {
+  res.json({
+    ok: true,
+    outcomes: Object.entries(OUTCOME_LABELS).map(([code, label]) => ({ code, label }))
+  });
+});
+
+router.get('/promotional-visits', authAgent, (req, res) => {
+  const status = String(req.query.status || '').trim();
+  res.json({
+    ok: true,
+    visits: listPromotionalVisits({
+      agentId: req.agent.id,
+      status: status || undefined,
+      limit: 100
+    })
+  });
+});
+
+router.get('/promotional-visits/:id', authAgent, (req, res) => {
+  const visit = loadPromotionalVisit(Number(req.params.id));
+  if (!visit || visit.agentId !== req.agent.id) {
+    return res.status(404).json({ ok: false, error: 'الزيارة غير موجودة' });
+  }
+  res.json({ ok: true, visit });
+});
+
+router.post('/promotional-visits', authAgent, (req, res) => {
+  try {
+    const visit = createPromotionalVisit(req.agent.id, req.body || {});
+    res.json({ ok: true, visit });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.delete('/promotional-visits/:id', authAgent, (req, res) => {
+  try {
+    const result = deletePromotionalVisit(Number(req.params.id), { agentId: req.agent.id });
+    if (!result) return res.status(404).json({ ok: false, error: 'الزيارة غير موجودة' });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
 module.exports = router;

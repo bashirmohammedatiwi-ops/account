@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/accounts/accounts_hub_screen.dart';
+import '../../features/auth/auth_boot_screen.dart';
 import '../../features/auth/login_screen.dart';
 import '../../features/commerce/shop_hub_screen.dart';
 import '../../features/customers/customers_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/invoices/invoice_screen.dart';
 import '../../features/orders/orders_hub_screen.dart';
+import '../../features/promotional_visits/promotional_visits_screen.dart';
 import '../../features/receipts/receipts_screen.dart';
 import '../../features/reports/reports_screen.dart';
 import '../../features/settings/settings_screen.dart';
@@ -19,20 +21,28 @@ final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final auth = ref.watch(authProvider);
+  final refresh = _RouterRefresh(ref);
+  ref.onDispose(refresh.dispose);
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/home',
     redirect: (context, state) {
-      final loggingIn = state.matchedLocation == '/login';
-      if (auth.loading) return null;
+      final auth = ref.read(authProvider);
+      final loc = state.matchedLocation;
+      final loggingIn = loc == '/login';
+      final booting = loc == '/boot';
+      if (auth.loading) return booting ? null : '/boot';
       if (!auth.isAuthenticated) return loggingIn ? null : '/login';
-      if (loggingIn) return '/home';
+      if (loggingIn || booting) return '/home';
       return null;
     },
-    refreshListenable: _RouterRefresh(ref),
+    refreshListenable: refresh,
     routes: [
+      GoRoute(
+        path: '/boot',
+        builder: (_, _) => const AuthBootScreen(),
+      ),
       GoRoute(
         path: '/login',
         builder: (_, _) => const LoginScreen(),
@@ -106,6 +116,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/reports', builder: (_, _) => const ReportsScreen()),
           GoRoute(path: '/receipts', builder: (_, _) => const ReceiptsScreen()),
           GoRoute(path: '/customers', builder: (_, _) => const CustomersScreen()),
+          GoRoute(path: '/promotional-visits', builder: (_, _) => const PromotionalVisitsScreen()),
           GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
         ],
       ),

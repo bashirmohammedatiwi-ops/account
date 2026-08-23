@@ -30,7 +30,8 @@ abstract final class EdAccountsTheme {
   static const heroGradient = LinearGradient(
     begin: Alignment.topRight,
     end: Alignment.bottomLeft,
-    colors: [Color(0xFFF8FAFC), Color(0xFFEEF2F6)],
+    colors: [Color(0xFF0A1020), Color(0xFF1A3352), Color(0xFF0D9488)],
+    stops: [0.0, 0.55, 1.0],
   );
 
   static Color balanceColor(num? v) {

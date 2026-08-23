@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -13,6 +15,7 @@ const _tabRoots = {
   '/orders',
   '/receipts',
   '/customers',
+  '/promotional-visits',
   '/reports',
   '/settings',
 };
@@ -51,60 +54,74 @@ class EdPhoneHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final back = shouldShowPhoneBack(context, showBack: showBack);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: const Border(bottom: BorderSide(color: AppColors.borderLight)),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(EdSpacing.sm, compact ? 6 : 10, EdSpacing.lg, compact ? 12 : 16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              SizedBox(
-                width: 48,
-                child: back && onBack != null
-                    ? _HeaderIconBtn(icon: Icons.arrow_forward_rounded, onTap: onBack!)
-                    : null,
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (kicker != null)
-                      Text(
-                        kicker!,
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.accentTeal, letterSpacing: 0.4),
-                      ),
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: compact ? 18 : 21, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.2),
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface.withValues(alpha: 0.88),
+            border: Border(bottom: BorderSide(color: AppColors.borderLight.withValues(alpha: 0.85))),
+            boxShadow: AppColors.headerShadow,
+          ),
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(EdSpacing.sm, compact ? 6 : 10, EdSpacing.lg, compact ? 12 : 16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 48,
+                    child: back && onBack != null
+                        ? _HeaderIconBtn(icon: Icons.arrow_forward_rounded, onTap: onBack!)
+                        : null,
+                  ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (kicker != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              gradient: AppColors.moduleSoftGradient(AppColors.accentTeal),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(color: AppColors.accentTeal.withValues(alpha: 0.15)),
+                            ),
+                            child: Text(
+                              kicker!,
+                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppColors.accentTeal, letterSpacing: 0.3),
+                            ),
+                          ),
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: compact ? 18 : 22, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.2, letterSpacing: -0.2),
+                        ),
+                        if (subtitle != null && subtitle!.isNotEmpty)
+                          Text(
+                            subtitle!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
+                          ),
+                      ],
                     ),
-                    if (subtitle != null && subtitle!.isNotEmpty)
-                      Text(
-                        subtitle!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
-                      ),
-                  ],
-                ),
+                  ),
+                  if (actions != null)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (var i = 0; i < actions!.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 6),
+                          actions![i],
+                        ],
+                      ],
+                    ),
+                ],
               ),
-              if (actions != null)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (var i = 0; i < actions!.length; i++) ...[
-                      if (i > 0) const SizedBox(width: 6),
-                      actions![i],
-                    ],
-                  ],
-                ),
-            ],
+            ),
           ),
         ),
       ),
@@ -122,10 +139,19 @@ class _HeaderIconBtn extends StatelessWidget {
     return Material(
       color: AppColors.surfaceAlt,
       borderRadius: BorderRadius.circular(AppColors.radiusSm),
+      elevation: 0,
+      shadowColor: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppColors.radiusSm),
-        child: SizedBox(width: 42, height: 42, child: Icon(icon, color: AppColors.navy, size: 20)),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppColors.radiusSm),
+            border: Border.all(color: AppColors.borderLight),
+            boxShadow: AppColors.softShadow,
+          ),
+          child: SizedBox(width: 42, height: 42, child: Icon(icon, color: AppColors.navy, size: 20)),
+        ),
       ),
     );
   }
@@ -154,50 +180,66 @@ class EdPhoneServiceCard extends StatelessWidget {
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(AppColors.radiusLg),
             border: Border.all(color: AppColors.borderLight),
-            boxShadow: AppColors.softShadow,
+            boxShadow: AppColors.cardShadow,
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppColors.radiusLg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 46,
-                      height: 46,
-                      decoration: BoxDecoration(
-                        color: app.iconBg,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: app.iconColor.withValues(alpha: 0.1)),
-                      ),
-                      child: Icon(app.icon, color: app.iconColor, size: 24),
-                    ),
-                    const Spacer(),
-                    if (_showBadge)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: app.iconColor.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(999),
+                Container(
+                  height: 4,
+                  decoration: BoxDecoration(gradient: AppColors.moduleGradient(app.iconColor)),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                gradient: AppColors.moduleSoftGradient(app.iconColor),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: app.iconColor.withValues(alpha: 0.12)),
+                                boxShadow: [BoxShadow(color: app.iconColor.withValues(alpha: 0.12), blurRadius: 10, offset: const Offset(0, 4))],
+                              ),
+                              child: Icon(app.icon, color: app.iconColor, size: 24),
+                            ),
+                            const Spacer(),
+                            if (_showBadge)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                                decoration: BoxDecoration(
+                                  gradient: AppColors.moduleSoftGradient(app.iconColor),
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(color: app.iconColor.withValues(alpha: 0.2)),
+                                ),
+                                child: Text(app.badge!, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: app.iconColor)),
+                              ),
+                          ],
                         ),
-                        child: Text(app.badge!, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: app.iconColor)),
-                      ),
-                  ],
-                ),
-                const Spacer(),
-                Text(
-                  app.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.3),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  app.hint,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted),
+                        const Spacer(),
+                        Text(
+                          app.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.3),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          app.hint,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -331,36 +373,54 @@ class EdPhoneStatsCard extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppColors.radiusLg),
         border: Border.all(color: AppColors.borderLight),
-        boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.06), blurRadius: 20, offset: const Offset(0, 8))],
+        boxShadow: AppColors.cardShadow,
       ),
       clipBehavior: Clip.antiAlias,
-      child: IntrinsicHeight(
-        child: Row(
-          children: [
-            Expanded(child: _cell(treeCount, 'شجرة', AppColors.accentTeal)),
-            const VerticalDivider(width: 1, thickness: 1, color: AppColors.borderLight),
-            Expanded(child: _cell(customerCount, 'زبون', AppColors.navy)),
-            const VerticalDivider(width: 1, thickness: 1, color: AppColors.borderLight),
-            Expanded(child: _cell(orderCount, 'طلب', AppColors.warning)),
-            if (pendingTotal > 0) ...[
-              const VerticalDivider(width: 1, thickness: 1, color: AppColors.borderLight),
-              Expanded(child: _cell('$pendingTotal', 'بانتظار', const Color(0xFFB45309))),
-            ],
-          ],
-        ),
+      child: Column(
+        children: [
+          Container(
+            height: 3,
+            decoration: const BoxDecoration(gradient: AppColors.accentGradient),
+          ),
+          IntrinsicHeight(
+            child: Row(
+              children: [
+                Expanded(child: _cell(treeCount, 'شجرة', AppColors.accentTeal, Icons.account_tree_outlined)),
+                const VerticalDivider(width: 1, thickness: 1, color: AppColors.borderLight),
+                Expanded(child: _cell(customerCount, 'زبون', AppColors.navy, Icons.people_alt_outlined)),
+                const VerticalDivider(width: 1, thickness: 1, color: AppColors.borderLight),
+                Expanded(child: _cell(orderCount, 'طلب', AppColors.warning, Icons.shopping_bag_outlined)),
+                if (pendingTotal > 0) ...[
+                  const VerticalDivider(width: 1, thickness: 1, color: AppColors.borderLight),
+                  Expanded(child: _cell('$pendingTotal', 'بانتظار', AppColors.warning, Icons.schedule_rounded)),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _cell(String value, String label, Color color) {
+  Widget _cell(String value, String label, Color color, IconData icon) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 6),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          Container(
+            width: 32,
+            height: 32,
+            margin: const EdgeInsets.only(bottom: 6),
+            decoration: BoxDecoration(
+              gradient: AppColors.moduleSoftGradient(color),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 16, color: color),
+          ),
           Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: color, height: 1)),
-          const SizedBox(height: 4),
-          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
+          const SizedBox(height: 3),
+          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted)),
         ],
       ),
     );
@@ -434,7 +494,7 @@ class EdPhoneStatsRow extends StatelessWidget {
   }
 }
 
-/// بطل الشاشة الرئيسية
+/// بطل الشاشة الرئيسية — فاتح وأنيق
 class EdPhoneHomeHero extends StatelessWidget {
   const EdPhoneHomeHero({
     super.key,
@@ -463,75 +523,125 @@ class EdPhoneHomeHero extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.fromLTRB(EdSpacing.page, top + 12, EdSpacing.page, 44),
+      padding: EdgeInsets.fromLTRB(EdSpacing.page, top + 10, EdSpacing.page, 20),
       decoration: const BoxDecoration(
-        gradient: AppColors.brandGradient,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+        gradient: AppColors.homeSkyGradient,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(5),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: Image.asset('assets/logo.png', width: 24, height: 24),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Edari',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.92), fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.6),
-              ),
-              const Spacer(),
-              if (onRefresh != null) _heroBtn(Icons.refresh_rounded, onRefresh!),
-              if (onSettings != null) ...[
-                const SizedBox(width: 6),
-                _heroBtn(Icons.settings_outlined, onSettings!),
-              ],
-            ],
-          ),
-          const SizedBox(height: 24),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Container(
-                width: 56,
-                height: 56,
-                alignment: Alignment.center,
+          Positioned(
+            top: 0,
+            right: -24,
+            child: IgnorePointer(
+              child: Container(
+                width: 110,
+                height: 110,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.14),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                  color: AppColors.accentTeal.withValues(alpha: 0.1),
                 ),
-                child: Text(initial, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'مرحباً بك',
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 12, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800, height: 1.25),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'بوابة المندوب',
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 11, fontWeight: FontWeight.w700),
-                    ),
-                  ],
+            ),
+          ),
+          Positioned(
+            bottom: -10,
+            left: -16,
+            child: IgnorePointer(
+              child: Container(
+                width: 90,
+                height: 90,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.accentBlue.withValues(alpha: 0.08),
                 ),
+              ),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.borderLight),
+                      boxShadow: AppColors.softShadow,
+                    ),
+                    child: Image.asset('assets/logo.png', width: 26, height: 26),
+                  ),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'Edari',
+                    style: TextStyle(color: Color(0xFF334155), fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 0.4),
+                  ),
+                  const Spacer(),
+                  if (onRefresh != null) _heroBtn(Icons.refresh_rounded, onRefresh!),
+                  if (onSettings != null) ...[
+                    const SizedBox(width: 8),
+                    _heroBtn(Icons.settings_outlined, onSettings!),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 24),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: AppColors.homeSunGradient,
+                      boxShadow: [BoxShadow(color: AppColors.accentTeal.withValues(alpha: 0.18), blurRadius: 14, offset: const Offset(0, 5))],
+                    ),
+                    child: Container(
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.surface,
+                        border: Border.all(color: AppColors.borderLight),
+                      ),
+                      child: Text(initial, style: const TextStyle(color: AppColors.accentTeal, fontSize: 24, fontWeight: FontWeight.w800)),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'مرحباً بك',
+                          style: TextStyle(color: AppColors.muted, fontSize: 13, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Color(0xFF1E293B), fontSize: 26, fontWeight: FontWeight.w800, height: 1.2, letterSpacing: -0.3),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentTeal.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: AppColors.accentTeal.withValues(alpha: 0.18)),
+                          ),
+                          child: const Text(
+                            'بوابة المندوب',
+                            style: TextStyle(color: AppColors.accentTeal, fontSize: 11, fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -542,12 +652,20 @@ class EdPhoneHomeHero extends StatelessWidget {
 
   Widget _heroBtn(IconData icon, VoidCallback onTap) {
     return Material(
-      color: Colors.white.withValues(alpha: 0.1),
-      borderRadius: BorderRadius.circular(AppColors.radiusSm),
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(14),
+      elevation: 0,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppColors.radiusSm),
-        child: SizedBox(width: 42, height: 42, child: Icon(icon, color: Colors.white, size: 21)),
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.borderLight),
+            boxShadow: AppColors.softShadow,
+          ),
+          child: SizedBox(width: 44, height: 44, child: Icon(icon, color: const Color(0xFF475569), size: 21)),
+        ),
       ),
     );
   }
@@ -570,50 +688,62 @@ class EdPhoneDock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: const Border(top: BorderSide(color: AppColors.borderLight)),
-        boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.04), blurRadius: 12, offset: const Offset(0, -4))],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
-          child: Row(
-            children: List.generate(_items.length, (i) {
-              final item = _items[i];
-              final active = i == selected;
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () => onSelect(i),
-                  behavior: HitTestBehavior.opaque,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeOutCubic,
-                    margin: const EdgeInsets.symmetric(horizontal: 2),
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: active ? AppColors.accentSoft : Colors.transparent,
-                      borderRadius: BorderRadius.circular(AppColors.radiusSm),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(active ? item.activeIcon : item.icon, size: 22, color: active ? AppColors.accentTeal : AppColors.mutedLight),
-                        const SizedBox(height: 3),
-                        Text(
-                          item.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: active ? AppColors.accentTeal : AppColors.mutedLight),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppColors.radiusXl),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.surface.withValues(alpha: 0.92),
+              borderRadius: BorderRadius.circular(AppColors.radiusXl),
+              border: Border.all(color: AppColors.borderLight),
+              boxShadow: AppColors.dockShadow,
+            ),
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(6, 8, 6, 6),
+                child: Row(
+                  children: List.generate(_items.length, (i) {
+                    final item = _items[i];
+                    final active = i == selected;
+                    return Expanded(
+                      child: GestureDetector(
+                        onTap: () => onSelect(i),
+                        behavior: HitTestBehavior.opaque,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 240),
+                          curve: Curves.easeOutCubic,
+                          margin: const EdgeInsets.symmetric(horizontal: 2),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            gradient: active ? AppColors.moduleSoftGradient(AppColors.accentTeal) : null,
+                            color: active ? null : Colors.transparent,
+                            borderRadius: BorderRadius.circular(AppColors.radiusSm),
+                            border: active ? Border.all(color: AppColors.accentTeal.withValues(alpha: 0.15)) : null,
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(active ? item.activeIcon : item.icon, size: 22, color: active ? AppColors.accentTeal : AppColors.mutedLight),
+                              const SizedBox(height: 3),
+                              Text(
+                                item.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: active ? AppColors.accentTeal : AppColors.mutedLight),
+                              ),
+                            ],
+                          ),
                         ),
-                      ],
-                    ),
-                  ),
+                      ),
+                    );
+                  }),
                 ),
-              );
-            }),
+              ),
+            ),
           ),
         ),
       ),

@@ -270,6 +270,48 @@ class ApiClient {
     await _json('DELETE', '/customer-requests/$id');
   }
 
+  Future<List<IraqGovernorate>> getGovernorates() async {
+    final data = await _json('GET', '/governorates');
+    return (data['governorates'] as List)
+        .map((e) => IraqGovernorate.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  Future<List<VisitOutcome>> getVisitOutcomes() async {
+    final data = await _json('GET', '/promotional-visits/outcomes');
+    return (data['outcomes'] as List)
+        .map((e) => VisitOutcome.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  Future<List<PromotionalVisit>> getPromotionalVisits({String? status}) async {
+    final data = await _json('GET', '/promotional-visits', query: status != null ? {'status': status} : null);
+    return (data['visits'] as List)
+        .map((e) => PromotionalVisit.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  Future<PromotionalVisit> createPromotionalVisit({
+    required String governorateCode,
+    required String areaName,
+    required String shopName,
+    required String visitOutcome,
+    String? notes,
+  }) async {
+    final data = await _json('POST', '/promotional-visits', body: {
+      'governorateCode': governorateCode,
+      'areaName': areaName,
+      'shopName': shopName,
+      'visitOutcome': visitOutcome,
+      'notes': notes ?? '',
+    });
+    return PromotionalVisit.fromJson(Map<String, dynamic>.from(data['visit'] as Map));
+  }
+
+  Future<void> deletePromotionalVisit(int id) async {
+    await _json('DELETE', '/promotional-visits/$id');
+  }
+
   Future<void> deleteOrder(int id) async {
     await _json('DELETE', '/orders/$id');
   }
@@ -293,9 +335,9 @@ final dioProvider = Provider<Dio>((ref) {
     onError: (error, handler) async {
       if (error.response?.statusCode == 401) {
         final sent = error.requestOptions.headers['Authorization']?.toString();
-        final token = ref.read(authProvider).token;
-        final expected = token != null && token.isNotEmpty ? 'Bearer $token' : null;
-        if (sent != null && sent == expected) {
+        final auth = ref.read(authProvider);
+        final expected = auth.token != null && auth.token!.isNotEmpty ? 'Bearer ${auth.token}' : null;
+        if (auth.isAuthenticated && sent != null && sent == expected) {
           await ref.read(authProvider.notifier).logout();
         }
       }

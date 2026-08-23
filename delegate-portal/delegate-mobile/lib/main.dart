@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'app.dart';
+import 'core/auth/auth_provider.dart';
+import 'core/auth/data_refresh.dart';
 import 'core/layout/breakpoints.dart';
 import 'core/theme/app_theme.dart';
 
@@ -23,7 +25,13 @@ class EdariDelegateApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final router = ref.watch(appRouterProvider);
+    ref.listen(authProvider, (prev, next) {
+      if (prev?.isAuthenticated != true && next.isAuthenticated) {
+        ref.read(delegateDataRefreshProvider)();
+      }
+    });
+
+    final router = ref.read(appRouterProvider);
 
     return MaterialApp.router(
       title: 'Edari Delegate',

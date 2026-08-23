@@ -21,12 +21,17 @@ class EdStatementExportBar extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: loading ? null : onExport,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         child: Ink(
           decoration: BoxDecoration(
-            color: EdAccountsTheme.card,
-            borderRadius: BorderRadius.circular(10),
+            gradient: LinearGradient(
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+              colors: [EdAccountsTheme.accentSoft, EdAccountsTheme.card],
+            ),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: EdAccountsTheme.accent.withValues(alpha: 0.35)),
+            boxShadow: AppColors.softShadow,
           ),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
@@ -61,17 +66,22 @@ class EdStatementDebtField extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: EdAccountsTheme.card,
-        borderRadius: BorderRadius.circular(14),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppColors.radius),
         border: Border.all(color: EdAccountsTheme.line),
+        boxShadow: AppColors.softShadow,
       ),
       child: Row(
         children: [
           Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(color: EdAccountsTheme.cardTint, borderRadius: BorderRadius.circular(10), border: Border.all(color: EdAccountsTheme.line)),
-            child: const Icon(Icons.payments_outlined, color: EdAccountsTheme.debt, size: 20),
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [EdAccountsTheme.debitSoft, EdAccountsTheme.debit.withValues(alpha: 0.08)]),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: EdAccountsTheme.debit.withValues(alpha: 0.15)),
+            ),
+            child: const Icon(Icons.payments_outlined, color: EdAccountsTheme.debit, size: 22),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -114,15 +124,18 @@ class EdStatementDocPanel extends StatelessWidget {
       width: double.infinity,
       decoration: BoxDecoration(
         gradient: EdAccountsTheme.heroGradient,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(AppColors.radiusLg),
         border: Border.all(color: EdAccountsTheme.line),
-        boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.08), blurRadius: 18, offset: const Offset(0, 6))],
+        boxShadow: AppColors.cardShadow,
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(height: 4, color: EdAccountsTheme.accent),
+          Container(
+            height: 5,
+            decoration: const BoxDecoration(gradient: AppColors.accentGradient),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
             child: Column(
@@ -132,14 +145,14 @@ class EdStatementDocPanel extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
-                      width: 42,
-                      height: 42,
+                      width: 48,
+                      height: 48,
                       decoration: BoxDecoration(
-                        color: EdAccountsTheme.accentSoft,
-                        borderRadius: BorderRadius.circular(12),
+                        gradient: AppColors.moduleSoftGradient(EdAccountsTheme.accent),
+                        borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: EdAccountsTheme.accent.withValues(alpha: 0.15)),
                       ),
-                      child: const Icon(Icons.receipt_long_rounded, color: EdAccountsTheme.accent, size: 21),
+                      child: const Icon(Icons.receipt_long_rounded, color: EdAccountsTheme.accent, size: 24),
                     ),
                     const SizedBox(width: 12),
                     Expanded(

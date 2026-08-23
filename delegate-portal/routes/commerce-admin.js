@@ -754,4 +754,83 @@ router.delete('/customer-requests/:id', (req, res) => {
   }
 });
 
+const { listGovernorates } = require('../lib/iraq-governorates');
+const {
+  listPromotionalVisits,
+  loadPromotionalVisit,
+  updateVisitByAdmin,
+  setVisitStatus,
+  deletePromotionalVisit,
+  visitStats,
+  OUTCOME_LABELS
+} = require('../lib/promotional-visits');
+
+router.get('/promotional-visits/stats', (_req, res) => {
+  res.json({ ok: true, stats: visitStats() });
+});
+
+router.get('/promotional-visits/governorates', (_req, res) => {
+  res.json({ ok: true, governorates: listGovernorates() });
+});
+
+router.get('/promotional-visits/outcomes', (_req, res) => {
+  res.json({
+    ok: true,
+    outcomes: Object.entries(OUTCOME_LABELS).map(([code, label]) => ({ code, label }))
+  });
+});
+
+router.get('/promotional-visits', (req, res) => {
+  const status = String(req.query.status || '').trim();
+  const governorateCode = String(req.query.governorate || '').trim();
+  res.json({
+    ok: true,
+    visits: listPromotionalVisits({
+      status: status || undefined,
+      governorateCode: governorateCode || undefined,
+      limit: 300
+    })
+  });
+});
+
+router.get('/promotional-visits/:id', (req, res) => {
+  const visit = loadPromotionalVisit(Number(req.params.id));
+  if (!visit) return res.status(404).json({ ok: false, error: 'الزيارة غير موجودة' });
+  res.json({ ok: true, visit });
+});
+
+router.patch('/promotional-visits/:id', (req, res) => {
+  try {
+    const visit = updateVisitByAdmin(Number(req.params.id), req.body || {});
+    if (!visit) return res.status(404).json({ ok: false, error: 'الزيارة غير موجودة' });
+    res.json({ ok: true, visit });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.patch('/promotional-visits/:id/status', (req, res) => {
+  try {
+    const visit = setVisitStatus(Number(req.params.id), req.body?.status, {
+      actorType: 'admin',
+      actorId: 'admin',
+      note: req.body?.note || ''
+    });
+    if (!visit) return res.status(404).json({ ok: false, error: 'الزيارة غير موجودة' });
+    res.json({ ok: true, visit });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.delete('/promotional-visits/:id', (req, res) => {
+  try {
+    const result = deletePromotionalVisit(Number(req.params.id));
+    if (!result) return res.status(404).json({ ok: false, error: 'الزيارة غير موجودة' });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
 module.exports = router;

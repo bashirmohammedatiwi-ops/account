@@ -8,6 +8,7 @@ import '../api/api_client.dart';
 import '../api/api_exception.dart';
 import '../api/login_api.dart';
 import '../config/app_config_notifier.dart';
+import 'data_refresh.dart';
 
 const _tokenKey = 'delegateToken';
 const _agentKey = 'delegateAgent';
@@ -39,10 +40,10 @@ class AuthNotifier extends Notifier<AuthState> {
 
   Future<SharedPreferences> get _prefs async => SharedPreferences.getInstance();
 
-  /// ينتظر حتى تنتهي استعادة الجلسة أو تسجيل الدخول — قبل أي طلب API.
+  /// ينتظر حتى تنتهي استعادة الجلسة — قبل أي طلب API.
   Future<void> waitUntilReady() async {
     var spins = 0;
-    while (state.loading && spins < 200) {
+    while (state.loading && spins < 400) {
       await Future.delayed(const Duration(milliseconds: 25));
       spins++;
     }
@@ -69,7 +70,11 @@ class AuthNotifier extends Notifier<AuthState> {
 
       Agent? agent;
       if (agentRaw != null) {
-        agent = Agent.fromJson(Map<String, dynamic>.from(jsonDecode(agentRaw) as Map));
+        try {
+          agent = Agent.fromJson(Map<String, dynamic>.from(jsonDecode(agentRaw) as Map));
+        } catch (_) {
+          agent = null;
+        }
       }
 
       if (token == null || token.isEmpty) {
@@ -84,42 +89,48 @@ class AuthNotifier extends Notifier<AuthState> {
       }
 
       state = AuthState(token: token, agent: agent, loading: false);
+      ref.read(delegateDataRefreshProvider)();
     } catch (_) {
       if (epoch != _sessionEpoch) return;
       state = const AuthState(loading: false);
     }
   }
 
-  Future<void> _refreshAgent(int epoch, String token) async {
+  Future<void> _refreshAgent(int epoch, String token, {Agent? fallbackAgent}) async {
     try {
       final me = await ref.read(apiClientProvider).me();
       if (epoch != _sessionEpoch) return;
       await _write(_agentKey, jsonEncode(me.toJson()));
       state = AuthState(token: token, agent: me, loading: false);
+      ref.read(delegateDataRefreshProvider)();
     } on ApiException catch (e) {
       if (epoch != _sessionEpoch) return;
       if (e.statusCode == 401) {
         await logout();
+      } else if (fallbackAgent != null) {
+        state = AuthState(token: token, agent: fallbackAgent, loading: false);
       } else {
         state = AuthState(token: token, loading: false);
       }
     } catch (_) {
       if (epoch != _sessionEpoch) return;
-      state = AuthState(token: token, loading: false);
+      if (fallbackAgent != null) {
+        state = AuthState(token: token, agent: fallbackAgent, loading: false);
+      } else {
+        state = AuthState(token: token, loading: false);
+      }
     }
   }
 
   Future<void> login(String username, String password) async {
     _sessionEpoch++;
-    state = state.copyWith(loading: true);
     try {
       final config = ref.read(appConfigProvider);
       final result = await performLogin(config, username.trim(), password);
-      try {
-        await _write(_tokenKey, result.token);
-        await _write(_agentKey, jsonEncode(result.agent.toJson()));
-      } catch (_) {}
+      await _write(_tokenKey, result.token);
+      await _write(_agentKey, jsonEncode(result.agent.toJson()));
       state = AuthState(token: result.token, agent: result.agent, loading: false);
+      ref.read(delegateDataRefreshProvider)();
     } catch (e) {
       state = const AuthState(loading: false);
       rethrow;

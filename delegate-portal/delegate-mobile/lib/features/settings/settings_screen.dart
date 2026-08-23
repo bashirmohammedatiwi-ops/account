@@ -72,15 +72,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              gradient: AppColors.heroGradient,
-              borderRadius: BorderRadius.circular(AppColors.radius),
+              gradient: AppColors.brandGradient,
+              borderRadius: BorderRadius.circular(AppColors.radiusLg),
+              boxShadow: AppColors.elevatedShadow,
             ),
             child: Row(
               children: [
-                CircleAvatar(
-                  radius: 28,
-                  backgroundColor: Colors.white.withValues(alpha: 0.15),
-                  child: Text(initial, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
+                Container(
+                  width: 56,
+                  height: 56,
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: AppColors.avatarRingGradient,
+                  ),
+                  child: Container(
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.14),
+                    ),
+                    child: Text(initial, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(

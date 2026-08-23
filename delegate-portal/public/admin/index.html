@@ -49,6 +49,10 @@
             <span class="nav-icon ic-receipts" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span>
             <span class="nav-text">مبيعات المندوبين</span>
           </button>
+          <button type="button" class="nav-item" data-page="promotionalVisits">
+            <span class="nav-icon ic-promo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></span>
+            <span class="nav-text">الزيادات الترويجية</span>
+          </button>
         </div>
 
         <div class="nav-group">
@@ -389,6 +393,41 @@
           </div>
           <div class="rv-card hidden" id="customerReqDetailPanel"></div>
           </div>
+        </section>
+
+        <!-- Promotional visits -->
+        <section class="page rv-page" id="page-promotionalVisits">
+          <div class="rv-card rv-card-list">
+            <div class="rv-card-head">
+              <div>
+                <h2 class="rv-card-title">الزيادات الترويجية</h2>
+                <p class="rv-card-sub">زيارات المندوبين للمحلات والمراكز بعد ترويج المنتجات</p>
+              </div>
+              <div class="rv-filter-row">
+                <select id="promoVisitGovFilter" class="search rv-filter" onchange="loadPromotionalVisitsPage()">
+                  <option value="">كل المحافظات</option>
+                </select>
+                <select id="promoVisitStatusFilter" class="search rv-filter" onchange="loadPromotionalVisitsPage()">
+                  <option value="">كل الحالات</option>
+                  <option value="pending">بانتظار المراجعة</option>
+                  <option value="reviewed">تمت المراجعة</option>
+                  <option value="archived">مؤرشف</option>
+                </select>
+              </div>
+            </div>
+            <div class="rv-kpis" id="promoVisitStats"></div>
+            <div class="table-scroll">
+              <table class="data-table compact">
+                <thead>
+                  <tr>
+                    <th>رقم</th><th>مندوب</th><th>المحافظة</th><th>المنطقة</th><th>المحل</th><th>الحالة بعد الترويج</th><th>مراجعة</th><th>تاريخ</th><th></th>
+                  </tr>
+                </thead>
+                <tbody id="promoVisitsBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="rv-card hidden" id="promoVisitDetailPanel"></div>
         </section>
 
         <!-- Reports -->
@@ -1094,6 +1133,7 @@
   <script src="admin-commerce.js?v=20260818cust"></script>
   <script src="admin-receipts.js?v=20260818cust"></script>
   <script src="admin-customers.js?v=20260818cust"></script>
+  <script src="admin-promotional-visits.js?v=20260823promo"></script>
   <script src="admin-sales-report.js?v=20260709treeFix3"></script>
   <script src="admin-account-statements.js?v=20260615kpi"></script>
   <script src="admin-price-sync.js?v=20260703"></script>

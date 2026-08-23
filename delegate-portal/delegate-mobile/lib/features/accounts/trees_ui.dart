@@ -143,7 +143,7 @@ class EdTreesSidePanel extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppColors.radiusLg),
         border: Border.all(color: AppColors.borderLight),
-        boxShadow: AppColors.softShadow,
+        boxShadow: AppColors.cardShadow,
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -151,8 +151,12 @@ class EdTreesSidePanel extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
+            height: 4,
+            decoration: const BoxDecoration(gradient: AppColors.accentGradient),
+          ),
+          Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            color: AppColors.surfaceAlt,
+            color: AppColors.surfaceMuted,
             child: const Text(
               'ملخص المندوب',
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.muted, letterSpacing: 0.4),
@@ -297,62 +301,88 @@ class EdTreeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.surface,
+      color: Colors.transparent,
       clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppColors.radiusLg),
-        side: const BorderSide(color: AppColors.borderLight),
-      ),
+      borderRadius: BorderRadius.circular(AppColors.radiusLg),
       child: InkWell(
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        borderRadius: BorderRadius.circular(AppColors.radiusLg),
+        child: Ink(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppColors.radiusLg),
+            border: Border.all(color: AppColors.borderLight),
+            boxShadow: AppColors.cardShadow,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    index.toString().padLeft(2, '0'),
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.muted),
-                  ),
-                  Text(
-                    _num,
-                    textDirection: TextDirection.ltr,
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted),
-                  ),
-                ],
-              ),
-              Text(
-                _title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.35),
-              ),
-              Text(
-                '${fmtNumAlways(tree.directChildren)} حساب فرعي',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
-              ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: EdAccountsTheme.cardTint,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: EdAccountsTheme.line),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.people_outline_rounded, size: 16, color: EdAccountsTheme.accent),
-                    const SizedBox(width: 6),
-                    Text(
-                      'استعراض الزبائن',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: EdAccountsTheme.accent),
-                    ),
-                    const Spacer(),
-                    Icon(Icons.arrow_back_ios_new_rounded, size: 12, color: EdAccountsTheme.accent),
-                  ],
+                height: 4,
+                decoration: const BoxDecoration(gradient: AppColors.accentGradient),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              gradient: AppColors.moduleSoftGradient(EdAccountsTheme.accent),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              index.toString().padLeft(2, '0'),
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: EdAccountsTheme.accent),
+                            ),
+                          ),
+                          Text(
+                            _num,
+                            textDirection: TextDirection.ltr,
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        _title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.35),
+                      ),
+                      Text(
+                        '${fmtNumAlways(tree.directChildren)} حساب فرعي',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [EdAccountsTheme.accentSoft, EdAccountsTheme.cardTint],
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: EdAccountsTheme.accent.withValues(alpha: 0.15)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.people_outline_rounded, size: 16, color: EdAccountsTheme.accent),
+                            const SizedBox(width: 6),
+                            Text(
+                              'استعراض الزبائن',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: EdAccountsTheme.accent),
+                            ),
+                            const Spacer(),
+                            Icon(Icons.arrow_back_ios_new_rounded, size: 12, color: EdAccountsTheme.accent),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],

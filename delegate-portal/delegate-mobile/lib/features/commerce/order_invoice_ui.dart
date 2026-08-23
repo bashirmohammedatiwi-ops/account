@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/invoice_helpers.dart';
 import '../../models/models.dart';
+import 'commerce_draft.dart';
 import 'commerce_theme.dart';
 
 class OrderInvoiceLineData {
@@ -15,6 +16,7 @@ class OrderInvoiceLineData {
     required this.unitPrice,
     required this.quant,
     required this.bonus,
+    this.tester = 0,
   });
 
   final int productId;
@@ -23,15 +25,16 @@ class OrderInvoiceLineData {
   final num unitPrice;
   final num quant;
   final num bonus;
+  final num tester;
 
   num get lineTotal => (quant * unitPrice).round();
 }
 
-List<OrderInvoiceLineData> buildOrderInvoiceLines(List<Product> products, Map<int, ({num quant, num bonus})> draft) {
+List<OrderInvoiceLineData> buildOrderInvoiceLines(List<Product> products, Map<int, DraftLine> draft) {
   final lines = <OrderInvoiceLineData>[];
   for (final p in products) {
     final d = draft[p.id];
-    if (d == null || (d.quant <= 0 && d.bonus <= 0)) continue;
+    if (d == null || !draftLineActive(d)) continue;
     lines.add(OrderInvoiceLineData(
       productId: p.id,
       matName: p.name,
@@ -39,6 +42,7 @@ List<OrderInvoiceLineData> buildOrderInvoiceLines(List<Product> products, Map<in
       unitPrice: p.price,
       quant: d.quant,
       bonus: d.bonus,
+      tester: d.tester,
     ));
   }
   return lines;
@@ -53,6 +57,7 @@ List<OrderInvoiceLineData> orderLinesToInvoiceData(List<OrderLine> lines) {
             unitPrice: l.unitPrice,
             quant: l.quant,
             bonus: l.bonus,
+            tester: l.tester,
           ))
       .toList();
 }
@@ -72,6 +77,7 @@ class EdOrderInvoiceDetailView extends StatelessWidget {
     final total = order.totalAmount ?? lines.fold<num>(0, (s, l) => s + l.lineTotal);
     final qtySum = lines.fold<num>(0, (s, l) => s + l.quant);
     final bonusSum = lines.fold<num>(0, (s, l) => s + l.bonus);
+    final testerSum = lines.fold<num>(0, (s, l) => s + l.tester);
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -93,6 +99,7 @@ class EdOrderInvoiceDetailView extends StatelessWidget {
           lineCount: lines.length,
           qtySum: qtySum,
           bonusSum: bonusSum,
+          testerSum: testerSum,
           total: total,
         ),
         const SizedBox(height: 16),
@@ -210,6 +217,7 @@ class EdOrderInvoiceDocPanel extends StatelessWidget {
     required this.lineCount,
     required this.qtySum,
     required this.bonusSum,
+    this.testerSum = 0,
     required this.total,
   });
 
@@ -223,6 +231,7 @@ class EdOrderInvoiceDocPanel extends StatelessWidget {
   final int lineCount;
   final num qtySum;
   final num bonusSum;
+  final num testerSum;
   final num total;
 
   @override
@@ -231,15 +240,18 @@ class EdOrderInvoiceDocPanel extends StatelessWidget {
       width: double.infinity,
       decoration: BoxDecoration(
         color: EdCommerceTheme.card,
-        borderRadius: BorderRadius.circular(AppColors.radiusSm),
+        borderRadius: BorderRadius.circular(AppColors.radiusLg),
         border: Border.all(color: EdCommerceTheme.line),
-        boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
+        boxShadow: AppColors.cardShadow,
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(height: 3, color: EdCommerceTheme.accent),
+          Container(
+            height: 5,
+            decoration: const BoxDecoration(gradient: EdCommerceTheme.accentGradient),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
             child: Row(
@@ -289,6 +301,8 @@ class EdOrderInvoiceDocPanel extends StatelessWidget {
                 5: FlexColumnWidth(),
                 6: FlexColumnWidth(),
                 7: FlexColumnWidth(),
+                8: FlexColumnWidth(),
+                9: FlexColumnWidth(),
               },
               children: [
                 TableRow(
@@ -299,6 +313,8 @@ class EdOrderInvoiceDocPanel extends StatelessWidget {
                     _metaTd(fmtInvInt(qtySum)),
                     _metaTh('إجمالي الهدايا'),
                     _metaTd(fmtInvInt(bonusSum)),
+                    _metaTh('إجمالي التيستر'),
+                    _metaTd(fmtInvInt(testerSum)),
                     _metaTh('إجمالي الفاتورة'),
                     _metaTd(fmtInvInt(total), highlight: true),
                   ],
@@ -338,7 +354,7 @@ class EdOrderInvoiceLinesSection extends StatelessWidget {
 
   final List<OrderInvoiceLineData> lines;
   final bool editable;
-  final void Function(int productId, {required bool quant, required int delta})? onAdjust;
+  final void Function(int productId, {required String field, required int delta})? onAdjust;
 
   @override
   Widget build(BuildContext context) {
@@ -390,7 +406,7 @@ class EdOrderInvoiceLinesTable extends StatelessWidget {
 
   final List<OrderInvoiceLineData> lines;
   final bool editable;
-  final void Function(int productId, {required bool quant, required int delta})? onAdjust;
+  final void Function(int productId, {required String field, required int delta})? onAdjust;
 
   @override
   Widget build(BuildContext context) {
@@ -405,7 +421,7 @@ class EdOrderInvoiceLinesTable extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: EdFullWidthTable(
-        minWidth: 620,
+        minWidth: 700,
         builder: (_) => Table(
           border: TableBorder.all(color: EdCommerceTheme.line),
           defaultVerticalAlignment: TableCellVerticalAlignment.middle,
@@ -413,10 +429,11 @@ class EdOrderInvoiceLinesTable extends StatelessWidget {
             0: FixedColumnWidth(32),
             1: FixedColumnWidth(84),
             2: FlexColumnWidth(3),
-            3: FixedColumnWidth(72),
-            4: FixedColumnWidth(72),
-            5: FlexColumnWidth(1.1),
+            3: FixedColumnWidth(64),
+            4: FixedColumnWidth(64),
+            5: FixedColumnWidth(64),
             6: FlexColumnWidth(1.1),
+            7: FlexColumnWidth(1.1),
           },
           children: [
             TableRow(
@@ -426,6 +443,7 @@ class EdOrderInvoiceLinesTable extends StatelessWidget {
                 _th('اسم المادة'),
                 _th('الكمية'),
                 _th('هدية'),
+                _th('تيستر'),
                 _th('سعر الوحدة'),
                 _th('المبلغ'),
               ],
@@ -450,11 +468,14 @@ class EdOrderInvoiceLinesTable extends StatelessWidget {
           child: Text(line.matName, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, height: 1.3)),
         ),
         editable
-            ? _qtyStepperCell(line.productId, line.quant, quant: true)
+            ? _qtyStepperCell(line.productId, line.quant, field: 'quant')
             : _cell(fmtQty(line.quant), align: TextAlign.center, bold: true),
         editable
-            ? _qtyStepperCell(line.productId, line.bonus, quant: false)
+            ? _qtyStepperCell(line.productId, line.bonus, field: 'bonus')
             : _cell(fmtQty(line.bonus), align: TextAlign.center, bold: true),
+        editable
+            ? _qtyStepperCell(line.productId, line.tester, field: 'tester')
+            : _cell(fmtQty(line.tester), align: TextAlign.center, bold: true),
         _moneyCell(line.unitPrice),
         _moneyCell(line.lineTotal, net: true),
       ],
@@ -471,6 +492,7 @@ class EdOrderInvoiceLinesTable extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
           child: Text(label, textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: highlight ? AppColors.navy : AppColors.textSecondary)),
         ),
+        _cell(''),
         _cell(''),
         _cell(''),
         _cell(''),
@@ -515,26 +537,40 @@ class EdOrderInvoiceLinesTable extends StatelessWidget {
     );
   }
 
-  Widget _qtyStepperCell(int productId, num value, {required bool quant}) {
-    final gift = !quant;
+  Widget _qtyStepperCell(int productId, num value, {required String field}) {
+    final Color bg;
+    final Color border;
+    switch (field) {
+      case 'bonus':
+        bg = EdCommerceTheme.giftBg;
+        border = EdCommerceTheme.giftBorder;
+        break;
+      case 'tester':
+        bg = EdCommerceTheme.testerBg;
+        border = EdCommerceTheme.testerBorder;
+        break;
+      default:
+        bg = EdCommerceTheme.cardTint;
+        border = EdCommerceTheme.line;
+    }
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 4),
         decoration: BoxDecoration(
-          color: gift ? EdCommerceTheme.giftBg : EdCommerceTheme.cardTint,
+          color: bg,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: gift ? EdCommerceTheme.giftBorder : EdCommerceTheme.line),
+          border: Border.all(color: border),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _stepBtn(Icons.remove_rounded, () => onAdjust?.call(productId, quant: quant, delta: -1)),
+            _stepBtn(Icons.remove_rounded, () => onAdjust?.call(productId, field: field, delta: -1)),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6),
               child: Text(fmtQty(value), textDirection: TextDirection.ltr, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
             ),
-            _stepBtn(Icons.add_rounded, () => onAdjust?.call(productId, quant: quant, delta: 1)),
+            _stepBtn(Icons.add_rounded, () => onAdjust?.call(productId, field: field, delta: 1)),
           ],
         ),
       ),

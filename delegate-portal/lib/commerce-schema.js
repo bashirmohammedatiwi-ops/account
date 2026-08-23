@@ -157,6 +157,7 @@ function migrateCommerceSchema(db) {
   migrateOrderCustomerRequestField(db);
   migrateReceipts(db);
   migrateCustomerRequests(db);
+  migratePromotionalVisits(db);
 
   const branchCount = db.prepare('SELECT COUNT(*) AS c FROM catalog_branches').get().c;
   if (!branchCount) {
@@ -361,4 +362,42 @@ function migrateCustomerRequests(db) {
   `);
 }
 
-module.exports = { migrateCommerceSchema, migrateShorjaOrderFields, migrateReceipts, migrateCustomerRequests };
+function migratePromotionalVisits(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS promotional_visits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      visit_no TEXT NOT NULL UNIQUE,
+      agent_id INTEGER NOT NULL,
+      governorate_code TEXT NOT NULL,
+      governorate_name TEXT NOT NULL,
+      area_name TEXT NOT NULL,
+      shop_name TEXT NOT NULL,
+      visit_outcome TEXT NOT NULL,
+      notes TEXT DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'pending',
+      admin_note TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now')),
+      submitted_at TEXT,
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (agent_id) REFERENCES agents(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_promo_visits_agent ON promotional_visits(agent_id);
+    CREATE INDEX IF NOT EXISTS idx_promo_visits_status ON promotional_visits(status);
+    CREATE INDEX IF NOT EXISTS idx_promo_visits_gov ON promotional_visits(governorate_code);
+
+    CREATE TABLE IF NOT EXISTS promotional_visit_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      visit_id INTEGER NOT NULL,
+      actor_type TEXT,
+      actor_id TEXT,
+      from_status TEXT,
+      to_status TEXT,
+      note TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (visit_id) REFERENCES promotional_visits(id) ON DELETE CASCADE
+    );
+  `);
+}
+
+module.exports = { migrateCommerceSchema, migrateShorjaOrderFields, migrateReceipts, migrateCustomerRequests, migratePromotionalVisits };

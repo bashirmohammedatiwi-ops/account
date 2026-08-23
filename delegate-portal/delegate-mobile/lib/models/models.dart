@@ -304,6 +304,7 @@ class OrderLine {
     required this.quant,
     required this.bonus,
     required this.unitPrice,
+    this.tester = 0,
     this.barcode,
     this.lineTotal,
   });
@@ -312,6 +313,7 @@ class OrderLine {
   final String matName;
   final num quant;
   final num bonus;
+  final num tester;
   final num unitPrice;
   final String? barcode;
   final num? lineTotal;
@@ -323,6 +325,7 @@ class OrderLine {
         'matName': matName,
         'quant': quant,
         'bonus': bonus,
+        'tester': tester,
         'unitPrice': unitPrice,
         'price': unitPrice,
         'lineTotal': lineTotal ?? quant * unitPrice,
@@ -368,6 +371,7 @@ class Order {
             matName: '${m['matName'] ?? m['mat_name'] ?? ''}',
             quant: m['quant'] as num? ?? 0,
             bonus: m['bonus'] as num? ?? 0,
+            tester: m['tester'] as num? ?? 0,
             unitPrice: m['unitPrice'] as num? ?? m['price'] as num? ?? 0,
             barcode: m['barcode'] as String?,
             lineTotal: m['lineTotal'] as num? ?? m['line_total'] as num?,
@@ -557,6 +561,83 @@ class CustomerRequest {
         treeName: json['treeName'] as String? ?? json['tree_name'] as String?,
         treeNum: json['treeNum'] as String? ?? json['tree_num'] as String?,
         edariNum: json['edariNum'] as String? ?? json['edari_num'] as String?,
+        createdAt: json['createdAt'] as String? ?? json['created_at'] as String?,
+      );
+}
+
+class IraqGovernorate {
+  const IraqGovernorate({required this.code, required this.name});
+
+  final String code;
+  final String name;
+
+  factory IraqGovernorate.fromJson(Map<String, dynamic> json) => IraqGovernorate(
+        code: '${json['code'] ?? ''}',
+        name: '${json['name'] ?? ''}',
+      );
+}
+
+class VisitOutcome {
+  const VisitOutcome({required this.code, required this.label});
+
+  final String code;
+  final String label;
+
+  factory VisitOutcome.fromJson(Map<String, dynamic> json) => VisitOutcome(
+        code: '${json['code'] ?? ''}',
+        label: '${json['label'] ?? ''}',
+      );
+}
+
+class PromotionalVisit {
+  const PromotionalVisit({
+    required this.id,
+    required this.visitNo,
+    required this.status,
+    required this.statusLabel,
+    required this.governorateCode,
+    required this.governorateName,
+    required this.areaName,
+    required this.shopName,
+    required this.visitOutcome,
+    required this.visitOutcomeLabel,
+    this.notes,
+    this.adminNote,
+    this.submittedAt,
+    this.createdAt,
+  });
+
+  final int id;
+  final String visitNo;
+  final String status;
+  final String statusLabel;
+  final String governorateCode;
+  final String governorateName;
+  final String areaName;
+  final String shopName;
+  final String visitOutcome;
+  final String visitOutcomeLabel;
+  final String? notes;
+  final String? adminNote;
+  final String? submittedAt;
+  final String? createdAt;
+
+  bool get canDelete => status == 'pending';
+
+  factory PromotionalVisit.fromJson(Map<String, dynamic> json) => PromotionalVisit(
+        id: json['id'] as int,
+        visitNo: '${json['visitNo'] ?? json['visit_no'] ?? ''}',
+        status: '${json['status'] ?? ''}',
+        statusLabel: '${json['statusLabel'] ?? json['status_label'] ?? ''}',
+        governorateCode: '${json['governorateCode'] ?? json['governorate_code'] ?? ''}',
+        governorateName: '${json['governorateName'] ?? json['governorate_name'] ?? ''}',
+        areaName: '${json['areaName'] ?? json['area_name'] ?? ''}',
+        shopName: '${json['shopName'] ?? json['shop_name'] ?? ''}',
+        visitOutcome: '${json['visitOutcome'] ?? json['visit_outcome'] ?? ''}',
+        visitOutcomeLabel: '${json['visitOutcomeLabel'] ?? json['visit_outcome_label'] ?? ''}',
+        notes: json['notes'] as String?,
+        adminNote: json['adminNote'] as String? ?? json['admin_note'] as String?,
+        submittedAt: json['submittedAt'] as String? ?? json['submitted_at'] as String?,
         createdAt: json['createdAt'] as String? ?? json['created_at'] as String?,
       );
 }

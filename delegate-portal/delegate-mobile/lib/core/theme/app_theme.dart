@@ -55,6 +55,7 @@ abstract final class AppTheme {
           side: const BorderSide(color: AppColors.borderLight),
         ),
         margin: EdgeInsets.zero,
+        shadowColor: AppColors.navy.withValues(alpha: 0.08),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,

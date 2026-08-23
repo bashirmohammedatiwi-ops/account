@@ -185,6 +185,7 @@ class EdHeaderIconButton extends StatelessWidget {
       message: tooltip,
       child: Material(
         color: AppColors.surfaceAlt,
+        clipBehavior: Clip.antiAlias,
         borderRadius: BorderRadius.circular(AppColors.radiusSm),
         child: InkWell(
           onTap: onPressed,
@@ -535,50 +536,61 @@ class EdTreeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? AppColors.accentSoft : AppColors.surface,
-      borderRadius: BorderRadius.circular(AppColors.radius),
+      color: Colors.transparent,
+      clipBehavior: Clip.antiAlias,
+      borderRadius: BorderRadius.circular(AppColors.radiusLg),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppColors.radius),
-        child: Container(
+        borderRadius: BorderRadius.circular(AppColors.radiusLg),
+        child: Ink(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppColors.radius),
-            border: Border(
-              top: BorderSide(color: selected ? AppColors.accent : AppColors.border),
-              left: BorderSide(color: selected ? AppColors.accent : AppColors.border),
-              bottom: BorderSide(color: selected ? AppColors.accent : AppColors.border),
-              right: const BorderSide(color: AppColors.accent, width: 4),
-            ),
+            color: selected ? AppColors.accentSoft : AppColors.surface,
+            borderRadius: BorderRadius.circular(AppColors.radiusLg),
+            border: Border.all(color: selected ? AppColors.accentTeal.withValues(alpha: 0.4) : AppColors.borderLight),
+            boxShadow: selected ? AppColors.softShadow : AppColors.cardShadow,
           ),
-          padding: const EdgeInsets.all(14),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: AppColors.accentSoft,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text('#$index', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.accent)),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(accountNum, style: const TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w700)),
-                ],
+              Container(
+                height: 4,
+                decoration: BoxDecoration(
+                  gradient: selected ? AppColors.accentGradient : LinearGradient(colors: [AppColors.accentTeal.withValues(alpha: 0.35), AppColors.accentTeal.withValues(alpha: 0.05)]),
+                ),
               ),
-              const SizedBox(height: 10),
-              Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 6),
-              Text(meta, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 10),
-              const Row(
-                children: [
-                  Text('عرض الزبائن', style: TextStyle(color: AppColors.accentTeal, fontWeight: FontWeight.w800, fontSize: 13)),
-                  SizedBox(width: 4),
-                  Icon(Icons.arrow_back_ios_new_rounded, size: 12, color: AppColors.accentTeal),
-                ],
+              Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                          decoration: BoxDecoration(
+                            gradient: AppColors.moduleSoftGradient(AppColors.accentTeal),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text('#$index', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.accentTeal)),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(accountNum, style: const TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w700)),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                    const SizedBox(height: 6),
+                    Text(meta, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Text('عرض الزبائن', style: TextStyle(color: AppColors.accentTeal, fontWeight: FontWeight.w800, fontSize: 13)),
+                        const SizedBox(width: 4),
+                        Icon(Icons.arrow_back_ios_new_rounded, size: 12, color: AppColors.accentTeal),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -615,86 +627,107 @@ class EdBranchCard extends StatelessWidget {
     final initial = name.isNotEmpty ? name.characters.first : '؟';
 
     return Material(
-      color: selected ? accent.withValues(alpha: 0.06) : AppColors.surface,
-      borderRadius: BorderRadius.circular(AppColors.radius),
-      elevation: selected ? 1 : 0,
-      shadowColor: AppColors.navy.withValues(alpha: 0.08),
+      color: Colors.transparent,
+      clipBehavior: Clip.antiAlias,
+      borderRadius: BorderRadius.circular(AppColors.radiusLg),
+      elevation: 0,
+      shadowColor: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppColors.radius),
-        child: Container(
+        borderRadius: BorderRadius.circular(AppColors.radiusLg),
+        child: Ink(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppColors.radius),
-            border: Border(
-              top: BorderSide(color: selected ? accent : AppColors.border),
-              left: BorderSide(color: selected ? accent : AppColors.border),
-              bottom: BorderSide(color: selected ? accent : AppColors.border),
-              right: BorderSide(color: accent, width: 4),
-            ),
+            color: selected ? accent.withValues(alpha: 0.05) : AppColors.surface,
+            borderRadius: BorderRadius.circular(AppColors.radiusLg),
+            border: Border.all(color: selected ? accent.withValues(alpha: 0.35) : AppColors.borderLight),
+            boxShadow: AppColors.cardShadow,
           ),
-          padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 22,
-                    backgroundColor: accent.withValues(alpha: 0.12),
-                    child: Text(initial, style: TextStyle(color: accent, fontWeight: FontWeight.w800)),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              Container(
+                height: 4,
+                decoration: BoxDecoration(gradient: AppColors.moduleGradient(accent)),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
                       children: [
-                        Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
-                        const SizedBox(height: 4),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          width: 44,
+                          height: 44,
+                          alignment: Alignment.center,
                           decoration: BoxDecoration(
-                            color: accent.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(999),
+                            gradient: AppColors.moduleSoftGradient(accent),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: accent.withValues(alpha: 0.15)),
                           ),
-                          child: Text(branchStatusLabel(variant), style: TextStyle(color: accent, fontSize: 11, fontWeight: FontWeight.w800)),
+                          child: Text(initial, style: TextStyle(color: accent, fontWeight: FontWeight.w800, fontSize: 16)),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppColors.navy)),
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: accent.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(color: accent.withValues(alpha: 0.2)),
+                                ),
+                                child: Text(branchStatusLabel(variant), style: TextStyle(color: accent, fontSize: 10, fontWeight: FontWeight.w800)),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceMuted,
-                  borderRadius: BorderRadius.circular(AppColors.radiusSm),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(debtLabel, style: const TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w700)),
-                    Text(
-                      debtAmount,
-                      textDirection: TextDirection.ltr,
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: accent),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topRight,
+                          end: Alignment.bottomLeft,
+                          colors: [accent.withValues(alpha: 0.06), AppColors.surfaceAlt],
+                        ),
+                        borderRadius: BorderRadius.circular(AppColors.radiusSm),
+                        border: Border.all(color: accent.withValues(alpha: 0.12)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(debtLabel, style: const TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w700)),
+                          Text(
+                            debtAmount,
+                            textDirection: TextDirection.ltr,
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: accent),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(accountNum, style: const TextStyle(fontSize: 11, color: AppColors.muted, fontWeight: FontWeight.w600)),
+                        const Row(
+                          children: [
+                            Text('كشف الحساب', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.w800, fontSize: 12)),
+                            SizedBox(width: 4),
+                            Icon(Icons.arrow_back_ios_new_rounded, size: 11, color: AppColors.navy),
+                          ],
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(accountNum, style: const TextStyle(fontSize: 11, color: AppColors.muted, fontWeight: FontWeight.w600)),
-                  const Row(
-                    children: [
-                      Text('كشف الحساب', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.w800, fontSize: 12)),
-                      SizedBox(width: 4),
-                      Icon(Icons.arrow_back_ios_new_rounded, size: 11, color: AppColors.navy),
-                    ],
-                  ),
-                ],
               ),
             ],
           ),
@@ -718,24 +751,44 @@ class EdFilterChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final (value, label) in options)
-          FilterChip(
-            label: Text(label),
-            selected: selected == value,
-            onSelected: (_) => onChanged(value),
-            selectedColor: AppColors.navy,
-            checkmarkColor: Colors.white,
-            labelStyle: TextStyle(
-              fontWeight: FontWeight.w700,
-              color: selected == value ? Colors.white : AppColors.textSecondary,
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(
+        children: [
+          for (final (value, label) in options)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Material(
+                color: Colors.transparent,
+                clipBehavior: Clip.antiAlias,
+                borderRadius: BorderRadius.circular(999),
+                child: InkWell(
+                  onTap: () => onChanged(value),
+                  borderRadius: BorderRadius.circular(999),
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      gradient: selected == value ? AppColors.buttonGradient : null,
+                      color: selected == value ? null : AppColors.surface,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: selected == value ? Colors.transparent : AppColors.borderLight),
+                      boxShadow: selected == value ? AppColors.softShadow : null,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        color: selected == value ? Colors.white : AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
-            side: BorderSide(color: selected == value ? AppColors.navy : AppColors.border),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -1070,14 +1123,24 @@ class EdBottomActionBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.border)),
-        boxShadow: [BoxShadow(color: Color(0x14000000), blurRadius: 12, offset: Offset(0, -4))],
+        border: Border(top: BorderSide(color: AppColors.borderLight)),
+        boxShadow: AppColors.dockShadow,
       ),
       child: SafeArea(
         top: false,
-        child: FilledButton.icon(onPressed: onPressed, icon: Icon(icon), label: Text(label)),
+        child: FilledButton.icon(
+          onPressed: onPressed,
+          icon: Icon(icon),
+          label: Text(label),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.navy,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppColors.radius)),
+          ),
+        ),
       ),
     );
   }
@@ -1106,47 +1169,79 @@ class EdOrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(AppColors.radius),
+      color: Colors.transparent,
+      clipBehavior: Clip.antiAlias,
+      borderRadius: BorderRadius.circular(AppColors.radiusLg),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppColors.radius),
-        child: Container(
+        borderRadius: BorderRadius.circular(AppColors.radiusLg),
+        child: Ink(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppColors.radius),
-            border: Border(
-              top: const BorderSide(color: AppColors.border),
-              left: const BorderSide(color: AppColors.border),
-              bottom: const BorderSide(color: AppColors.border),
-              right: BorderSide(color: statusColor, width: 4),
-            ),
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppColors.radiusLg),
+            border: Border.all(color: AppColors.borderLight),
+            boxShadow: AppColors.cardShadow,
           ),
-          padding: const EdgeInsets.all(16),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              Container(
+                height: 4,
+                decoration: BoxDecoration(gradient: AppColors.moduleGradient(statusColor)),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
                   children: [
-                    Text('طلب #$id', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-                    const SizedBox(height: 4),
-                    Text('$customer · $date', style: const TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(999)),
-                      child: Text(statusLabel, style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w800)),
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        gradient: AppColors.moduleSoftGradient(statusColor),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(Icons.shopping_bag_outlined, color: statusColor, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('طلب #$id', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: AppColors.navy)),
+                          const SizedBox(height: 4),
+                          Text('$customer · $date', style: const TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(color: statusColor.withValues(alpha: 0.2)),
+                            ),
+                            child: Text(statusLabel, style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.w800)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(amount, textDirection: TextDirection.ltr, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: AppColors.navy)),
+                        const SizedBox(height: 8),
+                        Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceAlt,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.borderLight),
+                          ),
+                          child: Icon(Icons.arrow_back_ios_new_rounded, size: 12, color: statusColor),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(amount, textDirection: TextDirection.ltr, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                  const SizedBox(height: 6),
-                  const Icon(Icons.arrow_back_ios_new_rounded, size: 12, color: AppColors.muted),
-                ],
               ),
             ],
           ),
@@ -1172,26 +1267,31 @@ class EdPanelCard extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppColors.radiusXl),
         border: Border.all(color: AppColors.borderLight),
-        boxShadow: AppColors.softShadow,
+        boxShadow: AppColors.cardShadow,
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Container(
+            height: 4,
+            decoration: BoxDecoration(gradient: AppColors.moduleGradient(iconColor ?? AppColors.accentTeal)),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(EdSpacing.xl, EdSpacing.lg, EdSpacing.xl, EdSpacing.md),
             child: Row(
               children: [
                 if (icon != null)
                   Container(
-                    width: 40,
-                    height: 40,
+                    width: 44,
+                    height: 44,
                     margin: const EdgeInsetsDirectional.only(end: EdSpacing.md),
                     decoration: BoxDecoration(
-                      color: (iconColor ?? AppColors.accentTeal).withValues(alpha: 0.1),
+                      gradient: AppColors.moduleSoftGradient(iconColor ?? AppColors.accentTeal),
                       borderRadius: BorderRadius.circular(AppColors.radiusSm),
+                      boxShadow: [BoxShadow(color: (iconColor ?? AppColors.accentTeal).withValues(alpha: 0.15), blurRadius: 8, offset: const Offset(0, 3))],
                     ),
-                    child: Icon(icon, color: iconColor ?? AppColors.accentTeal, size: 20),
+                    child: Icon(icon, color: iconColor ?? AppColors.accentTeal, size: 22),
                   ),
                 Expanded(
                   child: Column(
@@ -1229,9 +1329,10 @@ class EdLineRow extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.surfaceMuted,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppColors.radiusSm),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.borderLight),
+        boxShadow: AppColors.softShadow,
       ),
       child: Row(
         children: [
@@ -1292,25 +1393,56 @@ class EdLoginAside extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: AppColors.navy,
+      decoration: BoxDecoration(
+        gradient: AppColors.brandGradient,
+        boxShadow: AppColors.elevatedShadow,
+      ),
       padding: const EdgeInsets.all(40),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Stack(
         children: [
-          Container(width: 48, height: 4, color: AppColors.goldLine),
-          const SizedBox(height: 20),
-          Image.asset('assets/logo.png', width: 64, height: 64),
-          const SizedBox(height: 20),
-          const Text('Edari', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          const Text('بوابة المندوب', style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 12),
-          Text('كشوف حساب · منتجات · طلبات · تقارير', style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontWeight: FontWeight.w600)),
-          const SizedBox(height: 28),
-          _feature(Icons.account_tree_rounded, 'كشوف حساب تفصيلية'),
-          _feature(Icons.storefront_rounded, 'طلبات وفواتير'),
-          _feature(Icons.bar_chart_rounded, 'تقارير مبيعات'),
+          Positioned(
+            top: -20,
+            right: -20,
+            child: Container(
+              width: 140,
+              height: 140,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.06)),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 56,
+                height: 4,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: [AppColors.goldLine, AppColors.gold.withValues(alpha: 0.5)]),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                ),
+                child: Image.asset('assets/logo.png', width: 56, height: 56),
+              ),
+              const SizedBox(height: 20),
+              Text('Edari', style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 1)),
+              const SizedBox(height: 8),
+              const Text('بوابة المندوب', style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+              const SizedBox(height: 12),
+              Text('كشوف حساب · منتجات · طلبات · تقارير', style: TextStyle(color: Colors.white.withValues(alpha: 0.78), fontWeight: FontWeight.w600, fontSize: 14)),
+              const SizedBox(height: 32),
+              _feature(Icons.account_tree_rounded, 'كشوف حساب تفصيلية'),
+              _feature(Icons.storefront_rounded, 'طلبات وفواتير'),
+              _feature(Icons.bar_chart_rounded, 'تقارير مبيعات'),
+            ],
+          ),
         ],
       ),
     );
@@ -1318,12 +1450,21 @@ class EdLoginAside extends StatelessWidget {
 
   Widget _feature(IconData icon, String text) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
-          Icon(icon, color: AppColors.goldLine, size: 20),
-          const SizedBox(width: 10),
-          Text(text, style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontWeight: FontWeight.w600)),
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.goldLine.withValues(alpha: 0.25)),
+            ),
+            child: Icon(icon, color: AppColors.goldLine, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Text(text, style: TextStyle(color: Colors.white.withValues(alpha: 0.92), fontWeight: FontWeight.w600, fontSize: 14)),
         ],
       ),
     );

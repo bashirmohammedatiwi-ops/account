@@ -39,22 +39,32 @@ class EdFormCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
+            height: 4,
+            decoration: const BoxDecoration(gradient: AppColors.accentGradient),
+          ),
+          Container(
             padding: const EdgeInsets.fromLTRB(EdSpacing.xl, EdSpacing.lg, EdSpacing.xl, EdSpacing.md),
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topRight,
+                end: Alignment.bottomLeft,
+                colors: [AppColors.surfaceMuted, AppColors.surface],
+              ),
+              border: const Border(bottom: BorderSide(color: AppColors.borderLight)),
             ),
             child: Row(
               children: [
                 if (icon != null)
                   Container(
-                    width: 44,
-                    height: 44,
+                    width: 48,
+                    height: 48,
                     margin: const EdgeInsetsDirectional.only(end: EdSpacing.md),
                     decoration: BoxDecoration(
-                      color: (iconColor ?? AppColors.accentTeal).withValues(alpha: 0.1),
+                      gradient: AppColors.moduleSoftGradient(iconColor ?? AppColors.accentTeal),
                       borderRadius: BorderRadius.circular(AppColors.radiusSm),
+                      boxShadow: [BoxShadow(color: (iconColor ?? AppColors.accentTeal).withValues(alpha: 0.15), blurRadius: 10, offset: const Offset(0, 4))],
                     ),
-                    child: Icon(icon, color: iconColor ?? AppColors.accentTeal, size: 22),
+                    child: Icon(icon, color: iconColor ?? AppColors.accentTeal, size: 24),
                   ),
                 Expanded(
                   child: Column(

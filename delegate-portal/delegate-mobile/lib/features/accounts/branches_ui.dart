@@ -111,15 +111,18 @@ class _SoftTreeCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: EdAccountsTheme.card,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(AppColors.radiusLg),
         border: Border.all(color: EdAccountsTheme.line),
-        boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 3))],
+        boxShadow: AppColors.cardShadow,
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(height: 3, color: EdAccountsTheme.accent),
+          Container(
+            height: 5,
+            decoration: const BoxDecoration(gradient: AppColors.accentGradient),
+          ),
           Padding(
             padding: const EdgeInsets.all(18),
             child: Column(
@@ -128,14 +131,13 @@ class _SoftTreeCard extends StatelessWidget {
                 Row(
                   children: [
                     Container(
-                      width: 44,
-                      height: 44,
+                      width: 48,
+                      height: 48,
                       decoration: BoxDecoration(
-                        color: EdAccountsTheme.accentSoft,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: EdAccountsTheme.line),
+                        gradient: AppColors.moduleSoftGradient(EdAccountsTheme.accent),
+                        borderRadius: BorderRadius.circular(14),
                       ),
-                      child: const Icon(Icons.account_tree_rounded, color: EdAccountsTheme.accent, size: 22),
+                      child: const Icon(Icons.account_tree_rounded, color: EdAccountsTheme.accent, size: 24),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -301,13 +303,16 @@ class _SoftFilterChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(vertical: 11),
         decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: selected ? fg.withValues(alpha: 0.35) : EdAccountsTheme.line),
+          gradient: selected ? LinearGradient(colors: [bg, bg.withValues(alpha: 0.7)]) : null,
+          color: selected ? null : bg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: selected ? fg.withValues(alpha: 0.4) : EdAccountsTheme.line),
+          boxShadow: selected ? AppColors.softShadow : null,
         ),
         alignment: Alignment.center,
         child: Text(
@@ -354,27 +359,38 @@ class _SoftBranchCard extends StatelessWidget {
 
     return Material(
       color: Colors.transparent,
+      clipBehavior: Clip.antiAlias,
+      borderRadius: BorderRadius.circular(AppColors.radius),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppColors.radius),
         child: Ink(
           height: height,
           decoration: BoxDecoration(
             color: EdAccountsTheme.card,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: EdAccountsTheme.line),
-            boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 2))],
+            borderRadius: BorderRadius.circular(AppColors.radius),
+            border: Border.all(color: style.fg.withValues(alpha: 0.2)),
+            boxShadow: AppColors.cardShadow,
           ),
           child: Stack(
             children: [
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  height: 3,
+                  decoration: BoxDecoration(gradient: AppColors.moduleGradient(style.fg)),
+                ),
+              ),
               PositionedDirectional(
                 start: 0,
-                top: 10,
+                top: 12,
                 bottom: 10,
                 child: Container(
-                  width: 3,
+                  width: 4,
                   decoration: BoxDecoration(
-                    color: style.fg.withValues(alpha: 0.65),
+                    color: style.fg.withValues(alpha: 0.5),
                     borderRadius: const BorderRadiusDirectional.horizontal(start: Radius.circular(16)),
                   ),
                 ),

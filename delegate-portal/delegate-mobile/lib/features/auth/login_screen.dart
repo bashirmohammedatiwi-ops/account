@@ -37,7 +37,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     });
     try {
       await ref.read(authProvider.notifier).login(_userCtrl.text.trim(), _passCtrl.text);
-      if (mounted) context.go('/home');
+      if (!mounted) return;
+      context.go('/home');
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } on DioException catch (e) {
@@ -92,8 +93,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             padding: EdgeInsets.fromLTRB(EdSpacing.page, top + 40, EdSpacing.page, 56),
             decoration: BoxDecoration(
               gradient: AppColors.brandGradient,
-              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(36)),
-              boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.2), blurRadius: 32, offset: const Offset(0, 16))],
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(AppColors.radius2xl)),
+              boxShadow: AppColors.elevatedShadow,
             ),
             child: Column(
               children: [

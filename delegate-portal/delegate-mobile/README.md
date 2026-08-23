@@ -50,10 +50,63 @@ lib/
 ```bash
 flutter build apk --release
 flutter build appbundle --release   # Google Play
-# iOS (Mac + Xcode)
-flutter build ipa
 ```
+
+## بناء iOS والرفع عبر TestFlight / Xcode
+
+**المتطلبات:** Mac، Xcode، حساب Apple Developer.
+
+| البند | القيمة |
+|--------|--------|
+| Bundle ID | `com.edari.edariDelegate` |
+| اسم التطبيق | المندوب |
+| الإصدار | `1.2.2+7` |
+
+### 1. تجهيز المشروع
+
+```bash
+cd delegate-portal/delegate-mobile
+flutter pub get
+cd ios && pod install && cd ..
+```
+
+### 2. فتح Xcode
+
+```bash
+open ios/Runner.xcworkspace
+```
+
+> افتح **Runner.xcworkspace** وليس `Runner.xcodeproj`.
+
+### 3. التوقيع (Signing)
+
+1. اختر هدف **Runner** من القائمة اليسرى.
+2. تبويب **Signing & Capabilities**.
+3. فعّل **Automatically manage signing**.
+4. اختر **Team** (حساب Apple Developer).
+5. تأكد أن Bundle Identifier = `com.edari.edariDelegate`.
+
+### 4. الأرشفة والرفع إلى TestFlight
+
+1. من القائمة: **Product → Destination → Any iOS Device (arm64)**.
+2. **Product → Archive**.
+3. عند اكتمال الأرشفة: **Distribute App → App Store Connect → Upload**.
+
+أو من الطرفية:
+
+```bash
+flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+```
+
+ثم ارفع الملف من `build/ios/ipa/*.ipa` عبر تطبيق **Transporter** أو من Xcode Organizer.
+
+### 5. قبل الرفع
+
+- تأكد أن عنوان الخادم في `lib/config/app_config.dart` يشير إلى السيرفر الإنتاجي (`http://187.124.23.65:5005`).
+- أنشئ التطبيق في [App Store Connect](https://appstoreconnect.apple.com) بنفس Bundle ID `com.edari.edariDelegate`.
+- بعد الرفع: من App Store Connect → **TestFlight** → أضف المختبرين الداخليين أو الخارجيين.
+- عند سؤال التشفير: التطبيق **لا يستخدم تشفيراً معفى** (`ITSAppUsesNonExemptEncryption = false`).
 
 ## الإصدار
 
-**1.1.0** — سند قبض، زبون جديد، شريط تنقل للتابلت، اختيار زبون محسّن.
+**1.2.2** — إصلاح الجلسة على iOS، جلب البيانات بعد الدخول، iOS 15+.

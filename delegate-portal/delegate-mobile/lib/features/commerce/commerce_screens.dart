@@ -9,18 +9,16 @@ import '../../core/auth/auth_session.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_provider.dart';
-import '../../core/layout/breakpoints.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/utils/debounce.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/adaptive_shell.dart';
 import '../../core/widgets/customer_picker.dart';
 import '../../core/widgets/ed_components.dart';
 import '../../models/models.dart';
 import '../home/home_screen.dart';
+import 'commerce_draft.dart';
 import 'commerce_theme.dart';
-import 'commerce_ui.dart';
 import 'order_invoice_ui.dart';
 
 final catalogBranchesProvider = FutureProvider((ref) {
@@ -38,7 +36,7 @@ final catalogProductsProvider = FutureProvider.family<List<Product>, int>((ref, 
   return withAuth(ref, () => ref.read(apiClientProvider).getProducts(sectionId));
 });
 
-class InvoiceDraftNotifier extends Notifier<Map<int, ({num quant, num bonus})>> {
+class InvoiceDraftNotifier extends Notifier<Map<int, DraftLine>> {
   int? branchId;
   int? sectionId;
   String? branchName;
@@ -47,7 +45,7 @@ class InvoiceDraftNotifier extends Notifier<Map<int, ({num quant, num bonus})>> 
   String notes = '';
 
   @override
-  Map<int, ({num quant, num bonus})> build() => {};
+  Map<int, DraftLine> build() => {};
 
   Future<void> load(int agentId) async {
     final prefs = await SharedPreferences.getInstance();
@@ -66,13 +64,17 @@ class InvoiceDraftNotifier extends Notifier<Map<int, ({num quant, num bonus})>> 
     final draft = data['draft'] as Map<String, dynamic>? ?? {};
     state = draft.map((k, v) {
       final m = v as Map<String, dynamic>;
-      return MapEntry(int.parse(k), (quant: m['quant'] as num? ?? 0, bonus: m['bonus'] as num? ?? 0));
+      return MapEntry(int.parse(k), (
+        quant: m['quant'] as num? ?? 0,
+        bonus: m['bonus'] as num? ?? 0,
+        tester: m['tester'] as num? ?? 0,
+      ));
     });
   }
 
   Future<void> persist(int agentId) async {
     final prefs = await SharedPreferences.getInstance();
-    final draft = state.map((k, v) => MapEntry('$k', {'quant': v.quant, 'bonus': v.bonus}));
+    final draft = state.map((k, v) => MapEntry('$k', {'quant': v.quant, 'bonus': v.bonus, 'tester': v.tester}));
     await prefs.setString('delegateInvoice:$agentId', jsonEncode({
       'branchId': branchId,
       'sectionId': sectionId,
@@ -96,14 +98,30 @@ class InvoiceDraftNotifier extends Notifier<Map<int, ({num quant, num bonus})>> 
     }));
   }
 
-  void setQty(int productId, num quant, num bonus) {
-    if (quant <= 0 && bonus <= 0) {
+  void updateLine(int productId, {num? quant, num? bonus, num? tester}) {
+    final cur = state[productId] ?? emptyDraftLine();
+    final q = quant ?? cur.quant;
+    final b = bonus ?? cur.bonus;
+    final t = tester ?? cur.tester;
+    if (q <= 0 && b <= 0 && t <= 0) {
       final next = {...state};
       next.remove(productId);
       state = next;
       return;
     }
-    state = {...state, productId: (quant: quant, bonus: bonus)};
+    state = {...state, productId: (quant: q, bonus: b, tester: t)};
+  }
+
+  void adjustLine(int productId, {required String field, required int delta}) {
+    final cur = state[productId] ?? emptyDraftLine();
+    switch (field) {
+      case 'bonus':
+        updateLine(productId, bonus: (cur.bonus + delta).clamp(0, 999999));
+      case 'tester':
+        updateLine(productId, tester: (cur.tester + delta).clamp(0, 999999));
+      default:
+        updateLine(productId, quant: (cur.quant + delta).clamp(0, 999999));
+    }
   }
 
   void clear() {
@@ -113,475 +131,8 @@ class InvoiceDraftNotifier extends Notifier<Map<int, ({num quant, num bonus})>> 
   }
 }
 
-final invoiceDraftProvider = NotifierProvider<InvoiceDraftNotifier, Map<int, ({num quant, num bonus})>>(InvoiceDraftNotifier.new);
+final invoiceDraftProvider = NotifierProvider<InvoiceDraftNotifier, Map<int, DraftLine>>(InvoiceDraftNotifier.new);
 
-class ShopBranchesScreen extends ConsumerStatefulWidget {
-  const ShopBranchesScreen({super.key});
-
-  @override
-  ConsumerState<ShopBranchesScreen> createState() => _ShopBranchesScreenState();
-}
-
-class _ShopBranchesScreenState extends ConsumerState<ShopBranchesScreen> {
-  String? _resumeHint;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadResumeHint();
-  }
-
-  Future<void> _loadResumeHint() async {
-    final agentId = ref.read(authProvider).agent?.id;
-    if (agentId == null) return;
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString('delegateInvoice:$agentId');
-    if (raw == null || !mounted) return;
-    try {
-      final data = jsonDecode(raw) as Map<String, dynamic>;
-      final draft = data['draft'] as Map<String, dynamic>? ?? {};
-      final hasLines = draft.values.any((v) {
-        final m = v as Map<String, dynamic>;
-        return (m['quant'] as num? ?? 0) > 0 || (m['bonus'] as num? ?? 0) > 0;
-      });
-      if (hasLines) {
-        setState(() {
-          _resumeHint = [data['branchName'], data['sectionName']].whereType<String>().where((s) => s.isNotEmpty).join(' · ');
-        });
-      }
-    } catch (_) {}
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final branchesAsync = ref.watch(catalogBranchesProvider);
-    return AppPage(
-      title: 'فروع المنتجات',
-      kicker: 'المنتجات',
-      subtitle: 'اختر فرع المنتجات',
-      showBack: true,
-      onBack: () => context.go('/home'),
-      child: ColoredBox(
-        color: EdCommerceTheme.pageBg,
-        child: Column(
-          children: [
-            if (_resumeHint != null)
-              EdResumeBanner(
-                message: 'فاتورة محفوظة · $_resumeHint',
-                actionLabel: 'متابعة',
-                onAction: () async {
-                  final agentId = ref.read(authProvider).agent?.id;
-                  if (agentId != null) {
-                    await ref.read(invoiceDraftProvider.notifier).load(agentId);
-                    final n = ref.read(invoiceDraftProvider.notifier);
-                    if (n.branchId != null && n.sectionId != null && context.mounted) {
-                      context.go('/shop/${n.branchId}/sections/${n.sectionId}/products');
-                    }
-                  }
-                },
-              ),
-            Expanded(
-              child: branchesAsync.when(
-                loading: () => const LoadingView(),
-                error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(catalogBranchesProvider)),
-                data: (branches) => EdShopPickerGrid(
-                  items: branches,
-                  emptyMessage: 'لا توجد فروع منتجات',
-                  emptyIcon: Icons.store_mall_directory_outlined,
-                  itemBuilder: (_, i) {
-                    final b = branches[i];
-                    return EdShopPickerCard(
-                      title: b.name,
-                      subtitle: b.description,
-                      icon: Icons.store_mall_directory_outlined,
-                      onTap: () => context.go('/shop/${b.id}/sections'),
-                    );
-                  },
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class ShopSectionsScreen extends ConsumerWidget {
-  const ShopSectionsScreen({super.key, required this.branchId});
-  final int branchId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final sectionsAsync = ref.watch(catalogSectionsProvider(branchId));
-    final branchesAsync = ref.watch(catalogBranchesProvider);
-    final branchName = branchesAsync.valueOrNull?.where((b) => b.id == branchId).map((b) => b.name).firstOrNull;
-
-    return AppPage(
-      title: 'الأقسام',
-      kicker: 'المنتجات',
-      subtitle: branchName ?? 'اختر قسم المنتجات',
-      showBack: true,
-      onBack: () => context.pop(),
-      child: ColoredBox(
-        color: EdCommerceTheme.pageBg,
-        child: sectionsAsync.when(
-          loading: () => const LoadingView(),
-          error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(catalogSectionsProvider(branchId))),
-          data: (sections) => EdShopPickerGrid(
-            items: sections,
-            emptyMessage: 'لا توجد أقسام',
-            emptyIcon: Icons.category_outlined,
-            itemBuilder: (_, i) {
-              final s = sections[i];
-              return EdShopPickerCard(
-                title: s.name,
-                subtitle: s.description,
-                icon: Icons.category_outlined,
-                onTap: () async {
-                  final notifier = ref.read(invoiceDraftProvider.notifier);
-                  notifier.branchId = branchId;
-                  notifier.sectionId = s.id;
-                  notifier.branchName = branchName;
-                  notifier.sectionName = s.name;
-                  final agentId = ref.read(authProvider).agent?.id;
-                  if (agentId != null) await notifier.persist(agentId);
-                  if (context.mounted) context.go('/shop/$branchId/sections/${s.id}/products');
-                },
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class ShopProductsScreen extends ConsumerWidget {
-  const ShopProductsScreen({super.key, required this.branchId, required this.sectionId});
-  final int branchId;
-  final int sectionId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final branchesAsync = ref.watch(catalogBranchesProvider);
-    final sectionsAsync = ref.watch(catalogSectionsProvider(branchId));
-    final branchName = branchesAsync.valueOrNull?.where((b) => b.id == branchId).map((b) => b.name).firstOrNull ?? '';
-    final sectionName = sectionsAsync.valueOrNull?.where((s) => s.id == sectionId).map((s) => s.name).firstOrNull ?? '';
-
-    return AppPage(
-      title: 'عرض وطلب',
-      kicker: 'المنتجات',
-      subtitle: [branchName, sectionName].where((s) => s.isNotEmpty).join(' · '),
-      showBack: true,
-      onBack: () => context.pop(),
-      child: ShopProductsPanel(
-        branchId: branchId,
-        sectionId: sectionId,
-        branchName: branchName,
-        sectionName: sectionName,
-      ),
-    );
-  }
-}
-
-class ShopProductsPanel extends ConsumerStatefulWidget {
-  const ShopProductsPanel({
-    super.key,
-    required this.branchId,
-    required this.sectionId,
-    required this.branchName,
-    required this.sectionName,
-  });
-
-  final int branchId;
-  final int sectionId;
-  final String branchName;
-  final String sectionName;
-
-  @override
-  ConsumerState<ShopProductsPanel> createState() => _ShopProductsPanelState();
-}
-
-class _ShopProductsPanelState extends ConsumerState<ShopProductsPanel> {
-  String _filter = '';
-  String _filterApplied = '';
-  int _page = 0;
-  int? _selectedId;
-  final _barcodeCtrl = TextEditingController();
-  final _notesCtrl = TextEditingController();
-  final _debouncer = Debouncer();
-
-  @override
-  void dispose() {
-    _barcodeCtrl.dispose();
-    _notesCtrl.dispose();
-    _debouncer.dispose();
-    super.dispose();
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    final agentId = ref.read(authProvider).agent?.id;
-    if (agentId != null) {
-      ref.read(invoiceDraftProvider.notifier).load(agentId).then((_) {
-        if (mounted) {
-          _notesCtrl.text = ref.read(invoiceDraftProvider.notifier).notes;
-        }
-      });
-    }
-    final notifier = ref.read(invoiceDraftProvider.notifier);
-    notifier.branchId = widget.branchId;
-    notifier.sectionId = widget.sectionId;
-    notifier.branchName = widget.branchName;
-    notifier.sectionName = widget.sectionName;
-  }
-
-  int _pageSize(BuildContext context) {
-    final cols = EdLayout.of(context).gridColumns(phone: 2, tablet: 3, wide: 3, desktop: 4);
-    return cols * 2;
-  }
-
-  num _total(List<Product> products, Map<int, ({num quant, num bonus})> draft) {
-    num t = 0;
-    for (final p in products) {
-      final d = draft[p.id];
-      if (d != null && d.quant > 0) t += d.quant * p.price;
-    }
-    return t;
-  }
-
-  int _lineCount(Map<int, ({num quant, num bonus})> draft) {
-    return draft.values.where((d) => d.quant > 0 || d.bonus > 0).length;
-  }
-
-  Future<void> _persistDraft() async {
-    final agentId = ref.read(authProvider).agent?.id;
-    if (agentId != null) await ref.read(invoiceDraftProvider.notifier).persist(agentId);
-  }
-
-  Future<void> _pickCustomer() async {
-    final branch = await pickBranchCustomer(context, ref);
-    if (branch != null) {
-      ref.read(invoiceDraftProvider.notifier).customer = branch;
-      await _persistDraft();
-      if (mounted) setState(() {});
-    }
-  }
-
-  Future<void> _lookupBarcode(List<Product> products) async {
-    final code = _barcodeCtrl.text.trim();
-    if (code.isEmpty) return;
-    try {
-      final product = await ref.read(apiClientProvider).lookupProduct(code, branchId: widget.branchId);
-      _selectProduct(product.id, products);
-      final notifier = ref.read(invoiceDraftProvider.notifier);
-      final current = ref.read(invoiceDraftProvider)[product.id];
-      notifier.setQty(product.id, (current?.quant ?? 0) + 1, current?.bonus ?? 0);
-      await _persistDraft();
-      _barcodeCtrl.clear();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${product.name} +1')));
-      }
-    } catch (e) {
-      final local = products.where((p) => (p.barcode ?? '').contains(code) || (p.skuNum ?? '').contains(code)).toList();
-      if (local.length == 1) {
-        final p = local.first;
-        _selectProduct(p.id, products);
-        final notifier = ref.read(invoiceDraftProvider.notifier);
-        final current = ref.read(invoiceDraftProvider)[p.id];
-        notifier.setQty(p.id, (current?.quant ?? 0) + 1, current?.bonus ?? 0);
-        await _persistDraft();
-        _barcodeCtrl.clear();
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-      }
-    }
-  }
-
-  void _selectProduct(int id, List<Product> products) {
-    setState(() {
-      _selectedId = id;
-      _page = products.indexWhere((p) => p.id == id) ~/ _pageSize(context);
-    });
-  }
-
-  Product? _selectedProduct(List<Product> products) {
-    if (_selectedId == null) return null;
-    for (final p in products) {
-      if (p.id == _selectedId) return p;
-    }
-    return null;
-  }
-
-  void _adjustQty(Product product, {required bool quant, required int delta}) {
-    final notifier = ref.read(invoiceDraftProvider.notifier);
-    final current = ref.read(invoiceDraftProvider)[product.id];
-    final q = current?.quant ?? 0;
-    final b = current?.bonus ?? 0;
-    if (quant) {
-      notifier.setQty(product.id, (q + delta).clamp(0, 999999), b);
-    } else {
-      notifier.setQty(product.id, q, (b + delta).clamp(0, 999999));
-    }
-    _persistDraft();
-    setState(() {});
-  }
-
-  Future<void> _openInvoiceSheet(List<Product> products) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (ctx) => EdOrderInvoiceSheet(branchId: widget.branchId, products: products),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final productsAsync = ref.watch(catalogProductsProvider(widget.sectionId));
-    final draft = ref.watch(invoiceDraftProvider);
-    final customer = ref.read(invoiceDraftProvider.notifier).customer;
-    final layout = EdLayout.of(context);
-    final sideWidth = layout.isTablet ? 320.0 : 280.0;
-    final cols = layout.gridColumns(phone: 2, tablet: 3, wide: 3, desktop: 4);
-
-    return ColoredBox(
-      color: EdCommerceTheme.pageBg,
-      child: productsAsync.when(
-        loading: () => const LoadingView(message: 'جاري تحميل المنتجات...'),
-        error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(catalogProductsProvider(widget.sectionId))),
-        data: (products) {
-          final q = _filterApplied.toLowerCase();
-          final filtered = products.where((p) {
-            if (q.isEmpty) return true;
-            return p.name.toLowerCase().contains(q) || (p.barcode ?? '').contains(q) || (p.skuNum ?? '').contains(q);
-          }).toList();
-
-          if (_selectedId != null && !filtered.any((p) => p.id == _selectedId)) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) setState(() => _selectedId = null);
-            });
-          }
-
-          final pageSize = _pageSize(context);
-          final pageCount = filtered.isEmpty ? 1 : ((filtered.length + pageSize - 1) / pageSize).ceil();
-          final safePage = _page.clamp(0, pageCount - 1);
-          if (safePage != _page) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) setState(() => _page = safePage);
-            });
-          }
-          final pageItems = filtered.skip(safePage * pageSize).take(pageSize).toList();
-          final selected = _selectedProduct(filtered);
-          final showSide = layout.isTablet || selected != null;
-
-          Widget buildDetailPanel() {
-            if (selected != null) {
-              return EdShopProductDetailPanel(
-                product: selected,
-                sectionName: widget.sectionName,
-                quant: draft[selected.id]?.quant ?? 0,
-                bonus: draft[selected.id]?.bonus ?? 0,
-                onDecQuant: () => _adjustQty(selected, quant: true, delta: -1),
-                onIncQuant: () => _adjustQty(selected, quant: true, delta: 1),
-                onDecBonus: () => _adjustQty(selected, quant: false, delta: -1),
-                onIncBonus: () => _adjustQty(selected, quant: false, delta: 1),
-                notesController: _notesCtrl,
-                onNotesChanged: (v) {
-                  ref.read(invoiceDraftProvider.notifier).notes = v;
-                  _persistDraft();
-                },
-              );
-            }
-            return const EdShopProductDetailPlaceholder();
-          }
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              EdShopCustomerBar(
-                customer: customer,
-                branchLabel: [widget.branchName, widget.sectionName].where((s) => s.isNotEmpty).join(' / '),
-                onPick: _pickCustomer,
-              ),
-              EdShopToolbar(
-                searchHint: 'اسم المنتج...',
-                onSearchChanged: (v) {
-                  _filter = v.trim();
-                  _debouncer.run(() {
-                    if (mounted) {
-                      setState(() {
-                        _filterApplied = _filter;
-                        _page = 0;
-                      });
-                    }
-                  });
-                },
-                barcodeController: _barcodeCtrl,
-                onBarcodeSubmit: () => _lookupBarcode(products),
-                onBarcodeScan: () => _lookupBarcode(products),
-              ),
-              Expanded(
-                child: Row(
-                  textDirection: TextDirection.ltr,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (showSide)
-                      SizedBox(
-                        width: sideWidth,
-                        child: buildDetailPanel(),
-                      ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          EdShopMetaBar(text: '${widget.branchName} · ${widget.sectionName} · ${filtered.length} منتج · صفحة ${safePage + 1} من $pageCount'),
-                          Expanded(
-                            child: filtered.isEmpty
-                                ? const EmptyState(message: 'لا توجد منتجات', icon: Icons.inventory_2_outlined)
-                                : GridView.builder(
-                                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-                                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                                      crossAxisCount: cols,
-                                      crossAxisSpacing: 10,
-                                      mainAxisSpacing: 10,
-                                      childAspectRatio: layout.isTablet ? 0.78 : 0.72,
-                                    ),
-                                    itemCount: pageItems.length,
-                                    itemBuilder: (_, i) {
-                                      final p = pageItems[i];
-                                      final d = draft[p.id];
-                                      return EdShopProductTile(
-                                        key: ValueKey(p.id),
-                                        product: p,
-                                        selected: _selectedId == p.id,
-                                        inDraft: (d?.quant ?? 0) > 0 || (d?.bonus ?? 0) > 0,
-                                        onTap: () => setState(() => _selectedId = p.id),
-                                      );
-                                    },
-                                  ),
-                          ),
-                          EdShopPagination(page: safePage, pageCount: pageCount, onPage: (p) => setState(() => _page = p)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              EdShopOrderDock(
-                lineCount: _lineCount(draft),
-                totalLabel: fmtMoney(_total(products, draft)),
-                onPressed: () => _openInvoiceSheet(products),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
 
 class EdOrderInvoiceSheet extends ConsumerStatefulWidget {
   const EdOrderInvoiceSheet({super.key, required this.branchId, required this.products});
@@ -623,16 +174,8 @@ class _EdOrderInvoiceSheetState extends ConsumerState<EdOrderInvoiceSheet> {
     }
   }
 
-  void _adjustLine(int productId, {required bool quant, required int delta}) {
-    final notifier = ref.read(invoiceDraftProvider.notifier);
-    final current = ref.read(invoiceDraftProvider)[productId];
-    final q = current?.quant ?? 0;
-    final b = current?.bonus ?? 0;
-    if (quant) {
-      notifier.setQty(productId, (q + delta).clamp(0, 999999), b);
-    } else {
-      notifier.setQty(productId, q, (b + delta).clamp(0, 999999));
-    }
+  void _adjustLine(int productId, {required String field, required int delta}) {
+    ref.read(invoiceDraftProvider.notifier).adjustLine(productId, field: field, delta: delta);
     _persist();
     setState(() {});
   }
@@ -659,12 +202,13 @@ class _EdOrderInvoiceSheetState extends ConsumerState<EdOrderInvoiceSheet> {
     final lines = <OrderLine>[];
     for (final p in widget.products) {
       final d = draft[p.id];
-      if (d == null || (d.quant <= 0 && d.bonus <= 0)) continue;
+      if (d == null || !draftLineActive(d)) continue;
       lines.add(OrderLine(
         productId: p.id,
         matName: p.name,
         quant: d.quant,
         bonus: d.bonus,
+        tester: d.tester,
         unitPrice: p.price,
         barcode: p.barcode ?? p.skuNum,
       ));
@@ -708,6 +252,7 @@ class _EdOrderInvoiceSheetState extends ConsumerState<EdOrderInvoiceSheet> {
     final total = lines.fold<num>(0, (s, l) => s + l.lineTotal);
     final qtySum = lines.fold<num>(0, (s, l) => s + l.quant);
     final bonusSum = lines.fold<num>(0, (s, l) => s + l.bonus);
+    final testerSum = lines.fold<num>(0, (s, l) => s + l.tester);
 
     return DraggableScrollableSheet(
       expand: false,
@@ -755,6 +300,7 @@ class _EdOrderInvoiceSheetState extends ConsumerState<EdOrderInvoiceSheet> {
                     lineCount: lines.length,
                     qtySum: qtySum,
                     bonusSum: bonusSum,
+                    testerSum: testerSum,
                     total: total,
                   ),
                   const SizedBox(height: 16),
@@ -870,14 +416,27 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     final active = _filter == value;
     return Padding(
       padding: const EdgeInsetsDirectional.only(end: 8),
-      child: FilterChip(
-        label: Text(label),
-        selected: active,
-        onSelected: (_) => setState(() => _filter = value),
-        selectedColor: AppColors.accentSoft,
-        checkmarkColor: AppColors.accentTeal,
-        labelStyle: TextStyle(fontWeight: FontWeight.w700, color: active ? AppColors.accentTeal : AppColors.text),
-        side: BorderSide(color: active ? AppColors.accentTeal : AppColors.border),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(999),
+        child: InkWell(
+          onTap: () => setState(() => _filter = value),
+          borderRadius: BorderRadius.circular(999),
+          child: Ink(
+            decoration: BoxDecoration(
+              gradient: active ? AppColors.buttonGradient : null,
+              color: active ? null : AppColors.surface,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: active ? Colors.transparent : AppColors.borderLight),
+              boxShadow: active ? AppColors.softShadow : null,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Text(
+              label,
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: active ? Colors.white : AppColors.textSecondary),
+            ),
+          ),
+        ),
       ),
     );
   }
