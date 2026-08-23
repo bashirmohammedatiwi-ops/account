@@ -171,6 +171,67 @@ router.delete('/receipts/:id', authAgent, (req, res) => {
 });
 
 const {
+  createDeliveryReceipt,
+  listDeliveryReceipts,
+  loadDeliveryReceipt,
+  markDeliveryReceiptPrinted,
+  deleteDeliveryReceipt
+} = require('../lib/delivery-receipts');
+
+router.get('/delivery-receipts', authAgent, (req, res) => {
+  const status = String(req.query.status || '').trim();
+  res.json({
+    ok: true,
+    deliveryReceipts: listDeliveryReceipts({
+      agentId: req.agent.id,
+      status: status || undefined,
+      limit: 100
+    })
+  });
+});
+
+router.get('/delivery-receipts/:id', authAgent, (req, res) => {
+  const item = loadDeliveryReceipt(Number(req.params.id));
+  if (!item || item.agentId !== req.agent.id) {
+    return res.status(404).json({ ok: false, error: 'وصل الاستلام غير موجود' });
+  }
+  res.json({ ok: true, deliveryReceipt: item });
+});
+
+router.post('/delivery-receipts', authAgent, (req, res) => {
+  const body = req.body || {};
+  if (body.customerAccSeq && !canAgentAccess(req.agent.id, body.customerAccSeq)) {
+    return res.status(403).json({ ok: false, error: 'لا تملك صلاحية هذا الزبون' });
+  }
+  try {
+    const deliveryReceipt = createDeliveryReceipt(req.agent.id, body);
+    res.json({ ok: true, deliveryReceipt });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/delivery-receipts/:id/printed', authAgent, (req, res) => {
+  try {
+    const deliveryReceipt = markDeliveryReceiptPrinted(Number(req.params.id), { agentId: req.agent.id });
+    if (!deliveryReceipt) return res.status(404).json({ ok: false, error: 'وصل الاستلام غير موجود' });
+    res.json({ ok: true, deliveryReceipt });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.delete('/delivery-receipts/:id', authAgent, (req, res) => {
+  try {
+    const result = deleteDeliveryReceipt(Number(req.params.id), { agentId: req.agent.id });
+    if (!result) return res.status(404).json({ ok: false, error: 'وصل الاستلام غير موجود' });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+const {
   createCustomerRequest,
   listCustomerRequests,
   loadCustomerRequest,

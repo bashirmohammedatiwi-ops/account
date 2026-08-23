@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -55,60 +53,52 @@ class EdPhoneHeader extends StatelessWidget {
     final back = shouldShowPhoneBack(context, showBack: showBack);
 
     return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface.withValues(alpha: 0.88),
-            border: Border(bottom: BorderSide(color: AppColors.borderLight.withValues(alpha: 0.85))),
-            boxShadow: AppColors.headerShadow,
-          ),
-          child: SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(EdSpacing.sm, compact ? 6 : 10, EdSpacing.lg, compact ? 12 : 16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 48,
-                    child: back && onBack != null
-                        ? _HeaderIconBtn(icon: Icons.arrow_forward_rounded, onTap: onBack!)
-                        : null,
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (kicker != null)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              gradient: AppColors.moduleSoftGradient(AppColors.accentTeal),
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(color: AppColors.accentTeal.withValues(alpha: 0.15)),
-                            ),
-                            child: Text(
-                              kicker!,
-                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppColors.accentTeal, letterSpacing: 0.3),
-                            ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(EdSpacing.sm, compact ? 6 : 10, EdSpacing.lg, compact ? 12 : 14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 48,
+                  child: back && onBack != null
+                      ? _HeaderIconBtn(icon: Icons.arrow_forward_rounded, onTap: onBack!)
+                      : null,
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (kicker != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                            kicker!,
+                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted),
                           ),
-                        Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: compact ? 18 : 22, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.2, letterSpacing: -0.2),
                         ),
-                        if (subtitle != null && subtitle!.isNotEmpty)
-                          Text(
-                            subtitle!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
-                          ),
-                      ],
-                    ),
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: compact ? 18 : 20, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.2),
+                      ),
+                      if (subtitle != null && subtitle!.isNotEmpty)
+                        Text(
+                          subtitle!,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
+                        ),
+                    ],
                   ),
+                ),
                   if (actions != null)
                     Row(
                       mainAxisSize: MainAxisSize.min,
@@ -688,62 +678,53 @@ class EdPhoneDock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppColors.radiusXl),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.surface.withValues(alpha: 0.92),
-              borderRadius: BorderRadius.circular(AppColors.radiusXl),
-              border: Border.all(color: AppColors.borderLight),
-              boxShadow: AppColors.dockShadow,
-            ),
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(6, 8, 6, 6),
-                child: Row(
-                  children: List.generate(_items.length, (i) {
-                    final item = _items[i];
-                    final active = i == selected;
-                    return Expanded(
-                      child: GestureDetector(
-                        onTap: () => onSelect(i),
-                        behavior: HitTestBehavior.opaque,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 240),
-                          curve: Curves.easeOutCubic,
-                          margin: const EdgeInsets.symmetric(horizontal: 2),
-                          padding: const EdgeInsets.symmetric(vertical: 8),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: AppColors.borderLight)),
+        boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, -2))],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+          child: Row(
+            children: List.generate(_items.length, (i) {
+              final item = _items[i];
+              final active = i == selected;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => onSelect(i),
+                  behavior: HitTestBehavior.opaque,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOutCubic,
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                           decoration: BoxDecoration(
-                            gradient: active ? AppColors.moduleSoftGradient(AppColors.accentTeal) : null,
-                            color: active ? null : Colors.transparent,
-                            borderRadius: BorderRadius.circular(AppColors.radiusSm),
-                            border: active ? Border.all(color: AppColors.accentTeal.withValues(alpha: 0.15)) : null,
+                            color: active ? AppColors.surfaceAlt : Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                            border: active ? Border.all(color: AppColors.borderLight) : null,
                           ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(active ? item.activeIcon : item.icon, size: 22, color: active ? AppColors.accentTeal : AppColors.mutedLight),
-                              const SizedBox(height: 3),
-                              Text(
-                                item.label,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: active ? AppColors.accentTeal : AppColors.mutedLight),
-                              ),
-                            ],
-                          ),
+                          child: Icon(active ? item.activeIcon : item.icon, size: 22, color: active ? AppColors.navy : AppColors.mutedLight),
                         ),
-                      ),
-                    );
-                  }),
+                        const SizedBox(height: 4),
+                        Text(
+                          item.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: active ? AppColors.navy : AppColors.mutedLight),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ),
+              );
+            }),
           ),
         ),
       ),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/api/api_client.dart';
+import '../../core/api/delegate_api.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/pdf_utils.dart';

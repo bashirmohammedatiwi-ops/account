@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/api/api_client.dart';
+import '../../core/api/delegate_api.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/adaptive_shell.dart';
@@ -120,7 +120,7 @@ class _PromotionalVisitsScreenState extends ConsumerState<PromotionalVisitsScree
       showBack: true,
       onBack: () => context.go('/home'),
       child: ColoredBox(
-        color: AppColors.bg,
+        color: Colors.white,
         child: RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(promotionalVisitsMetaProvider);

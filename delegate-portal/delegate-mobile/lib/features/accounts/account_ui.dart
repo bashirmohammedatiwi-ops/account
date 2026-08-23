@@ -342,7 +342,7 @@ class EdBranchRowCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(branch.name1, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                          Text(branch.name1, maxLines: 4, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.navy)),
                           const SizedBox(height: 4),
                           Text('حساب ${branch.accountNum}', style: const TextStyle(fontSize: 13, color: AppColors.muted, fontWeight: FontWeight.w600)),
                           if (branch.address != null && branch.address!.isNotEmpty) ...[

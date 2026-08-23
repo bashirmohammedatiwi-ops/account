@@ -24,7 +24,11 @@ function setRvTab(name) {
     btn.classList.toggle('active', btn.dataset.rvTab === name);
   });
   document.getElementById('rvTabReceipts')?.classList.toggle('hidden', name !== 'receipts');
+  document.getElementById('rvTabDelivery')?.classList.toggle('hidden', name !== 'delivery');
   document.getElementById('rvTabCustomers')?.classList.toggle('hidden', name !== 'customers');
+  if (name === 'delivery' && typeof window.loadDeliveryReceiptsPage === 'function') {
+    void window.loadDeliveryReceiptsPage();
+  }
 }
 
 function customerReqRowActions(r) {

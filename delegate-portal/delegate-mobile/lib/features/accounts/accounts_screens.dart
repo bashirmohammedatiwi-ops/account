@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/api/api_client.dart';
+import '../../core/api/delegate_api.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/theme/app_colors.dart';
@@ -36,6 +36,7 @@ class TreesScreen extends ConsumerWidget {
       subtitle: 'اختر شجرة للمتابعة',
       showBack: true,
       onBack: () => context.go('/home'),
+      toolbar: const EdFlowSteps(current: 0),
       actions: [
         EdHeaderIconButton(icon: Icons.refresh_rounded, tooltip: 'تحديث', onPressed: () => ref.invalidate(treesProvider)),
       ],
@@ -99,6 +100,7 @@ class _BranchesScreenState extends ConsumerState<BranchesScreen> {
       subtitle: tree?.name1 ?? '',
       showBack: true,
       onBack: () => context.go('/accounts'),
+      toolbar: const EdFlowSteps(current: 1),
       actions: [
         EdHeaderIconButton(icon: Icons.refresh_rounded, tooltip: 'تحديث', onPressed: () => ref.invalidate(childrenProvider(widget.treeSeq))),
       ],

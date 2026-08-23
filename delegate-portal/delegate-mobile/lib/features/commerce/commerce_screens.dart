@@ -6,7 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/auth/auth_session.dart';
-import '../../core/api/api_client.dart';
+import '../../core/api/delegate_api.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/theme/app_colors.dart';

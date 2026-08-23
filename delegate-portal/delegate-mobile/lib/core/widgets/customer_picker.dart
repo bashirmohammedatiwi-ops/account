@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../api/api_client.dart';
+import '../api/delegate_api.dart';
 import '../theme/app_colors.dart';
 import '../utils/debounce.dart';
 import '../../models/models.dart';

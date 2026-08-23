@@ -670,6 +670,55 @@ router.delete('/receipts/:id', (req, res) => {
 });
 
 const {
+  listDeliveryReceipts,
+  loadDeliveryReceipt,
+  updateDeliveryReceiptByAdmin,
+  deleteDeliveryReceipt,
+  deliveryReceiptStats
+} = require('../lib/delivery-receipts');
+
+router.get('/delivery-receipts/stats', (_req, res) => {
+  res.json({ ok: true, stats: deliveryReceiptStats() });
+});
+
+router.get('/delivery-receipts', (req, res) => {
+  const status = String(req.query.status || '').trim();
+  res.json({
+    ok: true,
+    deliveryReceipts: listDeliveryReceipts({
+      status: status || undefined,
+      limit: 300
+    })
+  });
+});
+
+router.get('/delivery-receipts/:id', (req, res) => {
+  const item = loadDeliveryReceipt(Number(req.params.id));
+  if (!item) return res.status(404).json({ ok: false, error: 'وصل الاستلام غير موجود' });
+  res.json({ ok: true, deliveryReceipt: item });
+});
+
+router.patch('/delivery-receipts/:id', (req, res) => {
+  try {
+    const item = updateDeliveryReceiptByAdmin(Number(req.params.id), req.body || {});
+    if (!item) return res.status(404).json({ ok: false, error: 'وصل الاستلام غير موجود' });
+    res.json({ ok: true, deliveryReceipt: item });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.delete('/delivery-receipts/:id', (req, res) => {
+  try {
+    const result = deleteDeliveryReceipt(Number(req.params.id), { admin: true });
+    if (!result) return res.status(404).json({ ok: false, error: 'وصل الاستلام غير موجود' });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+const {
   listCustomerRequests,
   loadCustomerRequest,
   customerRequestStats,
@@ -748,6 +797,55 @@ router.delete('/customer-requests/:id', (req, res) => {
   try {
     const result = deleteCustomerRequest(Number(req.params.id));
     if (!result) return res.status(404).json({ ok: false, error: 'طلب الزبون غير موجود' });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+const {
+  listDeliveryReceipts,
+  loadDeliveryReceipt,
+  updateDeliveryReceiptByAdmin,
+  deleteDeliveryReceipt,
+  deliveryReceiptStats
+} = require('../lib/delivery-receipts');
+
+router.get('/delivery-receipts/stats', (_req, res) => {
+  res.json({ ok: true, stats: deliveryReceiptStats() });
+});
+
+router.get('/delivery-receipts', (req, res) => {
+  const status = String(req.query.status || '').trim();
+  res.json({
+    ok: true,
+    deliveryReceipts: listDeliveryReceipts({
+      status: status || undefined,
+      limit: 300
+    })
+  });
+});
+
+router.get('/delivery-receipts/:id', (req, res) => {
+  const item = loadDeliveryReceipt(Number(req.params.id));
+  if (!item) return res.status(404).json({ ok: false, error: 'وصل الاستلام غير موجود' });
+  res.json({ ok: true, deliveryReceipt: item });
+});
+
+router.patch('/delivery-receipts/:id', (req, res) => {
+  try {
+    const item = updateDeliveryReceiptByAdmin(Number(req.params.id), req.body || {});
+    if (!item) return res.status(404).json({ ok: false, error: 'وصل الاستلام غير موجود' });
+    res.json({ ok: true, deliveryReceipt: item });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.delete('/delivery-receipts/:id', (req, res) => {
+  try {
+    const result = deleteDeliveryReceipt(Number(req.params.id), { admin: true });
+    if (!result) return res.status(404).json({ ok: false, error: 'وصل الاستلام غير موجود' });
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });

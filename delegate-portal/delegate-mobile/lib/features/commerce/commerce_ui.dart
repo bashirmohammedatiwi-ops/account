@@ -299,36 +299,35 @@ class EdShopProductDetailPlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: EdCommerceTheme.panelBg,
-        border: Border(
-          left: BorderSide(color: EdCommerceTheme.accent.withValues(alpha: 0.25), width: 4),
-          right: BorderSide(color: EdCommerceTheme.line),
-        ),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: EdCommerceTheme.line),
+        boxShadow: AppColors.softShadow,
       ),
+      clipBehavior: Clip.antiAlias,
       child: Center(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(32),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 72,
-                height: 72,
+                width: 80,
+                height: 80,
                 decoration: BoxDecoration(
-                  color: EdCommerceTheme.card,
+                  color: EdCommerceTheme.accentSoft,
                   shape: BoxShape.circle,
-                  border: Border.all(color: EdCommerceTheme.line),
-                  boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.04), blurRadius: 12, offset: const Offset(0, 4))],
+                  border: Border.all(color: EdCommerceTheme.accent.withValues(alpha: 0.15)),
                 ),
-                child: Icon(Icons.inventory_2_outlined, size: 32, color: AppColors.muted.withValues(alpha: 0.55)),
+                child: Icon(Icons.touch_app_rounded, size: 36, color: EdCommerceTheme.accent.withValues(alpha: 0.7)),
               ),
-              const SizedBox(height: 16),
-              const Text('معلومات الصنف', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.navy)),
+              const SizedBox(height: 20),
+              const Text('تفاصيل المنتج', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Color(0xFF1E293B))),
               const SizedBox(height: 8),
               Text(
-                'اختر منتجاً من الشبكة\nلعرض التفاصيل وإدخال الكميات',
+                'اختر منتجاً من الشبكة لعرض الصورة والسعر وإدخال الكمية والهدايا والتيستر',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted.withValues(alpha: 0.9), height: 1.55),
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.muted, height: 1.5),
               ),
             ],
           ),
@@ -345,89 +344,110 @@ class EdShopProductDetailPanel extends StatelessWidget {
     required this.sectionName,
     required this.quant,
     required this.bonus,
+    required this.tester,
     required this.onDecQuant,
     required this.onIncQuant,
     required this.onDecBonus,
     required this.onIncBonus,
-    required this.notesController,
-    required this.onNotesChanged,
+    required this.onDecTester,
+    required this.onIncTester,
+    required this.onSetQuant,
+    required this.onSetBonus,
+    required this.onSetTester,
+    this.scrollController,
   });
 
   final Product product;
   final String sectionName;
   final num quant;
   final num bonus;
+  final num tester;
   final VoidCallback onDecQuant;
   final VoidCallback onIncQuant;
   final VoidCallback onDecBonus;
   final VoidCallback onIncBonus;
-  final TextEditingController notesController;
-  final ValueChanged<String> onNotesChanged;
+  final VoidCallback onDecTester;
+  final VoidCallback onIncTester;
+  final ValueChanged<num> onSetQuant;
+  final ValueChanged<num> onSetBonus;
+  final ValueChanged<num> onSetTester;
+  final ScrollController? scrollController;
 
   @override
   Widget build(BuildContext context) {
     final lineTotal = quant * product.price;
     final stock = product.stockHint;
     final code = product.barcode ?? product.skuNum ?? '—';
+    final inDraft = quant > 0 || bonus > 0 || tester > 0;
 
     return Container(
       decoration: BoxDecoration(
-        color: EdCommerceTheme.panelBg,
-        border: Border(
-          left: BorderSide(color: EdCommerceTheme.accent, width: 4),
-          right: BorderSide(color: EdCommerceTheme.line),
-        ),
-        boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.05), blurRadius: 16, offset: const Offset(4, 0))],
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: inDraft ? EdCommerceTheme.accent.withValues(alpha: 0.35) : EdCommerceTheme.line, width: inDraft ? 2 : 1),
+        boxShadow: AppColors.cardShadow,
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-            color: EdCommerceTheme.panelHeader,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [EdCommerceTheme.panelHeader, AppColors.surface],
+              ),
+              border: Border(bottom: BorderSide(color: EdCommerceTheme.line.withValues(alpha: 0.6))),
+            ),
+            child: Row(
               children: [
-                const Row(
-                  children: [
-                    Icon(Icons.info_outline_rounded, color: Colors.white, size: 16),
-                    SizedBox(width: 6),
-                    Text('معلومات الصنف', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
-                  ],
-                ),
-                if (stock != null && stock.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(999)),
-                    child: Text('كمية المخزون: $stock', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: EdCommerceTheme.accentSoft,
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                ],
+                  child: const Icon(Icons.inventory_2_outlined, color: EdCommerceTheme.accent, size: 22),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text('تفاصيل الإضافة', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF1E293B))),
+                ),
+                if (inDraft)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: EdCommerceTheme.accentSoft,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: EdCommerceTheme.accent.withValues(alpha: 0.2)),
+                    ),
+                    child: const Text('في الفاتورة', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: EdCommerceTheme.accent)),
+                  ),
               ],
             ),
           ),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+              controller: scrollController,
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   AspectRatio(
-                    aspectRatio: 1,
+                    aspectRatio: 1.1,
                     child: Container(
                       decoration: BoxDecoration(
-                        color: EdCommerceTheme.card,
-                        borderRadius: BorderRadius.circular(14),
+                        color: EdCommerceTheme.accentSoft.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(18),
                         border: Border.all(color: EdCommerceTheme.line),
-                        boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
                       ),
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(14),
                       child: _productImage(product),
                     ),
                   ),
-                  const SizedBox(height: 14),
-                  Text(product.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.4)),
+                  const SizedBox(height: 16),
+                  Text(product.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1E293B), height: 1.35)),
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 6,
@@ -435,70 +455,59 @@ class EdShopProductDetailPanel extends StatelessWidget {
                     children: [
                       _chip(Icons.qr_code_2_rounded, code, mono: true),
                       _chip(Icons.category_outlined, sectionName),
+                      if (stock != null && stock.isNotEmpty) _chip(Icons.warehouse_outlined, 'مخزون: $stock'),
                     ],
                   ),
-                  const SizedBox(height: 14),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: EdCommerceTheme.card,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: EdCommerceTheme.line),
-                    ),
-                    child: Row(
-                      children: [
-                        const Expanded(
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: EdCommerceTheme.cardTint,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: EdCommerceTheme.line),
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('سعر الجملة', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted)),
-                              SizedBox(height: 4),
+                              const Text('سعر الجملة', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                              const SizedBox(height: 4),
+                              Text(fmtMoney(product.price), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: EdCommerceTheme.accent)),
                             ],
                           ),
                         ),
-                        Text(fmtMoney(product.price), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: EdCommerceTheme.accent)),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: EdCommerceTheme.accentSoft,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: EdCommerceTheme.accent.withValues(alpha: 0.15)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('المجموع', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                              const SizedBox(height: 4),
+                              Text(fmtMoney(lineTotal), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF1E293B))),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: EdCommerceTheme.accentSoft,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: EdCommerceTheme.accent.withValues(alpha: 0.2)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('المجموع الاجمالي', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
-                        Text(fmtMoney(lineTotal), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: EdCommerceTheme.accent)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  EdShopQtyRow(label: 'الكمية', value: fmtQty(quant), kind: EdShopQtyKind.unit, onDec: onDecQuant, onInc: onIncQuant),
+                  const SizedBox(height: 18),
+                  const Text('الكميات', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF334155))),
                   const SizedBox(height: 10),
-                  EdShopQtyRow(label: 'الهدايا', value: fmtQty(bonus), kind: EdShopQtyKind.gift, onDec: onDecBonus, onInc: onIncBonus),
-                  const SizedBox(height: 14),
-                  const Text('ملاحظات', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: notesController,
-                    onChanged: onNotesChanged,
-                    maxLines: 3,
-                    decoration: InputDecoration(
-                      hintText: 'اختياري...',
-                      isDense: true,
-                      filled: true,
-                      fillColor: EdCommerceTheme.card,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: EdCommerceTheme.line)),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: EdCommerceTheme.line)),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: EdCommerceTheme.accent.withValues(alpha: 0.5))),
-                    ),
-                  ),
+                  EdShopQtyRow(label: 'الكمية', amount: quant, kind: EdShopQtyKind.unit, onDec: onDecQuant, onInc: onIncQuant, onSetValue: onSetQuant),
+                  const SizedBox(height: 10),
+                  EdShopQtyRow(label: 'الهدايا', amount: bonus, kind: EdShopQtyKind.gift, onDec: onDecBonus, onInc: onIncBonus, onSetValue: onSetBonus),
+                  const SizedBox(height: 10),
+                  EdShopQtyRow(label: 'التيستر', amount: tester, kind: EdShopQtyKind.tester, onDec: onDecTester, onInc: onIncTester, onSetValue: onSetTester),
                 ],
               ),
             ),
@@ -510,10 +519,10 @@ class EdShopProductDetailPanel extends StatelessWidget {
 
   Widget _chip(IconData icon, String text, {bool mono = false}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: EdCommerceTheme.card,
-        borderRadius: BorderRadius.circular(8),
+        color: EdCommerceTheme.cardTint,
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: EdCommerceTheme.line),
       ),
       child: Row(
@@ -524,7 +533,7 @@ class EdShopProductDetailPanel extends StatelessWidget {
           Text(
             text,
             textDirection: mono ? TextDirection.ltr : TextDirection.rtl,
-            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
           ),
         ],
       ),
@@ -549,25 +558,87 @@ Widget _productImage(Product product) {
 
 enum EdShopQtyKind { unit, gift, tester }
 
-class EdShopQtyRow extends StatelessWidget {
+class EdShopQtyRow extends StatefulWidget {
   const EdShopQtyRow({
     super.key,
     required this.label,
-    required this.value,
+    required this.amount,
     required this.kind,
     required this.onDec,
     required this.onInc,
+    required this.onSetValue,
   });
 
   final String label;
-  final String value;
+  final num amount;
   final EdShopQtyKind kind;
   final VoidCallback onDec;
   final VoidCallback onInc;
+  final ValueChanged<num> onSetValue;
+
+  @override
+  State<EdShopQtyRow> createState() => _EdShopQtyRowState();
+}
+
+class _EdShopQtyRowState extends State<EdShopQtyRow> {
+  bool _editing = false;
+  late TextEditingController _ctrl;
+  final _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: _textForAmount(widget.amount));
+    _focus.addListener(() {
+      if (!_focus.hasFocus && _editing) _commit();
+    });
+  }
+
+  @override
+  void didUpdateWidget(EdShopQtyRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_editing && oldWidget.amount != widget.amount) {
+      _ctrl.text = _textForAmount(widget.amount);
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  String _textForAmount(num v) {
+    if (v == v.roundToDouble()) return '${v.round()}';
+    return v.toString();
+  }
+
+  void _startEdit() {
+    setState(() {
+      _editing = true;
+      _ctrl.text = _textForAmount(widget.amount);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focus.requestFocus();
+    });
+  }
+
+  void _commit() {
+    final raw = _ctrl.text.trim().replaceAll(',', '').replaceAll('،', '');
+    final parsed = num.tryParse(raw);
+    if (parsed != null) {
+      widget.onSetValue(parsed.clamp(0, 999999));
+    }
+    if (mounted) {
+      setState(() => _editing = false);
+      _ctrl.text = _textForAmount(widget.amount);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final (bg, border, fg) = switch (kind) {
+    final (bg, border, fg) = switch (widget.kind) {
       EdShopQtyKind.gift => (EdCommerceTheme.giftBg, EdCommerceTheme.giftBorder, EdCommerceTheme.giftFg),
       EdShopQtyKind.tester => (EdCommerceTheme.testerBg, EdCommerceTheme.testerBorder, EdCommerceTheme.testerFg),
       EdShopQtyKind.unit => (EdCommerceTheme.card, EdCommerceTheme.line, AppColors.navy),
@@ -589,16 +660,59 @@ class EdShopQtyRow extends StatelessWidget {
               color: fg.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(999),
             ),
-            child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: fg)),
+            child: Text(widget.label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: fg)),
           ),
           const SizedBox(height: 10),
           Row(
             children: [
-              _qtyBtn(Icons.remove_rounded, onDec, fg),
+              _qtyBtn(Icons.remove_rounded, widget.onDec, fg),
               Expanded(
-                child: Text(value, textAlign: TextAlign.center, textDirection: TextDirection.ltr, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: fg)),
+                child: _editing
+                    ? TextField(
+                        controller: _ctrl,
+                        focusNode: _focus,
+                        textAlign: TextAlign.center,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        textInputAction: TextInputAction.done,
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: fg),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          filled: true,
+                          fillColor: AppColors.surface,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: border)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: border)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: fg, width: 1.5)),
+                        ),
+                        onSubmitted: (_) => _commit(),
+                      )
+                    : Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _startEdit,
+                          borderRadius: BorderRadius.circular(10),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Column(
+                              children: [
+                                Text(
+                                  fmtQty(widget.amount),
+                                  textAlign: TextAlign.center,
+                                  textDirection: TextDirection.ltr,
+                                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: fg),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'اضغط للكتابة',
+                                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: fg.withValues(alpha: 0.55)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
               ),
-              _qtyBtn(Icons.add_rounded, onInc, fg),
+              _qtyBtn(Icons.add_rounded, widget.onInc, fg),
             ],
           ),
         ],
@@ -648,60 +762,84 @@ class EdShopProductTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = selected ? EdCommerceTheme.selectedBorder : (inDraft ? EdCommerceTheme.accent.withValues(alpha: 0.5) : EdCommerceTheme.line);
+    final borderColor = selected ? EdCommerceTheme.accent : (inDraft ? EdCommerceTheme.accent.withValues(alpha: 0.4) : EdCommerceTheme.line);
 
     return Material(
-      color: EdCommerceTheme.card,
-      borderRadius: BorderRadius.circular(AppColors.radiusSm),
+      color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppColors.radiusSm),
-        child: Container(
+        borderRadius: BorderRadius.circular(18),
+        child: Ink(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppColors.radiusSm),
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(color: borderColor, width: selected ? 2 : 1),
-            boxShadow: selected ? [BoxShadow(color: EdCommerceTheme.selectedGlow, blurRadius: 0, spreadRadius: 1)] : null,
+            boxShadow: selected ? [BoxShadow(color: EdCommerceTheme.selectedGlow, blurRadius: 12, offset: const Offset(0, 4))] : AppColors.softShadow,
           ),
-          padding: const EdgeInsets.all(8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: EdCommerceTheme.cardTint,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: EdCommerceTheme.line),
-                  ),
-                  padding: const EdgeInsets.all(6),
-                  child: product.imageUrl != null
-                      ? CachedNetworkImage(
-                          imageUrl: product.imageUrl!,
-                          fit: BoxFit.contain,
-                          memCacheWidth: 160,
-                          placeholder: (_, __) => const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
-                          errorWidget: (_, __, ___) => const Icon(Icons.inventory_2_outlined, color: AppColors.muted),
-                        )
-                      : const Icon(Icons.inventory_2_outlined, color: AppColors.muted),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                product.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, height: 1.25, color: AppColors.navy),
-              ),
               if (inDraft)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(color: EdCommerceTheme.accentSoft, borderRadius: BorderRadius.circular(999)),
-                    child: const Text('في الطلب', textAlign: TextAlign.center, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: EdCommerceTheme.accent)),
+                Container(
+                  height: 3,
+                  decoration: const BoxDecoration(
+                    gradient: EdCommerceTheme.accentGradient,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
                   ),
                 ),
+              Expanded(
+                flex: 3,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: EdCommerceTheme.accentSoft.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: EdCommerceTheme.line.withValues(alpha: 0.6)),
+                    ),
+                    padding: const EdgeInsets.all(8),
+                    child: product.imageUrl != null
+                        ? CachedNetworkImage(
+                            imageUrl: product.imageUrl!,
+                            fit: BoxFit.contain,
+                            memCacheWidth: 200,
+                            placeholder: (_, __) => const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
+                            errorWidget: (_, __, ___) => const Icon(Icons.inventory_2_outlined, color: AppColors.muted, size: 32),
+                          )
+                        : const Icon(Icons.inventory_2_outlined, color: AppColors.muted, size: 32),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      product.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, height: 1.3, color: Color(0xFF1E293B)),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Text(fmtMoney(product.price), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: EdCommerceTheme.accent)),
+                        const Spacer(),
+                        if (inDraft)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: EdCommerceTheme.accentSoft,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: const Text('مضاف', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: EdCommerceTheme.accent)),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -824,56 +962,59 @@ class EdShopOrderDock extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
       decoration: BoxDecoration(
-        gradient: AppColors.brandGradient,
-        boxShadow: AppColors.elevatedShadow,
+        color: AppColors.surface,
+        border: Border(top: BorderSide(color: EdCommerceTheme.line.withValues(alpha: 0.8))),
+        boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.06), blurRadius: 16, offset: const Offset(0, -4))],
       ),
       child: SafeArea(
         top: false,
         child: Row(
           children: [
-            Expanded(
-              child: Material(
-                color: Colors.transparent,
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                gradient: EdCommerceTheme.accentGradient,
                 borderRadius: BorderRadius.circular(14),
-                child: InkWell(
-                  onTap: lineCount > 0 ? onPressed : null,
-                  borderRadius: BorderRadius.circular(14),
-                  child: Ink(
-                    decoration: BoxDecoration(
-                      color: lineCount > 0 ? Colors.white : Colors.white.withValues(alpha: 0.25),
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: lineCount > 0 ? [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 12, offset: const Offset(0, 4))] : null,
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.receipt_long_rounded, size: 20, color: lineCount > 0 ? EdCommerceTheme.dockBg : Colors.white70),
-                        const SizedBox(width: 8),
-                        Text(
-                          'عرض الطلبية · $totalLabel',
-                          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: lineCount > 0 ? EdCommerceTheme.dockBg : Colors.white70),
-                        ),
-                      ],
-                    ),
+                boxShadow: [BoxShadow(color: EdCommerceTheme.accent.withValues(alpha: 0.25), blurRadius: 10, offset: const Offset(0, 4))],
+              ),
+              alignment: Alignment.center,
+              child: Text('$lineCount', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18)),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('$lineCount أصناف في الفاتورة', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF1E293B))),
+                  Text(totalLabel, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: EdCommerceTheme.accent)),
+                ],
+              ),
+            ),
+            Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(14),
+              child: InkWell(
+                onTap: onPressed,
+                borderRadius: BorderRadius.circular(14),
+                child: Ink(
+                  decoration: BoxDecoration(
+                    gradient: EdCommerceTheme.accentGradient,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [BoxShadow(color: EdCommerceTheme.accent.withValues(alpha: 0.3), blurRadius: 12, offset: const Offset(0, 4))],
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.receipt_long_rounded, color: Colors.white, size: 20),
+                      SizedBox(width: 8),
+                      Text('الفاتورة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14)),
+                    ],
                   ),
                 ),
               ),
             ),
-            if (lineCount > 0) ...[
-              const SizedBox(width: 10),
-              Container(
-                width: 40,
-                height: 40,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  gradient: EdCommerceTheme.accentGradient,
-                  shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: EdCommerceTheme.accent.withValues(alpha: 0.4), blurRadius: 10, offset: const Offset(0, 4))],
-                ),
-                child: Text('$lineCount', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
-              ),
-            ],
           ],
         ),
       ),

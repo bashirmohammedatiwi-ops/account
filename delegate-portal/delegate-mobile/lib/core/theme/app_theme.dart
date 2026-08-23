@@ -16,7 +16,7 @@ abstract final class AppTheme {
         surface: AppColors.surface,
         error: AppColors.danger,
       ),
-      scaffoldBackgroundColor: AppColors.bg,
+      scaffoldBackgroundColor: Colors.white,
       cardColor: AppColors.surface,
       dividerColor: AppColors.borderLight,
       splashColor: AppColors.accentTeal.withValues(alpha: 0.08),

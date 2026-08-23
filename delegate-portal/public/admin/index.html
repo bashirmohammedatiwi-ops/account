@@ -320,6 +320,7 @@
 
           <div class="rv-tabs" role="tablist">
             <button type="button" class="rv-tab active" data-rv-tab="receipts">سندات قبض</button>
+            <button type="button" class="rv-tab" data-rv-tab="delivery">وصول استلام</button>
             <button type="button" class="rv-tab" data-rv-tab="customers">زبائن جدد</button>
           </div>
 
@@ -362,6 +363,34 @@
             </div>
           </div>
           <div class="rv-card hidden" id="receiptDetailPanel"></div>
+          </div>
+
+          <div id="rvTabDelivery" class="hidden">
+          <div class="rv-card rv-card-list">
+            <div class="rv-card-head">
+              <div>
+                <h2 class="rv-card-title">وصول استلام المبلغ للزبون</h2>
+                <p class="rv-card-sub">يُصدَّر من المندوب ويُطبع حرارياً — للعرض والمتابعة فقط دون ترحيل للإداري</p>
+              </div>
+              <select id="deliveryReceiptStatusFilter" class="search rv-filter">
+                <option value="">كل الحالات</option>
+                <option value="issued">مُصدَّر</option>
+                <option value="linked">مرتبط بسند قبض</option>
+              </select>
+            </div>
+            <div class="rv-kpis" id="deliveryReceiptStats"></div>
+            <div class="table-scroll">
+              <table class="data-table compact">
+                <thead>
+                  <tr>
+                    <th>رقم الوصل</th><th>مندوب</th><th>زبون</th><th>مبلغ</th><th>حالة</th><th>مطبوع</th><th>سند القبض</th><th>تاريخ</th><th></th>
+                  </tr>
+                </thead>
+                <tbody id="deliveryReceiptsBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="rv-card hidden" id="deliveryReceiptDetailPanel"></div>
           </div>
 
           <div id="rvTabCustomers" class="hidden">
@@ -1132,6 +1161,7 @@
   <script src="admin.js?v=20260818cust"></script>
   <script src="admin-commerce.js?v=20260818cust"></script>
   <script src="admin-receipts.js?v=20260818cust"></script>
+  <script src="admin-delivery-receipts.js?v=20260823dr"></script>
   <script src="admin-customers.js?v=20260818cust"></script>
   <script src="admin-promotional-visits.js?v=20260823promo"></script>
   <script src="admin-sales-report.js?v=20260709treeFix3"></script>

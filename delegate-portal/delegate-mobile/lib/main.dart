@@ -6,6 +6,8 @@ import 'app.dart';
 import 'core/auth/auth_provider.dart';
 import 'core/auth/data_refresh.dart';
 import 'core/layout/breakpoints.dart';
+import 'core/offline/offline_banner.dart';
+import 'core/offline/sync_engine.dart';
 import 'core/theme/app_theme.dart';
 
 void main() {
@@ -15,7 +17,9 @@ void main() {
 
   runApp(
     const ProviderScope(
-      child: EdariDelegateApp(),
+      child: SyncBootstrap(
+        child: EdariDelegateApp(),
+      ),
     ),
   );
 }
@@ -28,6 +32,7 @@ class EdariDelegateApp extends ConsumerWidget {
     ref.listen(authProvider, (prev, next) {
       if (prev?.isAuthenticated != true && next.isAuthenticated) {
         ref.read(delegateDataRefreshProvider)();
+        Future.microtask(() => ref.read(syncEngineProvider).fullSync());
       }
     });
 

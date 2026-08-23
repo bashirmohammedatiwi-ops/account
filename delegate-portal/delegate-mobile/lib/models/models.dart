@@ -499,7 +499,7 @@ class Receipt {
   final String? receiptDate;
   final String? createdAt;
 
-  bool get canDelete => status != 'posted';
+  bool get canDelete => false; // الحذف من لوحة التحكم فقط
 
   factory Receipt.fromJson(Map<String, dynamic> json) => Receipt(
         id: json['id'] as int,
@@ -514,6 +514,66 @@ class Receipt {
         treeName: json['treeName'] as String? ?? json['tree_name'] as String?,
         notes: json['notes'] as String?,
         receiptDate: json['receiptDate'] as String? ?? json['receipt_date'] as String?,
+        createdAt: json['createdAt'] as String? ?? json['created_at'] as String?,
+      );
+}
+
+class DeliveryReceipt {
+  const DeliveryReceipt({
+    required this.id,
+    required this.deliveryNo,
+    required this.status,
+    required this.statusLabel,
+    required this.amount,
+    this.customerName,
+    this.customerNum,
+    this.customerAccSeq,
+    this.treeAccSeq,
+    this.treeName,
+    this.notes,
+    this.receiptDate,
+    this.printedAt,
+    this.receiptId,
+    this.linkedReceiptNo,
+    this.createdAt,
+  });
+
+  final int id;
+  final String deliveryNo;
+  final String status;
+  final String statusLabel;
+  final num amount;
+  final String? customerName;
+  final String? customerNum;
+  final String? customerAccSeq;
+  final String? treeAccSeq;
+  final String? treeName;
+  final String? notes;
+  final String? receiptDate;
+  final String? printedAt;
+  final int? receiptId;
+  final String? linkedReceiptNo;
+  final String? createdAt;
+
+  bool get canDelete => false; // الحذف من لوحة التحكم فقط
+  bool get canCreateReceipt => status == 'issued' && receiptId == null;
+
+  factory DeliveryReceipt.fromJson(Map<String, dynamic> json) => DeliveryReceipt(
+        id: json['id'] as int,
+        deliveryNo: '${json['deliveryNo'] ?? json['delivery_no'] ?? ''}',
+        status: '${json['status'] ?? ''}',
+        statusLabel: '${json['statusLabel'] ?? json['status_label'] ?? ''}',
+        amount: json['amount'] as num? ?? 0,
+        customerName: json['customerName'] as String? ?? json['customer_name'] as String?,
+        customerNum: json['customerNum'] as String? ?? json['customer_num'] as String?,
+        customerAccSeq: json['customerAccSeq'] as String? ?? json['customer_acc_seq'] as String?,
+        treeAccSeq: json['treeAccSeq'] as String? ?? json['tree_acc_seq'] as String?,
+        treeName: json['treeName'] as String? ?? json['tree_name'] as String?,
+        notes: json['notes'] as String?,
+        receiptDate: json['receiptDate'] as String? ?? json['receipt_date'] as String?,
+        printedAt: json['printedAt'] as String? ?? json['printed_at'] as String?,
+        receiptId: json['receiptId'] as int? ?? json['receipt_id'] as int?,
+        linkedReceiptNo: json['linkedReceiptNo'] as String? ?? json['linked_receipt_no'] as String?,
         createdAt: json['createdAt'] as String? ?? json['created_at'] as String?,
       );
 }

@@ -118,6 +118,13 @@ abstract final class AppColors {
     stops: [0.0, 0.55, 1.0],
   );
 
+  static const homeAuroraGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFFDBEAFE), Color(0xFFE0F2FE), Color(0xFFCCFBF1), Color(0xFFF5F3FF)],
+    stops: [0.0, 0.3, 0.65, 1.0],
+  );
+
   static const homeSunGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,

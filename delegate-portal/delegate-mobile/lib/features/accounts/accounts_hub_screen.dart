@@ -3,10 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_session.dart';
-import '../../core/api/api_client.dart';
+import '../../core/api/delegate_api.dart';
 import '../../core/widgets/adaptive_shell.dart';
 import '../../models/models.dart';
 import '../home/home_screen.dart';
+import 'account_ui.dart';
 import 'accounts_screens.dart';
 import 'statement_panel.dart';
 
@@ -76,6 +77,7 @@ class StatementScreen extends ConsumerWidget {
       subtitle: treeName != null ? 'شجرة $treeName' : '',
       showBack: true,
       onBack: () => context.go('/accounts/$treeSeq/branches'),
+      toolbar: const EdFlowSteps(current: 2),
       child: StatementPanel(
         accSeq: accSeq,
         treeSeq: treeSeq,

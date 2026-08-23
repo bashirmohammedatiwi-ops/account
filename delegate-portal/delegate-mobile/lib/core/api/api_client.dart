@@ -19,6 +19,12 @@ class ApiClient {
   String get _base => _read.read(appConfigProvider).apiBase;
   String get serverUrl => _read.read(appConfigProvider).serverUrl;
 
+  Future<Map<String, dynamic>> requestJson(String method, String path,
+      {Map<String, dynamic>? body, Map<String, dynamic>? query}) =>
+      _json(method, path, body: body, query: query);
+
+  Future<Uint8List> requestBytes(String path, {Map<String, dynamic>? query}) => _bytes(path, query: query);
+
   Future<Map<String, dynamic>> _json(String method, String path,
       {Map<String, dynamic>? body, Map<String, dynamic>? query}) async {
     try {
@@ -223,6 +229,7 @@ class ApiClient {
     num commission = 0,
     num discount = 0,
     String? notes,
+    int? deliveryReceiptId,
   }) async {
     final data = await _json('POST', '/receipts', body: {
       'customerAccSeq': customerAccSeq,
@@ -232,8 +239,41 @@ class ApiClient {
       'commission': commission,
       'discount': discount,
       'notes': notes ?? '',
+      if (deliveryReceiptId != null) 'deliveryReceiptId': deliveryReceiptId,
     });
     return Receipt.fromJson(Map<String, dynamic>.from(data['receipt'] as Map));
+  }
+
+  Future<List<DeliveryReceipt>> getDeliveryReceipts({String? status}) async {
+    final data = await _json('GET', '/delivery-receipts', query: status != null ? {'status': status} : null);
+    return (data['deliveryReceipts'] as List)
+        .map((e) => DeliveryReceipt.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  Future<DeliveryReceipt> createDeliveryReceipt({
+    required String customerAccSeq,
+    required String treeAccSeq,
+    required String treeName,
+    required num amount,
+    String? notes,
+  }) async {
+    final data = await _json('POST', '/delivery-receipts', body: {
+      'customerAccSeq': customerAccSeq,
+      'treeAccSeq': treeAccSeq,
+      'treeName': treeName,
+      'amount': amount,
+      'notes': notes ?? '',
+    });
+    return DeliveryReceipt.fromJson(Map<String, dynamic>.from(data['deliveryReceipt'] as Map));
+  }
+
+  Future<void> markDeliveryReceiptPrinted(int id) async {
+    await _json('POST', '/delivery-receipts/$id/printed');
+  }
+
+  Future<void> deleteDeliveryReceipt(int id) async {
+    await _json('DELETE', '/delivery-receipts/$id');
   }
 
   Future<void> deleteReceipt(int id) async {
@@ -348,7 +388,7 @@ final dioProvider = Provider<Dio>((ref) {
   return dio;
 });
 
-final apiClientProvider = Provider<ApiClient>((ref) => ApiClient(ref.read(dioProvider), ref));
+final rawApiClientProvider = Provider<ApiClient>((ref) => ApiClient(ref.read(dioProvider), ref));
 
 Map<String, dynamic> _parseResponseData(dynamic raw) {
   if (raw is Map<String, dynamic>) return raw;

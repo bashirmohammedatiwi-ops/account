@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../layout/breakpoints.dart';
+import '../offline/offline_banner.dart';
 import '../theme/app_colors.dart';
 import 'ed_components.dart';
 import 'ed_page_background.dart';
@@ -142,27 +144,23 @@ class _MoreNavCard extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppColors.radiusLg),
             border: Border.all(color: AppColors.borderLight),
-            gradient: LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [color.withValues(alpha: 0.08), AppColors.surface],
-            ),
+            color: AppColors.surface,
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 52,
-                height: 52,
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
-                  gradient: AppColors.moduleSoftGradient(color),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [BoxShadow(color: color.withValues(alpha: 0.15), blurRadius: 12, offset: const Offset(0, 4))],
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.borderLight),
                 ),
-                child: Icon(icon, color: color, size: 26),
+                child: Icon(icon, color: color, size: 24),
               ),
-              const SizedBox(height: 12),
-              Text(label, style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.navy, fontSize: 13)),
+              const SizedBox(height: 10),
+              Text(label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.navy, fontSize: 12)),
             ],
           ),
         ),
@@ -172,29 +170,37 @@ class _MoreNavCard extends StatelessWidget {
 }
 
 /// غلاف التطبيق — شريط جانبي على التابلت، شريط سفلي على الهاتف
-class AdaptiveShell extends StatelessWidget {
+class AdaptiveShell extends ConsumerWidget {
   const AdaptiveShell({super.key, required this.child});
 
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final layout = EdLayout.of(context);
     final location = GoRouterState.of(context).matchedLocation;
 
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: AppColors.bg,
+        backgroundColor: Colors.white,
         body: EdPageBackground(
-          child: layout.isWide
-              ? Row(
-                  children: [
-                    Expanded(child: child),
-                    _TabletNavRail(selected: _tabletSelectedIndex(location)),
-                  ],
-                )
-              : SizedBox.expand(child: child),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const OfflineBanner(),
+              Expanded(
+                child: layout.isWide
+                    ? Row(
+                        children: [
+                          Expanded(child: child),
+                          _TabletNavRail(selected: _tabletSelectedIndex(location)),
+                        ],
+                      )
+                    : SizedBox.expand(child: child),
+              ),
+            ],
+          ),
         ),
         bottomNavigationBar: layout.isWide
             ? null
@@ -221,11 +227,11 @@ class _TabletNavRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 88,
+      width: 92,
       decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.96),
+        color: Colors.white,
         border: Border(left: BorderSide(color: AppColors.borderLight)),
-        boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.04), blurRadius: 16, offset: const Offset(-4, 0))],
+        boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.04), blurRadius: 12, offset: const Offset(-2, 0))],
       ),
       child: SafeArea(
         child: Column(
@@ -235,13 +241,14 @@ class _TabletNavRail extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                gradient: AppColors.heroGradient,
-                borderRadius: BorderRadius.circular(14),
+                color: AppColors.navy,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.borderLight),
               ),
               alignment: Alignment.center,
-              child: const Text('E', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 20)),
+              child: const Text('E', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.symmetric(vertical: 4),
@@ -252,38 +259,55 @@ class _TabletNavRail extends StatelessWidget {
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     child: Material(
-                      color: active ? null : Colors.transparent,
-                      borderRadius: BorderRadius.circular(14),
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
                       child: InkWell(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(12),
                         onTap: () => context.go(item.path),
-                        child: Ink(
+                        child: Container(
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(14),
-                            gradient: active ? AppColors.moduleSoftGradient(AppColors.accentTeal) : null,
-                            border: active ? Border.all(color: AppColors.accentTeal.withValues(alpha: 0.15)) : null,
+                            color: active ? AppColors.surfaceAlt : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            border: active ? Border.all(color: AppColors.borderLight) : null,
                           ),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(item.icon, size: 22, color: active ? AppColors.accentTeal : AppColors.muted),
-                                const SizedBox(height: 4),
-                                Text(
-                                  item.label,
-                                  textAlign: TextAlign.center,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w800,
-                                    height: 1.2,
-                                    color: active ? AppColors.accentTeal : AppColors.muted,
+                          child: Stack(
+                            children: [
+                              if (active)
+                                Positioned(
+                                  right: 0,
+                                  top: 8,
+                                  bottom: 8,
+                                  child: Container(
+                                    width: 3,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.accentTeal,
+                                      borderRadius: BorderRadius.circular(99),
+                                    ),
                                   ),
                                 ),
-                              ],
-                            ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(item.icon, size: 22, color: active ? AppColors.navy : AppColors.muted),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      item.label,
+                                      textAlign: TextAlign.center,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w800,
+                                        height: 1.25,
+                                        color: active ? AppColors.navy : AppColors.muted,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -340,7 +364,7 @@ class AppPage extends StatelessWidget {
       return Directionality(
         textDirection: TextDirection.rtl,
         child: Scaffold(
-          backgroundColor: AppColors.bg,
+          backgroundColor: Colors.white,
           floatingActionButton: floatingActionButton,
           body: EdPageBackground(
             child: Column(
@@ -367,7 +391,7 @@ class AppPage extends StatelessWidget {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: AppColors.bg,
+        backgroundColor: Colors.white,
         appBar: useHeader
             ? EdAppHeader(
                 title: title,

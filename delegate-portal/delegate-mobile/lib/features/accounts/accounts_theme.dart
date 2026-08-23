@@ -5,7 +5,7 @@ import '../../core/theme/app_theme.dart';
 
 /// ألوان موحّدة لقسم الكشوفات — Pearl Edari (بسيطة وأنيقة)
 abstract final class EdAccountsTheme {
-  static const pageBg = AppColors.bg;
+  static const pageBg = Colors.white;
 
   static const card = AppColors.surface;
   static const cardTint = AppColors.surfaceAlt;

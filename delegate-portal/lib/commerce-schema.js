@@ -158,6 +158,7 @@ function migrateCommerceSchema(db) {
   migrateReceipts(db);
   migrateCustomerRequests(db);
   migratePromotionalVisits(db);
+  migrateDeliveryReceipts(db);
 
   const branchCount = db.prepare('SELECT COUNT(*) AS c FROM catalog_branches').get().c;
   if (!branchCount) {
@@ -400,4 +401,37 @@ function migratePromotionalVisits(db) {
   `);
 }
 
-module.exports = { migrateCommerceSchema, migrateShorjaOrderFields, migrateReceipts, migrateCustomerRequests, migratePromotionalVisits };
+function migrateDeliveryReceipts(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS delivery_receipts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      delivery_no TEXT NOT NULL UNIQUE,
+      agent_id INTEGER NOT NULL,
+      customer_acc_seq TEXT NOT NULL,
+      tree_acc_seq TEXT DEFAULT '',
+      tree_name TEXT DEFAULT '',
+      amount REAL NOT NULL DEFAULT 0,
+      notes TEXT DEFAULT '',
+      receipt_date TEXT,
+      status TEXT NOT NULL DEFAULT 'issued',
+      printed_at TEXT,
+      receipt_id INTEGER,
+      admin_note TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (agent_id) REFERENCES agents(id),
+      FOREIGN KEY (receipt_id) REFERENCES receipts(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_delivery_receipts_agent ON delivery_receipts(agent_id);
+    CREATE INDEX IF NOT EXISTS idx_delivery_receipts_status ON delivery_receipts(status);
+    CREATE INDEX IF NOT EXISTS idx_delivery_receipts_customer ON delivery_receipts(customer_acc_seq);
+  `);
+  try {
+    db.exec('ALTER TABLE receipts ADD COLUMN delivery_receipt_id INTEGER');
+  } catch {
+    /* column exists */
+  }
+}
+
+module.exports = { migrateCommerceSchema, migrateShorjaOrderFields, migrateReceipts, migrateCustomerRequests, migratePromotionalVisits, migrateDeliveryReceipts };

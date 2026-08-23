@@ -452,6 +452,9 @@ window.commercePages.receipts = async () => {
   if (typeof window.loadCustomerRequestsPage === 'function') {
     await window.loadCustomerRequestsPage();
   }
+  if (typeof window.loadDeliveryReceiptsPage === 'function') {
+    await window.loadDeliveryReceiptsPage();
+  }
 };
 
 initReceiptsAdmin();

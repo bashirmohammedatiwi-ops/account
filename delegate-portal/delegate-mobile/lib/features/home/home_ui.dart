@@ -1,9 +1,9 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/ed_page_decor.dart';
 import '../../core/widgets/phone_ui.dart';
 
 class EdHomeApp {
@@ -16,6 +16,7 @@ class EdHomeApp {
     required this.onTap,
     this.badge,
     this.category = 'الخدمات',
+    this.featured = false,
   });
 
   final IconData icon;
@@ -26,9 +27,10 @@ class EdHomeApp {
   final VoidCallback onTap;
   final String? badge;
   final String category;
+  final bool featured;
 }
 
-class EdHomePage extends StatelessWidget {
+class EdHomePage extends StatefulWidget {
   const EdHomePage({
     super.key,
     required this.agentName,
@@ -42,6 +44,7 @@ class EdHomePage extends StatelessWidget {
     this.pendingPromoVisits,
     this.onRefresh,
     this.onSettings,
+    this.onLogout,
   });
 
   final String agentName;
@@ -55,122 +58,145 @@ class EdHomePage extends StatelessWidget {
   final String? pendingPromoVisits;
   final VoidCallback? onRefresh;
   final VoidCallback? onSettings;
+  final VoidCallback? onLogout;
+
+  @override
+  State<EdHomePage> createState() => _EdHomePageState();
+}
+
+class _EdHomePageState extends State<EdHomePage> {
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  List<EdHomeApp> _filteredApps() {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return widget.apps;
+    return widget.apps
+        .where((a) => a.name.toLowerCase().contains(q) || a.hint.toLowerCase().contains(q))
+        .toList();
+  }
 
   @override
   Widget build(BuildContext context) {
     final layout = EdLayout.of(context);
+    final pendingR = int.tryParse(widget.pendingReceipts ?? '') ?? 0;
+    final pendingC = int.tryParse(widget.pendingCustomers ?? '') ?? 0;
+    final pendingP = int.tryParse(widget.pendingPromoVisits ?? '') ?? 0;
+    final pendingTotal = pendingR + pendingC + pendingP;
+    final pagePad = layout.isDesktop ? 32.0 : layout.isTablet ? 24.0 : EdSpacing.page;
+    final top = MediaQuery.paddingOf(context).top;
+    final cols = layout.isDesktop ? 4 : layout.isTablet ? 3 : 2;
+    final gap = layout.isTablet ? 14.0 : 12.0;
+    final tileExtent = edFormalTileExtent(layout, phone: 172, tablet: 208, desktop: 195);
+    final filtered = _filteredApps();
 
-    if (layout.isTablet) {
-      return LayoutBuilder(
-        builder: (context, constraints) => CustomScrollView(
+    return ColoredBox(
+      color: Colors.white,
+      child: Stack(
+        children: [
+          const EdModernBackdrop(variant: EdBackdropVariant.home),
+        CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            SliverFillRemaining(
-              hasScrollBody: false,
+            SliverToBoxAdapter(
               child: Padding(
-                padding: EdgeInsets.fromLTRB(layout.isDesktop ? 28 : 22, 16, layout.isDesktop ? 28 : 22, 24),
-                child: SizedBox(
-                  height: constraints.maxHeight,
-                  child: Row(
-                    textDirection: TextDirection.ltr,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      SizedBox(
-                        width: layout.isDesktop ? 320 : 300,
-                        child: EdHomeSidePanel(
-                          agentName: agentName,
-                          avatarText: avatarText,
-                          treeCount: treeCount,
-                          customerCount: customerCount,
-                          orderCount: orderCount,
-                          pendingReceipts: pendingReceipts,
-                          pendingCustomers: pendingCustomers,
-                          pendingPromoVisits: pendingPromoVisits,
-                        ),
-                      ),
-                      const SizedBox(width: 20),
-                      Expanded(child: _HomeMainColumn(apps: apps)),
-                    ],
+                padding: EdgeInsets.fromLTRB(pagePad, top + 10, pagePad, 0),
+                child: _AtelierHeader(
+                  agentName: widget.agentName,
+                  avatarText: widget.avatarText,
+                  treeCount: widget.treeCount,
+                  customerCount: widget.customerCount,
+                  orderCount: widget.orderCount,
+                  pendingTotal: pendingTotal,
+                  onRefresh: widget.onRefresh,
+                  onSettings: widget.onSettings,
+                  onLogout: widget.onLogout,
+                  large: layout.isTablet,
+                  wide: layout.isWide,
+                ),
+              ),
+            ),
+            if (pendingTotal > 0)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(pagePad, 16, pagePad, 0),
+                  child: _AtelierPendingNote(
+                    message: _pendingMessage(widget.pendingReceipts, widget.pendingCustomers, widget.pendingPromoVisits),
+                    large: layout.isTablet,
                   ),
                 ),
               ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(pagePad, 22, pagePad, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    EdSectionHeader(
+                      title: 'لوحة الخدمات',
+                      subtitle: _query.isNotEmpty
+                          ? 'عرض ${filtered.length} من ${widget.apps.length}'
+                          : '${widget.apps.length} أقسام متساوية الحجم',
+                      icon: Icons.grid_view_rounded,
+                      large: layout.isTablet,
+                    ),
+                    const SizedBox(height: 12),
+                    EdModernSearchField(
+                      controller: _searchCtrl,
+                      hint: 'ابحث عن خدمة...',
+                      large: layout.isTablet,
+                      hasText: _query.isNotEmpty,
+                      onChanged: (v) => setState(() => _query = v),
+                      onClear: () {
+                        _searchCtrl.clear();
+                        setState(() => _query = '');
+                      },
+                    ),
+                  ],
+                ),
+              ),
             ),
+            if (filtered.isEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(pagePad, 24, pagePad, 0),
+                  child: _AtelierEmptySearch(query: _query),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(pagePad, 4, pagePad, layout.isPhone ? kPhoneBottomInset : 36),
+                sliver: SliverGrid(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: cols,
+                    mainAxisSpacing: gap,
+                    crossAxisSpacing: gap,
+                    mainAxisExtent: tileExtent,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => _TileEntrance(
+                      index: index,
+                      child: _AtelierTile(
+                        app: filtered[index],
+                        index: widget.apps.indexOf(filtered[index]),
+                        large: layout.isTablet,
+                      ),
+                    ),
+                    childCount: filtered.length,
+                  ),
+                ),
+              ),
           ],
         ),
-      );
-    }
-
-    final pendingR = int.tryParse(pendingReceipts ?? '') ?? 0;
-    final pendingC = int.tryParse(pendingCustomers ?? '') ?? 0;
-    final pendingP = int.tryParse(pendingPromoVisits ?? '') ?? 0;
-    final pendingTotal = pendingR + pendingC + pendingP;
-    final grouped = _groupApps(apps);
-
-    return CustomScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      slivers: [
-        SliverToBoxAdapter(
-          child: EdPhoneHomeHero(
-            agentName: agentName,
-            avatarText: avatarText,
-            onRefresh: onRefresh,
-            onSettings: onSettings,
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, 16),
-            child: EdHomeStatsBento(
-              treeCount: treeCount,
-              customerCount: customerCount,
-              orderCount: orderCount,
-              pendingTotal: pendingTotal,
-            ),
-          ),
-        ),
-        if (pendingTotal > 0)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, 16),
-              child: _PendingBanner(
-                message: _pendingMessage(pendingReceipts, pendingCustomers, pendingPromoVisits),
-              ),
-            ),
-          ),
-        for (final group in grouped.entries) ...[
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(EdSpacing.page, 8, EdSpacing.page, 12),
-              child: _HomeSectionLabel(title: group.key),
-            ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, 8),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, i) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: EdHomeServiceTile(app: group.value[i]),
-                ),
-                childCount: group.value.length,
-              ),
-            ),
-          ),
-        ],
-        SliverPadding(
-          padding: const EdgeInsets.only(bottom: kPhoneBottomInset),
-          sliver: const SliverToBoxAdapter(child: SizedBox.shrink()),
-        ),
       ],
+      ),
     );
-  }
-
-  static Map<String, List<EdHomeApp>> _groupApps(List<EdHomeApp> apps) {
-    final map = <String, List<EdHomeApp>>{};
-    for (final app in apps) {
-      map.putIfAbsent(app.category, () => []).add(app);
-    }
-    return map;
   }
 
   static String _pendingMessage(String? receipts, String? customers, String? promo) {
@@ -181,64 +207,23 @@ class EdHomePage extends StatelessWidget {
     if (r > 0) parts.add('$r سند قبض');
     if (c > 0) parts.add('$c زبون جديد');
     if (p > 0) parts.add('$p زيارة ترويجية');
-    return 'بانتظار المراجعة: ${parts.join(' · ')}';
+    return parts.join(' · ');
   }
 }
 
-class _HomeMainColumn extends StatelessWidget {
-  const _HomeMainColumn({required this.apps});
-
-  final List<EdHomeApp> apps;
-
-  @override
-  Widget build(BuildContext context) {
-    final grouped = EdHomePage._groupApps(apps);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const EdHomeSectionHead(tablet: true),
-        const SizedBox(height: 16),
-        Expanded(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              for (final group in grouped.entries) ...[
-                _HomeSectionLabel(title: group.key),
-                const SizedBox(height: 12),
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 14,
-                    mainAxisSpacing: 14,
-                    mainAxisExtent: 168,
-                  ),
-                  itemCount: group.value.length,
-                  itemBuilder: (context, i) => EdHomeFeatureCard(app: group.value[i]),
-                ),
-                const SizedBox(height: 20),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class EdHomeSidePanel extends StatelessWidget {
-  const EdHomeSidePanel({
-    super.key,
+class _AtelierHeader extends StatelessWidget {
+  const _AtelierHeader({
     required this.agentName,
     required this.treeCount,
     required this.customerCount,
     required this.orderCount,
+    required this.pendingTotal,
     this.avatarText,
-    this.pendingReceipts,
-    this.pendingCustomers,
-    this.pendingPromoVisits,
+    this.onRefresh,
+    this.onSettings,
+    this.onLogout,
+    this.large = false,
+    this.wide = false,
   });
 
   final String agentName;
@@ -246,289 +231,347 @@ class EdHomeSidePanel extends StatelessWidget {
   final String treeCount;
   final String customerCount;
   final String orderCount;
-  final String? pendingReceipts;
-  final String? pendingCustomers;
-  final String? pendingPromoVisits;
+  final int pendingTotal;
+  final VoidCallback? onRefresh;
+  final VoidCallback? onSettings;
+  final VoidCallback? onLogout;
+  final bool large;
+  final bool wide;
 
   @override
   Widget build(BuildContext context) {
     final name = agentName.trim().isEmpty ? 'مندوب' : agentName.trim();
-    final initial = _initial(avatarText ?? name);
-    final pendingR = int.tryParse(pendingReceipts ?? '') ?? 0;
-    final pendingC = int.tryParse(pendingCustomers ?? '') ?? 0;
-    final pendingP = int.tryParse(pendingPromoVisits ?? '') ?? 0;
-    final pendingTotal = pendingR + pendingC + pendingP;
+    final initial = _HomeIdentity.initial(avatarText ?? name);
+    final greeting = _HomeIdentity.greeting();
+    final dateLabel = DateFormat('EEEE، d MMMM yyyy', 'ar').format(DateTime.now());
+    final radius = large ? 26.0 : 22.0;
 
     return Container(
-      height: double.infinity,
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppColors.radiusXl),
+        borderRadius: BorderRadius.circular(radius),
         border: Border.all(color: AppColors.borderLight),
-        boxShadow: AppColors.softShadow,
+        boxShadow: AppColors.cardShadow,
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(22, 28, 22, 24),
-            decoration: const BoxDecoration(gradient: AppColors.homeSkyGradient),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          EdCardDecorStrip(
+            child: Row(
               children: [
-                _avatar(initial),
-                const SizedBox(height: 16),
-                Text(name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Color(0xFF1E293B))),
-                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.asset('assets/logo.png', width: 26, height: 26),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Edari Delegate',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white70),
+                  ),
+                ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: AppColors.accentTeal.withValues(alpha: 0.12),
+                    color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: AppColors.accentTeal.withValues(alpha: 0.2)),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
                   ),
-                  child: const Text(
-                    'بوابة المندوب',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.accentTeal),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(width: 6, height: 6, decoration: const BoxDecoration(color: AppColors.accentTealLight, shape: BoxShape.circle)),
+                      const SizedBox(width: 6),
+                      Text('جاهز', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white.withValues(alpha: 0.9))),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 10),
-                const Text(
-                  'اختر الخدمة وابدأ العمل',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.muted, height: 1.5),
-                ),
+                if (onRefresh != null) ...[
+                  const SizedBox(width: 8),
+                  _HeaderIconBtn(icon: Icons.refresh_rounded, onTap: onRefresh!, light: true),
+                ],
+                if (onSettings != null) ...[
+                  const SizedBox(width: 6),
+                  _HeaderIconBtn(icon: Icons.settings_outlined, onTap: onSettings!, light: true),
+                ],
+                if (onLogout != null) ...[
+                  const SizedBox(width: 6),
+                  _HeaderIconBtn(icon: Icons.logout_rounded, onTap: onLogout!, light: true, muted: true),
+                ],
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
-            child: EdHomeStatsBento(
-              treeCount: treeCount,
-              customerCount: customerCount,
-              orderCount: orderCount,
-              pendingTotal: pendingTotal,
-              compact: true,
+          Container(
+            color: AppColors.surface,
+            child: Padding(
+              padding: EdgeInsets.all(large ? 22 : 18),
+              child: wide
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        EdGradientAvatar(label: initial, size: large ? 64 : 56),
+                        const SizedBox(width: 18),
+                        Expanded(
+                          flex: 5,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(greeting, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.muted)),
+                              const SizedBox(height: 6),
+                              Text(
+                                name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: large ? 32 : 26, fontWeight: FontWeight.w800, color: AppColors.navy, letterSpacing: -0.8, height: 1.05),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(dateLabel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.mutedLight)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 20),
+                        Expanded(
+                          flex: 6,
+                          child: _StatsPanel(
+                            treeCount: treeCount,
+                            customerCount: customerCount,
+                            orderCount: orderCount,
+                            pendingTotal: pendingTotal,
+                            large: true,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            EdGradientAvatar(label: initial, size: large ? 54 : 48),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(greeting, style: TextStyle(fontSize: large ? 13 : 12, fontWeight: FontWeight.w600, color: AppColors.muted)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    name,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(fontSize: large ? 26 : 22, fontWeight: FontWeight.w800, color: AppColors.navy, letterSpacing: -0.6, height: 1.05),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(dateLabel, style: TextStyle(fontSize: large ? 11 : 10, fontWeight: FontWeight.w600, color: AppColors.mutedLight)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: large ? 18 : 14),
+                        _StatsPanel(
+                          treeCount: treeCount,
+                          customerCount: customerCount,
+                          orderCount: orderCount,
+                          pendingTotal: pendingTotal,
+                          large: large,
+                        ),
+                      ],
+                    ),
             ),
           ),
-          if (pendingTotal > 0)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: _PendingBanner(
-                message: EdHomePage._pendingMessage(pendingReceipts, pendingCustomers, pendingPromoVisits),
-              ),
-            ),
-          const Spacer(),
         ],
       ),
     );
   }
-
-  Widget _avatar(String initial) {
-    return Container(
-      width: 72,
-      height: 72,
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: AppColors.homeSunGradient,
-        boxShadow: [BoxShadow(color: AppColors.accentTeal.withValues(alpha: 0.2), blurRadius: 16, offset: const Offset(0, 6))],
-      ),
-      child: Container(
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: AppColors.surface,
-          border: Border.all(color: AppColors.borderLight),
-        ),
-        child: Text(initial, style: const TextStyle(color: AppColors.accentTeal, fontSize: 26, fontWeight: FontWeight.w800)),
-      ),
-    );
-  }
-
-  static String _initial(String text) {
-    final t = text.trim();
-    if (t.isEmpty) return 'م';
-    return t.characters.first;
-  }
 }
 
-class EdHomeSectionHead extends StatelessWidget {
-  const EdHomeSectionHead({super.key, this.tablet = false});
+class _HeaderIconBtn extends StatelessWidget {
+  const _HeaderIconBtn({required this.icon, required this.onTap, this.light = false, this.muted = false});
 
-  final bool tablet;
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool light;
+  final bool muted;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'لوحة الخدمات',
-                style: TextStyle(fontSize: tablet ? 20 : 18, fontWeight: FontWeight.w800, color: const Color(0xFF1E293B)),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                tablet ? 'كل ما تحتاجه في مكان واحد' : 'اضغط على الخدمة للدخول',
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.muted),
-              ),
-            ],
+    return Material(
+      color: light ? Colors.white.withValues(alpha: muted ? 0.08 : 0.14) : AppColors.surfaceAlt,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: light ? Colors.white.withValues(alpha: 0.12) : AppColors.borderLight),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: SizedBox(
+          width: 34,
+          height: 34,
+          child: Icon(
+            icon,
+            size: 17,
+            color: light ? Colors.white.withValues(alpha: muted ? 0.55 : 0.95) : AppColors.navy,
           ),
         ),
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            gradient: AppColors.homeIconGradient(AppColors.accentTeal),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.accentTeal.withValues(alpha: 0.15)),
-          ),
-          alignment: Alignment.center,
-          child: const Icon(Icons.grid_view_rounded, size: 22, color: AppColors.accentTeal),
-        ),
-      ],
+      ),
     );
   }
 }
 
-class EdHomePageBackground extends StatelessWidget {
-  const EdHomePageBackground({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final h = MediaQuery.sizeOf(context).height;
-
-    return Stack(
-      children: [
-        Positioned(
-          top: -40,
-          right: -20,
-          child: ImageFiltered(
-            imageFilter: ImageFilter.blur(sigmaX: 48, sigmaY: 48),
-            child: Container(
-              width: 200,
-              height: 200,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.accentTeal.withValues(alpha: 0.12)),
-            ),
-          ),
-        ),
-        Positioned(
-          top: h * 0.12,
-          left: -30,
-          child: ImageFiltered(
-            imageFilter: ImageFilter.blur(sigmaX: 48, sigmaY: 48),
-            child: Container(
-              width: 160,
-              height: 160,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.moduleShop.withValues(alpha: 0.1)),
-            ),
-          ),
-        ),
-        Positioned(
-          bottom: h * 0.15,
-          right: 20,
-          child: ImageFiltered(
-            imageFilter: ImageFilter.blur(sigmaX: 48, sigmaY: 48),
-            child: Container(
-              width: 140,
-              height: 140,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.moduleReports.withValues(alpha: 0.08)),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class EdHomeStatsBento extends StatelessWidget {
-  const EdHomeStatsBento({
-    super.key,
+class _StatsPanel extends StatelessWidget {
+  const _StatsPanel({
     required this.treeCount,
     required this.customerCount,
     required this.orderCount,
-    this.pendingTotal = 0,
-    this.compact = false,
+    required this.pendingTotal,
+    this.large = false,
   });
 
   final String treeCount;
   final String customerCount;
   final String orderCount;
   final int pendingTotal;
-  final bool compact;
+  final bool large;
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final cells = [
-          _StatCell(value: treeCount, label: 'شجرة', color: AppColors.accentTeal, icon: Icons.account_tree_outlined, bg: EdHomeThemes.accountsBg),
-          _StatCell(value: customerCount, label: 'زبون', color: AppColors.accentBlue, icon: Icons.people_alt_outlined, bg: EdHomeThemes.shopBg),
-          _StatCell(value: orderCount, label: 'طلب', color: AppColors.moduleOrders, icon: Icons.shopping_bag_outlined, bg: EdHomeThemes.ordersBg),
-          if (pendingTotal > 0)
-            _StatCell(value: '$pendingTotal', label: 'بانتظار', color: AppColors.warning, icon: Icons.schedule_rounded, bg: AppColors.warningSoft),
-        ];
-
-        if (compact) {
-          return Row(
-            children: [
-              for (var i = 0; i < cells.length; i++) ...[
-                Expanded(child: _bentoTile(cells[i], compact: true)),
-                if (i < cells.length - 1) const SizedBox(width: 8),
-              ],
-            ],
-          );
-        }
-
-        return GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: 1.55,
-          children: cells.map((c) => _bentoTile(c)).toList(),
-        );
-      },
+    return Container(
+      padding: EdgeInsets.all(large ? 14 : 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderLight),
+        boxShadow: [
+          BoxShadow(color: AppColors.navy.withValues(alpha: 0.04), blurRadius: 12, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(child: _StatCell(icon: Icons.account_tree_outlined, value: treeCount, label: 'شجرة', large: large)),
+          _statDivider(),
+          Expanded(child: _StatCell(icon: Icons.people_outline_rounded, value: customerCount, label: 'زبون', large: large)),
+          _statDivider(),
+          Expanded(child: _StatCell(icon: Icons.shopping_bag_outlined, value: orderCount, label: 'طلب', large: large)),
+          if (pendingTotal > 0) ...[
+            _statDivider(),
+            Expanded(child: _StatCell(icon: Icons.pending_actions_outlined, value: '$pendingTotal', label: 'بانتظار', large: large, highlight: true)),
+          ],
+        ],
+      ),
     );
   }
 
-  Widget _bentoTile(_StatCell cell, {bool compact = false}) {
+  Widget _statDivider() => Container(width: 1, height: 36, margin: const EdgeInsets.symmetric(horizontal: 6), color: AppColors.borderLight);
+}
+
+class _StatCell extends StatelessWidget {
+  const _StatCell({
+    required this.icon,
+    required this.value,
+    required this.label,
+    this.large = false,
+    this.highlight = false,
+  });
+
+  final IconData icon;
+  final String value;
+  final String label;
+  final bool large;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = highlight ? AppColors.warning : AppColors.accentTeal;
+    return Column(
+      children: [
+        Container(
+          width: large ? 28 : 26,
+          height: large ? 28 : 26,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceAlt,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.borderLight),
+          ),
+          child: Icon(icon, size: large ? 14 : 12, color: accent),
+        ),
+        SizedBox(height: large ? 8 : 6),
+        Text(
+          value,
+          style: TextStyle(fontSize: large ? 24 : 20, fontWeight: FontWeight.w800, color: highlight ? AppColors.warning : AppColors.navy, height: 1),
+        ),
+        const SizedBox(height: 2),
+        Text(label, style: TextStyle(fontSize: large ? 11 : 10, fontWeight: FontWeight.w700, color: AppColors.muted)),
+      ],
+    );
+  }
+}
+
+class _AtelierEmptySearch extends StatelessWidget {
+  const _AtelierEmptySearch({required this.query});
+
+  final String query;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 14, vertical: compact ? 12 : 16),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: cell.bg,
-        borderRadius: BorderRadius.circular(compact ? 16 : 20),
-        border: Border.all(color: cell.color.withValues(alpha: 0.12)),
-        boxShadow: AppColors.softShadow,
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderLight),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.search_off_rounded, size: 36, color: AppColors.mutedLight),
+          const SizedBox(height: 10),
+          Text('لا نتائج لـ «$query»', style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.navy)),
+          const SizedBox(height: 4),
+          const Text('جرّب كلمات أخرى', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.muted, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+}
+
+class _AtelierPendingNote extends StatelessWidget {
+  const _AtelierPendingNote({required this.message, this.large = false});
+
+  final String message;
+  final bool large;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: large ? 16 : 14, vertical: large ? 14 : 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.goldLine),
+        boxShadow: AppColors.softShadow,
+      ),
+      child: Row(
         children: [
           Container(
-            width: compact ? 32 : 36,
-            height: compact ? 32 : 36,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: cell.color.withValues(alpha: 0.15)),
+              color: AppColors.goldSoft,
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(cell.icon, size: compact ? 16 : 18, color: cell.color),
+            child: const Icon(Icons.notifications_active_outlined, size: 18, color: AppColors.warning),
           ),
-          SizedBox(height: compact ? 8 : 12),
-          Text(
-            cell.value,
-            style: TextStyle(fontSize: compact ? 18 : 24, fontWeight: FontWeight.w800, color: cell.color, height: 1),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            cell.label,
-            style: TextStyle(fontSize: compact ? 10 : 12, fontWeight: FontWeight.w700, color: AppColors.muted),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('بانتظار المراجعة', style: TextStyle(fontSize: large ? 13 : 12, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                const SizedBox(height: 2),
+                Text(message, style: TextStyle(fontSize: large ? 11 : 10, fontWeight: FontWeight.w600, color: AppColors.textSecondary, height: 1.35)),
+              ],
+            ),
           ),
         ],
       ),
@@ -536,227 +579,197 @@ class EdHomeStatsBento extends StatelessWidget {
   }
 }
 
-class _StatCell {
-  const _StatCell({required this.value, required this.label, required this.color, required this.icon, required this.bg});
-  final String value;
-  final String label;
-  final Color color;
-  final IconData icon;
-  final Color bg;
+class _TileEntrance extends StatefulWidget {
+  const _TileEntrance({required this.index, required this.child});
+
+  final int index;
+  final Widget child;
+
+  @override
+  State<_TileEntrance> createState() => _TileEntranceState();
 }
 
-class EdHomeServiceTile extends StatelessWidget {
-  const EdHomeServiceTile({super.key, required this.app});
+class _TileEntranceState extends State<_TileEntrance> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _fade;
+  late final Animation<Offset> _slide;
 
-  final EdHomeApp app;
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 420));
+    _fade = CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic);
+    _slide = Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
+    Future.delayed(Duration(milliseconds: 35 * widget.index), () {
+      if (mounted) _ctrl.forward();
+    });
+  }
 
-  bool get _showBadge {
-    final b = app.badge;
-    return b != null && b != '—' && b != '0';
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: app.onTap,
-        borderRadius: BorderRadius.circular(22),
-        child: Ink(
-          decoration: BoxDecoration(
-            gradient: AppColors.homeCardWash,
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: AppColors.borderLight),
-            boxShadow: AppColors.softShadow,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: app.iconBg,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: app.iconColor.withValues(alpha: 0.12)),
-                  ),
-                  child: Icon(app.icon, color: app.iconColor, size: 28),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        app.name,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        app.hint,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
-                      ),
-                    ],
-                  ),
-                ),
-                if (_showBadge)
-                  Container(
-                    margin: const EdgeInsets.only(left: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: app.iconColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: app.iconColor.withValues(alpha: 0.2)),
-                    ),
-                    child: Text(app.badge!, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: app.iconColor)),
-                  ),
-                const SizedBox(width: 8),
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: app.iconBg,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(Icons.arrow_back_ios_new_rounded, size: 14, color: app.iconColor),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(position: _slide, child: widget.child),
     );
   }
 }
 
-class EdHomeFeatureCard extends StatelessWidget {
-  const EdHomeFeatureCard({super.key, required this.app});
+class _AtelierTile extends StatefulWidget {
+  const _AtelierTile({required this.app, required this.index, this.large = false});
 
   final EdHomeApp app;
+  final int index;
+  final bool large;
+
+  @override
+  State<_AtelierTile> createState() => _AtelierTileState();
+}
+
+class _AtelierTileState extends State<_AtelierTile> {
+  bool _pressed = false;
+  bool _hovered = false;
 
   bool get _showBadge {
-    final b = app.badge;
+    final b = widget.app.badge;
     return b != null && b != '—' && b != '0';
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(22),
-        side: BorderSide(color: AppColors.borderLight),
-      ),
-      child: InkWell(
-        onTap: app.onTap,
-        child: Ink(
-          decoration: BoxDecoration(
-            gradient: AppColors.homeCardWash,
-            borderRadius: BorderRadius.circular(22),
-            boxShadow: AppColors.softShadow,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 52,
-                      height: 52,
-                      decoration: BoxDecoration(
-                        color: app.iconBg,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: app.iconColor.withValues(alpha: 0.12)),
-                      ),
-                      child: Icon(app.icon, color: app.iconColor, size: 26),
-                    ),
-                    const Spacer(),
-                    if (_showBadge)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: app.iconColor.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: app.iconColor.withValues(alpha: 0.2)),
-                        ),
-                        child: Text(app.badge!, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: app.iconColor)),
-                      ),
-                  ],
-                ),
-                const Spacer(),
-                Text(
-                  app.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF1E293B), height: 1.3),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  app.hint,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted, height: 1.35),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Text('فتح', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: app.iconColor)),
-                    const Spacer(),
-                    Icon(Icons.arrow_back_ios_new_rounded, size: 12, color: app.iconColor),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HomeSectionLabel extends StatelessWidget {
-  const _HomeSectionLabel({required this.title});
-
-  final String title;
+  String get _indexLabel => (widget.index + 1).toString().padLeft(2, '0');
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: AppColors.accentTeal.withValues(alpha: 0.35),
-            boxShadow: [BoxShadow(color: AppColors.accentTeal.withValues(alpha: 0.25), blurRadius: 6)],
-          ),
-        ),
-        const SizedBox(width: 10),
-        Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF334155))),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Container(
-            height: 1,
+    final large = widget.large;
+    final radius = large ? 22.0 : 20.0;
+    final scale = _pressed ? 0.96 : (_hovered ? 1.02 : 1.0);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTap: widget.app.onTap,
+        child: AnimatedScale(
+          scale: scale,
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOutCubic,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppColors.borderLight, AppColors.borderLight.withValues(alpha: 0)],
+              borderRadius: BorderRadius.circular(radius),
+              border: Border.all(color: AppColors.borderLight),
+              boxShadow: _pressed ? null : AppColors.softShadow,
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(radius),
+              child: Material(
+                color: AppColors.surface,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Row(
+                      children: [
+                        Container(width: 3, color: widget.app.iconColor.withValues(alpha: 0.75)),
+                        Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.fromLTRB(large ? 14 : 12, large ? 14 : 12, large ? 14 : 12, large ? 12 : 10),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Center(
+                                  child: EdGradientIconBox(
+                                    icon: widget.app.icon,
+                                    color: widget.app.iconColor,
+                                    bgColor: widget.app.iconBg,
+                                    size: large ? 50 : 44,
+                                    iconSize: large ? 22 : 20,
+                                  ),
+                                ),
+                                SizedBox(height: large ? 10 : 8),
+                                Text(
+                                  widget.app.name,
+                                  textAlign: TextAlign.center,
+                                  maxLines: large ? 3 : 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: large ? 14 : 13, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.25),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  widget.app.hint,
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: large ? 11 : 10, fontWeight: FontWeight.w600, color: AppColors.muted, height: 1.3),
+                                ),
+                                const Spacer(),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      _indexLabel,
+                                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.mutedLight),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Icon(Icons.arrow_forward_ios_rounded, size: 10, color: AppColors.mutedLight),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_showBadge)
+                      Positioned(
+                        top: 8,
+                        left: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.navy,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            widget.app.badge!,
+                            style: TextStyle(fontSize: large ? 11 : 10, fontWeight: FontWeight.w800, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
         ),
-      ],
+      ),
     );
   }
 }
 
-/// ألوان خلفية أيقونات التطبيقات
+abstract final class _HomeIdentity {
+  static String initial(String text) {
+    final t = text.trim();
+    if (t.isEmpty) return 'م';
+    return t.characters.first;
+  }
+
+  static String greeting() {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'صباح الخير';
+    if (h < 17) return 'نهارك سعيد';
+    return 'مساء الخير';
+  }
+
+}
+
+/// ألوان خلفية أيقونات التطبيقات (للتوافق مع home_screen)
 abstract final class EdHomeThemes {
   static const accountsBg = Color(0xFFE6F7F5);
   static const shopBg = Color(0xFFEFF6FF);
@@ -765,45 +778,4 @@ abstract final class EdHomeThemes {
   static const receiptsBg = Color(0xFFECFDF5);
   static const customersBg = Color(0xFFFFF1F2);
   static const promoBg = Color(0xFFFDF2F8);
-}
-
-class _PendingBanner extends StatelessWidget {
-  const _PendingBanner({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.warningSoft,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFFDE68A)),
-        boxShadow: AppColors.softShadow,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.warning.withValues(alpha: 0.2)),
-            ),
-            child: const Icon(Icons.notifications_active_outlined, color: AppColors.warning, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              message,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFFB45309), height: 1.4),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

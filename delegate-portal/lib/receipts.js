@@ -1,4 +1,5 @@
 const db = require('./db');
+const { linkDeliveryReceiptToReceipt } = require('./delivery-receipts');
 const {
   buildReceiptJournalLines,
   validatePostingAccounts
@@ -160,6 +161,7 @@ function mapReceipt(row, events = []) {
     edariPostedAt: row.edari_posted_at || '',
     postedError: row.posted_error || '',
     adminNote: row.admin_note || '',
+    deliveryReceiptId: row.delivery_receipt_id || null,
     createdAt: row.created_at,
     submittedAt: row.submitted_at,
     updatedAt: row.updated_at,
@@ -259,13 +261,24 @@ function createReceipt(agentId, data = {}) {
   const discount = money(data.discount);
   const settings = getReceiptAccountSettings();
   const receiptNo = nextReceiptNo();
+  const deliveryReceiptId = Number(data.deliveryReceiptId || 0);
+
+  if (deliveryReceiptId > 0) {
+    const dr = db.prepare('SELECT * FROM delivery_receipts WHERE id = ? AND agent_id = ?').get(deliveryReceiptId, agentId);
+    if (!dr) throw new Error('وصل الاستلام غير موجود');
+    if (dr.receipt_id) throw new Error('تم إنشاء سند قبض لهذا الوصل مسبقاً');
+    if (String(dr.customer_acc_seq) !== String(customer.seq)) {
+      throw new Error('الزبون لا يطابق وصل الاستلام');
+    }
+  }
+
   const r = db.prepare(`
     INSERT INTO receipts (
       receipt_no, agent_id, customer_acc_seq, tree_acc_seq, tree_name,
       amount, commission, discount, notes, receipt_date, status,
       cash_acc_seq, commission_debit_acc_seq, commission_credit_acc_seq, discount_acc_seq,
-      submitted_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, datetime('now'), datetime('now'))
+      delivery_receipt_id, submitted_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
   `).run(
     receiptNo,
     agentId,
@@ -280,8 +293,12 @@ function createReceipt(agentId, data = {}) {
     settings.cash.seq || '',
     settings.commissionDebit.seq || '',
     settings.commissionCredit.seq || '',
-    settings.discount.seq || ''
+    settings.discount.seq || '',
+    deliveryReceiptId > 0 ? deliveryReceiptId : null
   );
+  if (deliveryReceiptId > 0) {
+    linkDeliveryReceiptToReceipt(deliveryReceiptId, r.lastInsertRowid);
+  }
   logEvent(r.lastInsertRowid, {
     actorType: 'agent',
     actorId: agentId,

@@ -4,12 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_provider.dart';
 import '../../core/auth/auth_session.dart';
-import '../../core/api/api_client.dart';
+import '../../core/api/delegate_api.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
-import '../../core/widgets/adaptive_shell.dart';
-import '../../core/widgets/ed_components.dart';
 import 'home_ui.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -124,8 +122,9 @@ class HomeScreen extends ConsumerWidget {
       ),
     ];
 
-    final homeBody = RefreshIndicator(
-      color: AppColors.navy,
+    return RefreshIndicator(
+      color: AppColors.accentTeal,
+      backgroundColor: AppColors.surface,
       onRefresh: refresh,
       child: EdHomePage(
         agentName: agentName,
@@ -139,48 +138,13 @@ class HomeScreen extends ConsumerWidget {
         pendingPromoVisits: pendingPromoVisits,
         onRefresh: refresh,
         onSettings: () => context.push('/settings'),
+        onLogout: layout.isPhone
+            ? null
+            : () async {
+                await ref.read(authProvider.notifier).logout();
+                if (context.mounted) context.go('/login');
+              },
       ),
-    );
-
-    if (layout.isPhone) {
-      return RefreshIndicator(
-        color: AppColors.accentTeal,
-        backgroundColor: AppColors.surface,
-        onRefresh: refresh,
-        child: EdHomePage(
-          agentName: agentName,
-          avatarText: agent?.name,
-          apps: apps,
-          treeCount: treeCount,
-          customerCount: customerCount,
-          orderCount: orderCount,
-          pendingReceipts: pendingReceipts,
-          pendingCustomers: pendingCustomers,
-          pendingPromoVisits: pendingPromoVisits,
-          onRefresh: refresh,
-          onSettings: () => context.push('/settings'),
-        ),
-      );
-    }
-
-    return AppPage(
-      title: 'Edari',
-      kicker: 'بوابة المندوب',
-      subtitle: agentName,
-      actions: [
-        EdHeaderIconButton(icon: Icons.refresh_rounded, tooltip: 'تحديث', onPressed: refresh),
-        EdHeaderIconButton(icon: Icons.settings_outlined, tooltip: 'الإعدادات', onPressed: () => context.push('/settings')),
-        EdHeaderIconButton(
-          icon: Icons.logout_rounded,
-          tooltip: 'خروج',
-          danger: true,
-          onPressed: () async {
-            await ref.read(authProvider.notifier).logout();
-            if (context.mounted) context.go('/login');
-          },
-        ),
-      ],
-      child: homeBody,
     );
   }
 }

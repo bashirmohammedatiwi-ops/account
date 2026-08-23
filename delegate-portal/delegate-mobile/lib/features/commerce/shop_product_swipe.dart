@@ -24,6 +24,9 @@ class EdShopSwipeProductCard extends StatelessWidget {
     required this.onIncBonus,
     required this.onDecTester,
     required this.onIncTester,
+    required this.onSetQuant,
+    required this.onSetBonus,
+    required this.onSetTester,
   });
 
   final Product product;
@@ -39,6 +42,9 @@ class EdShopSwipeProductCard extends StatelessWidget {
   final VoidCallback onIncBonus;
   final VoidCallback onDecTester;
   final VoidCallback onIncTester;
+  final ValueChanged<num> onSetQuant;
+  final ValueChanged<num> onSetBonus;
+  final ValueChanged<num> onSetTester;
 
   @override
   Widget build(BuildContext context) {
@@ -64,6 +70,9 @@ class EdShopSwipeProductCard extends StatelessWidget {
       onIncBonus: onIncBonus,
       onDecTester: onDecTester,
       onIncTester: onIncTester,
+      onSetQuant: onSetQuant,
+      onSetBonus: onSetBonus,
+      onSetTester: onSetTester,
     );
 
     return Padding(
@@ -266,6 +275,9 @@ class _ProductQtyBlock extends StatelessWidget {
     required this.onIncBonus,
     required this.onDecTester,
     required this.onIncTester,
+    required this.onSetQuant,
+    required this.onSetBonus,
+    required this.onSetTester,
   });
 
   final num quant;
@@ -278,13 +290,16 @@ class _ProductQtyBlock extends StatelessWidget {
   final VoidCallback onIncBonus;
   final VoidCallback onDecTester;
   final VoidCallback onIncTester;
+  final ValueChanged<num> onSetQuant;
+  final ValueChanged<num> onSetBonus;
+  final ValueChanged<num> onSetTester;
 
   @override
   Widget build(BuildContext context) {
     final children = [
-      EdShopQtyRow(label: 'الكمية', value: fmtQty(quant), kind: EdShopQtyKind.unit, onDec: onDecQuant, onInc: onIncQuant),
-      EdShopQtyRow(label: 'الهدايا', value: fmtQty(bonus), kind: EdShopQtyKind.gift, onDec: onDecBonus, onInc: onIncBonus),
-      EdShopQtyRow(label: 'التيستر', value: fmtQty(tester), kind: EdShopQtyKind.tester, onDec: onDecTester, onInc: onIncTester),
+      EdShopQtyRow(label: 'الكمية', amount: quant, kind: EdShopQtyKind.unit, onDec: onDecQuant, onInc: onIncQuant, onSetValue: onSetQuant),
+      EdShopQtyRow(label: 'الهدايا', amount: bonus, kind: EdShopQtyKind.gift, onDec: onDecBonus, onInc: onIncBonus, onSetValue: onSetBonus),
+      EdShopQtyRow(label: 'التيستر', amount: tester, kind: EdShopQtyKind.tester, onDec: onDecTester, onInc: onIncTester, onSetValue: onSetTester),
     ];
 
     if (wide) {

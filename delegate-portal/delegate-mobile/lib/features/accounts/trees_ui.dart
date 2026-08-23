@@ -4,11 +4,12 @@ import '../../core/layout/breakpoints.dart';
 import '../../core/layout/ed_table_wrap.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/widgets/ed_page_decor.dart';
 import '../../core/widgets/phone_ui.dart';
 import '../../models/models.dart';
 import 'accounts_theme.dart';
 
-class EdTreesPage extends StatelessWidget {
+class EdTreesPage extends StatefulWidget {
   const EdTreesPage({
     super.key,
     required this.trees,
@@ -21,13 +22,31 @@ class EdTreesPage extends StatelessWidget {
   final ValueChanged<AccountTree> onTreeTap;
 
   @override
+  State<EdTreesPage> createState() => _EdTreesPageState();
+}
+
+class _EdTreesPageState extends State<EdTreesPage> {
+  String _query = '';
+
+  List<AccountTree> get _filtered {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return widget.trees;
+    return widget.trees
+        .where((t) => t.name1.toLowerCase().contains(q) || t.accountNum.toLowerCase().contains(q))
+        .toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final layout = EdLayout.of(context);
     final pad = edPageHorizontalPadding(context);
-    final customers = trees.fold<int>(0, (s, t) => s + t.directChildren);
-    final bottomPad = layout.isPhone ? kPhoneBottomInset : 24.0;
+    final customers = widget.trees.fold<int>(0, (s, t) => s + t.directChildren);
+    final bottomPad = layout.isPhone ? kPhoneBottomInset : 28.0;
+    final filtered = _filtered;
+    final cols = layout.isDesktop ? 3 : layout.isTablet ? 2 : 2;
+    final cardExtent = edFormalCardExtent(layout, phone: 156, tablet: 168);
 
-    if (trees.isEmpty) {
+    if (widget.trees.isEmpty) {
       return LayoutBuilder(
         builder: (context, constraints) {
           final minH = constraints.maxHeight.isFinite && constraints.maxHeight > 0 ? constraints.maxHeight : 400.0;
@@ -35,87 +54,183 @@ class EdTreesPage extends StatelessWidget {
             physics: const AlwaysScrollableScrollPhysics(),
             child: ConstrainedBox(
               constraints: BoxConstraints(minHeight: minH),
-              child: Padding(
-                padding: EdgeInsets.all(pad),
-                child: const EdTreesEmptyState(),
-              ),
+              child: Padding(padding: EdgeInsets.all(pad), child: const EdTreesEmptyState()),
             ),
           );
         },
       );
     }
 
-    final gridDelegate = SliverGridDelegateWithFixedCrossAxisCount(
-      crossAxisCount: layout.gridColumns(phone: 1, tablet: 2, wide: 2, desktop: 3),
-      crossAxisSpacing: 10,
-      mainAxisSpacing: 10,
-      mainAxisExtent: layout.isPhone ? 200 : 210,
-    );
-
     final gridSliver = SliverPadding(
       padding: EdgeInsets.fromLTRB(pad, 0, pad, bottomPad),
-      sliver: SliverGrid(
-        gridDelegate: gridDelegate,
-        delegate: SliverChildBuilderDelegate(
-          (context, i) => EdTreeCard(
-            index: i + 1,
-            tree: trees[i],
-            onTap: () => onTreeTap(trees[i]),
-          ),
-          childCount: trees.length,
-        ),
-      ),
-    );
-
-    if (layout.isTablet) {
-      return CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(pad, 18, pad, 0),
-            sliver: SliverToBoxAdapter(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                textDirection: TextDirection.ltr,
-                children: [
-                  SizedBox(
-                    width: layout.isDesktop ? 300 : 280,
-                    child: EdTreesSidePanel(
-                      agentName: agentName,
-                      treeCount: trees.length,
-                      customerCount: customers,
-                    ),
+      sliver: filtered.isEmpty
+          ? SliverToBoxAdapter(
+              child: _TreesSearchEmpty(query: _query),
+            )
+          : SliverGrid(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: cols,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                mainAxisExtent: cardExtent,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, i) => _TileEntrance(
+                  index: i,
+                  child: EdTreeCard(
+                    index: widget.trees.indexOf(filtered[i]) + 1,
+                    tree: filtered[i],
+                    onTap: () => widget.onTreeTap(filtered[i]),
+                    large: layout.isTablet,
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        EdTreesContentHead(treeCount: trees.length, customerCount: customers),
-                        const SizedBox(height: 12),
-                      ],
-                    ),
-                  ),
-                ],
+                ),
+                childCount: filtered.length,
               ),
             ),
-          ),
-          gridSliver,
-        ],
-      );
-    }
+    );
 
-    return CustomScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      slivers: [
-        SliverPadding(
-          padding: EdgeInsets.fromLTRB(pad, 8, pad, 12),
-          sliver: SliverToBoxAdapter(
-            child: EdTreesContentHead(treeCount: trees.length, customerCount: customers),
-          ),
+    return ColoredBox(
+      color: Colors.white,
+      child: Stack(
+        children: [
+          const EdModernBackdrop(variant: EdBackdropVariant.accounts),
+        CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(pad, layout.isTablet ? 16 : 10, pad, 0),
+              sliver: SliverToBoxAdapter(
+                child: layout.isTablet
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        textDirection: TextDirection.ltr,
+                        children: [
+                          SizedBox(
+                            width: layout.isDesktop ? 280 : 260,
+                            child: EdTreesSidePanel(
+                              agentName: widget.agentName,
+                              treeCount: widget.trees.length,
+                              customerCount: customers,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                EdSectionHeader(
+                                  title: 'الشجرات المعيّنة',
+                                  subtitle: _query.isNotEmpty
+                                      ? 'عرض ${filtered.length} من ${widget.trees.length} شجرة'
+                                      : '${widget.trees.length} شجرة · ${fmtNumAlways(customers)} زبون',
+                                  icon: Icons.account_tree_outlined,
+                                  iconColor: EdAccountsTheme.accent,
+                                ),
+                                const SizedBox(height: 12),
+                                EdModernSearchField(
+                                  hint: 'ابحث عن شجرة...',
+                                  hasText: _query.isNotEmpty,
+                                  onChanged: (v) => setState(() => _query = v),
+                                  onClear: () => setState(() => _query = ''),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          EdSectionHeader(
+                            title: 'الشجرات المعيّنة',
+                            subtitle: _query.isNotEmpty
+                                ? 'عرض ${filtered.length} من ${widget.trees.length} شجرة'
+                                : '${widget.trees.length} شجرة · ${fmtNumAlways(customers)} زبون',
+                            icon: Icons.account_tree_outlined,
+                            iconColor: EdAccountsTheme.accent,
+                          ),
+                          const SizedBox(height: 12),
+                          EdModernSearchField(
+                            hint: 'ابحث عن شجرة...',
+                            hasText: _query.isNotEmpty,
+                            onChanged: (v) => setState(() => _query = v),
+                            onClear: () => setState(() => _query = ''),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+            SliverPadding(padding: EdgeInsets.only(top: layout.isTablet ? 16 : 14)),
+            gridSliver,
+          ],
         ),
-        gridSliver,
       ],
+      ),
+    );
+  }
+}
+
+class _TreesSearchEmpty extends StatelessWidget {
+  const _TreesSearchEmpty({required this.query});
+
+  final String query;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.search_off_rounded, size: 32, color: AppColors.mutedLight),
+          const SizedBox(height: 8),
+          Text('لا نتائج لـ «$query»', style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.navy)),
+        ],
+      ),
+    );
+  }
+}
+
+class _TileEntrance extends StatefulWidget {
+  const _TileEntrance({required this.index, required this.child});
+
+  final int index;
+  final Widget child;
+
+  @override
+  State<_TileEntrance> createState() => _TileEntranceState();
+}
+
+class _TileEntranceState extends State<_TileEntrance> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 380));
+    Future.delayed(Duration(milliseconds: 30 * widget.index), () {
+      if (mounted) _ctrl.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: CurvedAnimation(parent: _ctrl, curve: Curves.easeOut),
+      child: SlideTransition(
+        position: Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic)),
+        child: widget.child,
+      ),
     );
   }
 }
@@ -134,14 +249,13 @@ class EdTreesSidePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final layout = EdLayout.of(context);
     final name = agentName.trim().isEmpty ? 'مندوب' : agentName.trim();
     final initial = name.characters.first;
 
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppColors.radiusLg),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.borderLight),
         boxShadow: AppColors.cardShadow,
       ),
@@ -150,41 +264,45 @@ class EdTreesSidePanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            height: 4,
-            decoration: const BoxDecoration(gradient: AppColors.accentGradient),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            color: AppColors.surfaceMuted,
-            child: const Text(
-              'ملخص المندوب',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.muted, letterSpacing: 0.4),
-            ),
-          ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(18, layout.isTablet ? 22 : 20, 18, layout.isTablet ? 12 : 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          EdCardDecorStrip(
+            child: const Row(
               children: [
-                _avatar(initial),
-                const SizedBox(height: 14),
-                _welcomeText(name),
+                Icon(Icons.account_tree_outlined, size: 16, color: Colors.white70),
+                SizedBox(width: 8),
+                Text('ملخص الشجرات', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white70)),
               ],
             ),
           ),
           Container(
-            decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: AppColors.borderLight)),
+            color: AppColors.surface,
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Row(
+                children: [
+                  EdGradientAvatar(label: initial, size: 48),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                        const SizedBox(height: 4),
+                        const Text('اختر شجرة لعرض الزبائن', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
+          ),
+          Container(
+            decoration: const BoxDecoration(border: Border(top: BorderSide(color: AppColors.borderLight))),
             child: IntrinsicHeight(
               child: Row(
                 children: [
-                  Expanded(child: _metric('$treeCount', 'الشجرات', AppColors.navy)),
-                  const VerticalDivider(width: 1, thickness: 1, color: EdAccountsTheme.line),
-                  Expanded(child: _metric(fmtNumAlways(customerCount), 'الزبائن', AppColors.navy)),
-                  const VerticalDivider(width: 1, thickness: 1, color: EdAccountsTheme.line),
-                  Expanded(child: _metric('●', 'الحالة', EdAccountsTheme.credit, compact: true)),
+                  Expanded(child: _sideMetric('$treeCount', 'شجرة')),
+                  const VerticalDivider(width: 1, thickness: 1, color: AppColors.borderLight),
+                  Expanded(child: _sideMetric(fmtNumAlways(customerCount), 'زبون')),
                 ],
               ),
             ),
@@ -194,47 +312,14 @@ class EdTreesSidePanel extends StatelessWidget {
     );
   }
 
-  Widget _avatar(String initial) {
-    return Container(
-      width: 64,
-      height: 64,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: EdAccountsTheme.cardTint,
-        borderRadius: BorderRadius.circular(AppColors.radiusSm),
-        border: Border.all(color: EdAccountsTheme.line),
-      ),
-      child: Text(initial, style: const TextStyle(color: AppColors.navy, fontSize: 22, fontWeight: FontWeight.w800)),
-    );
-  }
-
-  Widget _welcomeText(String name) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.navy)),
-        const SizedBox(height: 8),
-        const Text(
-          'اختر شجرة حساب لعرض الزبائن',
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.muted, height: 1.5),
-        ),
-      ],
-    );
-  }
-
-  Widget _metric(String value, String label, Color color, {bool compact = false}) {
+  Widget _sideMetric(String value, String label) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 14),
       child: Column(
         children: [
-          Text(
-            value,
-            textAlign: TextAlign.center,
-            textDirection: compact ? TextDirection.ltr : TextDirection.rtl,
-            style: TextStyle(fontSize: compact ? 16 : 18, fontWeight: FontWeight.w800, color: color, height: 1.1),
-          ),
-          const SizedBox(height: 4),
-          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted)),
+          Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.navy)),
+          const SizedBox(height: 2),
+          Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted)),
         ],
       ),
     );
@@ -242,150 +327,167 @@ class EdTreesSidePanel extends StatelessWidget {
 }
 
 class EdTreesContentHead extends StatelessWidget {
-  const EdTreesContentHead({super.key, required this.treeCount, required this.customerCount});
+  const EdTreesContentHead({
+    super.key,
+    required this.treeCount,
+    required this.customerCount,
+    this.filtered,
+    this.hasQuery = false,
+  });
 
   final int treeCount;
   final int customerCount;
+  final int? filtered;
+  final bool hasQuery;
 
   @override
   Widget build(BuildContext context) {
+    final subtitle = hasQuery && filtered != null
+        ? 'عرض $filtered من $treeCount شجرة'
+        : '$treeCount شجرة · ${fmtNumAlways(customerCount)} زبون';
+
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.borderLight),
+          ),
+          child: const Icon(Icons.account_tree_outlined, size: 18, color: AppColors.accentTeal),
+        ),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('الشجرات المعيّنة', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.navy)),
-              const SizedBox(height: 4),
-              Text(
-                '$treeCount شجرة · ${fmtNumAlways(customerCount)} زبون',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
-              ),
+              Text(subtitle, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted)),
             ],
           ),
-        ),
-        Container(
-          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: EdAccountsTheme.accentSoft,
-            borderRadius: BorderRadius.circular(AppColors.radiusSm),
-            border: Border.all(color: EdAccountsTheme.line),
-          ),
-          alignment: Alignment.center,
-          child: Text('$treeCount', style: const TextStyle(color: EdAccountsTheme.accent, fontSize: 16, fontWeight: FontWeight.w800)),
         ),
       ],
     );
   }
 }
 
-class EdTreeCard extends StatelessWidget {
-  const EdTreeCard({super.key, required this.index, required this.tree, required this.onTap});
+class EdTreeCard extends StatefulWidget {
+  const EdTreeCard({super.key, required this.index, required this.tree, required this.onTap, this.large = false});
 
   final int index;
   final AccountTree tree;
   final VoidCallback onTap;
+  final bool large;
+
+  @override
+  State<EdTreeCard> createState() => _EdTreeCardState();
+}
+
+class _EdTreeCardState extends State<EdTreeCard> {
+  bool _pressed = false;
+  bool _hovered = false;
 
   String get _title {
-    final name = tree.name1.trim();
+    final name = widget.tree.name1.trim();
     return name.isEmpty ? '—' : name;
-  }
-
-  String get _num {
-    final num = tree.accountNum.trim();
-    return num.isEmpty ? '—' : num;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      clipBehavior: Clip.antiAlias,
-      borderRadius: BorderRadius.circular(AppColors.radiusLg),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppColors.radiusLg),
-        child: Ink(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppColors.radiusLg),
-            border: Border.all(color: AppColors.borderLight),
-            boxShadow: AppColors.cardShadow,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                height: 4,
-                decoration: const BoxDecoration(gradient: AppColors.accentGradient),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              gradient: AppColors.moduleSoftGradient(EdAccountsTheme.accent),
-                              borderRadius: BorderRadius.circular(8),
+    final large = widget.large;
+    final scale = _pressed ? 0.96 : (_hovered ? 1.02 : 1.0);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: scale,
+          duration: const Duration(milliseconds: 130),
+          curve: Curves.easeOutCubic,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: Material(
+              color: AppColors.surface,
+              child: Ink(
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.borderLight),
+                  boxShadow: [
+                    BoxShadow(color: AppColors.navy.withValues(alpha: _hovered ? 0.08 : 0.05), blurRadius: 18, offset: const Offset(0, 6)),
+                  ],
+                ),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Row(
+                      children: [
+                        Container(width: 3, color: EdAccountsTheme.accent.withValues(alpha: 0.75)),
+                        Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.all(large ? 14 : 12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      widget.index.toString().padLeft(2, '0'),
+                                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.mutedLight),
+                                    ),
+                                    const Spacer(),
+                                    Text(
+                                      widget.tree.accountNum.trim().isEmpty ? '—' : widget.tree.accountNum.trim(),
+                                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.muted),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Center(
+                                  child: EdGradientIconBox(
+                                    icon: Icons.account_tree_outlined,
+                                    color: EdAccountsTheme.accent,
+                                    bgColor: EdAccountsTheme.accentSoft,
+                                    size: large ? 44 : 40,
+                                    iconSize: 20,
+                                  ),
+                                ),
+                                SizedBox(height: large ? 8 : 6),
+                                Text(
+                                  _title,
+                                  textAlign: TextAlign.center,
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: large ? 14 : 13, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.25),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${fmtNumAlways(widget.tree.directChildren)} زبون',
+                                  style: TextStyle(fontSize: large ? 11 : 10, fontWeight: FontWeight.w600, color: AppColors.muted),
+                                ),
+                                const Spacer(),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text('عرض الفروع', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: EdAccountsTheme.accent)),
+                                    const SizedBox(width: 4),
+                                    Icon(Icons.arrow_forward_ios_rounded, size: 10, color: EdAccountsTheme.accent.withValues(alpha: 0.7)),
+                                  ],
+                                ),
+                              ],
                             ),
-                            child: Text(
-                              index.toString().padLeft(2, '0'),
-                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: EdAccountsTheme.accent),
-                            ),
                           ),
-                          Text(
-                            _num,
-                            textDirection: TextDirection.ltr,
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        _title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.35),
-                      ),
-                      Text(
-                        '${fmtNumAlways(tree.directChildren)} حساب فرعي',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [EdAccountsTheme.accentSoft, EdAccountsTheme.cardTint],
-                          ),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: EdAccountsTheme.accent.withValues(alpha: 0.15)),
                         ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.people_outline_rounded, size: 16, color: EdAccountsTheme.accent),
-                            const SizedBox(width: 6),
-                            Text(
-                              'استعراض الزبائن',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: EdAccountsTheme.accent),
-                            ),
-                            const Spacer(),
-                            Icon(Icons.arrow_back_ios_new_rounded, size: 12, color: EdAccountsTheme.accent),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -404,7 +506,7 @@ class EdTreesEmptyState extends StatelessWidget {
       padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppColors.radiusLg),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.borderLight),
         boxShadow: AppColors.softShadow,
       ),
@@ -414,18 +516,11 @@ class EdTreesEmptyState extends StatelessWidget {
           Container(
             width: 56,
             height: 56,
-            decoration: BoxDecoration(
-              color: AppColors.accentSoft,
-              borderRadius: BorderRadius.circular(14),
-            ),
+            decoration: BoxDecoration(color: AppColors.accentSoft, borderRadius: BorderRadius.circular(14)),
             child: const Icon(Icons.account_tree_outlined, size: 28, color: AppColors.accentTeal),
           ),
           const SizedBox(height: 14),
-          const Text(
-            'لا توجد شجرات — تواصل مع الإدارة',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textSecondary),
-          ),
+          const Text('لا توجد شجرات — تواصل مع الإدارة', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
         ],
       ),
     );
