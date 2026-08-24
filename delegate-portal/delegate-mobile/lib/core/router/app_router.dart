@@ -13,6 +13,7 @@ import '../../features/orders/orders_hub_screen.dart';
 import '../../features/promotional_visits/promotional_visits_screen.dart';
 import '../../features/receipts/receipts_screen.dart';
 import '../../features/reports/reports_screen.dart';
+import '../../features/settings/printer_settings_screen.dart';
 import '../../features/settings/settings_screen.dart';
 import '../auth/auth_provider.dart';
 import '../widgets/adaptive_shell.dart';
@@ -117,7 +118,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/receipts', builder: (_, _) => const ReceiptsScreen()),
           GoRoute(path: '/customers', builder: (_, _) => const CustomersScreen()),
           GoRoute(path: '/promotional-visits', builder: (_, _) => const PromotionalVisitsScreen()),
-          GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
+          GoRoute(
+            path: '/settings',
+            builder: (_, _) => const SettingsScreen(),
+            routes: [
+              GoRoute(path: 'printer', builder: (_, _) => const PrinterSettingsScreen()),
+            ],
+          ),
         ],
       ),
     ],

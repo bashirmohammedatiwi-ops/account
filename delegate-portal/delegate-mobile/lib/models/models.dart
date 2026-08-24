@@ -1,3 +1,17 @@
+int _jsonInt(dynamic value, {int fallback = 0}) {
+  if (value == null) return fallback;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse('$value') ?? fallback;
+}
+
+int? _jsonIntOrNull(dynamic value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse('$value');
+}
+
 class Agent {
   const Agent({required this.id, required this.name, required this.username});
 
@@ -502,7 +516,7 @@ class Receipt {
   bool get canDelete => false; // الحذف من لوحة التحكم فقط
 
   factory Receipt.fromJson(Map<String, dynamic> json) => Receipt(
-        id: json['id'] as int,
+        id: _jsonInt(json['id']),
         receiptNo: '${json['receiptNo'] ?? json['receipt_no'] ?? ''}',
         status: '${json['status'] ?? ''}',
         statusLabel: '${json['statusLabel'] ?? json['status_label'] ?? ''}',
@@ -559,7 +573,7 @@ class DeliveryReceipt {
   bool get canCreateReceipt => status == 'issued' && receiptId == null;
 
   factory DeliveryReceipt.fromJson(Map<String, dynamic> json) => DeliveryReceipt(
-        id: json['id'] as int,
+        id: _jsonInt(json['id']),
         deliveryNo: '${json['deliveryNo'] ?? json['delivery_no'] ?? ''}',
         status: '${json['status'] ?? ''}',
         statusLabel: '${json['statusLabel'] ?? json['status_label'] ?? ''}',
@@ -572,7 +586,7 @@ class DeliveryReceipt {
         notes: json['notes'] as String?,
         receiptDate: json['receiptDate'] as String? ?? json['receipt_date'] as String?,
         printedAt: json['printedAt'] as String? ?? json['printed_at'] as String?,
-        receiptId: json['receiptId'] as int? ?? json['receipt_id'] as int?,
+        receiptId: _jsonIntOrNull(json['receiptId']) ?? _jsonIntOrNull(json['receipt_id']),
         linkedReceiptNo: json['linkedReceiptNo'] as String? ?? json['linked_receipt_no'] as String?,
         createdAt: json['createdAt'] as String? ?? json['created_at'] as String?,
       );

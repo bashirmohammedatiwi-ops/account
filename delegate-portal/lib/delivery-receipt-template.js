@@ -1,10 +1,12 @@
+const fs = require('fs');
+const path = require('path');
+
 const db = require('./db');
 
 const SETTING_KEY = 'delivery_receipt_print_template';
+const UPLOAD_ROOT = path.resolve(process.env.UPLOAD_DIR || path.join(__dirname, '..', 'uploads'));
 
 const FIELD_LABELS = {
-  company: 'اسم الشركة',
-  title: 'عنوان الوصل',
   deliveryNo: 'رقم الوصل',
   date: 'التاريخ',
   agent: 'المندوب',
@@ -16,30 +18,41 @@ const FIELD_LABELS = {
 };
 
 const DEFAULT_TEMPLATE = {
-  paperChars: 32,
-  footerBlankLines: 3,
-  lines: [
-    { type: 'separator', char: '=', size: 2 },
-    { type: 'field', field: 'company', align: 'center', size: 2, prefix: '', suffix: '' },
-    { type: 'field', field: 'title', align: 'center', size: 2, prefix: '', suffix: '' },
-    { type: 'separator', char: '=', size: 2 },
-    { type: 'field', field: 'deliveryNo', align: 'left', size: 1, prefix: 'رقم: ', suffix: '' },
-    { type: 'field', field: 'date', align: 'left', size: 1, prefix: 'التاريخ: ', suffix: '' },
-    { type: 'field', field: 'agent', align: 'left', size: 1, prefix: 'المندوب: ', suffix: '' },
-    { type: 'field', field: 'customer', align: 'left', size: 1, prefix: 'الزبون: ', suffix: '' },
-    { type: 'field', field: 'amount', align: 'left', size: 2, prefix: 'المبلغ: ', suffix: '' },
-    { type: 'separator', char: '-', size: 1 },
-    { type: 'text', text: 'وصلني منكم المبلغ المذكور', align: 'center', size: 1 },
-    { type: 'text', text: 'أعلاه نقداً / شيكاً', align: 'center', size: 1 },
-    { type: 'field', field: 'notes', align: 'center', size: 1, prefix: '', suffix: '', hideIfEmpty: true },
-    { type: 'separator', char: '=', size: 2 },
-    { type: 'field', field: 'footer', align: 'center', size: 1, prefix: '', suffix: '' },
-    { type: 'separator', char: '=', size: 2 }
-  ],
-  sample: {
-    company: 'Edari',
+  version: 2,
+  paperMm: 58,
+  footerBlankLines: 4,
+  branding: {
+    showLogo: true,
+    logoUrl: '',
+    logoWidth: 180,
+    legalName: 'شركة التوزيع',
+    legalNameFont: 30,
+    companyName: 'Edari',
+    companyFont: 17,
     title: 'وصل استلام مبلغ',
-    footer: 'شكراً لتعاملكم'
+    titleFont: 24,
+    footer: 'شكراً لتعاملكم',
+    footerFont: 17
+  },
+  typography: {
+    bodyFont: 18,
+    labelFont: 16,
+    amountFont: 30,
+    legalFont: 17
+  },
+  content: {
+    showLegalName: true,
+    showCompany: true,
+    showTitle: true,
+    showDeliveryNo: true,
+    showDate: true,
+    showAgent: true,
+    showCustomer: true,
+    showCustomerNum: true,
+    showTree: false,
+    showNotes: true,
+    legalText: 'وصلني منكم المبلغ المذكور أعلاه نقداً / شيكاً',
+    dividerStyle: 'light'
   }
 };
 
@@ -56,51 +69,70 @@ function setSetting(key, value) {
   `).run(key, String(value ?? ''));
 }
 
-function normalizeLine(line) {
-  const type = String(line?.type || 'text');
-  if (type === 'separator') {
-    return {
-      type: 'separator',
-      char: String(line.char || '=').slice(0, 1) || '=',
-      size: Number(line.size) === 2 ? 2 : 1
-    };
-  }
-  if (type === 'blank') {
-    return { type: 'blank', count: Math.min(Math.max(Number(line.count) || 1, 1), 5) };
-  }
-  if (type === 'field') {
-    const field = String(line.field || 'title');
-    if (!FIELD_LABELS[field] && field !== 'footer') return null;
-    return {
-      type: 'field',
-      field,
-      align: line.align === 'center' ? 'center' : 'left',
-      size: Number(line.size) === 2 ? 2 : 1,
-      prefix: String(line.prefix ?? ''),
-      suffix: String(line.suffix ?? ''),
-      hideIfEmpty: Boolean(line.hideIfEmpty)
-    };
-  }
-  return {
-    type: 'text',
-    text: String(line.text || ''),
-    align: line.align === 'center' ? 'center' : 'left',
-    size: Number(line.size) === 2 ? 2 : 1
-  };
+function clampNum(n, min, max, fallback) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(v)));
+}
+
+function ensureUploadDir(sub) {
+  const dir = path.join(UPLOAD_ROOT, sub);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return dir;
 }
 
 function normalizeTemplate(raw) {
-  const base = { ...DEFAULT_TEMPLATE };
-  if (!raw || typeof raw !== 'object') return base;
-  const lines = Array.isArray(raw.lines) ? raw.lines.map(normalizeLine).filter(Boolean) : base.lines;
+  if (!raw || typeof raw !== 'object' || Number(raw.version) < 2) {
+    const base = JSON.parse(JSON.stringify(DEFAULT_TEMPLATE));
+    if (raw?.sample) {
+      base.branding.companyName = String(raw.sample.company || base.branding.companyName);
+      base.branding.title = String(raw.sample.title || base.branding.title);
+      base.branding.footer = String(raw.sample.footer || base.branding.footer);
+    }
+    if (raw?.footerBlankLines != null) base.footerBlankLines = clampNum(raw.footerBlankLines, 0, 8, 4);
+    return base;
+  }
+
+  const b = raw.branding || {};
+  const t = raw.typography || {};
+  const c = raw.content || {};
+
   return {
-    paperChars: Math.min(Math.max(Number(raw.paperChars) || 32, 24), 48),
-    footerBlankLines: Math.min(Math.max(Number(raw.footerBlankLines) || 3, 0), 8),
-    lines: lines.length ? lines : base.lines,
-    sample: {
-      company: String(raw.sample?.company || base.sample.company),
-      title: String(raw.sample?.title || base.sample.title),
-      footer: String(raw.sample?.footer || base.sample.footer)
+    version: 2,
+    paperMm: 58,
+    footerBlankLines: clampNum(raw.footerBlankLines, 0, 8, 4),
+    branding: {
+      showLogo: Boolean(b.showLogo),
+      logoUrl: String(b.logoUrl || ''),
+      logoWidth: clampNum(b.logoWidth, 80, 320, 180),
+      legalName: String(b.legalName || DEFAULT_TEMPLATE.branding.legalName),
+      legalNameFont: clampNum(b.legalNameFont, 14, 42, 30),
+      companyName: String(b.companyName || DEFAULT_TEMPLATE.branding.companyName),
+      companyFont: clampNum(b.companyFont, 12, 28, 17),
+      title: String(b.title || DEFAULT_TEMPLATE.branding.title),
+      titleFont: clampNum(b.titleFont, 14, 36, 24),
+      footer: String(b.footer || DEFAULT_TEMPLATE.branding.footer),
+      footerFont: clampNum(b.footerFont, 12, 28, 17)
+    },
+    typography: {
+      bodyFont: clampNum(t.bodyFont, 12, 28, 18),
+      labelFont: clampNum(t.labelFont, 12, 24, 16),
+      amountFont: clampNum(t.amountFont, 18, 40, 30),
+      legalFont: clampNum(t.legalFont, 12, 24, 17)
+    },
+    content: {
+      showLegalName: Boolean(c.showLegalName ?? true),
+      showCompany: Boolean(c.showCompany ?? true),
+      showTitle: Boolean(c.showTitle ?? true),
+      showDeliveryNo: Boolean(c.showDeliveryNo ?? true),
+      showDate: Boolean(c.showDate ?? true),
+      showAgent: Boolean(c.showAgent ?? true),
+      showCustomer: Boolean(c.showCustomer ?? true),
+      showCustomerNum: Boolean(c.showCustomerNum ?? true),
+      showTree: Boolean(c.showTree ?? false),
+      showNotes: Boolean(c.showNotes ?? true),
+      legalText: String(c.legalText || DEFAULT_TEMPLATE.content.legalText),
+      dividerStyle: c.dividerStyle === 'solid' ? 'solid' : 'light'
     }
   };
 }
@@ -120,116 +152,231 @@ function saveDeliveryReceiptPrintTemplate(payload) {
   return template;
 }
 
-function padLine(text, width, align) {
-  const t = String(text ?? '');
-  if (t.length >= width) return t.slice(0, width);
-  if (align === 'center') {
-    const left = Math.floor((width - t.length) / 2);
-    return `${' '.repeat(left)}${t}`;
-  }
-  return t;
+function saveThermalLogo(dataUrl) {
+  const match = String(dataUrl || '').match(/^data:image\/(\w+);base64,(.+)$/);
+  if (!match) throw new Error('صيغة الصورة غير صالحة');
+
+  const ext = match[1] === 'jpeg' ? 'jpg' : match[1];
+  const buf = Buffer.from(match[2], 'base64');
+  if (buf.length > 2 * 1024 * 1024) throw new Error('حجم الصورة أكبر من 2MB');
+
+  ensureUploadDir('thermal');
+  const rel = `thermal/receipt-logo.${ext}`;
+  const full = path.join(UPLOAD_ROOT, rel);
+  fs.writeFileSync(full, buf);
+
+  const template = getDeliveryReceiptPrintTemplate();
+  template.branding.logoUrl = `/uploads/${rel}`;
+  template.branding.showLogo = true;
+  setSetting(SETTING_KEY, JSON.stringify(template));
+  return { template, logoUrl: template.branding.logoUrl };
 }
 
-function repeatChar(char, width) {
-  const c = String(char || '=').slice(0, 1) || '=';
-  return c.repeat(width);
+function deleteThermalLogo() {
+  const template = getDeliveryReceiptPrintTemplate();
+  const url = template.branding.logoUrl || '';
+  const rel = url.replace(/^\/uploads\//, '');
+  if (rel) {
+    const full = path.join(UPLOAD_ROOT, rel);
+    if (fs.existsSync(full)) fs.unlinkSync(full);
+  }
+  template.branding.logoUrl = '';
+  template.branding.showLogo = false;
+  setSetting(SETTING_KEY, JSON.stringify(template));
+  return template;
 }
 
 function fmtMoney(amount) {
   const n = Number(amount);
-  if (!Number.isFinite(n)) return '0';
+  if (!Number.isFinite(n)) return '0 IQD';
   return `${Math.round(n).toLocaleString('en-US')} IQD`;
 }
 
-function resolveFieldValue(field, ctx) {
-  switch (field) {
-    case 'company':
-      return ctx.company || 'Edari';
-    case 'title':
-      return ctx.title || 'وصل استلام مبلغ';
-    case 'footer':
-      return ctx.footer || 'شكراً لتعاملكم';
-    case 'deliveryNo':
-      return ctx.deliveryNo || '—';
-    case 'date':
-      return ctx.date || '—';
-    case 'agent':
-      return ctx.agent || 'مندوب';
-    case 'customer':
-      return ctx.customer || '—';
-    case 'customerNum':
-      return ctx.customerNum || '';
-    case 'tree':
-      return ctx.tree || '';
-    case 'amount':
-      return fmtMoney(ctx.amount);
-    case 'notes':
-      return String(ctx.notes || '').trim();
-    default:
-      return '';
-  }
-}
-
-/**
- * Returns array of { text, size } for thermal printer.
- */
-function buildDeliveryReceiptPrintLines(receipt, agentName, template = null) {
-  const tpl = normalizeTemplate(template || getDeliveryReceiptPrintTemplate());
-  const width = tpl.paperChars;
-  const ctx = {
-    company: tpl.sample.company,
-    title: tpl.sample.title,
-    footer: tpl.sample.footer,
-    deliveryNo: receipt.deliveryNo || receipt.delivery_no || '',
-    date: receipt.receiptDate || receipt.receipt_date || receipt.createdAt || receipt.created_at || '',
+function receiptContext(receipt, agentName, template) {
+  return {
+    deliveryNo: receipt.deliveryNo || receipt.delivery_no || '—',
+    date: receipt.receiptDate || receipt.receipt_date || receipt.createdAt || receipt.created_at || '—',
     agent: agentName?.trim() || receipt.agentName || receipt.agent_name || 'مندوب',
     customer: receipt.customerName || receipt.customer_name || '—',
     customerNum: receipt.customerNum || receipt.customer_num || '',
     tree: receipt.treeName || receipt.tree_name || '',
-    amount: receipt.amount,
-    notes: receipt.notes || ''
+    amount: fmtMoney(receipt.amount),
+    notes: String(receipt.notes || '').trim()
   };
-
-  const out = [];
-  for (const line of tpl.lines) {
-    if (line.type === 'separator') {
-      out.push({ text: repeatChar(line.char, width), size: line.size });
-      continue;
-    }
-    if (line.type === 'blank') {
-      for (let i = 0; i < line.count; i += 1) out.push({ text: '', size: 1 });
-      continue;
-    }
-    if (line.type === 'text') {
-      const text = padLine(line.text, width, line.align);
-      if (text.trim()) out.push({ text, size: line.size });
-      continue;
-    }
-    if (line.type === 'field') {
-      const value = resolveFieldValue(line.field, ctx);
-      if (line.hideIfEmpty && !value) continue;
-      const composed = `${line.prefix || ''}${value}${line.suffix || ''}`;
-      out.push({ text: padLine(composed, width, line.align), size: line.size });
-    }
-  }
-  for (let i = 0; i < tpl.footerBlankLines; i += 1) {
-    out.push({ text: '', size: 1 });
-  }
-  return out;
 }
 
-function previewSampleLines(template) {
+function dividerChar(style) {
+  return style === 'solid' ? '━' : '─';
+}
+
+/**
+ * يُرجع قائمة blocks للطباعة الحرارية (تطبيق المندوب).
+ * الأنواع: logo, text, divider, blank, row, amount
+ */
+function buildDeliveryReceiptPrintBlocks(receipt, agentName, template = null) {
+  const tpl = normalizeTemplate(template || getDeliveryReceiptPrintTemplate());
+  const b = tpl.branding;
+  const t = tpl.typography;
+  const c = tpl.content;
+  const ctx = receiptContext(receipt, agentName, tpl);
+  const div = dividerChar(c.dividerStyle);
+  const blocks = [];
+
+  if (b.showLogo && b.logoUrl) {
+    blocks.push({ type: 'logo', url: b.logoUrl, maxWidth: b.logoWidth });
+  }
+
+  if (c.showLegalName && b.legalName.trim()) {
+    blocks.push({
+      type: 'text',
+      text: b.legalName.trim(),
+      fontSize: b.legalNameFont,
+      align: 'center',
+      bold: true
+    });
+  }
+
+  if (c.showCompany && b.companyName.trim()) {
+    blocks.push({
+      type: 'text',
+      text: b.companyName.trim(),
+      fontSize: b.companyFont,
+      align: 'center',
+      bold: false
+    });
+  }
+
+  blocks.push({ type: 'divider', char: div });
+
+  if (c.showTitle && b.title.trim()) {
+    blocks.push({
+      type: 'text',
+      text: b.title.trim(),
+      fontSize: b.titleFont,
+      align: 'center',
+      bold: true
+    });
+  }
+
+  blocks.push({ type: 'blank', count: 1 });
+
+  const rows = [];
+  if (c.showDeliveryNo) rows.push({ label: 'رقم الوصل', value: ctx.deliveryNo });
+  if (c.showDate) rows.push({ label: 'التاريخ', value: ctx.date });
+  if (c.showAgent) rows.push({ label: 'المندوب', value: ctx.agent });
+  if (c.showCustomer) rows.push({ label: 'الزبون', value: ctx.customer });
+  if (c.showCustomerNum && ctx.customerNum) rows.push({ label: 'رقم الحساب', value: ctx.customerNum });
+  if (c.showTree && ctx.tree) rows.push({ label: 'الشجرة', value: ctx.tree });
+
+  for (const row of rows) {
+    blocks.push({
+      type: 'row',
+      label: row.label,
+      value: row.value,
+      labelFont: t.labelFont,
+      valueFont: t.bodyFont
+    });
+  }
+
+  blocks.push({ type: 'divider', char: div });
+
+  blocks.push({
+    type: 'amount',
+    label: 'المبلغ المستلم',
+    value: ctx.amount,
+    fontSize: t.amountFont
+  });
+
+  blocks.push({ type: 'blank', count: 1 });
+
+  if (c.legalText.trim()) {
+    blocks.push({
+      type: 'text',
+      text: c.legalText.trim(),
+      fontSize: t.legalFont,
+      align: 'center',
+      bold: false
+    });
+  }
+
+  if (c.showNotes && ctx.notes) {
+    blocks.push({
+      type: 'text',
+      text: ctx.notes,
+      fontSize: t.bodyFont,
+      align: 'center',
+      bold: false
+    });
+  }
+
+  blocks.push({ type: 'divider', char: div });
+
+  if (b.footer.trim()) {
+    blocks.push({
+      type: 'text',
+      text: b.footer.trim(),
+      fontSize: b.footerFont,
+      align: 'center',
+      bold: false
+    });
+  }
+
+  return {
+    blocks,
+    footerBlankLines: tpl.footerBlankLines,
+    paperMm: tpl.paperMm
+  };
+}
+
+function previewSampleBlocks(template) {
   const sampleReceipt = {
     deliveryNo: 'WR-20260824-0001',
     receiptDate: new Date().toISOString().slice(0, 10),
-    agentName: 'مندوب تجريبي',
     customerName: 'محل الأمين / بغداد',
     customerNum: '1201042',
     treeName: 'شجرة بغداد',
     amount: 250000,
     notes: 'دفعة شهرية'
   };
-  return buildDeliveryReceiptPrintLines(sampleReceipt, 'مندوب تجريبي', template);
+  return buildDeliveryReceiptPrintBlocks(sampleReceipt, 'مندوب تجريبي', template);
+}
+
+/** توافق مع الطباعة النصية القديمة */
+function buildDeliveryReceiptPrintLines(receipt, agentName, template = null) {
+  const { blocks, footerBlankLines } = buildDeliveryReceiptPrintBlocks(receipt, agentName, template);
+  const out = [];
+  for (const block of blocks) {
+    if (block.type === 'text') {
+      out.push({ text: block.text, size: block.fontSize >= 24 ? 2 : 1, fontSize: block.fontSize, align: block.align, bold: block.bold });
+    } else if (block.type === 'divider') {
+      out.push({ text: String(block.char || '─').repeat(32), size: 1 });
+    } else if (block.type === 'row') {
+      out.push({ text: `${block.label}: ${block.value}`, size: 1, fontSize: block.valueFont, align: 'left' });
+    } else if (block.type === 'amount') {
+      out.push({ text: block.value, size: 2, fontSize: block.fontSize, align: 'center', bold: true });
+      if (block.label) out.push({ text: block.label, size: 1, fontSize: 14, align: 'center' });
+    } else if (block.type === 'blank') {
+      for (let i = 0; i < (block.count || 1); i += 1) out.push({ text: '', size: 1 });
+    }
+  }
+  for (let i = 0; i < footerBlankLines; i += 1) out.push({ text: '', size: 1 });
+  return out;
+}
+
+function previewSampleLines(template) {
+  return buildDeliveryReceiptPrintLines(
+    {
+      deliveryNo: 'WR-20260824-0001',
+      receiptDate: new Date().toISOString().slice(0, 10),
+      customerName: 'محل الأمين / بغداد',
+      customerNum: '1201042',
+      treeName: 'شجرة بغداد',
+      amount: 250000,
+      notes: 'دفعة شهرية'
+    },
+    'مندوب تجريبي',
+    template
+  );
 }
 
 module.exports = {
@@ -237,6 +384,10 @@ module.exports = {
   DEFAULT_TEMPLATE,
   getDeliveryReceiptPrintTemplate,
   saveDeliveryReceiptPrintTemplate,
+  saveThermalLogo,
+  deleteThermalLogo,
+  buildDeliveryReceiptPrintBlocks,
   buildDeliveryReceiptPrintLines,
+  previewSampleBlocks,
   previewSampleLines
 };

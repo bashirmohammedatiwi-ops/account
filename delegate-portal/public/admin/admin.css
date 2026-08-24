@@ -5109,19 +5109,174 @@ td.row-actions .btn { margin-inline-start: 4px; }
   border-radius: 12px;
 }
 
+/* Thermal receipt designer v2 */
+.thermal-design-layout-v2 {
+  grid-template-columns: 1fr minmax(300px, 380px);
+}
+
+.thermal-section {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.thermal-section-title {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #0f766e;
+  margin: 0 0 12px;
+}
+
+.thermal-logo-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.thermal-logo-preview {
+  width: 120px;
+  height: 80px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+  overflow: hidden;
+}
+
+.thermal-logo-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.thermal-logo-actions {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.thermal-file-btn { cursor: pointer; }
+
+.thermal-check-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  margin-bottom: 12px;
+}
+
+.thermal-font-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.thermal-font-field input[type="range"] { width: 100%; }
+.thermal-font-field output {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #64748b;
+}
+
+.thermal-preview-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  background: repeating-linear-gradient(45deg, #f1f5f9, #f1f5f9 8px, #e2e8f0 8px, #e2e8f0 16px);
+  border-radius: 12px;
+}
+
 .thermal-preview-paper {
   width: 280px;
   min-height: 360px;
   background: #fff;
   padding: 14px 10px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.45;
   color: #0f172a;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
+
+.thermal-preview-paper-v2 {
+  font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.thermal-preview-paper-v2 .tp-logo {
+  margin-bottom: 8px;
+}
+
+.thermal-preview-paper-v2 .tp-logo img {
+  max-width: 70%;
+  max-height: 56px;
+  object-fit: contain;
+}
+
+.thermal-preview-paper-v2 .tp-legal {
+  font-weight: 800;
+  margin: 2px 0;
+}
+
+.thermal-preview-paper-v2 .tp-company {
+  color: #64748b;
+  margin-bottom: 6px;
+}
+
+.thermal-preview-paper-v2 .tp-divider {
+  color: #94a3b8;
+  margin: 8px 0;
+  letter-spacing: 1px;
+}
+
+.thermal-preview-paper-v2 .tp-title {
+  font-weight: 800;
+  margin: 4px 0 10px;
+}
+
+.thermal-preview-paper-v2 .tp-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: right;
+  margin: 3px 0;
+  font-size: 12px;
+}
+
+.thermal-preview-paper-v2 .tp-row-label { color: #64748b; font-weight: 600; }
+.thermal-preview-paper-v2 .tp-row-value { font-weight: 700; text-align: left; direction: ltr; }
+
+.thermal-preview-paper-v2 .tp-amount {
+  margin: 10px 0;
+  padding: 8px 0;
+}
+
+.thermal-preview-paper-v2 .tp-amount-label {
+  font-size: 11px;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+
+.thermal-preview-paper-v2 .tp-amount-value {
+  font-weight: 900;
+  letter-spacing: 0.5px;
+}
+
+.thermal-preview-paper-v2 .tp-legal-text {
+  color: #334155;
+  margin: 8px 0;
+  line-height: 1.45;
+}
+
+.thermal-preview-paper-v2 .tp-footer {
+  color: #475569;
+  margin-top: 6px;
+}
+
+.thermal-preview-paper-v2 .tp-blank { height: 8px; }
+
 
 .thermal-line { margin-bottom: 2px; }
 .thermal-line-lg { font-size: 15px; font-weight: 800; }

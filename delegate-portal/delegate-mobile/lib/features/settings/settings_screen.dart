@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -193,11 +194,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 16),
+          if (!kIsWeb)
+            EdPanelCard(
+              title: 'الطابعة الحرارية',
+              subtitle: 'اختر الطابعة مرة واحدة للطباعة',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'اربط طابعة 58mm من هنا — تُحفظ تلقائياً ولا تحتاج إعادة الاختيار في كل مرة.',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.muted),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/settings/printer'),
+                    icon: const Icon(Icons.print_outlined, size: 18),
+                    label: const Text('إعدادات الطابعة'),
+                  ),
+                ],
+              ),
+            ),
+          if (!kIsWeb) const SizedBox(height: 16),
           EdPanelCard(
             title: 'عن التطبيق',
             child: Column(
               children: [
-                _infoRow(Icons.verified_outlined, 'الإصدار', '1.1.1'),
+                _infoRow(Icons.verified_outlined, 'الإصدار', '1.2.2'),
                 const Divider(height: 20),
                 _infoRow(Icons.phone_android_outlined, 'المنصة', 'Edari Delegate'),
               ],

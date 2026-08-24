@@ -54,7 +54,7 @@ class ReceiptsStatsHeader extends StatelessWidget {
             padding: EdgeInsets.all(large ? 16 : 14),
             child: Row(
               children: [
-                Expanded(child: _StatBox(value: '$deliveryCount', label: 'وصول استلام', hint: pendingDeliveryReceipt > 0 ? '$pendingDeliveryReceipt بانتظار سند' : null)),
+                Expanded(child: _StatBox(value: '$deliveryCount', label: 'وصول قبض', hint: pendingDeliveryReceipt > 0 ? '$pendingDeliveryReceipt بانتظار سند' : null)),
                 const SizedBox(width: 10),
                 Expanded(child: _StatBox(value: '$receiptCount', label: 'سندات قبض', hint: pendingReceipts > 0 ? '$pendingReceipts قيد المراجعة' : null)),
               ],
@@ -117,14 +117,14 @@ class ReceiptsFlowBanner extends StatelessWidget {
         children: [
           Row(
             children: [
-              _stepDot(1, 'وصل استلام', step == 0),
+              _stepDot(1, 'وصل قبض', step == 0),
               Expanded(child: Container(height: 2, color: AppColors.borderLight)),
               _stepDot(2, 'سند قبض', step == 1),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            'يمكنك إصدار عدة وصول استلام ثم إنشاء سند قبض لاحقاً — أو إرسال سند بدون وصل',
+            'يمكنك إصدار عدة وصول قبض ثم إنشاء سند قبض لاحقاً — أو إرسال سند بدون وصل',
             style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.muted.withValues(alpha: 0.95), height: 1.35),
           ),
         ],
@@ -190,7 +190,7 @@ class ReceiptLinkedBanner extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('مرتبط بوصل استلام', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                const Text('مرتبط بوصل قبض', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
                 Text(deliveryNo, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.navy)),
                 Text('$customerName · ${fmtMoney(amount)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
               ],
@@ -397,7 +397,10 @@ class PrinterStatusBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final Color color;
     final IconData icon;
-    if (!status.bluetoothOn) {
+    if (!status.permissionGranted) {
+      color = AppColors.warning;
+      icon = Icons.bluetooth_disabled_rounded;
+    } else if (!status.bluetoothOn) {
       color = AppColors.warning;
       icon = Icons.bluetooth_disabled_rounded;
     } else if (status.connected) {
@@ -432,7 +435,7 @@ class PrinterStatusBanner extends StatelessWidget {
               color: AppColors.muted,
               tooltip: 'تحديث حالة الاتصال',
             ),
-          TextButton(onPressed: onConfigure, child: const Text('ربط الطابعة')),
+          TextButton(onPressed: onConfigure, child: const Text('إعدادات الطابعة')),
         ],
       ),
     );

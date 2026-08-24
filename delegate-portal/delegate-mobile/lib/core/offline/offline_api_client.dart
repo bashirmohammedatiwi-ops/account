@@ -482,7 +482,10 @@ class OfflineApiClient {
         cacheKey: cacheKey,
         onlineFetch: () async {
           final data = await fetch();
-          final raw = (data['receipts'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          final raw = (data['receipts'] as List?)
+                  ?.map((e) => Map<String, dynamic>.from(e as Map))
+                  .toList() ??
+              <Map<String, dynamic>>[];
           await _cache.setJson(cacheKey, raw);
           return raw.map((e) => Receipt.fromJson(e)).toList();
         },
@@ -587,7 +590,10 @@ class OfflineApiClient {
         cacheKey: cacheKey,
         onlineFetch: () async {
           final data = await fetch();
-          final raw = (data['deliveryReceipts'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          final raw = (data['deliveryReceipts'] as List?)
+                  ?.map((e) => Map<String, dynamic>.from(e as Map))
+                  .toList() ??
+              <Map<String, dynamic>>[];
           await _cache.setJson(cacheKey, raw);
           return raw.map((e) => DeliveryReceipt.fromJson(e)).toList();
         },

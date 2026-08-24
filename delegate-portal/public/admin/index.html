@@ -490,47 +490,94 @@
 
         <!-- Thermal receipt designer -->
         <section class="page rv-page" id="page-thermalReceipt">
-          <div class="thermal-design-layout">
+          <div class="thermal-design-layout thermal-design-layout-v2">
             <div class="rv-card thermal-design-editor">
               <div class="rv-card-head">
                 <div>
-                  <h2 class="rv-card-title">تصميم وصل الاستلام الحراري</h2>
-                  <p class="rv-card-sub">خصّص النصوص والحقول — يُطبَّق تلقائياً على تطبيق المندوب عند الطباعة</p>
+                  <h2 class="rv-card-title">إدارة الفاتورة الحرارية</h2>
+                  <p class="rv-card-sub">شعار، هوية الشركة، أحجام الخط — يُطبَّق مباشرة على تطبيق المندوب</p>
                 </div>
                 <div class="btn-row">
                   <button type="button" class="btn btn-soft btn-sm" id="btnThermalReset">افتراضي</button>
                   <button type="button" class="btn btn-primary btn-sm" id="btnThermalSave">حفظ التصميم</button>
                 </div>
               </div>
-              <div class="rv-edit-grid">
-                <label class="field"><span>عرض الورقة (حروف)</span><input type="number" id="thermalPaperChars" min="24" max="48" value="32"></label>
-                <label class="field"><span>أسطر فارغة بعد الطباعة</span><input type="number" id="thermalFooterBlanks" min="0" max="8" value="3"></label>
+
+              <div class="thermal-section">
+                <h3 class="thermal-section-title">الشعار والهوية</h3>
+                <div class="thermal-logo-row">
+                  <div class="thermal-logo-preview" id="thermalLogoPreview">
+                    <span class="muted">لا يوجد شعار</span>
+                  </div>
+                  <div class="thermal-logo-actions">
+                    <label class="btn btn-soft btn-sm thermal-file-btn">
+                      رفع شعار
+                      <input type="file" id="thermalLogoInput" accept="image/png,image/jpeg,image/webp" hidden>
+                    </label>
+                    <button type="button" class="btn btn-soft btn-sm" id="btnThermalLogoRemove">إزالة</button>
+                    <label class="check-row"><input type="checkbox" id="thermalShowLogo" checked><span>إظهار الشعار</span></label>
+                    <label class="field thermal-font-field"><span>عرض الشعار</span><input type="range" id="thermalLogoWidth" min="80" max="320" value="180"><output id="thermalLogoWidthOut">180</output></label>
+                  </div>
+                </div>
+                <div class="rv-edit-grid">
+                  <label class="field"><span>اسم المحق (كبير)</span><input type="text" id="thermalLegalName" placeholder="شركة التوزيع"></label>
+                  <label class="field thermal-font-field"><span>حجم خط المحق</span><input type="range" id="thermalLegalNameFont" min="14" max="42" value="30"><output id="thermalLegalNameFontOut">30</output></label>
+                  <label class="field"><span>اسم الشركة (أصغر)</span><input type="text" id="thermalCompanyName" placeholder="Edari"></label>
+                  <label class="field thermal-font-field"><span>حجم خط الشركة</span><input type="range" id="thermalCompanyFont" min="12" max="28" value="17"><output id="thermalCompanyFontOut">17</output></label>
+                </div>
               </div>
-              <div class="rv-edit-grid">
-                <label class="field"><span>اسم الشركة (ثابت)</span><input type="text" id="thermalSampleCompany" value="Edari"></label>
-                <label class="field"><span>عنوان الوصل (ثابت)</span><input type="text" id="thermalSampleTitle" value="وصل استلام مبلغ"></label>
-                <label class="field"><span>تذييل (ثابت)</span><input type="text" id="thermalSampleFooter" value="شكراً لتعاملكم"></label>
+
+              <div class="thermal-section">
+                <h3 class="thermal-section-title">عنوان الوصل</h3>
+                <div class="rv-edit-grid">
+                  <label class="field"><span>العنوان الرئيسي</span><input type="text" id="thermalTitle" value="وصل استلام مبلغ"></label>
+                  <label class="field thermal-font-field"><span>حجم العنوان</span><input type="range" id="thermalTitleFont" min="14" max="36" value="24"><output id="thermalTitleFontOut">24</output></label>
+                </div>
               </div>
-              <div class="thermal-add-row">
-                <button type="button" class="btn btn-soft btn-sm" id="btnThermalAddText">+ نص</button>
-                <button type="button" class="btn btn-soft btn-sm" id="btnThermalAddField">+ حقل</button>
-                <button type="button" class="btn btn-soft btn-sm" id="btnThermalAddSep">+ فاصل</button>
-                <button type="button" class="btn btn-soft btn-sm" id="btnThermalAddBlank">+ سطر فارغ</button>
+
+              <div class="thermal-section">
+                <h3 class="thermal-section-title">محتوى الوصل</h3>
+                <div class="thermal-check-grid">
+                  <label class="check-row"><input type="checkbox" id="thermalShowDeliveryNo" checked><span>رقم الوصل</span></label>
+                  <label class="check-row"><input type="checkbox" id="thermalShowDate" checked><span>التاريخ</span></label>
+                  <label class="check-row"><input type="checkbox" id="thermalShowAgent" checked><span>المندوب</span></label>
+                  <label class="check-row"><input type="checkbox" id="thermalShowCustomer" checked><span>الزبون</span></label>
+                  <label class="check-row"><input type="checkbox" id="thermalShowCustomerNum" checked><span>رقم الحساب</span></label>
+                  <label class="check-row"><input type="checkbox" id="thermalShowTree"><span>الشجرة</span></label>
+                  <label class="check-row"><input type="checkbox" id="thermalShowNotes" checked><span>الملاحظات</span></label>
+                </div>
+                <label class="field"><span>نص الإقرار القانوني</span><textarea id="thermalLegalText" rows="2">وصلني منكم المبلغ المذكور أعلاه نقداً / شيكاً</textarea></label>
+                <div class="rv-edit-grid">
+                  <label class="field thermal-font-field"><span>حجم نص الجسم</span><input type="range" id="thermalBodyFont" min="12" max="28" value="18"><output id="thermalBodyFontOut">18</output></label>
+                  <label class="field thermal-font-field"><span>حجم التسميات</span><input type="range" id="thermalLabelFont" min="12" max="24" value="16"><output id="thermalLabelFontOut">16</output></label>
+                  <label class="field thermal-font-field"><span>حجم المبلغ</span><input type="range" id="thermalAmountFont" min="18" max="40" value="30"><output id="thermalAmountFontOut">30</output></label>
+                  <label class="field thermal-font-field"><span>حجم نص الإقرار</span><input type="range" id="thermalLegalFont" min="12" max="24" value="17"><output id="thermalLegalFontOut">17</output></label>
+                </div>
               </div>
-              <div class="thermal-lines-list" id="thermalLinesList"></div>
-              <div class="thermal-line-editor panel-inset" id="thermalLineEditor"></div>
+
+              <div class="thermal-section">
+                <h3 class="thermal-section-title">التذييل</h3>
+                <div class="rv-edit-grid">
+                  <label class="field"><span>نص التذييل</span><input type="text" id="thermalFooter" value="شكراً لتعاملكم"></label>
+                  <label class="field thermal-font-field"><span>حجم التذييل</span><input type="range" id="thermalFooterFont" min="12" max="28" value="17"><output id="thermalFooterFontOut">17</output></label>
+                  <label class="field"><span>أسطر فارغة بعد الطباعة</span><input type="number" id="thermalFooterBlanks" min="0" max="8" value="4"></label>
+                  <label class="field"><span>نمط الفاصل</span>
+                    <select id="thermalDividerStyle"><option value="light">خفيف</option><option value="solid">صلب</option></select>
+                  </label>
+                </div>
+              </div>
             </div>
+
             <div class="rv-card thermal-design-preview">
               <div class="rv-card-head">
                 <div>
-                  <h2 class="rv-card-title">معاينة الطباعة</h2>
-                  <p class="rv-card-sub">محاكاة ورقة 58mm — بيانات تجريبية</p>
+                  <h2 class="rv-card-title">معاينة حية</h2>
+                  <p class="rv-card-sub">تطابق ما يُطبع على الطابعة 58mm</p>
                 </div>
               </div>
               <div class="thermal-preview-wrap">
-                <div class="thermal-preview-paper" id="thermalPreviewPaper"></div>
+                <div class="thermal-preview-paper thermal-preview-paper-v2" id="thermalPreviewPaper"></div>
               </div>
-              <p class="muted thermal-hint">الحقول الديناميكية: رقم الوصل، التاريخ، المندوب، الزبون، المبلغ، الملاحظات…</p>
             </div>
           </div>
         </section>
@@ -1240,7 +1287,7 @@
   <script src="admin-delivery-receipts.js?v=20260824admin"></script>
   <script src="admin-customers.js?v=20260824admin"></script>
   <script src="admin-promotional-visits.js?v=20260824admin"></script>
-  <script src="admin-thermal-template.js?v=20260824admin"></script>
+  <script src="admin-thermal-template.js?v=20260824thermal2"></script>
   <script src="admin-sales-report.js?v=20260709treeFix3"></script>
   <script src="admin-account-statements.js?v=20260615kpi"></script>
   <script src="admin-price-sync.js?v=20260703"></script>

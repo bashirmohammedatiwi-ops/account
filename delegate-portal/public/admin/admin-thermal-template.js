@@ -1,339 +1,275 @@
-/* Admin: thermal delivery receipt template designer */
+/* Admin: thermal receipt designer v2 */
 
 const thermalTplAdmin = {
   template: null,
-  fieldLabels: {},
   defaults: null,
-  selectedIndex: -1
+  preview: null
 };
 
-const THERMAL_FIELD_OPTIONS = [
-  'company', 'title', 'deliveryNo', 'date', 'agent', 'customer', 'customerNum', 'tree', 'amount', 'notes', 'footer'
-];
+function thermalFromForm() {
+  const t = thermalTplAdmin.template || {};
+  const b = t.branding || {};
+  const ty = t.typography || {};
+  const c = t.content || {};
+  const num = (id, fallback) => Number(document.getElementById(id)?.value) || fallback;
+  const chk = (id, fallback) => document.getElementById(id)?.checked ?? fallback;
+  const txt = (id, fallback) => document.getElementById(id)?.value?.trim() ?? fallback;
 
-function thermalLineSummary(line) {
-  if (!line) return '';
-  if (line.type === 'separator') return `خط فاصل (${line.char || '='})`;
-  if (line.type === 'blank') return `سطر فارغ × ${line.count || 1}`;
-  if (line.type === 'field') {
-    const label = thermalTplAdmin.fieldLabels[line.field] || line.field;
-    return `حقل: ${label}`;
+  return {
+    version: 2,
+    paperMm: 58,
+    footerBlankLines: Math.min(8, Math.max(0, num('thermalFooterBlanks', 4))),
+    branding: {
+      showLogo: chk('thermalShowLogo', true),
+      logoUrl: b.logoUrl || '',
+      logoWidth: num('thermalLogoWidth', 180),
+      legalName: txt('thermalLegalName', b.legalName || ''),
+      legalNameFont: num('thermalLegalNameFont', 30),
+      companyName: txt('thermalCompanyName', b.companyName || ''),
+      companyFont: num('thermalCompanyFont', 17),
+      title: txt('thermalTitle', b.title || ''),
+      titleFont: num('thermalTitleFont', 24),
+      footer: txt('thermalFooter', b.footer || ''),
+      footerFont: num('thermalFooterFont', 17)
+    },
+    typography: {
+      bodyFont: num('thermalBodyFont', 18),
+      labelFont: num('thermalLabelFont', 16),
+      amountFont: num('thermalAmountFont', 30),
+      legalFont: num('thermalLegalFont', 17)
+    },
+    content: {
+      showLegalName: true,
+      showCompany: true,
+      showTitle: true,
+      showDeliveryNo: chk('thermalShowDeliveryNo', true),
+      showDate: chk('thermalShowDate', true),
+      showAgent: chk('thermalShowAgent', true),
+      showCustomer: chk('thermalShowCustomer', true),
+      showCustomerNum: chk('thermalShowCustomerNum', true),
+      showTree: chk('thermalShowTree', false),
+      showNotes: chk('thermalShowNotes', true),
+      legalText: txt('thermalLegalText', ''),
+      dividerStyle: document.getElementById('thermalDividerStyle')?.value === 'solid' ? 'solid' : 'light'
+    }
+  };
+}
+
+function fillThermalForm(template) {
+  const t = template || {};
+  const b = t.branding || {};
+  const ty = t.typography || {};
+  const c = t.content || {};
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  const setChk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = Boolean(v); };
+  const setRange = (id, outId, v) => {
+    set(id, v);
+    const out = document.getElementById(outId);
+    if (out) out.textContent = String(v);
+  };
+
+  setChk('thermalShowLogo', b.showLogo);
+  setRange('thermalLogoWidth', 'thermalLogoWidthOut', b.logoWidth || 180);
+  set('thermalLegalName', b.legalName || '');
+  setRange('thermalLegalNameFont', 'thermalLegalNameFontOut', b.legalNameFont || 30);
+  set('thermalCompanyName', b.companyName || '');
+  setRange('thermalCompanyFont', 'thermalCompanyFontOut', b.companyFont || 17);
+  set('thermalTitle', b.title || '');
+  setRange('thermalTitleFont', 'thermalTitleFontOut', b.titleFont || 24);
+  set('thermalFooter', b.footer || '');
+  setRange('thermalFooterFont', 'thermalFooterFontOut', b.footerFont || 17);
+  set('thermalFooterBlanks', t.footerBlankLines ?? 4);
+  set('thermalLegalText', c.legalText || '');
+  setRange('thermalBodyFont', 'thermalBodyFontOut', ty.bodyFont || 18);
+  setRange('thermalLabelFont', 'thermalLabelFontOut', ty.labelFont || 16);
+  setRange('thermalAmountFont', 'thermalAmountFontOut', ty.amountFont || 30);
+  setRange('thermalLegalFont', 'thermalLegalFontOut', ty.legalFont || 17);
+  setChk('thermalShowDeliveryNo', c.showDeliveryNo);
+  setChk('thermalShowDate', c.showDate);
+  setChk('thermalShowAgent', c.showAgent);
+  setChk('thermalShowCustomer', c.showCustomer);
+  setChk('thermalShowCustomerNum', c.showCustomerNum);
+  setChk('thermalShowTree', c.showTree);
+  setChk('thermalShowNotes', c.showNotes);
+  set('thermalDividerStyle', c.dividerStyle || 'light');
+  updateLogoPreview(b.logoUrl);
+}
+
+function updateLogoPreview(url) {
+  const box = document.getElementById('thermalLogoPreview');
+  if (!box) return;
+  if (url) {
+    box.innerHTML = `<img src="${esc(url)}" alt="شعار">`;
+  } else {
+    box.innerHTML = '<span class="muted">لا يوجد شعار</span>';
   }
-  return line.text || 'نص';
 }
 
 function renderThermalPreview() {
   const box = document.getElementById('thermalPreviewPaper');
-  if (!box || !thermalTplAdmin.template) return;
-  const lines = buildPreviewLinesClient(thermalTplAdmin.template);
-  box.innerHTML = lines.map((ln) => {
-    const cls = ln.size === 2 ? 'thermal-line thermal-line-lg' : 'thermal-line';
-    return `<div class="${cls}">${esc(ln.text) || '&nbsp;'}</div>`;
-  }).join('');
+  if (!box) return;
+  const preview = thermalTplAdmin.preview;
+  if (!preview?.blocks) {
+    box.innerHTML = '<p class="muted">لا معاينة</p>';
+    return;
+  }
+
+  const html = [];
+  for (const block of preview.blocks) {
+    if (block.type === 'logo' && block.url) {
+      html.push(`<div class="tp-logo"><img src="${esc(block.url)}" alt="logo"></div>`);
+    } else if (block.type === 'text') {
+      let cls = 'tp-footer';
+      if (block.bold && (block.fontSize || 0) >= 22) cls = 'tp-title';
+      else if (block.bold) cls = 'tp-legal';
+      else if ((block.fontSize || 0) <= 18) cls = 'tp-company';
+      html.push(`<div class="${cls}" style="font-size:${(block.fontSize || 16) * 0.42}px">${esc(block.text)}</div>`);
+    } else if (block.type === 'divider') {
+      const ch = block.char || '─';
+      html.push(`<div class="tp-divider">${ch.repeat(28)}</div>`);
+    } else if (block.type === 'blank') {
+      html.push('<div class="tp-blank"></div>');
+    } else if (block.type === 'row') {
+      html.push(`<div class="tp-row"><span class="tp-row-label" style="font-size:${(block.labelFont || 14) * 0.4}px">${esc(block.label)}</span><span class="tp-row-value" style="font-size:${(block.valueFont || 16) * 0.4}px">${esc(block.value)}</span></div>`);
+    } else if (block.type === 'amount') {
+      html.push(`<div class="tp-amount"><div class="tp-amount-label">${esc(block.label || '')}</div><div class="tp-amount-value" style="font-size:${(block.fontSize || 28) * 0.45}px">${esc(block.value)}</div></div>`);
+    }
+  }
+  box.innerHTML = html.join('');
 }
 
-function buildPreviewLinesClient(template) {
-  const width = Number(template.paperChars) || 32;
-  const sample = template.sample || {};
-  const ctx = {
-    company: sample.company || 'Edari',
-    title: sample.title || 'وصل استلام مبلغ',
-    footer: sample.footer || 'شكراً لتعاملكم',
+function buildClientPreview(template) {
+  const t = template;
+  const b = t.branding || {};
+  const ty = t.typography || {};
+  const c = t.content || {};
+  const div = c.dividerStyle === 'solid' ? '━' : '─';
+  const blocks = [];
+  const sample = {
     deliveryNo: 'WR-20260824-0001',
     date: new Date().toISOString().slice(0, 10),
     agent: 'مندوب تجريبي',
     customer: 'محل الأمين / بغداد',
     customerNum: '1201042',
     tree: 'شجرة بغداد',
-    amount: 250000,
+    amount: '250,000 IQD',
     notes: 'دفعة شهرية'
   };
-  const pad = (text, align) => {
-    const t = String(text ?? '');
-    if (t.length >= width) return t.slice(0, width);
-    if (align === 'center') {
-      const left = Math.floor((width - t.length) / 2);
-      return `${' '.repeat(left)}${t}`;
-    }
-    return t;
-  };
-  const money = (n) => `${Math.round(Number(n) || 0).toLocaleString('en-US')} IQD`;
-  const fieldVal = (field) => {
-    switch (field) {
-      case 'company': return ctx.company;
-      case 'title': return ctx.title;
-      case 'footer': return ctx.footer;
-      case 'deliveryNo': return ctx.deliveryNo;
-      case 'date': return ctx.date;
-      case 'agent': return ctx.agent;
-      case 'customer': return ctx.customer;
-      case 'customerNum': return ctx.customerNum;
-      case 'tree': return ctx.tree;
-      case 'amount': return money(ctx.amount);
-      case 'notes': return ctx.notes;
-      default: return '';
-    }
-  };
-  const out = [];
-  for (const line of template.lines || []) {
-    if (line.type === 'separator') {
-      const c = String(line.char || '=').slice(0, 1);
-      out.push({ text: c.repeat(width), size: line.size || 1 });
-    } else if (line.type === 'blank') {
-      for (let i = 0; i < (line.count || 1); i += 1) out.push({ text: '', size: 1 });
-    } else if (line.type === 'field') {
-      const v = fieldVal(line.field);
-      if (line.hideIfEmpty && !v) continue;
-      out.push({ text: pad(`${line.prefix || ''}${v}${line.suffix || ''}`, line.align), size: line.size || 1 });
-    } else {
-      out.push({ text: pad(line.text || '', line.align), size: line.size || 1 });
-    }
-  }
-  const blanks = Number(template.footerBlankLines) || 0;
-  for (let i = 0; i < blanks; i += 1) out.push({ text: '', size: 1 });
-  return out;
+
+  if (b.showLogo && b.logoUrl) blocks.push({ type: 'logo', url: b.logoUrl });
+  if (b.legalName) blocks.push({ type: 'text', text: b.legalName, fontSize: b.legalNameFont, bold: true });
+  if (b.companyName) blocks.push({ type: 'text', text: b.companyName, fontSize: b.companyFont });
+  blocks.push({ type: 'divider', char: div });
+  if (b.title) blocks.push({ type: 'text', text: b.title, fontSize: b.titleFont, bold: true });
+  blocks.push({ type: 'blank', count: 1 });
+  if (c.showDeliveryNo) blocks.push({ type: 'row', label: 'رقم الوصل', value: sample.deliveryNo, labelFont: ty.labelFont, valueFont: ty.bodyFont });
+  if (c.showDate) blocks.push({ type: 'row', label: 'التاريخ', value: sample.date, labelFont: ty.labelFont, valueFont: ty.bodyFont });
+  if (c.showAgent) blocks.push({ type: 'row', label: 'المندوب', value: sample.agent, labelFont: ty.labelFont, valueFont: ty.bodyFont });
+  if (c.showCustomer) blocks.push({ type: 'row', label: 'الزبون', value: sample.customer, labelFont: ty.labelFont, valueFont: ty.bodyFont });
+  if (c.showCustomerNum) blocks.push({ type: 'row', label: 'رقم الحساب', value: sample.customerNum, labelFont: ty.labelFont, valueFont: ty.bodyFont });
+  if (c.showTree) blocks.push({ type: 'row', label: 'الشجرة', value: sample.tree, labelFont: ty.labelFont, valueFont: ty.bodyFont });
+  blocks.push({ type: 'divider', char: div });
+  blocks.push({ type: 'amount', label: 'المبلغ المستلم', value: sample.amount, fontSize: ty.amountFont });
+  blocks.push({ type: 'blank', count: 1 });
+  if (c.legalText) blocks.push({ type: 'text', text: c.legalText, fontSize: ty.legalFont });
+  if (c.showNotes && sample.notes) blocks.push({ type: 'text', text: sample.notes, fontSize: ty.bodyFont });
+  blocks.push({ type: 'divider', char: div });
+  if (b.footer) blocks.push({ type: 'text', text: b.footer, fontSize: b.footerFont });
+  return { blocks };
 }
 
-function renderThermalLineEditor() {
-  const panel = document.getElementById('thermalLineEditor');
-  const list = document.getElementById('thermalLinesList');
-  if (!panel || !list || !thermalTplAdmin.template) return;
-
-  list.innerHTML = (thermalTplAdmin.template.lines || []).map((line, i) => `
-    <button type="button" class="thermal-line-item${thermalTplAdmin.selectedIndex === i ? ' active' : ''}" data-thermal-idx="${i}">
-      <span class="thermal-line-item-type">${esc(line.type)}</span>
-      <span class="thermal-line-item-sum">${esc(thermalLineSummary(line))}</span>
-      <span class="thermal-line-item-actions">
-        <button type="button" class="btn btn-icon btn-sm" data-thermal-up="${i}" title="أعلى">↑</button>
-        <button type="button" class="btn btn-icon btn-sm" data-thermal-down="${i}" title="أسفل">↓</button>
-        <button type="button" class="btn btn-icon btn-sm" data-thermal-del="${i}" title="حذف">×</button>
-      </span>
-    </button>`).join('') || '<p class="muted">لا توجد أسطر — أضف من الأزرار</p>';
-
-  list.querySelectorAll('[data-thermal-idx]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      thermalTplAdmin.selectedIndex = Number(btn.dataset.thermalIdx);
-      renderThermalLineEditor();
-    });
-  });
-  list.querySelectorAll('[data-thermal-up]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      moveThermalLine(Number(btn.dataset.thermalUp), -1);
-    });
-  });
-  list.querySelectorAll('[data-thermal-down]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      moveThermalLine(Number(btn.dataset.thermalDown), 1);
-    });
-  });
-  list.querySelectorAll('[data-thermal-del]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      deleteThermalLine(Number(btn.dataset.thermalDel));
-    });
-  });
-
-  const idx = thermalTplAdmin.selectedIndex;
-  const line = thermalTplAdmin.template.lines?.[idx];
-  if (!line) {
-    panel.innerHTML = '<p class="muted">اختر سطراً للتعديل أو أضف سطراً جديداً</p>';
-    return;
-  }
-
-  if (line.type === 'text') {
-    panel.innerHTML = `
-      <h4 class="panel-title-sm">تعديل نص ثابت</h4>
-      <label class="field"><span>النص</span><textarea id="thermalEditText" rows="2">${esc(line.text || '')}</textarea></label>
-      <div class="rv-edit-grid">
-        <label class="field"><span>محاذاة</span>
-          <select id="thermalEditAlign"><option value="left" ${line.align !== 'center' ? 'selected' : ''}>يسار</option><option value="center" ${line.align === 'center' ? 'selected' : ''}>وسط</option></select></label>
-        <label class="field"><span>حجم</span>
-          <select id="thermalEditSize"><option value="1" ${line.size !== 2 ? 'selected' : ''}>عادي</option><option value="2" ${line.size === 2 ? 'selected' : ''}>كبير</option></select></label>
-      </div>`;
-    panel.querySelector('#thermalEditText')?.addEventListener('input', (e) => {
-      line.text = e.target.value;
-      renderThermalPreview();
-    });
-    panel.querySelector('#thermalEditAlign')?.addEventListener('change', (e) => {
-      line.align = e.target.value;
-      renderThermalPreview();
-    });
-    panel.querySelector('#thermalEditSize')?.addEventListener('change', (e) => {
-      line.size = Number(e.target.value);
-      renderThermalPreview();
-    });
-    return;
-  }
-
-  if (line.type === 'separator') {
-    panel.innerHTML = `
-      <h4 class="panel-title-sm">خط فاصل</h4>
-      <div class="rv-edit-grid">
-        <label class="field"><span>الرمز</span><input type="text" id="thermalSepChar" maxlength="1" value="${esc(line.char || '=')}"></label>
-        <label class="field"><span>حجم</span>
-          <select id="thermalEditSize"><option value="1" ${line.size !== 2 ? 'selected' : ''}>عادي</option><option value="2" ${line.size === 2 ? 'selected' : ''}>كبير</option></select></label>
-      </div>`;
-    panel.querySelector('#thermalSepChar')?.addEventListener('input', (e) => {
-      line.char = e.target.value.slice(0, 1) || '=';
-      renderThermalPreview();
-    });
-    panel.querySelector('#thermalEditSize')?.addEventListener('change', (e) => {
-      line.size = Number(e.target.value);
-      renderThermalPreview();
-    });
-    return;
-  }
-
-  if (line.type === 'field') {
-    const opts = THERMAL_FIELD_OPTIONS.map((f) =>
-      `<option value="${f}" ${line.field === f ? 'selected' : ''}>${esc(thermalTplAdmin.fieldLabels[f] || f)}</option>`
-    ).join('');
-    panel.innerHTML = `
-      <h4 class="panel-title-sm">حقل ديناميكي</h4>
-      <label class="field"><span>الحقل</span><select id="thermalFieldKey">${opts}</select></label>
-      <div class="rv-edit-grid">
-        <label class="field"><span>بادئة</span><input type="text" id="thermalFieldPrefix" value="${esc(line.prefix || '')}"></label>
-        <label class="field"><span>لاحقة</span><input type="text" id="thermalFieldSuffix" value="${esc(line.suffix || '')}"></label>
-      </div>
-      <div class="rv-edit-grid">
-        <label class="field"><span>محاذاة</span>
-          <select id="thermalEditAlign"><option value="left" ${line.align !== 'center' ? 'selected' : ''}>يسار</option><option value="center" ${line.align === 'center' ? 'selected' : ''}>وسط</option></select></label>
-        <label class="field"><span>حجم</span>
-          <select id="thermalEditSize"><option value="1" ${line.size !== 2 ? 'selected' : ''}>عادي</option><option value="2" ${line.size === 2 ? 'selected' : ''}>كبير</option></select></label>
-      </div>
-      <label class="check-row"><input type="checkbox" id="thermalFieldHide" ${line.hideIfEmpty ? 'checked' : ''}><span>إخفاء إذا فارغ (مثل الملاحظات)</span></label>`;
-    const bind = (sel, fn) => panel.querySelector(sel)?.addEventListener('input', fn);
-    panel.querySelector('#thermalFieldKey')?.addEventListener('change', (e) => {
-      line.field = e.target.value;
-      renderThermalLineEditor();
-      renderThermalPreview();
-    });
-    bind('#thermalFieldPrefix', (e) => { line.prefix = e.target.value; renderThermalPreview(); });
-    bind('#thermalFieldSuffix', (e) => { line.suffix = e.target.value; renderThermalPreview(); });
-    panel.querySelector('#thermalEditAlign')?.addEventListener('change', (e) => {
-      line.align = e.target.value;
-      renderThermalPreview();
-    });
-    panel.querySelector('#thermalEditSize')?.addEventListener('change', (e) => {
-      line.size = Number(e.target.value);
-      renderThermalPreview();
-    });
-    panel.querySelector('#thermalFieldHide')?.addEventListener('change', (e) => {
-      line.hideIfEmpty = e.target.checked;
-      renderThermalPreview();
-    });
-    return;
-  }
-
-  if (line.type === 'blank') {
-    panel.innerHTML = `
-      <h4 class="panel-title-sm">سطر فارغ</h4>
-      <label class="field"><span>عدد الأسطر</span><input type="number" id="thermalBlankCount" min="1" max="5" value="${line.count || 1}"></label>`;
-    panel.querySelector('#thermalBlankCount')?.addEventListener('input', (e) => {
-      line.count = Math.min(5, Math.max(1, Number(e.target.value) || 1));
-      renderThermalPreview();
-    });
-  }
-}
-
-function moveThermalLine(index, delta) {
-  const lines = thermalTplAdmin.template.lines;
-  const next = index + delta;
-  if (next < 0 || next >= lines.length) return;
-  const [item] = lines.splice(index, 1);
-  lines.splice(next, 0, item);
-  thermalTplAdmin.selectedIndex = next;
-  renderThermalLineEditor();
-  renderThermalPreview();
-}
-
-function deleteThermalLine(index) {
-  thermalTplAdmin.template.lines.splice(index, 1);
-  thermalTplAdmin.selectedIndex = Math.min(index, thermalTplAdmin.template.lines.length - 1);
-  renderThermalLineEditor();
-  renderThermalPreview();
-}
-
-function addThermalLine(type) {
-  const lines = thermalTplAdmin.template.lines || [];
-  let line;
-  if (type === 'separator') line = { type: 'separator', char: '=', size: 2 };
-  else if (type === 'blank') line = { type: 'blank', count: 1 };
-  else if (type === 'field') line = { type: 'field', field: 'amount', align: 'left', size: 2, prefix: 'المبلغ: ', suffix: '' };
-  else line = { type: 'text', text: 'نص جديد', align: 'center', size: 1 };
-  lines.push(line);
-  thermalTplAdmin.template.lines = lines;
-  thermalTplAdmin.selectedIndex = lines.length - 1;
-  renderThermalLineEditor();
+function onThermalFormChange() {
+  thermalTplAdmin.template = thermalFromForm();
+  thermalTplAdmin.preview = buildClientPreview(thermalTplAdmin.template);
   renderThermalPreview();
 }
 
 function bindThermalGlobals() {
-  document.getElementById('thermalPaperChars')?.addEventListener('input', (e) => {
-    thermalTplAdmin.template.paperChars = Math.min(48, Math.max(24, Number(e.target.value) || 32));
-    renderThermalPreview();
+  const ids = [
+    'thermalShowLogo', 'thermalLogoWidth', 'thermalLegalName', 'thermalLegalNameFont',
+    'thermalCompanyName', 'thermalCompanyFont', 'thermalTitle', 'thermalTitleFont',
+    'thermalFooter', 'thermalFooterFont', 'thermalFooterBlanks', 'thermalLegalText',
+    'thermalBodyFont', 'thermalLabelFont', 'thermalAmountFont', 'thermalLegalFont',
+    'thermalShowDeliveryNo', 'thermalShowDate', 'thermalShowAgent', 'thermalShowCustomer',
+    'thermalShowCustomerNum', 'thermalShowTree', 'thermalShowNotes', 'thermalDividerStyle'
+  ];
+  ids.forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', onThermalFormChange);
+    el.addEventListener('change', onThermalFormChange);
   });
-  document.getElementById('thermalFooterBlanks')?.addEventListener('input', (e) => {
-    thermalTplAdmin.template.footerBlankLines = Math.min(8, Math.max(0, Number(e.target.value) || 0));
-    renderThermalPreview();
-  });
-  ['thermalSampleCompany', 'thermalSampleTitle', 'thermalSampleFooter'].forEach((id) => {
-    document.getElementById(id)?.addEventListener('input', (e) => {
-      const key = id.replace('thermalSample', '').toLowerCase();
-      thermalTplAdmin.template.sample = thermalTplAdmin.template.sample || {};
-      if (key === 'company') thermalTplAdmin.template.sample.company = e.target.value;
-      if (key === 'title') thermalTplAdmin.template.sample.title = e.target.value;
-      if (key === 'footer') thermalTplAdmin.template.sample.footer = e.target.value;
+
+  document.getElementById('thermalLogoInput')?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('تعذّر قراءة الصورة'));
+        reader.readAsDataURL(file);
+      });
+      const data = await commerceApi('/delivery-receipts/print-template/logo', {
+        method: 'POST',
+        body: JSON.stringify({ dataUrl })
+      });
+      thermalTplAdmin.template = data.template;
+      thermalTplAdmin.preview = data.preview;
+      fillThermalForm(data.template);
       renderThermalPreview();
-    });
+      showToast('تم رفع الشعار');
+    } catch (err) {
+      showToast(err.message, 'err');
+    }
+    e.target.value = '';
   });
-  document.getElementById('btnThermalAddText')?.addEventListener('click', () => addThermalLine('text'));
-  document.getElementById('btnThermalAddField')?.addEventListener('click', () => addThermalLine('field'));
-  document.getElementById('btnThermalAddSep')?.addEventListener('click', () => addThermalLine('separator'));
-  document.getElementById('btnThermalAddBlank')?.addEventListener('click', () => addThermalLine('blank'));
+
+  document.getElementById('btnThermalLogoRemove')?.addEventListener('click', async () => {
+    try {
+      const data = await commerceApi('/delivery-receipts/print-template/logo', { method: 'DELETE' });
+      thermalTplAdmin.template = data.template;
+      thermalTplAdmin.preview = data.preview;
+      fillThermalForm(data.template);
+      renderThermalPreview();
+      showToast('تمت إزالة الشعار');
+    } catch (err) {
+      showToast(err.message, 'err');
+    }
+  });
+
   document.getElementById('btnThermalReset')?.addEventListener('click', () => {
     if (!confirm('استعادة التصميم الافتراضي؟')) return;
     thermalTplAdmin.template = JSON.parse(JSON.stringify(thermalTplAdmin.defaults || {}));
-    thermalTplAdmin.selectedIndex = 0;
-    fillThermalFormFields();
-    renderThermalLineEditor();
+    fillThermalForm(thermalTplAdmin.template);
+    thermalTplAdmin.preview = buildClientPreview(thermalTplAdmin.template);
     renderThermalPreview();
   });
-  document.getElementById('btnThermalSave')?.addEventListener('click', () => saveThermalTemplate());
-}
 
-function fillThermalFormFields() {
-  const t = thermalTplAdmin.template;
-  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
-  set('thermalPaperChars', t.paperChars || 32);
-  set('thermalFooterBlanks', t.footerBlankLines ?? 3);
-  set('thermalSampleCompany', t.sample?.company || '');
-  set('thermalSampleTitle', t.sample?.title || '');
-  set('thermalSampleFooter', t.sample?.footer || '');
+  document.getElementById('btnThermalSave')?.addEventListener('click', () => saveThermalTemplate());
 }
 
 async function loadThermalTemplatePage() {
   const data = await commerceApi('/delivery-receipts/print-template');
   thermalTplAdmin.template = data.template;
-  thermalTplAdmin.fieldLabels = data.fieldLabels || {};
   thermalTplAdmin.defaults = data.defaults;
-  thermalTplAdmin.selectedIndex = 0;
-  fillThermalFormFields();
-  renderThermalLineEditor();
+  thermalTplAdmin.preview = data.preview || buildClientPreview(data.template);
+  fillThermalForm(data.template);
   renderThermalPreview();
 }
 
 async function saveThermalTemplate() {
   try {
+    const template = thermalFromForm();
     const data = await commerceApi('/delivery-receipts/print-template', {
       method: 'PUT',
-      body: JSON.stringify({ template: thermalTplAdmin.template })
+      body: JSON.stringify({ template })
     });
     thermalTplAdmin.template = data.template;
-    showToast('تم حفظ تصميم الوصل الحراري');
+    thermalTplAdmin.preview = data.preview;
+    fillThermalForm(data.template);
     renderThermalPreview();
+    showToast('تم حفظ تصميم الفاتورة الحرارية');
   } catch (err) {
     showToast(err.message, 'err');
   }

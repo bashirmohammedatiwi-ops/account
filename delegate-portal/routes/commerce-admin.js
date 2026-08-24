@@ -692,22 +692,44 @@ const {
   DEFAULT_TEMPLATE,
   getDeliveryReceiptPrintTemplate,
   saveDeliveryReceiptPrintTemplate,
-  previewSampleLines
+  saveThermalLogo,
+  deleteThermalLogo,
+  previewSampleBlocks
 } = require('../lib/delivery-receipt-template');
 
 router.get('/delivery-receipts/print-template', (_req, res) => {
+  const template = getDeliveryReceiptPrintTemplate();
   res.json({
     ok: true,
-    template: getDeliveryReceiptPrintTemplate(),
+    template,
     fieldLabels: FIELD_LABELS,
-    defaults: DEFAULT_TEMPLATE
+    defaults: DEFAULT_TEMPLATE,
+    preview: previewSampleBlocks(template)
   });
 });
 
 router.put('/delivery-receipts/print-template', (req, res) => {
   try {
     const template = saveDeliveryReceiptPrintTemplate(req.body?.template || req.body);
-    res.json({ ok: true, template, preview: previewSampleLines(template) });
+    res.json({ ok: true, template, preview: previewSampleBlocks(template) });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/delivery-receipts/print-template/logo', (req, res) => {
+  try {
+    const result = saveThermalLogo(req.body?.dataUrl);
+    res.json({ ok: true, ...result, preview: previewSampleBlocks(result.template) });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.delete('/delivery-receipts/print-template/logo', (_req, res) => {
+  try {
+    const template = deleteThermalLogo();
+    res.json({ ok: true, template, preview: previewSampleBlocks(template) });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
