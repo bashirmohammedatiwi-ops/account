@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Edari Admin — لوحة التحكم</title>
-  <link rel="stylesheet" href="admin.css?v=20260824admin">
+  <link rel="stylesheet" href="admin.css?v=20260824thermal4">
 </head>
 <body>
   <div id="topLoader" class="top-loader" hidden aria-live="polite">
@@ -167,7 +167,7 @@
             </button>
             <button type="button" class="module-card" data-goto="thermalReceipt">
               <span class="module-icon tone-amber"><svg viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg></span>
-              <span class="module-body"><strong>تصميم الوصل الحراري</strong><span>معاينة وصل 58mm للطابعة</span></span>
+              <span class="module-body"><strong>تصميم الوصل الحراري</strong><span>معاينة وصل 80mm للطابعة</span></span>
             </button>
             <button type="button" class="module-card" data-goto="promotionalVisits">
               <span class="module-icon tone-violet"><svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg></span>
@@ -556,6 +556,18 @@
               </div>
 
               <div class="thermal-section">
+                <h3 class="thermal-section-title">عرض الورق والطباعة</h3>
+                <div class="rv-edit-grid">
+                  <label class="field"><span>عرض الطابعة</span>
+                    <select id="thermalPaperMm">
+                      <option value="80" selected>80mm — طابعة عريضة</option>
+                      <option value="58">58mm — طابعة صغيرة</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <div class="thermal-section">
                 <h3 class="thermal-section-title">التذييل</h3>
                 <div class="rv-edit-grid">
                   <label class="field"><span>نص التذييل</span><input type="text" id="thermalFooter" value="شكراً لتعاملكم — نتشرف بخدمتكم"></label>
@@ -572,7 +584,7 @@
               <div class="rv-card-head">
                 <div>
                   <h2 class="rv-card-title">معاينة حية</h2>
-                  <p class="rv-card-sub">تطابق ما يُطبع على الطابعة 58mm</p>
+                  <p class="rv-card-sub">تطابق ما يُطبع على الطابعة — الافتراضي 80mm</p>
                 </div>
               </div>
               <div class="thermal-preview-wrap">
@@ -1287,7 +1299,7 @@
   <script src="admin-delivery-receipts.js?v=20260824admin"></script>
   <script src="admin-customers.js?v=20260824admin"></script>
   <script src="admin-promotional-visits.js?v=20260824admin"></script>
-  <script src="admin-thermal-template.js?v=20260824thermal3"></script>
+  <script src="admin-thermal-template.js?v=20260824thermal4"></script>
   <script src="admin-sales-report.js?v=20260709treeFix3"></script>
   <script src="admin-account-statements.js?v=20260615kpi"></script>
   <script src="admin-price-sync.js?v=20260703"></script>

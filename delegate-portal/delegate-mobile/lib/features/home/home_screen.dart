@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/api/delegate_api.dart';
+import '../receipts/receipts_hub.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
@@ -157,11 +158,6 @@ final treesProvider = FutureProvider((ref) {
 final ordersProvider = FutureProvider((ref) {
   ref.keepAlive();
   return withAuth(ref, () => ref.read(apiClientProvider).getOrders());
-});
-
-final receiptsListProvider = FutureProvider((ref) {
-  ref.keepAlive();
-  return withAuth(ref, () => ref.read(apiClientProvider).getReceipts());
 });
 
 final customerRequestsListProvider = FutureProvider((ref) {

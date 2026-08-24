@@ -4,7 +4,12 @@ const path = require('path');
 const db = require('./db');
 
 const SETTING_KEY = 'delivery_receipt_print_template';
+const TEMPLATE_FILE_NAME = 'delivery-receipt-print-template.json';
 const UPLOAD_ROOT = path.resolve(process.env.UPLOAD_DIR || path.join(__dirname, '..', 'uploads'));
+const DATA_DIR = path.resolve(
+  path.dirname(process.env.DATABASE_PATH || path.join(__dirname, '..', 'data'))
+);
+const TEMPLATE_FILE_PATH = path.join(DATA_DIR, TEMPLATE_FILE_NAME);
 
 const FIELD_LABELS = {
   deliveryNo: 'رقم الوصل',
@@ -27,26 +32,26 @@ function cleanNotes(text) {
 
 const DEFAULT_TEMPLATE = {
   version: 2,
-  paperMm: 58,
+  paperMm: 80,
   footerBlankLines: 4,
   branding: {
     showLogo: true,
     logoUrl: '',
-    logoWidth: 200,
+    logoWidth: 240,
     legalName: 'شركة التوزيع',
-    legalNameFont: 32,
+    legalNameFont: 34,
     companyName: 'Edari',
-    companyFont: 16,
+    companyFont: 15,
     title: 'وصل قبض',
-    titleFont: 26,
-    footer: 'شكراً لتعاملكم — نتشرف بخدمتكم',
-    footerFont: 16
+    titleFont: 28,
+    footer: '★ شكراً لتعاملكم — نتشرف بخدمتكم ★',
+    footerFont: 15
   },
   typography: {
-    bodyFont: 17,
-    labelFont: 15,
-    amountFont: 36,
-    legalFont: 15
+    bodyFont: 18,
+    labelFont: 14,
+    amountFont: 42,
+    legalFont: 14
   },
   content: {
     showLegalName: true,
@@ -77,6 +82,94 @@ function setSetting(key, value) {
   `).run(key, String(value ?? ''));
 }
 
+function readTemplateFileRaw() {
+  try {
+    if (!fs.existsSync(TEMPLATE_FILE_PATH)) return null;
+    const text = fs.readFileSync(TEMPLATE_FILE_PATH, 'utf8').trim();
+    if (!text) return null;
+    return JSON.parse(text);
+  } catch (err) {
+    console.warn('[thermal-template] read file failed:', err.message);
+    return null;
+  }
+}
+
+function writeTemplateFile(template) {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    const json = JSON.stringify(template);
+    const tmp = `${TEMPLATE_FILE_PATH}.tmp`;
+    fs.writeFileSync(tmp, json, 'utf8');
+    fs.renameSync(tmp, TEMPLATE_FILE_PATH);
+  } catch (err) {
+    console.warn('[thermal-template] write file failed:', err.message);
+  }
+}
+
+function readStoredTemplateRaw() {
+  const dbVal = getSetting(SETTING_KEY, '').trim();
+  if (dbVal) {
+    try {
+      return JSON.parse(dbVal);
+    } catch (err) {
+      console.warn('[thermal-template] invalid DB JSON:', err.message);
+    }
+  }
+
+  const fromFile = readTemplateFileRaw();
+  if (fromFile) {
+    try {
+      const normalized = normalizeTemplate(fromFile);
+      setSetting(SETTING_KEY, JSON.stringify(normalized));
+      console.log('[thermal-template] restored from file backup');
+      return fromFile;
+    } catch (err) {
+      console.warn('[thermal-template] file restore failed:', err.message);
+    }
+  }
+
+  return null;
+}
+
+function persistTemplate(template) {
+  const normalized = normalizeTemplate(template);
+  const json = JSON.stringify(normalized);
+  setSetting(SETTING_KEY, json);
+  writeTemplateFile(normalized);
+  return normalized;
+}
+
+/** يُزامن ملف النسخة الاحتياطية مع DB عند التشغيل (بعد تحديث السيرفر). */
+function syncTemplatePersistence() {
+  const dbVal = getSetting(SETTING_KEY, '').trim();
+  if (dbVal) {
+    if (!fs.existsSync(TEMPLATE_FILE_PATH)) {
+      try {
+        const normalized = normalizeTemplate(JSON.parse(dbVal));
+        writeTemplateFile(normalized);
+        console.log('[thermal-template] file backup created from database');
+      } catch (_) {}
+    }
+    return;
+  }
+
+  const fromFile = readTemplateFileRaw();
+  if (fromFile) {
+    try {
+      const normalized = normalizeTemplate(fromFile);
+      setSetting(SETTING_KEY, JSON.stringify(normalized));
+      console.log('[thermal-template] database restored from file backup');
+    } catch (err) {
+      console.warn('[thermal-template] startup restore failed:', err.message);
+    }
+  }
+}
+
+function normalizePaperMm(n) {
+  const v = Number(n);
+  return v === 58 ? 58 : 80;
+}
+
 function clampNum(n, min, max, fallback) {
   const v = Number(n);
   if (!Number.isFinite(v)) return fallback;
@@ -90,14 +183,23 @@ function ensureUploadDir(sub) {
 }
 
 function normalizeTemplate(raw) {
-  if (!raw || typeof raw !== 'object' || Number(raw.version) < 2) {
+  if (!raw || typeof raw !== 'object') {
+    return JSON.parse(JSON.stringify(DEFAULT_TEMPLATE));
+  }
+
+  if (Number(raw.version) < 2) {
     const base = JSON.parse(JSON.stringify(DEFAULT_TEMPLATE));
-    if (raw?.sample) {
-      base.branding.companyName = String(raw.sample.company || base.branding.companyName);
-      base.branding.title = String(raw.sample.title || base.branding.title);
-      base.branding.footer = String(raw.sample.footer || base.branding.footer);
+    const legacyBranding = raw.branding || raw.sample || {};
+    const legacyContent = raw.content || {};
+    if (legacyBranding.company || legacyBranding.companyName) {
+      base.branding.companyName = String(legacyBranding.companyName || legacyBranding.company || base.branding.companyName);
     }
-    if (raw?.footerBlankLines != null) base.footerBlankLines = clampNum(raw.footerBlankLines, 0, 8, 4);
+    if (legacyBranding.title) base.branding.title = String(legacyBranding.title);
+    if (legacyBranding.footer) base.branding.footer = String(legacyBranding.footer);
+    if (legacyBranding.legalName) base.branding.legalName = String(legacyBranding.legalName);
+    if (legacyBranding.logoUrl) base.branding.logoUrl = String(legacyBranding.logoUrl);
+    if (legacyContent.legalText) base.content.legalText = cleanLegalText(legacyContent.legalText);
+    if (raw.footerBlankLines != null) base.footerBlankLines = clampNum(raw.footerBlankLines, 0, 8, 4);
     return base;
   }
 
@@ -107,12 +209,12 @@ function normalizeTemplate(raw) {
 
   return {
     version: 2,
-    paperMm: 58,
+    paperMm: normalizePaperMm(raw.paperMm),
     footerBlankLines: clampNum(raw.footerBlankLines, 0, 8, 4),
     branding: {
       showLogo: Boolean(b.showLogo),
       logoUrl: String(b.logoUrl || ''),
-      logoWidth: clampNum(b.logoWidth, 80, 320, 180),
+      logoWidth: clampNum(b.logoWidth, 80, 400, 240),
       legalName: String(b.legalName || DEFAULT_TEMPLATE.branding.legalName),
       legalNameFont: clampNum(b.legalNameFont, 14, 42, 30),
       companyName: String(b.companyName || DEFAULT_TEMPLATE.branding.companyName),
@@ -146,18 +248,11 @@ function normalizeTemplate(raw) {
 }
 
 function getDeliveryReceiptPrintTemplate() {
-  try {
-    const raw = JSON.parse(getSetting(SETTING_KEY, ''));
-    return normalizeTemplate(raw);
-  } catch {
-    return normalizeTemplate(null);
-  }
+  return normalizeTemplate(readStoredTemplateRaw());
 }
 
 function saveDeliveryReceiptPrintTemplate(payload) {
-  const template = normalizeTemplate(payload);
-  setSetting(SETTING_KEY, JSON.stringify(template));
-  return template;
+  return persistTemplate(payload);
 }
 
 function saveThermalLogo(dataUrl) {
@@ -176,7 +271,7 @@ function saveThermalLogo(dataUrl) {
   const template = getDeliveryReceiptPrintTemplate();
   template.branding.logoUrl = `/uploads/${rel}`;
   template.branding.showLogo = true;
-  setSetting(SETTING_KEY, JSON.stringify(template));
+  persistTemplate(template);
   return { template, logoUrl: template.branding.logoUrl };
 }
 
@@ -190,8 +285,7 @@ function deleteThermalLogo() {
   }
   template.branding.logoUrl = '';
   template.branding.showLogo = false;
-  setSetting(SETTING_KEY, JSON.stringify(template));
-  return template;
+  return persistTemplate(template);
 }
 
 function fmtMoney(amount) {
@@ -231,7 +325,8 @@ function pushDoubleDivider(blocks, char) {
 
 /**
  * يُرجع قائمة blocks للطباعة الحرارية (تطبيق المندوب).
- * الأنواع: logo, text, divider, doubleDivider, ribbon, blank, row, amountBox, legalBox
+ * الأنواع: logo, text, divider, doubleDivider, ribbon, titleBadge, ornament,
+ * blank, row, metaStart, metaEnd, customerBox, amountBox, legalBox, notesBox
  */
 function buildDeliveryReceiptPrintBlocks(receipt, agentName, template = null) {
   const tpl = normalizeTemplate(template || getDeliveryReceiptPrintTemplate());
@@ -242,6 +337,8 @@ function buildDeliveryReceiptPrintBlocks(receipt, agentName, template = null) {
   const div = dividerChar(c.dividerStyle);
   const heavy = heavyDividerChar(c.dividerStyle);
   const blocks = [];
+
+  blocks.push({ type: 'ornament', char: '✦', repeat: 3 });
 
   if (b.showLogo && b.logoUrl) {
     blocks.push({ type: 'logo', url: b.logoUrl, maxWidth: b.logoWidth });
@@ -272,46 +369,51 @@ function buildDeliveryReceiptPrintBlocks(receipt, agentName, template = null) {
   pushDoubleDivider(blocks, heavy);
 
   if (c.showTitle && b.title.trim()) {
+    const subText = c.showDeliveryNo ? `رقم الوصل: ${ctx.deliveryNo}` : '';
     blocks.push({
-      type: 'ribbon',
+      type: 'titleBadge',
       text: b.title.trim(),
+      subText,
       fontSize: b.titleFont,
-      char: div
+      subFontSize: t.labelFont,
+      char: heavy
     });
   }
 
   blocks.push({ type: 'blank', count: 1 });
 
   const metaRows = [];
-  if (c.showDeliveryNo) metaRows.push({ label: 'رقم الوصل', value: ctx.deliveryNo });
   if (c.showDate) metaRows.push({ label: 'التاريخ', value: ctx.date });
   if (c.showAgent) metaRows.push({ label: 'المندوب', value: ctx.agent });
-
-  for (const row of metaRows) {
-    blocks.push({
-      type: 'row',
-      label: row.label,
-      value: row.value,
-      labelFont: t.labelFont,
-      valueFont: t.bodyFont
-    });
+  if (c.showDeliveryNo && !c.showTitle) {
+    metaRows.unshift({ label: 'رقم الوصل', value: ctx.deliveryNo });
   }
 
-  const hasCustomerBlock = c.showCustomer || (c.showCustomerNum && ctx.customerNum) || (c.showTree && ctx.tree);
-  if (metaRows.length && hasCustomerBlock) {
-    pushDivider(blocks, div);
+  if (metaRows.length) {
+    blocks.push({ type: 'metaStart' });
+    for (const row of metaRows) {
+      blocks.push({
+        type: 'row',
+        label: row.label,
+        value: row.value,
+        labelFont: t.labelFont,
+        valueFont: t.bodyFont
+      });
+    }
+    blocks.push({ type: 'metaEnd' });
   }
 
-  if (c.showCustomer) {
+  if (c.showCustomer && ctx.customer && ctx.customer !== '—') {
     blocks.push({
-      type: 'row',
+      type: 'customerBox',
       label: 'الزبون',
       value: ctx.customer,
       labelFont: t.labelFont,
-      valueFont: Math.min(t.bodyFont + 3, 28),
-      emphasis: true
+      valueFont: Math.min(t.bodyFont + 6, 34),
+      char: div
     });
   }
+
   if (c.showCustomerNum && ctx.customerNum) {
     blocks.push({
       type: 'row',
@@ -335,7 +437,7 @@ function buildDeliveryReceiptPrintBlocks(receipt, agentName, template = null) {
 
   blocks.push({
     type: 'amountBox',
-    label: 'المبلغ المستلم',
+    label: 'المبلغ المستلم (نقداً)',
     value: ctx.amount,
     fontSize: t.amountFont,
     char: heavy
@@ -354,16 +456,15 @@ function buildDeliveryReceiptPrintBlocks(receipt, agentName, template = null) {
 
   if (c.showNotes && ctx.notes) {
     blocks.push({
-      type: 'text',
+      type: 'notesBox',
+      label: 'ملاحظات',
       text: ctx.notes,
-      fontSize: t.bodyFont,
-      align: 'center',
-      bold: false,
-      italic: true
+      labelFont: t.labelFont,
+      fontSize: t.bodyFont
     });
   }
 
-  pushDoubleDivider(blocks, div);
+  pushDivider(blocks, div);
 
   if (b.footer.trim()) {
     blocks.push({
@@ -374,6 +475,8 @@ function buildDeliveryReceiptPrintBlocks(receipt, agentName, template = null) {
       bold: false
     });
   }
+
+  blocks.push({ type: 'ornament', char: '✦', repeat: 3 });
 
   return {
     blocks,
@@ -408,11 +511,27 @@ function buildDeliveryReceiptPrintLines(receipt, agentName, template = null) {
       const ch = String(block.char || '═');
       out.push({ text: ch.repeat(32), size: 1 });
       out.push({ text: ch.repeat(32), size: 1 });
-    } else if (block.type === 'ribbon') {
+    } else if (block.type === 'ribbon' || block.type === 'titleBadge') {
       const ch = String(block.char || '─');
       out.push({ text: ch.repeat(32), size: 1 });
       out.push({ text: block.text, size: block.fontSize >= 24 ? 2 : 1, fontSize: block.fontSize, align: 'center', bold: true });
+      if (block.subText) out.push({ text: block.subText, size: 1, fontSize: block.subFontSize || 14, align: 'center' });
       out.push({ text: ch.repeat(32), size: 1 });
+    } else if (block.type === 'ornament') {
+      const ch = String(block.char || '✦');
+      const n = block.repeat || 3;
+      out.push({ text: Array(n).fill(ch).join('  '), size: 1, align: 'center' });
+    } else if (block.type === 'metaStart' || block.type === 'metaEnd') {
+      /* preview grouping only */
+    } else if (block.type === 'customerBox') {
+      const ch = String(block.char || '─');
+      out.push({ text: ch.repeat(32), size: 1 });
+      out.push({ text: block.label, size: 1, fontSize: block.labelFont || 14, align: 'right' });
+      out.push({ text: block.value, size: 2, fontSize: block.valueFont || 20, align: 'right', bold: true });
+      out.push({ text: ch.repeat(32), size: 1 });
+    } else if (block.type === 'notesBox') {
+      out.push({ text: block.label || 'ملاحظات', size: 1, fontSize: block.labelFont || 14, align: 'center' });
+      out.push({ text: block.text, size: 1, fontSize: block.fontSize || 16, align: 'center' });
     } else if (block.type === 'row') {
       out.push({ text: `${block.label}: ${block.value}`, size: 1, fontSize: block.valueFont, align: 'left' });
     } else if (block.type === 'amount' || block.type === 'amountBox') {
@@ -464,5 +583,8 @@ module.exports = {
   buildDeliveryReceiptPrintBlocks,
   buildDeliveryReceiptPrintLines,
   previewSampleBlocks,
-  previewSampleLines
+  previewSampleLines,
+  syncTemplatePersistence
 };
+
+syncTemplatePersistence();

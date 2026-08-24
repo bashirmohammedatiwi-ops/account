@@ -9,17 +9,26 @@ import 'package:image/image.dart' as img;
 import '../../models/models.dart';
 import 'delivery_receipt_print_template.dart';
 
-const _paperWidthDots = 384;
+int _paperWidthDotsFor(int paperMm) => paperMm == 58 ? 384 : 576;
+
+PaperSize _paperSizeFor(int paperMm) => paperMm == 58 ? PaperSize.mm58 : PaperSize.mm80;
+
+int _dividerCharCount(int paperWidthDots) => (paperWidthDots / 12).round().clamp(24, 64);
 
 CapabilityProfile? _profileCache;
-Generator? _generatorCache;
+final _generators = <int, Generator>{};
 
-Future<Generator> _generator() async {
-  if (_generatorCache != null) return _generatorCache!;
+Future<Generator> _generatorFor(int paperMm) async {
+  final key = _normalizePaperMm(paperMm);
+  final cached = _generators[key];
+  if (cached != null) return cached;
   _profileCache ??= await CapabilityProfile.load();
-  _generatorCache = Generator(PaperSize.mm58, _profileCache!);
-  return _generatorCache!;
+  final gen = Generator(_paperSizeFor(key), _profileCache!);
+  _generators[key] = gen;
+  return gen;
 }
+
+int _normalizePaperMm(int paperMm) => paperMm == 58 ? 58 : 80;
 
 bool _hasNonAscii(String text) => text.runes.any((r) => r > 127);
 
@@ -75,6 +84,7 @@ Future<img.Image?> _rasterText(
   required TextAlign align,
   required double fontSize,
   required bool bold,
+  required int paperWidthDots,
 }) async {
   final trimmed = text.trim();
   if (trimmed.isEmpty) return null;
@@ -94,38 +104,38 @@ Future<img.Image?> _rasterText(
     textAlign: align,
     maxLines: 8,
   );
-  painter.layout(maxWidth: _paperWidthDots.toDouble());
+  painter.layout(maxWidth: paperWidthDots.toDouble());
 
   final height = (painter.height.ceil() + 10).clamp(24, 360);
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(
     recorder,
-    Rect.fromLTWH(0, 0, _paperWidthDots.toDouble(), height.toDouble()),
+    Rect.fromLTWH(0, 0, paperWidthDots.toDouble(), height.toDouble()),
   );
   canvas.drawRect(
-    Rect.fromLTWH(0, 0, _paperWidthDots.toDouble(), height.toDouble()),
+    Rect.fromLTWH(0, 0, paperWidthDots.toDouble(), height.toDouble()),
     Paint()..color = Colors.white,
   );
 
   double dx = 0;
   if (align == TextAlign.center) {
-    dx = (_paperWidthDots - painter.width) / 2;
+    dx = (paperWidthDots - painter.width) / 2;
   } else if (align == TextAlign.right || isRtl) {
-    dx = _paperWidthDots - painter.width;
+    dx = paperWidthDots - painter.width;
   }
   painter.paint(canvas, Offset(dx, 4));
 
   final picture = recorder.endRecording();
-  final uiImage = await picture.toImage(_paperWidthDots, height);
+  final uiImage = await picture.toImage(paperWidthDots, height);
   final byteData = await uiImage.toByteData(format: ui.ImageByteFormat.rawRgba);
   uiImage.dispose();
   if (byteData == null) return null;
 
-  final out = img.Image(width: _paperWidthDots, height: height);
+  final out = img.Image(width: paperWidthDots, height: height);
   final rgba = byteData.buffer.asUint8List();
   for (var y = 0; y < height; y++) {
-    for (var x = 0; x < _paperWidthDots; x++) {
-      final i = (y * _paperWidthDots + x) * 4;
+    for (var x = 0; x < paperWidthDots; x++) {
+      final i = (y * paperWidthDots + x) * 4;
       out.setPixelRgba(x, y, rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]);
     }
   }
@@ -139,6 +149,7 @@ Future<List<int>> _appendRasterOrText(
   required double fontSize,
   required TextAlign align,
   required bool bold,
+  required int paperWidthDots,
 }) async {
   if (text.trim().isEmpty) {
     bytes += generator.feed(1);
@@ -146,7 +157,7 @@ Future<List<int>> _appendRasterOrText(
   }
 
   if (_hasNonAscii(text)) {
-    final raster = await _rasterText(text, align: align, fontSize: fontSize, bold: bold);
+    final raster = await _rasterText(text, align: align, fontSize: fontSize, bold: bold, paperWidthDots: paperWidthDots);
     if (raster != null) {
       bytes += generator.imageRaster(raster, align: _toPosAlign(align));
       return bytes;
@@ -170,8 +181,9 @@ Future<List<int>> _appendDivider(
   List<int> bytes,
   String char, {
   int lines = 1,
+  required int paperWidthDots,
 }) async {
-  final line = char * 28;
+  final line = char * _dividerCharCount(paperWidthDots);
   for (var i = 0; i < lines; i++) {
     bytes = await _appendRasterOrText(
       generator,
@@ -180,6 +192,7 @@ Future<List<int>> _appendDivider(
       fontSize: 14,
       align: TextAlign.center,
       bold: false,
+      paperWidthDots: paperWidthDots,
     );
   }
   return bytes;
@@ -192,34 +205,26 @@ Future<List<int>> _appendRow(
   String value, {
   required double labelFont,
   required double valueFont,
+  required int paperWidthDots,
   bool emphasis = false,
 }) async {
-  if (emphasis) {
-    bytes = await _appendRasterOrText(
-      generator,
-      bytes,
-      label,
-      fontSize: labelFont,
-      align: TextAlign.right,
-      bold: false,
-    );
-    return await _appendRasterOrText(
-      generator,
-      bytes,
-      value,
-      fontSize: valueFont,
-      align: TextAlign.right,
-      bold: true,
-    );
-  }
-  final line = '$label: $value';
+  bytes = await _appendRasterOrText(
+    generator,
+    bytes,
+    label,
+    fontSize: labelFont,
+    align: TextAlign.right,
+    bold: false,
+    paperWidthDots: paperWidthDots,
+  );
   return await _appendRasterOrText(
     generator,
     bytes,
-    line,
+    value,
     fontSize: valueFont,
     align: TextAlign.right,
-    bold: false,
+    bold: true,
+    paperWidthDots: paperWidthDots,
   );
 }
 
@@ -227,7 +232,9 @@ Future<List<int>> buildEscPosBytesFromPayload(
   DeliveryReceiptPrintPayload payload, {
   String? serverUrl,
 }) async {
-  final generator = await _generator();
+  final paperMm = _normalizePaperMm(payload.paperMm);
+  final paperWidthDots = _paperWidthDotsFor(paperMm);
+  final generator = await _generatorFor(paperMm);
   var bytes = <int>[];
   bytes += generator.reset();
 
@@ -235,7 +242,7 @@ Future<List<int>> buildEscPosBytesFromPayload(
     switch (block.type) {
       case 'logo':
         if (block.url != null && block.url!.isNotEmpty) {
-          final logo = await _loadLogoImage(block.url!, serverUrl, block.maxWidth ?? 180);
+          final logo = await _loadLogoImage(block.url!, serverUrl, block.maxWidth ?? 240);
           if (logo != null) {
             bytes += generator.imageRaster(logo, align: PosAlign.center);
             bytes += generator.feed(1);
@@ -250,17 +257,18 @@ Future<List<int>> buildEscPosBytesFromPayload(
           fontSize: (block.fontSize ?? 18).toDouble(),
           align: _toTextAlign(block.align, block.text ?? ''),
           bold: block.bold,
+          paperWidthDots: paperWidthDots,
         );
         break;
       case 'divider':
-        bytes = await _appendDivider(generator, bytes, block.char ?? '─');
+        bytes = await _appendDivider(generator, bytes, block.char ?? '─', paperWidthDots: paperWidthDots);
         break;
       case 'doubleDivider':
-        bytes = await _appendDivider(generator, bytes, block.char ?? '═', lines: 2);
+        bytes = await _appendDivider(generator, bytes, block.char ?? '═', lines: 2, paperWidthDots: paperWidthDots);
         break;
       case 'ribbon':
         final ribbonChar = block.char ?? '─';
-        bytes = await _appendDivider(generator, bytes, ribbonChar);
+        bytes = await _appendDivider(generator, bytes, ribbonChar, paperWidthDots: paperWidthDots);
         bytes = await _appendRasterOrText(
           generator,
           bytes,
@@ -268,8 +276,94 @@ Future<List<int>> buildEscPosBytesFromPayload(
           fontSize: (block.fontSize ?? 26).toDouble(),
           align: TextAlign.center,
           bold: true,
+          paperWidthDots: paperWidthDots,
         );
-        bytes = await _appendDivider(generator, bytes, ribbonChar);
+        bytes = await _appendDivider(generator, bytes, ribbonChar, paperWidthDots: paperWidthDots);
+        break;
+      case 'titleBadge':
+        final badgeChar = block.char ?? '═';
+        bytes = await _appendDivider(generator, bytes, badgeChar, lines: 2, paperWidthDots: paperWidthDots);
+        bytes = await _appendRasterOrText(
+          generator,
+          bytes,
+          block.text ?? '',
+          fontSize: (block.fontSize ?? 28).toDouble(),
+          align: TextAlign.center,
+          bold: true,
+          paperWidthDots: paperWidthDots,
+        );
+        if (block.subText != null && block.subText!.trim().isNotEmpty) {
+          bytes = await _appendRasterOrText(
+            generator,
+            bytes,
+            block.subText!,
+            fontSize: (block.subFontSize ?? 14).toDouble(),
+            align: TextAlign.center,
+            bold: false,
+            paperWidthDots: paperWidthDots,
+          );
+        }
+        bytes = await _appendDivider(generator, bytes, badgeChar, lines: 2, paperWidthDots: paperWidthDots);
+        break;
+      case 'ornament':
+        final ch = block.char ?? '✦';
+        final n = block.repeat.clamp(1, 5);
+        final ornament = List.generate(n, (_) => ch).join('  ');
+        bytes = await _appendRasterOrText(
+          generator,
+          bytes,
+          ornament,
+          fontSize: 14,
+          align: TextAlign.center,
+          bold: false,
+          paperWidthDots: paperWidthDots,
+        );
+        break;
+      case 'metaStart':
+      case 'metaEnd':
+        break;
+      case 'customerBox':
+        final boxChar = block.char ?? '─';
+        bytes = await _appendDivider(generator, bytes, boxChar, paperWidthDots: paperWidthDots);
+        bytes = await _appendRasterOrText(
+          generator,
+          bytes,
+          block.label ?? 'الزبون',
+          fontSize: (block.labelFont ?? 14).toDouble(),
+          align: TextAlign.right,
+          bold: false,
+          paperWidthDots: paperWidthDots,
+        );
+        bytes = await _appendRasterOrText(
+          generator,
+          bytes,
+          block.value ?? '',
+          fontSize: (block.valueFont ?? 24).toDouble(),
+          align: TextAlign.right,
+          bold: true,
+          paperWidthDots: paperWidthDots,
+        );
+        bytes = await _appendDivider(generator, bytes, boxChar, paperWidthDots: paperWidthDots);
+        break;
+      case 'notesBox':
+        bytes = await _appendRasterOrText(
+          generator,
+          bytes,
+          block.label ?? 'ملاحظات',
+          fontSize: (block.labelFont ?? 14).toDouble(),
+          align: TextAlign.center,
+          bold: false,
+          paperWidthDots: paperWidthDots,
+        );
+        bytes = await _appendRasterOrText(
+          generator,
+          bytes,
+          block.text ?? '',
+          fontSize: (block.fontSize ?? 18).toDouble(),
+          align: TextAlign.center,
+          bold: false,
+          paperWidthDots: paperWidthDots,
+        );
         break;
       case 'blank':
         for (var i = 0; i < block.count.clamp(1, 5); i++) {
@@ -284,24 +378,27 @@ Future<List<int>> buildEscPosBytesFromPayload(
           block.value ?? '',
           labelFont: (block.labelFont ?? 15).toDouble(),
           valueFont: (block.valueFont ?? 17).toDouble(),
+          paperWidthDots: paperWidthDots,
           emphasis: block.emphasis,
         );
         break;
       case 'amount':
       case 'amountBox':
         if (block.type == 'amountBox') {
-          bytes = await _appendDivider(generator, bytes, block.char ?? '═');
+          bytes = await _appendDivider(generator, bytes, block.char ?? '═', paperWidthDots: paperWidthDots);
         }
         if (block.label != null && block.label!.trim().isNotEmpty) {
           bytes = await _appendRasterOrText(
             generator,
             bytes,
             block.label!,
-            fontSize: 14,
+            fontSize: 15,
             align: TextAlign.center,
             bold: false,
+            paperWidthDots: paperWidthDots,
           );
         }
+        bytes += generator.feed(1);
         bytes = await _appendRasterOrText(
           generator,
           bytes,
@@ -309,13 +406,14 @@ Future<List<int>> buildEscPosBytesFromPayload(
           fontSize: (block.fontSize ?? 36).toDouble(),
           align: TextAlign.center,
           bold: true,
+          paperWidthDots: paperWidthDots,
         );
         if (block.type == 'amountBox') {
-          bytes = await _appendDivider(generator, bytes, block.char ?? '═');
+          bytes = await _appendDivider(generator, bytes, block.char ?? '═', paperWidthDots: paperWidthDots);
         }
         break;
       case 'legalBox':
-        bytes = await _appendDivider(generator, bytes, block.char ?? '─');
+        bytes = await _appendDivider(generator, bytes, block.char ?? '─', paperWidthDots: paperWidthDots);
         bytes = await _appendRasterOrText(
           generator,
           bytes,
@@ -323,8 +421,9 @@ Future<List<int>> buildEscPosBytesFromPayload(
           fontSize: (block.fontSize ?? 15).toDouble(),
           align: TextAlign.center,
           bold: false,
+          paperWidthDots: paperWidthDots,
         );
-        bytes = await _appendDivider(generator, bytes, block.char ?? '─');
+        bytes = await _appendDivider(generator, bytes, block.char ?? '─', paperWidthDots: paperWidthDots);
         break;
     }
   }
@@ -347,22 +446,22 @@ Future<List<int>> buildTestPrintBytes({
     'typography': {'bodyFont': 18, 'amountFont': 28},
     'content': {'legalText': 'اتصال ناجح مع الطابعة'},
   };
+  final built = buildDeliveryReceiptPrintBlocks(
+    DeliveryReceipt(
+      id: 0,
+      deliveryNo: 'TEST-001',
+      status: 'issued',
+      statusLabel: '',
+      amount: 0,
+      receiptDate: DateTime.now().toIso8601String().split('T').first,
+    ),
+    template: tpl,
+    agentName: agentName,
+  );
   final sample = DeliveryReceiptPrintPayload(
-    blocks: [
-      ...buildDeliveryReceiptPrintBlocks(
-        DeliveryReceipt(
-          id: 0,
-          deliveryNo: 'TEST-001',
-          status: 'issued',
-          statusLabel: '',
-          amount: 0,
-          receiptDate: DateTime.now().toIso8601String().split('T').first,
-        ),
-        template: tpl,
-        agentName: agentName,
-      ).blocks,
-    ],
+    blocks: built.blocks,
     footerBlankLines: 3,
+    paperMm: built.paperMm,
   );
   return await buildEscPosBytesFromPayload(sample, serverUrl: serverUrl);
 }

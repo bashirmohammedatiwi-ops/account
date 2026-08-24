@@ -202,7 +202,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Text(
-                    'اربط طابعة 58mm من هنا — تُحفظ تلقائياً ولا تحتاج إعادة الاختيار في كل مرة.',
+                    'اربط طابعة 80mm من هنا — تُحفظ تلقائياً ولا تحتاج إعادة الاختيار في كل مرة.',
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.muted),
                   ),
                   const SizedBox(height: 12),

@@ -19,10 +19,11 @@ ENV NODE_ENV=production
 ENV PORT=5005
 ENV HOST=0.0.0.0
 ENV DATABASE_PATH=/app/data/portal.db
+ENV UPLOAD_DIR=/app/uploads
 
 EXPOSE 5005
 
-VOLUME ["/app/data"]
+VOLUME ["/app/data", "/app/uploads"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||5005)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"

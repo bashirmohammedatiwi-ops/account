@@ -8,6 +8,7 @@ services:
       PORT: 5005
       HOST: 0.0.0.0
       DATABASE_PATH: /app/data/portal.db
+      UPLOAD_DIR: /app/uploads
       PUBLIC_URL: ${PUBLIC_URL:-http://187.124.23.65:5005}
       SYNC_API_KEY: ${SYNC_API_KEY:-edari-sync-local-key-2025}
       SHORJA_HUB_URL: ${SHORJA_HUB_URL:-http://187.124.23.65:5007}

@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/delegate_api.dart';
 import '../../core/auth/auth_provider.dart';
-import '../../core/auth/auth_session.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/adaptive_shell.dart';
@@ -16,14 +15,9 @@ import '../../core/widgets/ed_form.dart';
 import '../../core/widgets/phone_ui.dart';
 import '../../models/models.dart';
 
-import '../home/home_screen.dart';
+import 'receipts_hub.dart';
 import 'receipts_ui.dart';
 import 'thermal_print_service.dart';
-
-final deliveryReceiptsListProvider = FutureProvider((ref) {
-  ref.keepAlive();
-  return withAuth(ref, () => ref.read(apiClientProvider).getDeliveryReceipts());
-});
 
 class ReceiptsScreen extends ConsumerStatefulWidget {
   const ReceiptsScreen({super.key});
@@ -54,15 +48,10 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
   DeliveryReceipt? _linkedDelivery;
 
   Future<void> _bootstrapLists() async {
+    invalidateReceiptsData(ref);
     try {
-      final client = ref.read(apiClientProvider);
-      await client.getDeliveryReceipts();
-      await client.getReceipts();
+      await ref.read(receiptsHubProvider.future);
     } catch (_) {}
-    if (mounted) {
-      ref.invalidate(deliveryReceiptsListProvider);
-      ref.invalidate(receiptsListProvider);
-    }
   }
 
   @override
@@ -114,11 +103,9 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
   }
 
   Future<void> _refreshAll() async {
-    ref.invalidate(receiptsListProvider);
-    ref.invalidate(deliveryReceiptsListProvider);
+    invalidateReceiptsData(ref);
     try {
-      await ref.read(deliveryReceiptsListProvider.future);
-      await ref.read(receiptsListProvider.future);
+      await ref.read(receiptsHubProvider.future);
     } catch (_) {}
     await _refreshPrintTemplate();
   }
@@ -155,7 +142,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
     if (printed) {
       try {
         await ref.read(apiClientProvider).markDeliveryReceiptPrinted(receipt.id);
-        ref.invalidate(deliveryReceiptsListProvider);
+        invalidateReceiptsData(ref);
       } catch (_) {}
       if (showMessages) _snack('تمت الطباعة', success: true);
       await _refreshPrinterStatus();
@@ -187,14 +174,14 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
             amount: amount,
             notes: _drNotesCtrl.text.trim(),
           );
-      ref.invalidate(deliveryReceiptsListProvider);
+      invalidateReceiptsData(ref);
 
       if (!mounted) return;
       _drAmountCtrl.clear();
       _drNotesCtrl.clear();
       setState(() => _drPicked = null);
 
-      _snack('تم إصدار وصل القبض — يمكنك إصدار وصول أخرى أو إنشاء سند قبض لاحقاً', success: true);
+      _snack('تم إصدار وصل القبض', success: true);
 
       if (tryPrint && !kIsWeb) {
         setState(() => _drPrinting = true);
@@ -232,7 +219,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
     });
     _tabs.animateTo(1);
     if (!quiet) {
-      _snack('أكمل سند القبض الداخلي ثم أرسله للوحة التحكم');
+      _snack('أكمل سند القبض ثم أرسله للوحة التحكم', success: true);
     }
   }
 
@@ -269,8 +256,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
             notes: _notesCtrl.text.trim(),
             deliveryReceiptId: _linkedDeliveryId,
           );
-      ref.invalidate(receiptsListProvider);
-      ref.invalidate(deliveryReceiptsListProvider);
+      invalidateReceiptsData(ref);
       if (!mounted) return;
       _amountCtrl.clear();
       _commissionCtrl.clear();
@@ -290,27 +276,23 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
     }
   }
 
-  int _pendingDeliveryReceipt(List<DeliveryReceipt> list) => list.where((d) => d.canCreateReceipt).length;
-
-  int _pendingReceipts(List<Receipt> list) => list.where((r) => r.status == 'pending' || r.status == 'reviewed').length;
-
   @override
   Widget build(BuildContext context) {
-    final receiptsAsync = ref.watch(receiptsListProvider);
-    final deliveryAsync = ref.watch(deliveryReceiptsListProvider);
+    final hubAsync = ref.watch(receiptsHubProvider);
     final layout = EdLayout.of(context);
     final isWide = layout.isTablet;
     final tabIndex = _tabs.index;
 
-    final deliveryCount = deliveryAsync.maybeWhen(data: (l) => l.length, orElse: () => 0);
-    final receiptCount = receiptsAsync.maybeWhen(data: (l) => l.length, orElse: () => 0);
-    final pendingDr = deliveryAsync.maybeWhen(data: _pendingDeliveryReceipt, orElse: () => 0);
-    final pendingR = receiptsAsync.maybeWhen(data: _pendingReceipts, orElse: () => 0);
+    final hub = hubAsync.maybeWhen(data: (d) => d, orElse: () => null);
+    final deliveryCount = hub?.deliveries.length ?? 0;
+    final receiptCount = hub?.receipts.length ?? 0;
+    final pendingDr = hub?.awaitingReceipt.length ?? 0;
+    final pendingR = hub?.inReview.length ?? 0;
 
     return AppPage(
       title: 'سند قبض',
       kicker: 'تحصيل',
-      subtitle: 'وصل قبض للزبون — سند قبض داخلي (اختياري الربط)',
+      subtitle: 'وصل قبض للزبون — سند قبض للإدارة',
       showBack: true,
       onBack: () => context.go('/home'),
       child: ColoredBox(
@@ -341,18 +323,17 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
                   child: _pillTabBar(),
                 ),
                 Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: _refreshAll,
-                    child: IndexedStack(
-                      index: tabIndex,
-                      sizing: StackFit.expand,
+                  child: hubAsync.when(
+                    loading: () => const Center(child: LoadingView()),
+                    error: (e, _) => ErrorView(
+                      message: e.displayMessage,
+                      onRetry: () => invalidateReceiptsData(ref),
+                    ),
+                    data: (data) => TabBarView(
+                      controller: _tabs,
                       children: [
-                        _KeepAliveTab(
-                          child: _deliveryTab(deliveryAsync, isWide),
-                        ),
-                        _KeepAliveTab(
-                          child: _receiptTab(receiptsAsync, isWide, layout),
-                        ),
+                        _KeepAliveTab(child: _deliveryTabBody(data, isWide)),
+                        _KeepAliveTab(child: _receiptTabBody(data, isWide, layout)),
                       ],
                     ),
                   ),
@@ -406,30 +387,124 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
     );
   }
 
-  Widget _deliveryTab(AsyncValue<List<DeliveryReceipt>> deliveryAsync, bool isWide) {
-    final form = _deliveryFormCard();
-    final list = _deliveryListSection(deliveryAsync);
-    if (isWide) {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(width: 400, child: SingleChildScrollView(padding: const EdgeInsets.all(16), physics: const AlwaysScrollableScrollPhysics(), child: form)),
-          Expanded(child: SingleChildScrollView(padding: const EdgeInsets.all(16), physics: const AlwaysScrollableScrollPhysics(), child: list)),
+  Widget _deliveryTabBody(ReceiptsHubData data, bool isWide) {
+    return RefreshIndicator(
+      onRefresh: _refreshAll,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(EdSpacing.page, EdSpacing.lg, EdSpacing.page, 0),
+            sliver: SliverToBoxAdapter(child: _deliveryFormCard()),
+          ),
+          if (data.deliveries.isEmpty)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: EmptyState(message: 'لا توجد وصول قبض — أصدر وصلاً من النموذج أعلاه', icon: Icons.print_outlined),
+              ),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(EdSpacing.page, EdSpacing.xl, EdSpacing.page, kPhoneBottomInset),
+              sliver: SliverToBoxAdapter(
+                child: EdListSection(
+                  title: 'سجل وصول القبض',
+                  count: data.deliveries.length,
+                  child: Column(
+                    children: data.deliveries
+                        .map(
+                          (d) => DeliveryReceiptCard(
+                            item: d,
+                            showPrint: !kIsWeb,
+                            isReprinting: _reprintingDeliveryId == d.id,
+                            onReprint: !kIsWeb ? () => _reprintDelivery(d) : null,
+                            onCreateReceipt: d.canCreateReceipt ? () => _startReceiptFromDelivery(d) : null,
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+              ),
+            ),
         ],
-      );
-    }
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(EdSpacing.page, EdSpacing.lg, EdSpacing.page, kPhoneBottomInset),
-      children: [list, const SizedBox(height: EdSpacing.xxl), form],
+      ),
+    );
+  }
+
+  Widget _receiptTabBody(ReceiptsHubData data, bool isWide, EdLayoutData layout) {
+    return RefreshIndicator(
+      onRefresh: _refreshAll,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(EdSpacing.page, EdSpacing.lg, EdSpacing.page, 0),
+            sliver: SliverToBoxAdapter(
+              child: PendingDeliveriesPanel(
+                items: data.awaitingReceipt,
+                onTap: (d) => _startReceiptFromDelivery(d),
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: EdSpacing.page),
+            sliver: SliverToBoxAdapter(child: _receiptFormCard()),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(EdSpacing.page, EdSpacing.xl, EdSpacing.page, kPhoneBottomInset),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                if (data.inReview.isNotEmpty) ...[
+                  ReceiptsSectionHeader(
+                    title: 'قيد المراجعة',
+                    subtitle: 'بانتظار موافقة الإدارة',
+                    count: data.inReview.length,
+                    accent: AppColors.warning,
+                  ),
+                  ...data.inReview.map((r) => InternalReceiptCard(receipt: r)),
+                  const SizedBox(height: 16),
+                ],
+                if (data.deliveredToCompany.isNotEmpty) ...[
+                  ReceiptsSectionHeader(
+                    title: 'تم التسليم للشركة',
+                    subtitle: 'المبالغ المُرحّلة للإدارة',
+                    count: data.deliveredToCompany.length,
+                    accent: AppColors.success,
+                  ),
+                  ...data.deliveredToCompany.map((r) => InternalReceiptCard(receipt: r)),
+                  const SizedBox(height: 16),
+                ],
+                if (data.rejected.isNotEmpty) ...[
+                  ReceiptsSectionHeader(
+                    title: 'مرفوض',
+                    count: data.rejected.length,
+                    accent: AppColors.danger,
+                  ),
+                  ...data.rejected.map((r) => InternalReceiptCard(receipt: r)),
+                ],
+                if (data.receipts.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: EmptyState(
+                      message: 'لا توجد سندات — أرسل سند قبض من النموذج أعلاه',
+                      icon: Icons.receipt_long_outlined,
+                    ),
+                  ),
+              ]),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _deliveryFormCard() {
     final c = _drPicked?.customer;
     return EdFormCard(
-      title: 'وصل قبض',
-      subtitle: 'يُطبع للزبون — يمكنك إصدار عدة وصول ثم سند قبض لاحقاً',
+      key: const ValueKey('delivery_form'),
+      title: 'إصدار وصل قبض',
+      subtitle: 'يُطبع للزبون — يمكن إصدار عدة وصولات',
       icon: Icons.print_outlined,
       iconColor: AppColors.moduleReceipts,
       child: Column(
@@ -492,68 +567,8 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
               loading: _drPrinting,
             ),
           ],
-          const SizedBox(height: 8),
-          Text(
-            'بعد الإصدار تبقى في قائمة وصول القبض — أنشئ سند قبض من التبويب الثاني عند الحاجة',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted.withValues(alpha: 0.9)),
-          ),
         ],
       ),
-    );
-  }
-
-  Widget _deliveryListSection(AsyncValue<List<DeliveryReceipt>> deliveryAsync) {
-    return deliveryAsync.when(
-      loading: () => const Padding(padding: EdgeInsets.all(32), child: LoadingView()),
-      error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(deliveryReceiptsListProvider)),
-      data: (list) {
-        if (list.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(24),
-            child: EmptyState(message: 'لا توجد وصول قبض — أصدر وصلاً من النموذج', icon: Icons.print_outlined),
-          );
-        }
-        return EdListSection(
-          title: 'السجلات السابقة',
-          count: list.length,
-          child: Column(
-            children: list
-                .map(
-                  (d) => DeliveryReceiptCard(
-                    item: d,
-                    showPrint: !kIsWeb,
-                    isReprinting: _reprintingDeliveryId == d.id,
-                    onReprint: !kIsWeb ? () => _reprintDelivery(d) : null,
-                    onCreateReceipt: d.canCreateReceipt ? () => _startReceiptFromDelivery(d) : null,
-                  ),
-                )
-                .toList(),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _receiptTab(AsyncValue<List<Receipt>> receiptsAsync, bool isWide, EdLayoutData layout) {
-    final form = _receiptFormCard();
-    final list = _receiptListSection(receiptsAsync);
-    if (isWide) {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: layout.isDesktop ? 440 : 400,
-            child: SingleChildScrollView(padding: const EdgeInsets.all(16), physics: const AlwaysScrollableScrollPhysics(), child: form),
-          ),
-          Expanded(child: SingleChildScrollView(padding: const EdgeInsets.all(16), physics: const AlwaysScrollableScrollPhysics(), child: list)),
-        ],
-      );
-    }
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(EdSpacing.page, EdSpacing.lg, EdSpacing.page, kPhoneBottomInset),
-      children: [list, const SizedBox(height: EdSpacing.xxl), form],
     );
   }
 
@@ -561,8 +576,9 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
     final c = _picked?.customer;
     final linkedCustomer = _linkedDelivery?.customerName ?? '';
     return EdFormCard(
-      title: 'سند قبض داخلي',
-      subtitle: 'اختياري: اربط بوصل قبض أو أرسل سنداً مباشرة للوحة التحكم',
+      key: const ValueKey('receipt_form'),
+      title: 'سند قبض للإدارة',
+      subtitle: 'أرسل المبلغ المحصل للمراجعة والترحيل',
       icon: Icons.receipt_long_rounded,
       iconColor: AppColors.moduleReceipts,
       child: Column(
@@ -661,26 +677,6 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
           ),
         ],
       ),
-    );
-  }
-
-  Widget _receiptListSection(AsyncValue<List<Receipt>> receiptsAsync) {
-    return receiptsAsync.when(
-      loading: () => const Padding(padding: EdgeInsets.all(32), child: LoadingView()),
-      error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(receiptsListProvider)),
-      data: (list) {
-        if (list.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(24),
-            child: EmptyState(message: 'لا توجد سندات — أرسل سند قبض جديداً (مع أو بدون وصل قبض)', icon: Icons.receipt_long_outlined),
-          );
-        }
-        return EdListSection(
-          title: 'السجلات السابقة',
-          count: list.length,
-          child: Column(children: list.map((r) => InternalReceiptCard(receipt: r)).toList()),
-        );
-      },
     );
   }
 }

@@ -5,6 +5,178 @@ import '../../core/utils/formatters.dart';
 import '../../models/models.dart';
 import 'thermal_print_service.dart';
 
+String receiptAgentStatusLabel(Receipt receipt) {
+  switch (receipt.status) {
+    case 'posted':
+      return 'تم تسليم المبلغ للشركة';
+    case 'pending':
+      return 'بانتظار مراجعة الإدارة';
+    case 'reviewed':
+      return 'جاهز للترحيل — قيد المعالجة';
+    case 'rejected':
+      return 'مرفوض من الإدارة';
+    default:
+      return receipt.statusLabel;
+  }
+}
+
+IconData receiptAgentStatusIcon(String status) {
+  switch (status) {
+    case 'posted':
+      return Icons.verified_rounded;
+    case 'rejected':
+      return Icons.cancel_outlined;
+    case 'reviewed':
+      return Icons.hourglass_top_rounded;
+    default:
+      return Icons.schedule_rounded;
+  }
+}
+
+class ReceiptsSectionHeader extends StatelessWidget {
+  const ReceiptsSectionHeader({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.count,
+    this.accent,
+  });
+
+  final String title;
+  final String? subtitle;
+  final int? count;
+  final Color? accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = accent ?? AppColors.navy;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10, top: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: color)),
+                if (subtitle != null)
+                  Text(subtitle!, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted)),
+              ],
+            ),
+          ),
+          if (count != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text('$count', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: color)),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class PendingDeliveriesPanel extends StatelessWidget {
+  const PendingDeliveriesPanel({
+    super.key,
+    required this.items,
+    required this.onTap,
+  });
+
+  final List<DeliveryReceipt> items;
+  final ValueChanged<DeliveryReceipt> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ReceiptsSectionHeader(
+            title: 'وصولات بانتظار سند قبض',
+            subtitle: 'اضغط على الوصل لإنشاء السند تلقائياً',
+            count: items.length,
+            accent: AppColors.warning,
+          ),
+          ...items.map(
+            (d) => PendingDeliveryTile(item: d, onTap: () => onTap(d)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class PendingDeliveryTile extends StatelessWidget {
+  const PendingDeliveryTile({super.key, required this.item, required this.onTap});
+
+  final DeliveryReceipt item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.borderLight),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.touch_app_rounded, color: AppColors.warning, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(item.deliveryNo, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                    Text(item.customerName ?? '—', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted)),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(fmtMoney(item.amount), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                  const Text('إنشاء سند', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppColors.accentTeal)),
+                ],
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppColors.muted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class ReceiptsStatsHeader extends StatelessWidget {
   const ReceiptsStatsHeader({
     super.key,
@@ -322,12 +494,16 @@ class InternalReceiptCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _statusColor;
+    final label = receiptAgentStatusLabel(receipt);
+    final icon = receiptAgentStatusIcon(receipt.status);
+    final isPosted = receipt.status == 'posted';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.borderLight),
+        border: Border.all(color: isPosted ? AppColors.success.withValues(alpha: 0.35) : AppColors.borderLight),
         boxShadow: AppColors.softShadow,
       ),
       clipBehavior: Clip.antiAlias,
@@ -344,7 +520,7 @@ class InternalReceiptCard extends StatelessWidget {
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
-                    child: Icon(Icons.receipt_long_rounded, color: color, size: 22),
+                    child: Icon(icon, color: color, size: 22),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -354,12 +530,20 @@ class InternalReceiptCard extends StatelessWidget {
                         Text(receipt.receiptNo, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppColors.navy)),
                         const SizedBox(height: 2),
                         Text('${receipt.customerName ?? '—'} · ${fmtMoney(receipt.amount)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted)),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 6),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(999)),
-                          child: Text(receipt.statusLabel, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: color)),
+                          child: Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: color)),
                         ),
+                        if (isPosted)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'أُرسل المبلغ للشركة عبر الإدارة',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.success.withValues(alpha: 0.9)),
+                            ),
+                          ),
                       ],
                     ),
                   ),

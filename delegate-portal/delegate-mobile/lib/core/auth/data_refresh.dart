@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../features/commerce/commerce_screens.dart';
-import '../../features/receipts/receipts_screen.dart';
+import '../../features/receipts/receipts_hub.dart';
 import '../../features/home/home_screen.dart';
 import '../offline/sync_engine.dart';
 
@@ -10,6 +9,7 @@ final delegateDataRefreshProvider = Provider<void Function()>((ref) {
   return () {
     ref.invalidate(treesProvider);
     ref.invalidate(ordersProvider);
+    ref.invalidate(receiptsHubProvider);
     ref.invalidate(receiptsListProvider);
     ref.invalidate(deliveryReceiptsListProvider);
     ref.invalidate(customerRequestsListProvider);
