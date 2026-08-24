@@ -478,6 +478,26 @@ class OfflineApiClient {
     return _api.getSalesReport(treeSeq: treeSeq, dateFrom: dateFrom, dateTo: dateTo, limit: limit, offset: offset);
   }
 
+  Future<List<Receipt>> _parseReceiptList(List<Map<String, dynamic>> raw) async {
+    final out = <Receipt>[];
+    for (final e in raw) {
+      try {
+        out.add(Receipt.fromJson(e));
+      } catch (_) {}
+    }
+    return out;
+  }
+
+  Future<List<DeliveryReceipt>> _parseDeliveryList(List<Map<String, dynamic>> raw) async {
+    final out = <DeliveryReceipt>[];
+    for (final e in raw) {
+      try {
+        out.add(DeliveryReceipt.fromJson(e));
+      } catch (_) {}
+    }
+    return out;
+  }
+
   Future<List<Receipt>> _readReceiptsList(String cacheKey, Future<Map<String, dynamic>> Function() fetch) => _withCache(
         cacheKey: cacheKey,
         onlineFetch: () async {
@@ -487,12 +507,12 @@ class OfflineApiClient {
                   .toList() ??
               <Map<String, dynamic>>[];
           await _cache.setJson(cacheKey, raw);
-          return raw.map((e) => Receipt.fromJson(e)).toList();
+          return _parseReceiptList(raw);
         },
         offlineRead: () async {
           final raw = await _cache.getJson(cacheKey);
           if (raw is! List) return null;
-          return raw.map((e) => Receipt.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+          return _parseReceiptList(raw.map((e) => Map<String, dynamic>.from(e as Map)).toList());
         },
       );
 
@@ -595,12 +615,12 @@ class OfflineApiClient {
                   .toList() ??
               <Map<String, dynamic>>[];
           await _cache.setJson(cacheKey, raw);
-          return raw.map((e) => DeliveryReceipt.fromJson(e)).toList();
+          return _parseDeliveryList(raw);
         },
         offlineRead: () async {
           final raw = await _cache.getJson(cacheKey);
           if (raw is! List) return null;
-          return raw.map((e) => DeliveryReceipt.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+          return _parseDeliveryList(raw.map((e) => Map<String, dynamic>.from(e as Map)).toList());
         },
       );
 

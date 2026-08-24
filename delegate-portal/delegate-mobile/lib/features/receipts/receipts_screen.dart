@@ -53,6 +53,18 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
   String? _linkedDeliveryNo;
   DeliveryReceipt? _linkedDelivery;
 
+  Future<void> _bootstrapLists() async {
+    try {
+      final client = ref.read(apiClientProvider);
+      await client.getDeliveryReceipts();
+      await client.getReceipts();
+    } catch (_) {}
+    if (mounted) {
+      ref.invalidate(deliveryReceiptsListProvider);
+      ref.invalidate(receiptsListProvider);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -64,10 +76,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
       _refreshPrinterStatus();
       _refreshPrintTemplate();
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.invalidate(deliveryReceiptsListProvider);
-      ref.invalidate(receiptsListProvider);
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrapLists());
   }
 
   Future<void> _refreshPrintTemplate() async {
@@ -107,6 +116,10 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
   Future<void> _refreshAll() async {
     ref.invalidate(receiptsListProvider);
     ref.invalidate(deliveryReceiptsListProvider);
+    try {
+      await ref.read(deliveryReceiptsListProvider.future);
+      await ref.read(receiptsListProvider.future);
+    } catch (_) {}
     await _refreshPrintTemplate();
   }
 
@@ -408,7 +421,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(EdSpacing.page, EdSpacing.lg, EdSpacing.page, kPhoneBottomInset),
-      children: [form, const SizedBox(height: EdSpacing.xxl), list],
+      children: [list, const SizedBox(height: EdSpacing.xxl), form],
     );
   }
 
@@ -502,7 +515,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
           );
         }
         return EdListSection(
-          title: 'وصول القبض',
+          title: 'السجلات السابقة',
           count: list.length,
           child: Column(
             children: list
@@ -540,7 +553,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(EdSpacing.page, EdSpacing.lg, EdSpacing.page, kPhoneBottomInset),
-      children: [form, const SizedBox(height: EdSpacing.xxl), list],
+      children: [list, const SizedBox(height: EdSpacing.xxl), form],
     );
   }
 
@@ -663,7 +676,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
           );
         }
         return EdListSection(
-          title: 'سندات القبض',
+          title: 'السجلات السابقة',
           count: list.length,
           child: Column(children: list.map((r) => InternalReceiptCard(receipt: r)).toList()),
         );

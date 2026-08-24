@@ -216,9 +216,14 @@ class ApiClient {
 
   Future<List<Receipt>> getReceipts({String? status}) async {
     final data = await _json('GET', '/receipts', query: status != null ? {'status': status} : null);
-    return (data['receipts'] as List)
-        .map((e) => Receipt.fromJson(Map<String, dynamic>.from(e as Map)))
-        .toList();
+    final raw = (data['receipts'] as List?) ?? [];
+    final out = <Receipt>[];
+    for (final e in raw) {
+      try {
+        out.add(Receipt.fromJson(Map<String, dynamic>.from(e as Map)));
+      } catch (_) {}
+    }
+    return out;
   }
 
   Future<Receipt> createReceipt({
@@ -246,9 +251,14 @@ class ApiClient {
 
   Future<List<DeliveryReceipt>> getDeliveryReceipts({String? status}) async {
     final data = await _json('GET', '/delivery-receipts', query: status != null ? {'status': status} : null);
-    return (data['deliveryReceipts'] as List)
-        .map((e) => DeliveryReceipt.fromJson(Map<String, dynamic>.from(e as Map)))
-        .toList();
+    final raw = (data['deliveryReceipts'] as List?) ?? [];
+    final out = <DeliveryReceipt>[];
+    for (final e in raw) {
+      try {
+        out.add(DeliveryReceipt.fromJson(Map<String, dynamic>.from(e as Map)));
+      } catch (_) {}
+    }
+    return out;
   }
 
   Future<DeliveryReceipt> createDeliveryReceipt({

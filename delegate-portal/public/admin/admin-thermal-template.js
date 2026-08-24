@@ -105,6 +105,10 @@ function updateLogoPreview(url) {
   }
 }
 
+function tpScale(size, factor = 0.58) {
+  return Math.max(11, Math.round((size || 16) * factor));
+}
+
 function renderThermalPreview() {
   const box = document.getElementById('thermalPreviewPaper');
   if (!box) return;
@@ -114,38 +118,71 @@ function renderThermalPreview() {
     return;
   }
 
-  const html = [];
+  const parts = [];
+  let rowGroup = [];
+
+  const flushRows = () => {
+    if (!rowGroup.length) return;
+    parts.push(`<div class="tp-meta-card">${rowGroup.join('')}</div>`);
+    rowGroup = [];
+  };
+
   for (const block of preview.blocks) {
+    if (block.type === 'row') {
+      const emphasis = block.emphasis ? ' tp-row-emphasis' : '';
+      rowGroup.push(
+        `<div class="tp-row${emphasis}"><span class="tp-row-label" style="font-size:${tpScale(block.labelFont, 0.5)}px">${esc(block.label)}</span><span class="tp-row-value" style="font-size:${tpScale(block.valueFont)}px">${esc(block.value)}</span></div>`
+      );
+      continue;
+    }
+    flushRows();
+
     if (block.type === 'logo' && block.url) {
-      html.push(`<div class="tp-logo"><img src="${esc(block.url)}" alt="logo"></div>`);
+      parts.push(`<div class="tp-logo"><img src="${esc(block.url)}" alt="logo"></div>`);
     } else if (block.type === 'text') {
-      let cls = 'tp-footer';
-      if (block.bold && (block.fontSize || 0) >= 22) cls = 'tp-title';
-      else if (block.bold) cls = 'tp-legal';
-      else if ((block.fontSize || 0) <= 18) cls = 'tp-company';
-      html.push(`<div class="${cls}" style="font-size:${(block.fontSize || 16) * 0.42}px">${esc(block.text)}</div>`);
+      const muted = block.muted ? ' tp-muted' : '';
+      const italic = block.italic ? ' tp-italic' : '';
+      let cls = 'tp-body';
+      if (block.bold && (block.fontSize || 0) >= 24) cls = 'tp-brand';
+      else if (block.bold) cls = 'tp-brand-sub';
+      parts.push(`<div class="${cls}${muted}${italic}" style="font-size:${tpScale(block.fontSize)}px">${esc(block.text)}</div>`);
     } else if (block.type === 'divider') {
-      const ch = block.char || '─';
-      html.push(`<div class="tp-divider">${ch.repeat(28)}</div>`);
+      parts.push(`<div class="tp-divider">${esc(block.char || '─').repeat(24)}</div>`);
+    } else if (block.type === 'doubleDivider') {
+      const ch = esc(block.char || '═');
+      parts.push(`<div class="tp-divider tp-divider-heavy">${ch.repeat(24)}</div>`);
+    } else if (block.type === 'ribbon') {
+      const ch = esc(block.char || '─');
+      parts.push(
+        `<div class="tp-ribbon"><div class="tp-divider">${ch.repeat(24)}</div><div class="tp-ribbon-text" style="font-size:${tpScale(block.fontSize)}px">${esc(block.text)}</div><div class="tp-divider">${ch.repeat(24)}</div></div>`
+      );
     } else if (block.type === 'blank') {
-      html.push('<div class="tp-blank"></div>');
-    } else if (block.type === 'row') {
-      html.push(`<div class="tp-row"><span class="tp-row-label" style="font-size:${(block.labelFont || 14) * 0.4}px">${esc(block.label)}</span><span class="tp-row-value" style="font-size:${(block.valueFont || 16) * 0.4}px">${esc(block.value)}</span></div>`);
-    } else if (block.type === 'amount') {
-      html.push(`<div class="tp-amount"><div class="tp-amount-label">${esc(block.label || '')}</div><div class="tp-amount-value" style="font-size:${(block.fontSize || 28) * 0.45}px">${esc(block.value)}</div></div>`);
+      parts.push('<div class="tp-blank"></div>');
+    } else if (block.type === 'amount' || block.type === 'amountBox') {
+      const ch = esc(block.char || '═');
+      parts.push(
+        `<div class="tp-amount-box"><div class="tp-divider tp-divider-heavy">${ch.repeat(24)}</div><div class="tp-amount-label">${esc(block.label || '')}</div><div class="tp-amount-value" style="font-size:${tpScale(block.fontSize, 0.62)}px">${esc(block.value)}</div><div class="tp-divider tp-divider-heavy">${ch.repeat(24)}</div></div>`
+      );
+    } else if (block.type === 'legalBox') {
+      const ch = esc(block.char || '─');
+      parts.push(
+        `<div class="tp-legal-box"><div class="tp-divider">${ch.repeat(24)}</div><div class="tp-legal-text" style="font-size:${tpScale(block.fontSize, 0.52)}px">${esc(block.text)}</div><div class="tp-divider">${ch.repeat(24)}</div></div>`
+      );
     }
   }
-  box.innerHTML = html.join('');
+  flushRows();
+  box.innerHTML = parts.join('');
 }
 
 function buildClientPreview(template) {
-  const t = template;
-  const b = t.branding || {};
-  const ty = t.typography || {};
-  const c = t.content || {};
+  const tpl = template || {};
+  const b = tpl.branding || {};
+  const ty = tpl.typography || {};
+  const c = tpl.content || {};
   const div = c.dividerStyle === 'solid' ? '━' : '─';
+  const heavy = c.dividerStyle === 'solid' ? '━' : '═';
   const blocks = [];
-  const sample = {
+  const ctx = {
     deliveryNo: 'WR-20260824-0001',
     date: new Date().toISOString().slice(0, 10),
     agent: 'مندوب تجريبي',
@@ -153,28 +190,51 @@ function buildClientPreview(template) {
     customerNum: '1201042',
     tree: 'شجرة بغداد',
     amount: '250,000 IQD',
-    notes: 'دفعة شهرية'
+    notes: ''
   };
 
-  if (b.showLogo && b.logoUrl) blocks.push({ type: 'logo', url: b.logoUrl });
+  const pushDivider = (char) => blocks.push({ type: 'divider', char });
+  const pushDouble = (char) => blocks.push({ type: 'doubleDivider', char });
+  const pushRow = (label, value, emphasis = false) => {
+    blocks.push({
+      type: 'row',
+      label,
+      value,
+      labelFont: ty.labelFont,
+      valueFont: emphasis ? Math.min((ty.bodyFont || 17) + 3, 28) : ty.bodyFont,
+      emphasis
+    });
+  };
+
+  if (b.showLogo && b.logoUrl) {
+    blocks.push({ type: 'logo', url: b.logoUrl, maxWidth: b.logoWidth });
+    blocks.push({ type: 'blank', count: 1 });
+  }
   if (b.legalName) blocks.push({ type: 'text', text: b.legalName, fontSize: b.legalNameFont, bold: true });
-  if (b.companyName) blocks.push({ type: 'text', text: b.companyName, fontSize: b.companyFont });
-  blocks.push({ type: 'divider', char: div });
-  if (b.title) blocks.push({ type: 'text', text: b.title, fontSize: b.titleFont, bold: true });
+  if (b.companyName) blocks.push({ type: 'text', text: b.companyName, fontSize: b.companyFont, muted: true });
+  pushDouble(heavy);
+  if (b.title) blocks.push({ type: 'ribbon', text: b.title, fontSize: b.titleFont, char: div });
   blocks.push({ type: 'blank', count: 1 });
-  if (c.showDeliveryNo) blocks.push({ type: 'row', label: 'رقم الوصل', value: sample.deliveryNo, labelFont: ty.labelFont, valueFont: ty.bodyFont });
-  if (c.showDate) blocks.push({ type: 'row', label: 'التاريخ', value: sample.date, labelFont: ty.labelFont, valueFont: ty.bodyFont });
-  if (c.showAgent) blocks.push({ type: 'row', label: 'المندوب', value: sample.agent, labelFont: ty.labelFont, valueFont: ty.bodyFont });
-  if (c.showCustomer) blocks.push({ type: 'row', label: 'الزبون', value: sample.customer, labelFont: ty.labelFont, valueFont: ty.bodyFont });
-  if (c.showCustomerNum) blocks.push({ type: 'row', label: 'رقم الحساب', value: sample.customerNum, labelFont: ty.labelFont, valueFont: ty.bodyFont });
-  if (c.showTree) blocks.push({ type: 'row', label: 'الشجرة', value: sample.tree, labelFont: ty.labelFont, valueFont: ty.bodyFont });
-  blocks.push({ type: 'divider', char: div });
-  blocks.push({ type: 'amount', label: 'المبلغ المستلم', value: sample.amount, fontSize: ty.amountFont });
+
+  const metaCount = (c.showDeliveryNo ? 1 : 0) + (c.showDate ? 1 : 0) + (c.showAgent ? 1 : 0);
+  if (c.showDeliveryNo) pushRow('رقم الوصل', ctx.deliveryNo);
+  if (c.showDate) pushRow('التاريخ', ctx.date);
+  if (c.showAgent) pushRow('المندوب', ctx.agent);
+
+  const hasCustomer = c.showCustomer || (c.showCustomerNum && ctx.customerNum) || (c.showTree && ctx.tree);
+  if (metaCount && hasCustomer) pushDivider(div);
+  if (c.showCustomer) pushRow('الزبون', ctx.customer, true);
+  if (c.showCustomerNum && ctx.customerNum) pushRow('رقم الحساب', ctx.customerNum);
+  if (c.showTree && ctx.tree) pushRow('الشجرة', ctx.tree);
+
+  pushDouble(heavy);
+  blocks.push({ type: 'amountBox', label: 'المبلغ المستلم', value: ctx.amount, fontSize: ty.amountFont, char: heavy });
   blocks.push({ type: 'blank', count: 1 });
-  if (c.legalText) blocks.push({ type: 'text', text: c.legalText, fontSize: ty.legalFont });
-  if (c.showNotes && sample.notes) blocks.push({ type: 'text', text: sample.notes, fontSize: ty.bodyFont });
-  blocks.push({ type: 'divider', char: div });
+  if (c.legalText) blocks.push({ type: 'legalBox', text: c.legalText, fontSize: ty.legalFont, char: div });
+  if (c.showNotes && ctx.notes) blocks.push({ type: 'text', text: ctx.notes, fontSize: ty.bodyFont, italic: true });
+  pushDouble(div);
   if (b.footer) blocks.push({ type: 'text', text: b.footer, fontSize: b.footerFont });
+
   return { blocks };
 }
 

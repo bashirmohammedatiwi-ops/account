@@ -516,12 +516,12 @@
                     </label>
                     <button type="button" class="btn btn-soft btn-sm" id="btnThermalLogoRemove">إزالة</button>
                     <label class="check-row"><input type="checkbox" id="thermalShowLogo" checked><span>إظهار الشعار</span></label>
-                    <label class="field thermal-font-field"><span>عرض الشعار</span><input type="range" id="thermalLogoWidth" min="80" max="320" value="180"><output id="thermalLogoWidthOut">180</output></label>
+                    <label class="field thermal-font-field"><span>عرض الشعار</span><input type="range" id="thermalLogoWidth" min="80" max="320" value="200"><output id="thermalLogoWidthOut">200</output></label>
                   </div>
                 </div>
                 <div class="rv-edit-grid">
                   <label class="field"><span>اسم المحق (كبير)</span><input type="text" id="thermalLegalName" placeholder="شركة التوزيع"></label>
-                  <label class="field thermal-font-field"><span>حجم خط المحق</span><input type="range" id="thermalLegalNameFont" min="14" max="42" value="30"><output id="thermalLegalNameFontOut">30</output></label>
+                  <label class="field thermal-font-field"><span>حجم خط المحق</span><input type="range" id="thermalLegalNameFont" min="14" max="42" value="32"><output id="thermalLegalNameFontOut">32</output></label>
                   <label class="field"><span>اسم الشركة (أصغر)</span><input type="text" id="thermalCompanyName" placeholder="Edari"></label>
                   <label class="field thermal-font-field"><span>حجم خط الشركة</span><input type="range" id="thermalCompanyFont" min="12" max="28" value="17"><output id="thermalCompanyFontOut">17</output></label>
                 </div>
@@ -530,8 +530,8 @@
               <div class="thermal-section">
                 <h3 class="thermal-section-title">عنوان الوصل</h3>
                 <div class="rv-edit-grid">
-                  <label class="field"><span>العنوان الرئيسي</span><input type="text" id="thermalTitle" value="وصل استلام مبلغ"></label>
-                  <label class="field thermal-font-field"><span>حجم العنوان</span><input type="range" id="thermalTitleFont" min="14" max="36" value="24"><output id="thermalTitleFontOut">24</output></label>
+                  <label class="field"><span>العنوان الرئيسي</span><input type="text" id="thermalTitle" value="وصل قبض"></label>
+                  <label class="field thermal-font-field"><span>حجم العنوان</span><input type="range" id="thermalTitleFont" min="14" max="36" value="26"><output id="thermalTitleFontOut">26</output></label>
                 </div>
               </div>
 
@@ -546,11 +546,11 @@
                   <label class="check-row"><input type="checkbox" id="thermalShowTree"><span>الشجرة</span></label>
                   <label class="check-row"><input type="checkbox" id="thermalShowNotes" checked><span>الملاحظات</span></label>
                 </div>
-                <label class="field"><span>نص الإقرار القانوني</span><textarea id="thermalLegalText" rows="2">وصلني منكم المبلغ المذكور أعلاه نقداً / شيكاً</textarea></label>
+                <label class="field"><span>نص الإقرار القانوني</span><textarea id="thermalLegalText" rows="2">وصلني منكم المبلغ المذكور أعلاه نقداً</textarea></label>
                 <div class="rv-edit-grid">
                   <label class="field thermal-font-field"><span>حجم نص الجسم</span><input type="range" id="thermalBodyFont" min="12" max="28" value="18"><output id="thermalBodyFontOut">18</output></label>
                   <label class="field thermal-font-field"><span>حجم التسميات</span><input type="range" id="thermalLabelFont" min="12" max="24" value="16"><output id="thermalLabelFontOut">16</output></label>
-                  <label class="field thermal-font-field"><span>حجم المبلغ</span><input type="range" id="thermalAmountFont" min="18" max="40" value="30"><output id="thermalAmountFontOut">30</output></label>
+                  <label class="field thermal-font-field"><span>حجم المبلغ</span><input type="range" id="thermalAmountFont" min="18" max="40" value="36"><output id="thermalAmountFontOut">36</output></label>
                   <label class="field thermal-font-field"><span>حجم نص الإقرار</span><input type="range" id="thermalLegalFont" min="12" max="24" value="17"><output id="thermalLegalFontOut">17</output></label>
                 </div>
               </div>
@@ -558,7 +558,7 @@
               <div class="thermal-section">
                 <h3 class="thermal-section-title">التذييل</h3>
                 <div class="rv-edit-grid">
-                  <label class="field"><span>نص التذييل</span><input type="text" id="thermalFooter" value="شكراً لتعاملكم"></label>
+                  <label class="field"><span>نص التذييل</span><input type="text" id="thermalFooter" value="شكراً لتعاملكم — نتشرف بخدمتكم"></label>
                   <label class="field thermal-font-field"><span>حجم التذييل</span><input type="range" id="thermalFooterFont" min="12" max="28" value="17"><output id="thermalFooterFontOut">17</output></label>
                   <label class="field"><span>أسطر فارغة بعد الطباعة</span><input type="number" id="thermalFooterBlanks" min="0" max="8" value="4"></label>
                   <label class="field"><span>نمط الفاصل</span>
@@ -1287,7 +1287,7 @@
   <script src="admin-delivery-receipts.js?v=20260824admin"></script>
   <script src="admin-customers.js?v=20260824admin"></script>
   <script src="admin-promotional-visits.js?v=20260824admin"></script>
-  <script src="admin-thermal-template.js?v=20260824thermal2"></script>
+  <script src="admin-thermal-template.js?v=20260824thermal3"></script>
   <script src="admin-sales-report.js?v=20260709treeFix3"></script>
   <script src="admin-account-statements.js?v=20260615kpi"></script>
   <script src="admin-price-sync.js?v=20260703"></script>

@@ -165,6 +165,26 @@ Future<List<int>> _appendRasterOrText(
   return bytes;
 }
 
+Future<List<int>> _appendDivider(
+  Generator generator,
+  List<int> bytes,
+  String char, {
+  int lines = 1,
+}) async {
+  final line = char * 28;
+  for (var i = 0; i < lines; i++) {
+    bytes = await _appendRasterOrText(
+      generator,
+      bytes,
+      line,
+      fontSize: 14,
+      align: TextAlign.center,
+      bold: false,
+    );
+  }
+  return bytes;
+}
+
 Future<List<int>> _appendRow(
   Generator generator,
   List<int> bytes,
@@ -172,7 +192,26 @@ Future<List<int>> _appendRow(
   String value, {
   required double labelFont,
   required double valueFont,
+  bool emphasis = false,
 }) async {
+  if (emphasis) {
+    bytes = await _appendRasterOrText(
+      generator,
+      bytes,
+      label,
+      fontSize: labelFont,
+      align: TextAlign.right,
+      bold: false,
+    );
+    return await _appendRasterOrText(
+      generator,
+      bytes,
+      value,
+      fontSize: valueFont,
+      align: TextAlign.right,
+      bold: true,
+    );
+  }
   final line = '$label: $value';
   return await _appendRasterOrText(
     generator,
@@ -214,15 +253,23 @@ Future<List<int>> buildEscPosBytesFromPayload(
         );
         break;
       case 'divider':
-        final ch = block.char ?? '─';
+        bytes = await _appendDivider(generator, bytes, block.char ?? '─');
+        break;
+      case 'doubleDivider':
+        bytes = await _appendDivider(generator, bytes, block.char ?? '═', lines: 2);
+        break;
+      case 'ribbon':
+        final ribbonChar = block.char ?? '─';
+        bytes = await _appendDivider(generator, bytes, ribbonChar);
         bytes = await _appendRasterOrText(
           generator,
           bytes,
-          ch * 28,
-          fontSize: 14,
+          block.text ?? '',
+          fontSize: (block.fontSize ?? 26).toDouble(),
           align: TextAlign.center,
-          bold: false,
+          bold: true,
         );
+        bytes = await _appendDivider(generator, bytes, ribbonChar);
         break;
       case 'blank':
         for (var i = 0; i < block.count.clamp(1, 5); i++) {
@@ -235,11 +282,16 @@ Future<List<int>> buildEscPosBytesFromPayload(
           bytes,
           block.label ?? '',
           block.value ?? '',
-          labelFont: (block.labelFont ?? 16).toDouble(),
-          valueFont: (block.valueFont ?? 18).toDouble(),
+          labelFont: (block.labelFont ?? 15).toDouble(),
+          valueFont: (block.valueFont ?? 17).toDouble(),
+          emphasis: block.emphasis,
         );
         break;
       case 'amount':
+      case 'amountBox':
+        if (block.type == 'amountBox') {
+          bytes = await _appendDivider(generator, bytes, block.char ?? '═');
+        }
         if (block.label != null && block.label!.trim().isNotEmpty) {
           bytes = await _appendRasterOrText(
             generator,
@@ -254,10 +306,25 @@ Future<List<int>> buildEscPosBytesFromPayload(
           generator,
           bytes,
           block.value ?? '',
-          fontSize: (block.fontSize ?? 30).toDouble(),
+          fontSize: (block.fontSize ?? 36).toDouble(),
           align: TextAlign.center,
           bold: true,
         );
+        if (block.type == 'amountBox') {
+          bytes = await _appendDivider(generator, bytes, block.char ?? '═');
+        }
+        break;
+      case 'legalBox':
+        bytes = await _appendDivider(generator, bytes, block.char ?? '─');
+        bytes = await _appendRasterOrText(
+          generator,
+          bytes,
+          block.text ?? '',
+          fontSize: (block.fontSize ?? 15).toDouble(),
+          align: TextAlign.center,
+          bold: false,
+        );
+        bytes = await _appendDivider(generator, bytes, block.char ?? '─');
         break;
     }
   }

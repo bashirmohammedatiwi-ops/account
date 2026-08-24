@@ -5111,7 +5111,12 @@ td.row-actions .btn { margin-inline-start: 4px; }
 
 /* Thermal receipt designer v2 */
 .thermal-design-layout-v2 {
-  grid-template-columns: 1fr minmax(300px, 380px);
+  grid-template-columns: 1fr minmax(360px, 440px);
+}
+
+.thermal-design-preview {
+  position: sticky;
+  top: 12px;
 }
 
 .thermal-section {
@@ -5135,20 +5140,21 @@ td.row-actions .btn { margin-inline-start: 4px; }
 }
 
 .thermal-logo-preview {
-  width: 120px;
-  height: 80px;
-  border: 1px dashed #cbd5e1;
-  border-radius: 12px;
+  width: 160px;
+  min-height: 140px;
+  border: 2px dashed #cbd5e1;
+  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f8fafc;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
   overflow: hidden;
+  padding: 12px;
 }
 
 .thermal-logo-preview img {
   max-width: 100%;
-  max-height: 100%;
+  max-height: 120px;
   object-fit: contain;
 }
 
@@ -5184,98 +5190,200 @@ td.row-actions .btn { margin-inline-start: 4px; }
 .thermal-preview-wrap {
   display: flex;
   justify-content: center;
-  padding: 16px;
-  background: repeating-linear-gradient(45deg, #f1f5f9, #f1f5f9 8px, #e2e8f0 8px, #e2e8f0 16px);
-  border-radius: 12px;
+  padding: 24px 16px 32px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(15, 118, 110, 0.08), transparent 55%),
+    repeating-linear-gradient(45deg, #e8edf4, #e8edf4 10px, #dde4ee 10px, #dde4ee 20px);
+  border-radius: 16px;
+  min-height: 520px;
 }
 
 .thermal-preview-paper {
-  width: 280px;
-  min-height: 360px;
+  width: 320px;
+  min-height: 480px;
   background: #fff;
-  padding: 14px 10px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  padding: 20px 16px 28px;
+  box-shadow:
+    0 2px 0 #d1d5db,
+    0 12px 32px rgba(15, 23, 42, 0.18),
+    0 4px 8px rgba(15, 23, 42, 0.06);
   color: #0f172a;
+  border-radius: 4px 4px 2px 2px;
+  position: relative;
+}
+
+.thermal-preview-paper::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -6px;
+  height: 8px;
+  background: repeating-linear-gradient(90deg, #fff 0 6px, #e2e8f0 6px 12px);
 }
 
 .thermal-preview-paper-v2 {
   font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 1.45;
   text-align: center;
 }
 
 .thermal-preview-paper-v2 .tp-logo {
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+  padding: 8px 0;
 }
 
 .thermal-preview-paper-v2 .tp-logo img {
-  max-width: 70%;
-  max-height: 56px;
+  max-width: 85%;
+  max-height: 88px;
   object-fit: contain;
 }
 
-.thermal-preview-paper-v2 .tp-legal {
-  font-weight: 800;
+.thermal-preview-paper-v2 .tp-brand {
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: #0f172a;
   margin: 2px 0;
 }
 
-.thermal-preview-paper-v2 .tp-company {
+.thermal-preview-paper-v2 .tp-brand-sub {
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.thermal-preview-paper-v2 .tp-muted {
   color: #64748b;
-  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.thermal-preview-paper-v2 .tp-italic {
+  font-style: italic;
+  color: #475569;
+}
+
+.thermal-preview-paper-v2 .tp-body {
+  color: #334155;
 }
 
 .thermal-preview-paper-v2 .tp-divider {
   color: #94a3b8;
-  margin: 8px 0;
-  letter-spacing: 1px;
+  font-size: 11px;
+  letter-spacing: -1px;
+  line-height: 1.1;
+  margin: 6px 0;
+  overflow: hidden;
 }
 
-.thermal-preview-paper-v2 .tp-title {
-  font-weight: 800;
-  margin: 4px 0 10px;
+.thermal-preview-paper-v2 .tp-divider-heavy {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.thermal-preview-paper-v2 .tp-ribbon {
+  margin: 8px 0 10px;
+}
+
+.thermal-preview-paper-v2 .tp-ribbon-text {
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  color: #0f766e;
+  padding: 6px 4px;
+}
+
+.thermal-preview-paper-v2 .tp-meta-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  text-align: right;
 }
 
 .thermal-preview-paper-v2 .tp-row {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
   gap: 8px;
-  text-align: right;
-  margin: 3px 0;
-  font-size: 12px;
+  align-items: start;
+  padding: 5px 0;
+  border-bottom: 1px dashed #e2e8f0;
 }
 
-.thermal-preview-paper-v2 .tp-row-label { color: #64748b; font-weight: 600; }
-.thermal-preview-paper-v2 .tp-row-value { font-weight: 700; text-align: left; direction: ltr; }
+.thermal-preview-paper-v2 .tp-row:last-child {
+  border-bottom: none;
+}
 
-.thermal-preview-paper-v2 .tp-amount {
-  margin: 10px 0;
-  padding: 8px 0;
+.thermal-preview-paper-v2 .tp-row-emphasis {
+  grid-template-columns: 1fr;
+  gap: 2px;
+  padding: 8px 0 6px;
+  border-bottom: none;
+  margin-top: 4px;
+}
+
+.thermal-preview-paper-v2 .tp-row-emphasis .tp-row-value {
+  font-weight: 900;
+  color: #0f172a;
+  text-align: right;
+  direction: rtl;
+  line-height: 1.35;
+}
+
+.thermal-preview-paper-v2 .tp-row-label {
+  color: #64748b;
+  font-weight: 700;
+  text-align: right;
+}
+
+.thermal-preview-paper-v2 .tp-row-value {
+  font-weight: 800;
+  text-align: left;
+  direction: ltr;
+  color: #0f172a;
+}
+
+.thermal-preview-paper-v2 .tp-amount-box {
+  margin: 12px 0;
+  padding: 4px 0;
 }
 
 .thermal-preview-paper-v2 .tp-amount-label {
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 700;
   color: #64748b;
-  margin-bottom: 2px;
+  margin: 4px 0;
+  letter-spacing: 0.04em;
 }
 
 .thermal-preview-paper-v2 .tp-amount-value {
   font-weight: 900;
-  letter-spacing: 0.5px;
+  color: #0f766e;
+  letter-spacing: -0.02em;
+  padding: 4px 0 6px;
+  line-height: 1.2;
+}
+
+.thermal-preview-paper-v2 .tp-legal-box {
+  margin: 10px 0;
+  padding: 2px 0;
 }
 
 .thermal-preview-paper-v2 .tp-legal-text {
-  color: #334155;
-  margin: 8px 0;
-  line-height: 1.45;
+  color: #475569;
+  font-weight: 600;
+  padding: 8px 6px;
+  line-height: 1.5;
 }
 
 .thermal-preview-paper-v2 .tp-footer {
-  color: #475569;
+  color: #64748b;
+  font-weight: 700;
   margin-top: 6px;
 }
 
-.thermal-preview-paper-v2 .tp-blank { height: 8px; }
+.thermal-preview-paper-v2 .tp-blank {
+  height: 12px;
+}
 
 
 .thermal-line { margin-bottom: 2px; }

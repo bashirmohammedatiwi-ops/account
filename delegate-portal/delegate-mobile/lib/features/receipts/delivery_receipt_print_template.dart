@@ -16,6 +16,9 @@ class DeliveryReceiptPrintBlock {
     this.bold = false,
     this.char,
     this.count = 1,
+    this.emphasis = false,
+    this.muted = false,
+    this.italic = false,
   });
 
   final String type;
@@ -31,6 +34,9 @@ class DeliveryReceiptPrintBlock {
   final bool bold;
   final String? char;
   final int count;
+  final bool emphasis;
+  final bool muted;
+  final bool italic;
 }
 
 class DeliveryReceiptPrintPayload {
@@ -49,6 +55,20 @@ int _clampInt(dynamic v, int min, int max, int fallback) {
   return n.clamp(min, max);
 }
 
+String _cleanNotes(String? notes) {
+  final t = notes?.trim() ?? '';
+  if (t.isEmpty) return '';
+  return t.replaceAll(RegExp(r'دفعة\s*شهرية'), '').trim();
+}
+
+String _cleanLegalText(String text) {
+  return text.replaceAll(RegExp(r'\s*/\s*شيكاً'), '').replaceAll('شيكاً', '').trim();
+}
+
+String _dividerChar(String? style) => style == 'solid' ? '━' : '─';
+
+String _heavyDividerChar(String? style) => style == 'solid' ? '━' : '═';
+
 Map<String, dynamic> _normalizeTemplate(Map<String, dynamic>? raw) {
   if (raw == null || (raw['version'] as num?)?.toInt() != 2) {
     return {
@@ -57,17 +77,17 @@ Map<String, dynamic> _normalizeTemplate(Map<String, dynamic>? raw) {
       'branding': {
         'showLogo': false,
         'logoUrl': '',
-        'logoWidth': 180,
+        'logoWidth': 200,
         'legalName': raw?['sample']?['company']?.toString() ?? 'شركة التوزيع',
-        'legalNameFont': 30,
+        'legalNameFont': 32,
         'companyName': raw?['sample']?['company']?.toString() ?? 'Edari',
-        'companyFont': 17,
-        'title': raw?['sample']?['title']?.toString() ?? 'وصل استلام مبلغ',
-        'titleFont': 24,
-        'footer': raw?['sample']?['footer']?.toString() ?? 'شكراً لتعاملكم',
-        'footerFont': 17,
+        'companyFont': 16,
+        'title': raw?['sample']?['title']?.toString() ?? 'وصل قبض',
+        'titleFont': 26,
+        'footer': raw?['sample']?['footer']?.toString() ?? 'شكراً لتعاملكم — نتشرف بخدمتكم',
+        'footerFont': 16,
       },
-      'typography': {'bodyFont': 18, 'labelFont': 16, 'amountFont': 30, 'legalFont': 17},
+      'typography': {'bodyFont': 17, 'labelFont': 15, 'amountFont': 36, 'legalFont': 15},
       'content': {
         'showDeliveryNo': true,
         'showDate': true,
@@ -76,15 +96,15 @@ Map<String, dynamic> _normalizeTemplate(Map<String, dynamic>? raw) {
         'showCustomerNum': true,
         'showTree': false,
         'showNotes': true,
-        'legalText': 'وصلني منكم المبلغ المذكور أعلاه نقداً / شيكاً',
+        'legalText': 'وصلني منكم المبلغ المذكور أعلاه نقداً',
         'dividerStyle': 'light',
       },
     };
   }
-  return raw;
+  final content = Map<String, dynamic>.from(raw['content'] as Map? ?? {});
+  content['legalText'] = _cleanLegalText(content['legalText']?.toString() ?? 'وصلني منكم المبلغ المذكور أعلاه نقداً');
+  return Map<String, dynamic>.from(raw)..['content'] = content;
 }
-
-String _dividerChar(String? style) => style == 'solid' ? '━' : '─';
 
 /// يبني blocks الطباعة من قالب لوحة التحكم (v2).
 DeliveryReceiptPrintPayload buildDeliveryReceiptPrintBlocks(
@@ -97,6 +117,7 @@ DeliveryReceiptPrintPayload buildDeliveryReceiptPrintBlocks(
   final t = Map<String, dynamic>.from(tpl['typography'] as Map? ?? {});
   final c = Map<String, dynamic>.from(tpl['content'] as Map? ?? {});
   final div = _dividerChar(c['dividerStyle']?.toString());
+  final heavy = _heavyDividerChar(c['dividerStyle']?.toString());
 
   final ctx = <String, String>{
     'deliveryNo': receipt.deliveryNo,
@@ -106,17 +127,37 @@ DeliveryReceiptPrintPayload buildDeliveryReceiptPrintBlocks(
     'customerNum': receipt.customerNum ?? '',
     'tree': receipt.treeName ?? '',
     'amount': fmtMoney(receipt.amount),
-    'notes': receipt.notes?.trim() ?? '',
+    'notes': _cleanNotes(receipt.notes),
   };
 
   final blocks = <DeliveryReceiptPrintBlock>[];
+
+  void pushDivider(String char) => blocks.add(DeliveryReceiptPrintBlock(type: 'divider', char: char));
+
+  void pushDoubleDivider(String char) => blocks.add(DeliveryReceiptPrintBlock(type: 'doubleDivider', char: char));
+
+  void pushRow(String label, String field, {bool emphasis = false}) {
+    final value = ctx[field] ?? '';
+    if (value.isEmpty && field != 'customer') return;
+    blocks.add(DeliveryReceiptPrintBlock(
+      type: 'row',
+      label: label,
+      value: value,
+      labelFont: _clampInt(t['labelFont'], 12, 24, 15),
+      valueFont: emphasis
+          ? _clampInt(t['bodyFont'] + 3, 14, 28, 20)
+          : _clampInt(t['bodyFont'], 12, 28, 17),
+      emphasis: emphasis,
+    ));
+  }
 
   if (b['showLogo'] == true && (b['logoUrl']?.toString().isNotEmpty == true)) {
     blocks.add(DeliveryReceiptPrintBlock(
       type: 'logo',
       url: b['logoUrl']?.toString(),
-      maxWidth: _clampInt(b['logoWidth'], 80, 320, 180),
+      maxWidth: _clampInt(b['logoWidth'], 80, 320, 200),
     ));
+    blocks.add(const DeliveryReceiptPrintBlock(type: 'blank', count: 1));
   }
 
   final legalName = b['legalName']?.toString().trim() ?? '';
@@ -124,7 +165,7 @@ DeliveryReceiptPrintPayload buildDeliveryReceiptPrintBlocks(
     blocks.add(DeliveryReceiptPrintBlock(
       type: 'text',
       text: legalName,
-      fontSize: _clampInt(b['legalNameFont'], 14, 42, 30),
+      fontSize: _clampInt(b['legalNameFont'], 14, 42, 32),
       align: 'center',
       bold: true,
     ));
@@ -135,55 +176,58 @@ DeliveryReceiptPrintPayload buildDeliveryReceiptPrintBlocks(
     blocks.add(DeliveryReceiptPrintBlock(
       type: 'text',
       text: companyName,
-      fontSize: _clampInt(b['companyFont'], 12, 28, 17),
+      fontSize: _clampInt(b['companyFont'], 12, 28, 16),
       align: 'center',
+      muted: true,
     ));
   }
 
-  blocks.add(DeliveryReceiptPrintBlock(type: 'divider', char: div));
+  pushDoubleDivider(heavy);
 
   final title = b['title']?.toString().trim() ?? '';
   if (title.isNotEmpty) {
     blocks.add(DeliveryReceiptPrintBlock(
-      type: 'text',
+      type: 'ribbon',
       text: title,
-      fontSize: _clampInt(b['titleFont'], 14, 36, 24),
-      align: 'center',
-      bold: true,
+      fontSize: _clampInt(b['titleFont'], 14, 36, 26),
+      char: div,
     ));
   }
 
   blocks.add(const DeliveryReceiptPrintBlock(type: 'blank', count: 1));
 
-  void row(String label, String field, bool show) {
-    if (!show) return;
-    blocks.add(DeliveryReceiptPrintBlock(
-      type: 'row',
-      label: label,
-      value: ctx[field] ?? '',
-      labelFont: _clampInt(t['labelFont'], 12, 24, 16),
-      valueFont: _clampInt(t['bodyFont'], 12, 28, 18),
-    ));
+  final metaCount = (c['showDeliveryNo'] == true ? 1 : 0) +
+      (c['showDate'] == true ? 1 : 0) +
+      (c['showAgent'] == true ? 1 : 0);
+
+  if (c['showDeliveryNo'] == true) pushRow('رقم الوصل', 'deliveryNo');
+  if (c['showDate'] == true) pushRow('التاريخ', 'date');
+  if (c['showAgent'] == true) pushRow('المندوب', 'agent');
+
+  final hasCustomerBlock = c['showCustomer'] == true ||
+      (c['showCustomerNum'] == true && ctx['customerNum']!.isNotEmpty) ||
+      (c['showTree'] == true && ctx['tree']!.isNotEmpty);
+
+  if (metaCount > 0 && hasCustomerBlock) {
+    pushDivider(div);
   }
 
-  row('رقم الوصل', 'deliveryNo', c['showDeliveryNo'] == true);
-  row('التاريخ', 'date', c['showDate'] == true);
-  row('المندوب', 'agent', c['showAgent'] == true);
-  row('الزبون', 'customer', c['showCustomer'] == true);
+  if (c['showCustomer'] == true) pushRow('الزبون', 'customer', emphasis: true);
   if (c['showCustomerNum'] == true && ctx['customerNum']!.isNotEmpty) {
-    row('رقم الحساب', 'customerNum', true);
+    pushRow('رقم الحساب', 'customerNum');
   }
   if (c['showTree'] == true && ctx['tree']!.isNotEmpty) {
-    row('الشجرة', 'tree', true);
+    pushRow('الشجرة', 'tree');
   }
 
-  blocks.add(DeliveryReceiptPrintBlock(type: 'divider', char: div));
+  pushDoubleDivider(heavy);
 
   blocks.add(DeliveryReceiptPrintBlock(
-    type: 'amount',
+    type: 'amountBox',
     label: 'المبلغ المستلم',
     value: ctx['amount'],
-    fontSize: _clampInt(t['amountFont'], 18, 40, 30),
+    fontSize: _clampInt(t['amountFont'], 18, 40, 36),
+    char: heavy,
   ));
 
   blocks.add(const DeliveryReceiptPrintBlock(type: 'blank', count: 1));
@@ -191,10 +235,10 @@ DeliveryReceiptPrintPayload buildDeliveryReceiptPrintBlocks(
   final legalText = c['legalText']?.toString().trim() ?? '';
   if (legalText.isNotEmpty) {
     blocks.add(DeliveryReceiptPrintBlock(
-      type: 'text',
+      type: 'legalBox',
       text: legalText,
-      fontSize: _clampInt(t['legalFont'], 12, 24, 17),
-      align: 'center',
+      fontSize: _clampInt(t['legalFont'], 12, 24, 15),
+      char: div,
     ));
   }
 
@@ -202,19 +246,20 @@ DeliveryReceiptPrintPayload buildDeliveryReceiptPrintBlocks(
     blocks.add(DeliveryReceiptPrintBlock(
       type: 'text',
       text: ctx['notes'],
-      fontSize: _clampInt(t['bodyFont'], 12, 28, 18),
+      fontSize: _clampInt(t['bodyFont'], 12, 28, 17),
       align: 'center',
+      italic: true,
     ));
   }
 
-  blocks.add(DeliveryReceiptPrintBlock(type: 'divider', char: div));
+  pushDoubleDivider(div);
 
   final footer = b['footer']?.toString().trim() ?? '';
   if (footer.isNotEmpty) {
     blocks.add(DeliveryReceiptPrintBlock(
       type: 'text',
       text: footer,
-      fontSize: _clampInt(b['footerFont'], 12, 28, 17),
+      fontSize: _clampInt(b['footerFont'], 12, 28, 16),
       align: 'center',
     ));
   }
