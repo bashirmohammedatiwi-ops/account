@@ -57,6 +57,10 @@
             <span class="nav-icon ic-promo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></span>
             <span class="nav-text">الزيادات الترويجية</span>
           </button>
+          <button type="button" class="nav-item" data-page="thermalReceipt">
+            <span class="nav-icon ic-receipts" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg></span>
+            <span class="nav-text">تصميم الوصل الحراري</span>
+          </button>
         </div>
 
         <div class="nav-group">
@@ -160,6 +164,10 @@
             <button type="button" class="module-card" data-goto="receipts" data-rv-tab="delivery">
               <span class="module-icon tone-cyan"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
               <span class="module-body"><strong>وصول استلام</strong><span>وصولات المبلغ للزبون</span></span>
+            </button>
+            <button type="button" class="module-card" data-goto="thermalReceipt">
+              <span class="module-icon tone-amber"><svg viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg></span>
+              <span class="module-body"><strong>تصميم الوصل الحراري</strong><span>معاينة وصل 58mm للطابعة</span></span>
             </button>
             <button type="button" class="module-card" data-goto="promotionalVisits">
               <span class="module-icon tone-violet"><svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg></span>
@@ -478,6 +486,53 @@
             </div>
           </div>
           <div class="rv-card hidden" id="promoVisitDetailPanel"></div>
+        </section>
+
+        <!-- Thermal receipt designer -->
+        <section class="page rv-page" id="page-thermalReceipt">
+          <div class="thermal-design-layout">
+            <div class="rv-card thermal-design-editor">
+              <div class="rv-card-head">
+                <div>
+                  <h2 class="rv-card-title">تصميم وصل الاستلام الحراري</h2>
+                  <p class="rv-card-sub">خصّص النصوص والحقول — يُطبَّق تلقائياً على تطبيق المندوب عند الطباعة</p>
+                </div>
+                <div class="btn-row">
+                  <button type="button" class="btn btn-soft btn-sm" id="btnThermalReset">افتراضي</button>
+                  <button type="button" class="btn btn-primary btn-sm" id="btnThermalSave">حفظ التصميم</button>
+                </div>
+              </div>
+              <div class="rv-edit-grid">
+                <label class="field"><span>عرض الورقة (حروف)</span><input type="number" id="thermalPaperChars" min="24" max="48" value="32"></label>
+                <label class="field"><span>أسطر فارغة بعد الطباعة</span><input type="number" id="thermalFooterBlanks" min="0" max="8" value="3"></label>
+              </div>
+              <div class="rv-edit-grid">
+                <label class="field"><span>اسم الشركة (ثابت)</span><input type="text" id="thermalSampleCompany" value="Edari"></label>
+                <label class="field"><span>عنوان الوصل (ثابت)</span><input type="text" id="thermalSampleTitle" value="وصل استلام مبلغ"></label>
+                <label class="field"><span>تذييل (ثابت)</span><input type="text" id="thermalSampleFooter" value="شكراً لتعاملكم"></label>
+              </div>
+              <div class="thermal-add-row">
+                <button type="button" class="btn btn-soft btn-sm" id="btnThermalAddText">+ نص</button>
+                <button type="button" class="btn btn-soft btn-sm" id="btnThermalAddField">+ حقل</button>
+                <button type="button" class="btn btn-soft btn-sm" id="btnThermalAddSep">+ فاصل</button>
+                <button type="button" class="btn btn-soft btn-sm" id="btnThermalAddBlank">+ سطر فارغ</button>
+              </div>
+              <div class="thermal-lines-list" id="thermalLinesList"></div>
+              <div class="thermal-line-editor panel-inset" id="thermalLineEditor"></div>
+            </div>
+            <div class="rv-card thermal-design-preview">
+              <div class="rv-card-head">
+                <div>
+                  <h2 class="rv-card-title">معاينة الطباعة</h2>
+                  <p class="rv-card-sub">محاكاة ورقة 58mm — بيانات تجريبية</p>
+                </div>
+              </div>
+              <div class="thermal-preview-wrap">
+                <div class="thermal-preview-paper" id="thermalPreviewPaper"></div>
+              </div>
+              <p class="muted thermal-hint">الحقول الديناميكية: رقم الوصل، التاريخ، المندوب، الزبون، المبلغ، الملاحظات…</p>
+            </div>
+          </div>
         </section>
 
         <!-- Reports -->
@@ -1185,6 +1240,7 @@
   <script src="admin-delivery-receipts.js?v=20260824admin"></script>
   <script src="admin-customers.js?v=20260824admin"></script>
   <script src="admin-promotional-visits.js?v=20260824admin"></script>
+  <script src="admin-thermal-template.js?v=20260824admin"></script>
   <script src="admin-sales-report.js?v=20260709treeFix3"></script>
   <script src="admin-account-statements.js?v=20260615kpi"></script>
   <script src="admin-price-sync.js?v=20260703"></script>

@@ -177,6 +177,11 @@ const {
   markDeliveryReceiptPrinted,
   deleteDeliveryReceipt
 } = require('../lib/delivery-receipts');
+const { getDeliveryReceiptPrintTemplate } = require('../lib/delivery-receipt-template');
+
+router.get('/delivery-receipts/print-template', authAgent, (_req, res) => {
+  res.json({ ok: true, template: getDeliveryReceiptPrintTemplate() });
+});
 
 router.get('/delivery-receipts', authAgent, (req, res) => {
   const status = String(req.query.status || '').trim();

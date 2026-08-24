@@ -687,6 +687,31 @@ const {
   deleteDeliveryReceipt,
   deliveryReceiptStats
 } = require('../lib/delivery-receipts');
+const {
+  FIELD_LABELS,
+  DEFAULT_TEMPLATE,
+  getDeliveryReceiptPrintTemplate,
+  saveDeliveryReceiptPrintTemplate,
+  previewSampleLines
+} = require('../lib/delivery-receipt-template');
+
+router.get('/delivery-receipts/print-template', (_req, res) => {
+  res.json({
+    ok: true,
+    template: getDeliveryReceiptPrintTemplate(),
+    fieldLabels: FIELD_LABELS,
+    defaults: DEFAULT_TEMPLATE
+  });
+});
+
+router.put('/delivery-receipts/print-template', (req, res) => {
+  try {
+    const template = saveDeliveryReceiptPrintTemplate(req.body?.template || req.body);
+    res.json({ ok: true, template, preview: previewSampleLines(template) });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
 
 router.get('/delivery-receipts/stats', (_req, res) => {
   res.json({ ok: true, stats: deliveryReceiptStats() });

@@ -603,6 +603,20 @@ class OfflineApiClient {
     return _readDeliveryList(cacheKey, () => _api.requestJson('GET', '/delivery-receipts', query: status != null ? {'status': status} : null));
   }
 
+  Future<Map<String, dynamic>?> getDeliveryReceiptPrintTemplate() async {
+  if (_online) {
+      try {
+        final data = await _api.requestJson('GET', '/delivery-receipts/print-template');
+        final template = Map<String, dynamic>.from(data['template'] as Map);
+        await _cache.setJson(OfflineKeys.deliveryPrintTemplate, template);
+        return template;
+      } catch (_) {}
+    }
+    final raw = await _cache.getJson(OfflineKeys.deliveryPrintTemplate);
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return null;
+  }
+
   Future<DeliveryReceipt> createDeliveryReceipt({
     required String customerAccSeq,
     required String treeAccSeq,

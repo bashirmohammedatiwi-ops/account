@@ -5033,3 +5033,104 @@ td.row-actions .btn { margin-inline-start: 4px; }
   font-family: inherit;
   background: #fff;
 }
+
+/* Thermal receipt designer */
+.thermal-design-layout {
+  display: grid;
+  grid-template-columns: 1fr minmax(280px, 360px);
+  gap: 16px;
+  align-items: start;
+}
+
+.thermal-design-editor { min-width: 0; }
+
+.thermal-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.thermal-lines-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  overflow: auto;
+  margin-bottom: 12px;
+}
+
+.thermal-line-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: right;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+}
+
+.thermal-line-item.active {
+  border-color: #0f766e;
+  background: #ecfdf5;
+}
+
+.thermal-line-item-type {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.thermal-line-item-sum {
+  flex: 1;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.thermal-line-item-actions { display: flex; gap: 2px; }
+
+.thermal-line-editor {
+  padding: 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.thermal-preview-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  background: repeating-linear-gradient(45deg, #f1f5f9, #f1f5f9 8px, #e2e8f0 8px, #e2e8f0 16px);
+  border-radius: 12px;
+}
+
+.thermal-preview-paper {
+  width: 280px;
+  min-height: 360px;
+  background: #fff;
+  padding: 14px 10px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #0f172a;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.thermal-line { margin-bottom: 2px; }
+.thermal-line-lg { font-size: 15px; font-weight: 800; }
+
+.thermal-hint {
+  margin-top: 12px;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 1100px) {
+  .thermal-design-layout { grid-template-columns: 1fr; }
+}

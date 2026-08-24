@@ -40,6 +40,9 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
   final _drAmountCtrl = TextEditingController();
   final _drNotesCtrl = TextEditingController();
   bool _drSubmitting = false;
+  bool _drPrinting = false;
+  int? _reprintingDeliveryId;
+  PrinterStatus? _printerStatus;
 
   PickedCustomer? _picked;
   final _amountCtrl = TextEditingController();
@@ -58,6 +61,24 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
     _tabs.addListener(() {
       if (!_tabs.indexIsChanging) setState(() {});
     });
+    if (!kIsWeb) {
+      _refreshPrinterStatus();
+      _refreshPrintTemplate();
+    }
+  }
+
+  Future<void> _refreshPrintTemplate() async {
+    if (kIsWeb) return;
+    try {
+      final tpl = await ref.read(apiClientProvider).getDeliveryReceiptPrintTemplate();
+      if (tpl != null) await ThermalPrintService.cacheTemplate(tpl);
+    } catch (_) {}
+  }
+
+  Future<void> _refreshPrinterStatus() async {
+    if (kIsWeb) return;
+    final status = await ThermalPrintService.status();
+    if (mounted) setState(() => _printerStatus = status);
   }
 
   @override
@@ -75,6 +96,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
   Future<void> _refreshAll() async {
     ref.invalidate(receiptsListProvider);
     ref.invalidate(deliveryReceiptsListProvider);
+    await _refreshPrintTemplate();
   }
 
   void _snack(String msg, {bool success = false}) {
@@ -133,11 +155,35 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
       ),
     );
     if (selected == null) return;
-    final ok = await ThermalPrintService.connect(selected.macAdress);
-    _snack(ok ? 'تم الاتصال بالطابعة' : 'فشل الاتصال', success: ok);
+    final ok = await ThermalPrintService.connect(selected.macAdress, name: selected.name);
+    await _refreshPrinterStatus();
+    _snack(ok ? 'تم الاتصال بالطابعة' : 'فشل الاتصال — تأكد أن الطابعة مفعّلة ومقترنة', success: ok);
   }
 
-  Future<void> _issueAndPrintDelivery() async {
+  Future<bool> _printDelivery(DeliveryReceipt receipt, {bool showMessages = true}) async {
+    if (kIsWeb) {
+      if (showMessages) _snack('الطباعة متاحة على الهاتف والآيباد فقط');
+      return false;
+    }
+    final agent = ref.read(authProvider).agent?.name;
+    final printed = await ThermalPrintService.printDeliveryReceipt(receipt, agentName: agent);
+    if (printed) {
+      try {
+        await ref.read(apiClientProvider).markDeliveryReceiptPrinted(receipt.id);
+        ref.invalidate(deliveryReceiptsListProvider);
+      } catch (_) {}
+      if (showMessages) _snack('تمت الطباعة', success: true);
+      await _refreshPrinterStatus();
+      return true;
+    }
+    if (showMessages) {
+      _snack('تعذّرت الطباعة — ربط الطابعة من الزر أعلاه ثم أعد المحاولة');
+    }
+    await _refreshPrinterStatus();
+    return false;
+  }
+
+  Future<void> _issueDelivery({required bool tryPrint}) async {
     if (_drPicked == null) {
       _snack('اختر شجرة ثم زبوناً');
       return;
@@ -158,30 +204,18 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
           );
       ref.invalidate(deliveryReceiptsListProvider);
 
-      bool printed = false;
-      if (!kIsWeb) {
-        final agent = ref.read(authProvider).agent?.name;
-        printed = await ThermalPrintService.printDeliveryReceipt(receipt, agentName: agent);
-        if (printed) {
-          await ref.read(apiClientProvider).markDeliveryReceiptPrinted(receipt.id);
-          ref.invalidate(deliveryReceiptsListProvider);
-        }
-      }
-
       if (!mounted) return;
       _drAmountCtrl.clear();
       _drNotesCtrl.clear();
       setState(() => _drPicked = null);
 
-      if (kIsWeb) {
-        _snack('تم إصدار الوصل — أكمل سند القبض الداخلي', success: true);
-      } else if (printed) {
-        _snack('تم إصدار وطباعة الوصل — أكمل سند القبض', success: true);
-      } else {
-        _snack('تم إصدار الوصل — أكمل سند القبض (تعذّرت الطباعة)');
-      }
+      _snack('تم إصدار وصل الاستلام — يمكنك إصدار وصول أخرى أو إنشاء سند قبض لاحقاً', success: true);
 
-      _startReceiptFromDelivery(receipt, quiet: true);
+      if (tryPrint && !kIsWeb) {
+        setState(() => _drPrinting = true);
+        await _printDelivery(receipt);
+        if (mounted) setState(() => _drPrinting = false);
+      }
     } catch (e) {
       _snack(e is ApiException ? e.message : '$e');
     } finally {
@@ -194,14 +228,11 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
       _snack('الطباعة متاحة على الآيباد والهاتف');
       return;
     }
-    final agent = ref.read(authProvider).agent?.name;
-    final ok = await ThermalPrintService.printDeliveryReceipt(item, agentName: agent);
-    if (ok) {
-      await ref.read(apiClientProvider).markDeliveryReceiptPrinted(item.id);
-      ref.invalidate(deliveryReceiptsListProvider);
-      _snack('تمت الطباعة', success: true);
-    } else {
-      _snack('فشل الطباعة — تحقق من اتصال الطابعة');
+    setState(() => _reprintingDeliveryId = item.id);
+    try {
+      await _printDelivery(item);
+    } finally {
+      if (mounted) setState(() => _reprintingDeliveryId = null);
     }
   }
 
@@ -294,7 +325,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
     return AppPage(
       title: 'سند قبض',
       kicker: 'تحصيل',
-      subtitle: 'وصل استلام للزبون ثم سند قبض داخلي',
+      subtitle: 'وصل استلام للزبون — سند قبض داخلي (اختياري الربط)',
       showBack: true,
       onBack: () => context.go('/home'),
       child: ColoredBox(
@@ -408,12 +439,20 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
     final c = _drPicked?.customer;
     return EdFormCard(
       title: 'وصل استلام مبلغ',
-      subtitle: 'يُطبع للزبون — ثم يُحوَّل تلقائياً لسند قبض',
+      subtitle: 'يُطبع للزبون — يمكنك إصدار عدة وصول ثم سند قبض لاحقاً',
       icon: Icons.print_outlined,
       iconColor: AppColors.moduleReceipts,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (!kIsWeb && _printerStatus != null) ...[
+            PrinterStatusBanner(
+              status: _printerStatus!,
+              onConfigure: _configurePrinter,
+              onRefresh: _refreshPrinterStatus,
+            ),
+            const SizedBox(height: EdSpacing.md),
+          ],
           EdPickerField(
             label: 'الزبون',
             value: c != null ? c.name1 : null,
@@ -441,21 +480,31 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
             prefixIcon: Icons.notes_outlined,
           ),
           const SizedBox(height: EdSpacing.md),
-          OutlinedButton.icon(
-            onPressed: _configurePrinter,
-            icon: const Icon(Icons.bluetooth_rounded, size: 18),
-            label: const Text('ربط الطابعة الحرارية'),
-          ),
+          if (!kIsWeb)
+            OutlinedButton.icon(
+              onPressed: _configurePrinter,
+              icon: const Icon(Icons.bluetooth_rounded, size: 18),
+              label: const Text('اختيار / ربط الطابعة'),
+            ),
           const SizedBox(height: EdSpacing.lg),
           EdSubmitButton(
-            label: _drSubmitting ? 'جاري الإصدار...' : 'إصدار وطباعة للزبون',
-            icon: Icons.print_rounded,
-            onPressed: _drSubmitting ? null : _issueAndPrintDelivery,
-            loading: _drSubmitting,
+            label: _drSubmitting ? 'جاري الإصدار...' : 'إصدار وصل الاستلام',
+            icon: Icons.check_circle_outline_rounded,
+            onPressed: (_drSubmitting || _drPrinting) ? null : () => _issueDelivery(tryPrint: false),
+            loading: _drSubmitting && !_drPrinting,
           ),
+          if (!kIsWeb) ...[
+            const SizedBox(height: EdSpacing.sm),
+            EdSubmitButton(
+              label: _drPrinting ? 'جاري الطباعة...' : 'إصدار وطباعة للزبون',
+              icon: Icons.print_rounded,
+              onPressed: (_drSubmitting || _drPrinting) ? null : () => _issueDelivery(tryPrint: true),
+              loading: _drPrinting,
+            ),
+          ],
           const SizedBox(height: 8),
           Text(
-            'بعد الإصدار ستُفتح تبويب سند القبض تلقائياً',
+            'بعد الإصدار تبقى في قائمة وصول الاستلام — أنشئ سند قبض من التبويب الثاني عند الحاجة',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted.withValues(alpha: 0.9)),
           ),
@@ -484,6 +533,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
                   (d) => DeliveryReceiptCard(
                     item: d,
                     showPrint: !kIsWeb,
+                    isReprinting: _reprintingDeliveryId == d.id,
                     onReprint: !kIsWeb ? () => _reprintDelivery(d) : null,
                     onCreateReceipt: d.canCreateReceipt ? () => _startReceiptFromDelivery(d) : null,
                   ),
@@ -522,7 +572,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
     final linkedCustomer = _linkedDelivery?.customerName ?? '';
     return EdFormCard(
       title: 'سند قبض داخلي',
-      subtitle: 'يُراجع في لوحة التحكم — الحذف من اللوحة فقط',
+      subtitle: 'اختياري: اربط بوصل استلام أو أرسل سنداً مباشرة للوحة التحكم',
       icon: Icons.receipt_long_rounded,
       iconColor: AppColors.moduleReceipts,
       child: Column(
@@ -632,7 +682,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
         if (list.isEmpty) {
           return const Padding(
             padding: EdgeInsets.all(24),
-            child: EmptyState(message: 'لا توجد سندات — اربط وصل استلام أو أرسل سنداً جديداً', icon: Icons.receipt_long_outlined),
+            child: EmptyState(message: 'لا توجد سندات — أرسل سند قبض جديداً (مع أو بدون وصل استلام)', icon: Icons.receipt_long_outlined),
           );
         }
         return EdListSection(

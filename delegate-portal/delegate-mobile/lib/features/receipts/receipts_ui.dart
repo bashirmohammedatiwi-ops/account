@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/models.dart';
+import 'thermal_print_service.dart';
 
 class ReceiptsStatsHeader extends StatelessWidget {
   const ReceiptsStatsHeader({
@@ -111,11 +112,21 @@ class ReceiptsFlowBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.borderLight),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _stepDot(1, 'وصل استلام', step == 0),
-          Expanded(child: Container(height: 2, color: step >= 1 ? AppColors.accentTeal : AppColors.borderLight)),
-          _stepDot(2, 'سند قبض', step == 1),
+          Row(
+            children: [
+              _stepDot(1, 'وصل استلام', step == 0),
+              Expanded(child: Container(height: 2, color: AppColors.borderLight)),
+              _stepDot(2, 'سند قبض', step == 1),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'يمكنك إصدار عدة وصول استلام ثم إنشاء سند قبض لاحقاً — أو إرسال سند بدون وصل',
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.muted.withValues(alpha: 0.95), height: 1.35),
+          ),
         ],
       ),
     );
@@ -199,12 +210,14 @@ class DeliveryReceiptCard extends StatelessWidget {
     required this.onReprint,
     required this.onCreateReceipt,
     this.showPrint = true,
+    this.isReprinting = false,
   });
 
   final DeliveryReceipt item;
   final VoidCallback? onReprint;
   final VoidCallback? onCreateReceipt;
   final bool showPrint;
+  final bool isReprinting;
 
   @override
   Widget build(BuildContext context) {
@@ -265,9 +278,11 @@ class DeliveryReceiptCard extends StatelessWidget {
                     children: [
                       if (showPrint && onReprint != null)
                         OutlinedButton.icon(
-                          onPressed: onReprint,
-                          icon: const Icon(Icons.print_rounded, size: 16),
-                          label: const Text('طباعة'),
+                          onPressed: isReprinting ? null : onReprint,
+                          icon: isReprinting
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.print_rounded, size: 16),
+                          label: Text(isReprinting ? 'جاري الطباعة...' : 'إعادة طباعة'),
                         ),
                       if (item.canCreateReceipt && onCreateReceipt != null) ...[
                         if (showPrint && onReprint != null) const SizedBox(width: 8),
@@ -364,4 +379,62 @@ class ReceiptsBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const SizedBox.shrink();
+}
+
+class PrinterStatusBanner extends StatelessWidget {
+  const PrinterStatusBanner({
+    super.key,
+    required this.status,
+    required this.onConfigure,
+    this.onRefresh,
+  });
+
+  final PrinterStatus status;
+  final VoidCallback onConfigure;
+  final VoidCallback? onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color color;
+    final IconData icon;
+    if (!status.bluetoothOn) {
+      color = AppColors.warning;
+      icon = Icons.bluetooth_disabled_rounded;
+    } else if (status.connected) {
+      color = AppColors.success;
+      icon = Icons.bluetooth_connected_rounded;
+    } else if (status.hasSavedPrinter) {
+      color = AppColors.warning;
+      icon = Icons.bluetooth_searching_rounded;
+    } else {
+      color = AppColors.muted;
+      icon = Icons.print_outlined;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(status.label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.navy)),
+          ),
+          if (onRefresh != null)
+            IconButton(
+              onPressed: onRefresh,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              color: AppColors.muted,
+              tooltip: 'تحديث حالة الاتصال',
+            ),
+          TextButton(onPressed: onConfigure, child: const Text('ربط الطابعة')),
+        ],
+      ),
+    );
+  }
 }

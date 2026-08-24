@@ -3,6 +3,7 @@ abstract final class OfflineKeys {
   static const orders = 'cache:orders';
   static const receipts = 'cache:receipts';
   static const deliveryReceipts = 'cache:delivery_receipts';
+  static const deliveryPrintTemplate = 'cache:delivery_print_template';
   static const customerRequests = 'cache:customer_requests';
   static const promoVisits = 'cache:promo_visits';
   static const governorates = 'cache:governorates';

@@ -104,6 +104,7 @@ class SyncEngine {
         client.getGovernorates(),
         client.getVisitOutcomes(),
         client.getCatalogBranches(),
+        client.getDeliveryReceiptPrintTemplate(),
       ]);
 
       if (deepCatalog) {

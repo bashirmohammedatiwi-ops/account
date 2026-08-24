@@ -272,6 +272,11 @@ class ApiClient {
     await _json('POST', '/delivery-receipts/$id/printed');
   }
 
+  Future<Map<String, dynamic>> getDeliveryReceiptPrintTemplate() async {
+    final data = await _json('GET', '/delivery-receipts/print-template');
+    return Map<String, dynamic>.from(data['template'] as Map);
+  }
+
   Future<void> deleteDeliveryReceipt(int id) async {
     await _json('DELETE', '/delivery-receipts/$id');
   }
