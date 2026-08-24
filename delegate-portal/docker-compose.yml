@@ -19,6 +19,7 @@ services:
       EMP_PASS: ${EMP_PASS:-000000}
       FCM_SERVER_KEY: ${FCM_SERVER_KEY:-}
     volumes:
+      # لا تستخدم docker compose down -v — يحذف القالب والشعار
       - portal_data:/app/data
       - portal_uploads:/app/uploads
     restart: unless-stopped

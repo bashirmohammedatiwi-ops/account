@@ -10,6 +10,7 @@ const DATA_DIR = path.resolve(
   path.dirname(process.env.DATABASE_PATH || path.join(__dirname, '..', 'data'))
 );
 const TEMPLATE_FILE_PATH = path.join(DATA_DIR, TEMPLATE_FILE_NAME);
+const TEMPLATE_UPLOAD_BACKUP_PATH = path.join(UPLOAD_ROOT, 'thermal', 'print-template-backup.json');
 
 const FIELD_LABELS = {
   deliveryNo: 'رقم الوصل',
@@ -39,19 +40,19 @@ const DEFAULT_TEMPLATE = {
     logoUrl: '',
     logoWidth: 200,
     legalName: 'شركة التوزيع',
-    legalNameFont: 28,
+    legalNameFont: 32,
     companyName: 'Edari',
-    companyFont: 14,
+    companyFont: 17,
     title: 'وصل قبض',
-    titleFont: 24,
+    titleFont: 26,
     footer: 'شكراً لتعاملكم — نتشرف بخدمتكم',
-    footerFont: 14
+    footerFont: 17
   },
   typography: {
-    bodyFont: 17,
-    labelFont: 13,
-    amountFont: 38,
-    legalFont: 13
+    bodyFont: 18,
+    labelFont: 16,
+    amountFont: 36,
+    legalFont: 17
   },
   content: {
     showLegalName: true,
@@ -82,6 +83,89 @@ function setSetting(key, value) {
   `).run(key, String(value ?? ''));
 }
 
+function readUploadBackupRaw() {
+  try {
+    if (!fs.existsSync(TEMPLATE_UPLOAD_BACKUP_PATH)) return null;
+    const text = fs.readFileSync(TEMPLATE_UPLOAD_BACKUP_PATH, 'utf8').trim();
+    if (!text) return null;
+    return JSON.parse(text);
+  } catch (err) {
+    console.warn('[thermal-template] upload backup read failed:', err.message);
+    return null;
+  }
+}
+
+function writeUploadBackup(template) {
+  try {
+    ensureUploadDir('thermal');
+    const json = JSON.stringify(template);
+    const tmp = `${TEMPLATE_UPLOAD_BACKUP_PATH}.tmp`;
+    fs.writeFileSync(tmp, json, 'utf8');
+    fs.renameSync(tmp, TEMPLATE_UPLOAD_BACKUP_PATH);
+  } catch (err) {
+    console.warn('[thermal-template] upload backup write failed:', err.message);
+  }
+}
+
+function readDbTemplateRaw() {
+  const dbVal = getSetting(SETTING_KEY, '').trim();
+  if (!dbVal) return null;
+  try {
+    return JSON.parse(dbVal);
+  } catch (err) {
+    console.warn('[thermal-template] invalid DB JSON:', err.message);
+    return null;
+  }
+}
+
+function isDefaultishTemplate(raw) {
+  try {
+    if (!raw || typeof raw !== 'object') return true;
+    if (raw.customized) return false;
+    if (raw.branding?.logoUrl) return false;
+    const t = normalizeTemplate(raw);
+    const d = DEFAULT_TEMPLATE;
+    return (
+      t.branding.legalName === d.branding.legalName &&
+      t.branding.companyName === d.branding.companyName &&
+      t.branding.title === d.branding.title &&
+      t.branding.footer === d.branding.footer
+    );
+  } catch {
+    return true;
+  }
+}
+
+function templateRank(raw) {
+  if (!raw || typeof raw !== 'object') return -1;
+  let rank = 0;
+  if (raw.customized) rank += 1_000_000_000_000;
+  if (raw.branding?.logoUrl) rank += 100_000_000_000;
+  if (!isDefaultishTemplate(raw)) rank += 50_000_000_000;
+  if (raw.updatedAt) {
+    const ts = Date.parse(raw.updatedAt);
+    if (Number.isFinite(ts)) rank += ts;
+  }
+  return rank;
+}
+
+function loadBestTemplateRaw() {
+  const candidates = [
+    { source: 'database', raw: readDbTemplateRaw() },
+    { source: 'data-file', raw: readTemplateFileRaw() },
+    { source: 'upload-backup', raw: readUploadBackupRaw() }
+  ].filter((c) => c.raw);
+
+  if (!candidates.length) return null;
+
+  candidates.sort((a, b) => templateRank(b.raw) - templateRank(a.raw));
+  const winner = candidates[0];
+  if (winner.source !== 'database') {
+    console.log(`[thermal-template] loaded template from ${winner.source}`);
+  }
+  return winner.raw;
+}
+
 function readTemplateFileRaw() {
   try {
     if (!fs.existsSync(TEMPLATE_FILE_PATH)) return null;
@@ -107,62 +191,41 @@ function writeTemplateFile(template) {
 }
 
 function readStoredTemplateRaw() {
-  const dbVal = getSetting(SETTING_KEY, '').trim();
-  if (dbVal) {
-    try {
-      return JSON.parse(dbVal);
-    } catch (err) {
-      console.warn('[thermal-template] invalid DB JSON:', err.message);
-    }
-  }
-
-  const fromFile = readTemplateFileRaw();
-  if (fromFile) {
-    try {
-      const normalized = normalizeTemplate(fromFile);
-      setSetting(SETTING_KEY, JSON.stringify(normalized));
-      console.log('[thermal-template] restored from file backup');
-      return fromFile;
-    } catch (err) {
-      console.warn('[thermal-template] file restore failed:', err.message);
-    }
-  }
-
-  return null;
+  return loadBestTemplateRaw();
 }
 
 function persistTemplate(template) {
-  const normalized = normalizeTemplate(template);
+  const withMeta = {
+    ...template,
+    customized: true,
+    updatedAt: new Date().toISOString()
+  };
+  const normalized = normalizeTemplate(withMeta);
   const json = JSON.stringify(normalized);
   setSetting(SETTING_KEY, json);
   writeTemplateFile(normalized);
+  writeUploadBackup(normalized);
   return normalized;
 }
 
-/** يُزامن ملف النسخة الاحتياطية مع DB عند التشغيل (بعد تحديث السيرفر). */
+/** يُزامن كل نسخ القالب عند التشغيل — يختار الأحدث/المخصص ولا يعود للافتراضي. */
 function syncTemplatePersistence() {
-  const dbVal = getSetting(SETTING_KEY, '').trim();
-  if (dbVal) {
-    if (!fs.existsSync(TEMPLATE_FILE_PATH)) {
-      try {
-        const normalized = normalizeTemplate(JSON.parse(dbVal));
-        writeTemplateFile(normalized);
-        console.log('[thermal-template] file backup created from database');
-      } catch (_) {}
-    }
+  const raw = loadBestTemplateRaw();
+  if (!raw) {
+    console.log('[thermal-template] no saved template yet');
     return;
   }
 
-  const fromFile = readTemplateFileRaw();
-  if (fromFile) {
-    try {
-      const normalized = normalizeTemplate(fromFile);
-      setSetting(SETTING_KEY, JSON.stringify(normalized));
-      console.log('[thermal-template] database restored from file backup');
-    } catch (err) {
-      console.warn('[thermal-template] startup restore failed:', err.message);
-    }
-  }
+  const normalized = normalizeTemplate({
+    ...raw,
+    customized: raw.customized || !isDefaultishTemplate(raw),
+    updatedAt: raw.updatedAt || new Date().toISOString()
+  });
+  const json = JSON.stringify(normalized);
+  setSetting(SETTING_KEY, json);
+  writeTemplateFile(normalized);
+  writeUploadBackup(normalized);
+  console.log('[thermal-template] synced template to database + data file + upload backup');
 }
 
 function normalizePaperMm(n) {
@@ -212,22 +275,22 @@ function normalizeTemplate(raw) {
     paperMm: normalizePaperMm(raw.paperMm),
     footerBlankLines: clampNum(raw.footerBlankLines, 0, 8, 4),
     branding: {
-      showLogo: Boolean(b.showLogo),
+      showLogo: Boolean(b.showLogo ?? DEFAULT_TEMPLATE.branding.showLogo),
       logoUrl: String(b.logoUrl || ''),
-      logoWidth: clampNum(b.logoWidth, 80, 400, 240),
+      logoWidth: clampNum(b.logoWidth, 80, 400, 200),
       legalName: String(b.legalName || DEFAULT_TEMPLATE.branding.legalName),
-      legalNameFont: clampNum(b.legalNameFont, 14, 42, 30),
+      legalNameFont: clampNum(b.legalNameFont, 14, 42, 32),
       companyName: String(b.companyName || DEFAULT_TEMPLATE.branding.companyName),
       companyFont: clampNum(b.companyFont, 12, 28, 17),
       title: String(b.title || DEFAULT_TEMPLATE.branding.title),
-      titleFont: clampNum(b.titleFont, 14, 36, 24),
+      titleFont: clampNum(b.titleFont, 14, 36, 26),
       footer: String(b.footer || DEFAULT_TEMPLATE.branding.footer),
       footerFont: clampNum(b.footerFont, 12, 28, 17)
     },
     typography: {
       bodyFont: clampNum(t.bodyFont, 12, 28, 18),
       labelFont: clampNum(t.labelFont, 12, 24, 16),
-      amountFont: clampNum(t.amountFont, 18, 40, 30),
+      amountFont: clampNum(t.amountFont, 18, 48, 36),
       legalFont: clampNum(t.legalFont, 12, 24, 17)
     },
     content: {
@@ -248,7 +311,8 @@ function normalizeTemplate(raw) {
 }
 
 function getDeliveryReceiptPrintTemplate() {
-  return normalizeTemplate(readStoredTemplateRaw());
+  const raw = readStoredTemplateRaw();
+  return normalizeTemplate(raw || DEFAULT_TEMPLATE);
 }
 
 function saveDeliveryReceiptPrintTemplate(payload) {
@@ -373,11 +437,9 @@ function buildDeliveryReceiptPrintBlocks(receipt, agentName, template = null) {
 
   if (c.showDeliveryNo) {
     blocks.push({
-      type: 'text',
+      type: 'receiptId',
       text: ctx.deliveryNo,
-      fontSize: t.labelFont,
-      align: 'center',
-      muted: true
+      fontSize: t.labelFont
     });
   }
 

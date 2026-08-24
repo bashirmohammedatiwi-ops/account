@@ -168,19 +168,21 @@ DeliveryReceiptPrintPayload buildDeliveryReceiptPrintBlocks(
     ));
   }
 
+  final showLegalName = c['showLegalName'] == true;
   final legalName = b['legalName']?.toString().trim() ?? '';
-  if (legalName.isNotEmpty) {
+  if (showLegalName && legalName.isNotEmpty) {
     blocks.add(DeliveryReceiptPrintBlock(
       type: 'text',
       text: legalName,
-      fontSize: _clampInt(b['legalNameFont'], 14, 36, 28),
+      fontSize: _clampInt(b['legalNameFont'], 14, 42, 32),
       align: 'center',
       bold: true,
     ));
   }
 
+  final showCompany = c['showCompany'] == true;
   final companyName = b['companyName']?.toString().trim() ?? '';
-  if (companyName.isNotEmpty) {
+  if (showCompany && companyName.isNotEmpty) {
     blocks.add(DeliveryReceiptPrintBlock(
       type: 'text',
       text: companyName,
@@ -206,11 +208,9 @@ DeliveryReceiptPrintPayload buildDeliveryReceiptPrintBlocks(
 
   if (c['showDeliveryNo'] == true) {
     blocks.add(DeliveryReceiptPrintBlock(
-      type: 'text',
+      type: 'receiptId',
       text: ctx['deliveryNo']!,
       fontSize: labelFont,
-      align: 'center',
-      muted: true,
     ));
   }
 

@@ -129,45 +129,158 @@ function renderThermalPreview() {
   }
 
   const parts = [];
+  let headerOpen = false;
+  let customerOpen = false;
+  let amountOpen = false;
+
+  const openHeader = () => {
+    if (!headerOpen) {
+      parts.push('<div class="tp-header-cluster">');
+      headerOpen = true;
+    }
+  };
+
+  const closeHeader = () => {
+    if (headerOpen) {
+      parts.push('</div>');
+      headerOpen = false;
+    }
+  };
+
+  const closeCustomer = () => {
+    if (customerOpen) {
+      parts.push('</div>');
+      customerOpen = false;
+    }
+  };
+
+  const closeAmount = () => {
+    if (amountOpen) {
+      parts.push('</div>');
+      amountOpen = false;
+    }
+  };
+
   for (const block of preview.blocks) {
-    if (block.type === 'logo' && block.url) {
-      parts.push(`<div class="tp-logo"><img src="${esc(block.url)}" alt="logo"></div>`);
-    } else if (block.type === 'text' || block.type === 'title' || block.type === 'hero' || block.type === 'caption') {
-      const muted = block.muted ? ' tp-muted' : '';
-      const italic = block.italic ? ' tp-italic' : '';
-      let cls = 'tp-body';
-      if (block.type === 'title') cls = 'tp-title';
-      else if (block.type === 'hero') cls = 'tp-hero';
-      else if (block.type === 'caption') cls = 'tp-caption';
-      else if (block.bold && (block.fontSize || 0) >= 24) cls = 'tp-brand';
-      else if (block.bold) cls = 'tp-brand-sub';
-      const align = block.align === 'right' ? ' tp-align-right' : block.align === 'left' ? ' tp-align-left' : '';
-      parts.push(`<div class="${cls}${muted}${italic}${align}" style="font-size:${tpScale(block.fontSize, paperMm)}px">${esc(block.text)}</div>`);
-    } else if (block.type === 'rule' || block.type === 'divider' || block.type === 'doubleDivider') {
+    if (block.type === 'logo') {
+      openHeader();
+      if (block.url) parts.push(`<div class="tp-logo"><img src="${esc(block.url)}" alt="logo"></div>`);
+      continue;
+    }
+
+    if (block.type === 'text' && block.bold && !block.muted) {
+      openHeader();
+      parts.push(`<div class="tp-brand" style="font-size:${tpScale(block.fontSize, paperMm)}px">${esc(block.text)}</div>`);
+      continue;
+    }
+
+    if (block.type === 'text' && block.muted && headerOpen) {
+      parts.push(`<div class="tp-brand-sub tp-muted" style="font-size:${tpScale(block.fontSize, paperMm)}px">${esc(block.text)}</div>`);
+      continue;
+    }
+
+    if (block.type === 'title') {
+      closeHeader();
+      parts.push(`<div class="tp-doc-title" style="font-size:${tpScale(block.fontSize, paperMm)}px">${esc(block.text)}</div>`);
+      continue;
+    }
+
+    if (block.type === 'receiptId') {
+      parts.push(`<div class="tp-receipt-id" style="font-size:${tpScale(block.fontSize, paperMm)}px">${esc(block.text)}</div>`);
+      continue;
+    }
+
+    if (block.type === 'rule' || block.type === 'divider' || block.type === 'doubleDivider') {
+      closeHeader();
+      closeCustomer();
+      closeAmount();
       parts.push('<div class="tp-rule"></div>');
-    } else if (block.type === 'spacer' || block.type === 'blank') {
+      continue;
+    }
+
+    if (block.type === 'spacer' || block.type === 'blank') {
       const n = Math.min(4, block.count || 1);
-      parts.push(`<div class="tp-spacer" style="height:${n * 6}px"></div>`);
-    } else if (block.type === 'pair' || block.type === 'row') {
+      parts.push(`<div class="tp-spacer" style="height:${n * 5}px"></div>`);
+      continue;
+    }
+
+    if (block.type === 'pair' || block.type === 'row') {
       parts.push(
         `<div class="tp-pair"><span class="tp-pair-label" style="font-size:${tpScale(block.labelFont, paperMm)}px">${esc(block.label)}</span><span class="tp-pair-value" style="font-size:${tpScale(block.valueFont, paperMm)}px">${esc(block.value)}</span></div>`
       );
-    } else if (block.type === 'amount' || block.type === 'amountBox') {
+      continue;
+    }
+
+    if (block.type === 'text' && block.text === 'الزبون') {
+      closeCustomer();
+      parts.push('<div class="tp-customer-card">');
+      customerOpen = true;
+      parts.push(`<div class="tp-customer-label" style="font-size:${tpScale(block.fontSize, paperMm)}px">${esc(block.text)}</div>`);
+      continue;
+    }
+
+    if (block.type === 'hero' && customerOpen) {
+      const align = block.align === 'right' ? ' tp-align-right' : '';
+      parts.push(`<div class="tp-hero${align}" style="font-size:${tpScale(block.fontSize, paperMm)}px">${esc(block.text)}</div>`);
+      closeCustomer();
+      continue;
+    }
+
+    if (block.type === 'text' && block.text === 'المبلغ المستلم') {
+      closeAmount();
+      parts.push('<div class="tp-amount-panel">');
+      amountOpen = true;
+      parts.push(`<div class="tp-amount-label" style="font-size:${tpScale(block.fontSize, paperMm)}px">${esc(block.text)}</div>`);
+      continue;
+    }
+
+    if ((block.type === 'amount' || block.type === 'amountBox') && amountOpen) {
+      parts.push(`<div class="tp-amount-value" style="font-size:${tpScale(block.fontSize, paperMm)}px">${esc(block.value)}</div>`);
+      closeAmount();
+      continue;
+    }
+
+    if (block.type === 'text' || block.type === 'hero' || block.type === 'caption') {
+      const muted = block.muted ? ' tp-muted' : '';
+      const italic = block.italic ? ' tp-italic' : '';
+      let cls = block.type === 'caption' ? 'tp-caption' : 'tp-body';
+      if (block.type === 'hero') cls = 'tp-hero';
+      const align = block.align === 'right' ? ' tp-align-right' : block.align === 'left' ? ' tp-align-left' : '';
+      parts.push(`<div class="${cls}${muted}${italic}${align}" style="font-size:${tpScale(block.fontSize, paperMm)}px">${esc(block.text)}</div>`);
+      continue;
+    }
+
+    if (block.type === 'amount' || block.type === 'amountBox') {
       if (block.label) {
         parts.push(`<div class="tp-amount-label" style="font-size:${tpScale(block.labelFont || 13, paperMm)}px">${esc(block.label)}</div>`);
       }
       parts.push(`<div class="tp-amount-value" style="font-size:${tpScale(block.fontSize, paperMm)}px">${esc(block.value)}</div>`);
-    } else if (block.type === 'legalBox' || block.type === 'notesBox') {
+      continue;
+    }
+
+    if (block.type === 'legalBox' || block.type === 'notesBox') {
       if (block.label) parts.push(`<div class="tp-caption" style="font-size:${tpScale(block.labelFont, paperMm)}px">${esc(block.label)}</div>`);
       parts.push(`<div class="tp-caption tp-italic" style="font-size:${tpScale(block.fontSize, paperMm)}px">${esc(block.text)}</div>`);
-    } else if (block.type === 'customerBox') {
-      parts.push(`<div class="tp-caption tp-align-right" style="font-size:${tpScale(block.labelFont, paperMm)}px">${esc(block.label || 'الزبون')}</div>`);
+      continue;
+    }
+
+    if (block.type === 'customerBox') {
+      parts.push('<div class="tp-customer-card">');
+      parts.push(`<div class="tp-customer-label" style="font-size:${tpScale(block.labelFont, paperMm)}px">${esc(block.label || 'الزبون')}</div>`);
       parts.push(`<div class="tp-hero tp-align-right" style="font-size:${tpScale(block.valueFont, paperMm)}px">${esc(block.value)}</div>`);
-    } else if (block.type === 'titleBadge' || block.type === 'ribbon') {
-      parts.push(`<div class="tp-title" style="font-size:${tpScale(block.fontSize, paperMm)}px">${esc(block.text)}</div>`);
-      if (block.subText) parts.push(`<div class="tp-caption" style="font-size:${tpScale(block.subFontSize, paperMm)}px">${esc(block.subText)}</div>`);
+      parts.push('</div>');
+      continue;
+    }
+
+    if (block.type === 'titleBadge' || block.type === 'ribbon') {
+      parts.push(`<div class="tp-doc-title" style="font-size:${tpScale(block.fontSize, paperMm)}px">${esc(block.text)}</div>`);
+      if (block.subText) parts.push(`<div class="tp-receipt-id" style="font-size:${tpScale(block.subFontSize, paperMm)}px">${esc(block.subText)}</div>`);
     }
   }
+
+  closeHeader();
+  closeCustomer();
+  closeAmount();
   box.innerHTML = parts.join('');
 }
 
@@ -197,14 +310,14 @@ function buildClientPreview(template) {
   if (b.companyName) blocks.push({ type: 'text', text: b.companyName, fontSize: b.companyFont, muted: true });
   blocks.push({ type: 'spacer', count: 1 });
   if (b.title) blocks.push({ type: 'title', text: b.title, fontSize: b.titleFont, bold: true });
-  if (c.showDeliveryNo) blocks.push({ type: 'text', text: ctx.deliveryNo, fontSize: ty.labelFont, muted: true });
+  if (c.showDeliveryNo) blocks.push({ type: 'receiptId', text: ctx.deliveryNo, fontSize: ty.labelFont });
   blocks.push({ type: 'rule' });
   if (c.showDate) pushPair('التاريخ', ctx.date);
   if (c.showAgent) pushPair('المندوب', ctx.agent);
   if (c.showCustomer) {
     blocks.push({ type: 'spacer', count: 1 });
     blocks.push({ type: 'text', text: 'الزبون', fontSize: ty.labelFont, align: 'right', muted: true });
-    blocks.push({ type: 'hero', text: ctx.customer, fontSize: Math.min((ty.bodyFont || 17) + 8, 32), align: 'right', bold: true });
+    blocks.push({ type: 'hero', text: ctx.customer, fontSize: Math.min((ty.bodyFont || 18) + 8, 32), align: 'right', bold: true });
   }
   if (c.showCustomerNum && ctx.customerNum) pushPair('رقم الحساب', ctx.customerNum);
   if (c.showTree && ctx.tree) pushPair('الشجرة', ctx.tree);

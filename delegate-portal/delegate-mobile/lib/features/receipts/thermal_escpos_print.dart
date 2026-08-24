@@ -362,14 +362,15 @@ Future<List<int>> buildEscPosBytesFromPayload(
       case 'title':
       case 'hero':
       case 'caption':
+      case 'receiptId':
         bytes = await _appendRasterOrText(
           generator,
           bytes,
           block.text ?? '',
           fontSize: (block.fontSize ?? 18).toDouble(),
-          align: _toTextAlign(block.align, block.text ?? ''),
+          align: block.type == 'receiptId' ? TextAlign.center : _toTextAlign(block.align, block.text ?? ''),
           bold: block.bold || block.type == 'hero' || block.type == 'title',
-          muted: block.muted,
+          muted: block.muted || block.type == 'receiptId' || block.type == 'caption',
           italic: block.italic,
           paperWidthDots: paperWidthDots,
         );
