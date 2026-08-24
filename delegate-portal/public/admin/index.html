@@ -1296,15 +1296,20 @@
   </div>
 
   <script src="config.js"></script>
-  <script src="admin.js?v=20260824admin"></script>
+  <script src="admin.js?v=20260824thermal8"></script>
   <script src="admin-commerce.js?v=20260824admin"></script>
   <script src="admin-receipts.js?v=20260824admin"></script>
   <script src="admin-delivery-receipts.js?v=20260824admin"></script>
   <script src="admin-customers.js?v=20260824admin"></script>
   <script src="admin-promotional-visits.js?v=20260824admin"></script>
-  <script src="admin-thermal-template.js?v=20260824thermal6"></script>
+  <script src="admin-thermal-template.js?v=20260824thermal8"></script>
   <script src="admin-sales-report.js?v=20260709treeFix3"></script>
   <script src="admin-account-statements.js?v=20260615kpi"></script>
   <script src="admin-price-sync.js?v=20260703"></script>
+  <script>
+    setTimeout(function () {
+      if (typeof restoreAdminPageFromHash === 'function') restoreAdminPageFromHash();
+    }, 0);
+  </script>
 </body>
 </html>

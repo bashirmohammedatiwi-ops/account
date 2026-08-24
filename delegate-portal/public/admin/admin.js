@@ -189,6 +189,15 @@ function showPage(name, opts = {}) {
   else if (name === 'receipts') pendingRvTab = 'receipts';
   else pendingRvTab = null;
   const rvTab = opts.rvTab || pendingRvTab;
+  try {
+    localStorage.setItem('adminActivePage', name);
+    if (rvTab) localStorage.setItem('adminActiveRvTab', rvTab);
+    else localStorage.removeItem('adminActiveRvTab');
+  } catch (_) {}
+  const hashRv = rvTab ? `&rvTab=${encodeURIComponent(rvTab)}` : '';
+  if (location.hash !== `#page=${name}${hashRv}`) {
+    location.hash = `page=${name}${hashRv}`;
+  }
   document.querySelectorAll('.nav-item').forEach((n) => {
     const page = n.dataset.page;
     const tab = n.dataset.rvTab;
@@ -1588,3 +1597,37 @@ document.getElementById('edariDatabasePick')?.addEventListener('change', (e) => 
 });
 
 refreshAll();
+
+function parseAdminHash() {
+  const hash = location.hash.replace(/^#/, '');
+  if (!hash.startsWith('page=')) return null;
+  const rest = hash.slice(5);
+  const page = rest.split('&')[0];
+  let rvTab = null;
+  if (rest.includes('rvTab=')) {
+    rvTab = decodeURIComponent(rest.split('rvTab=')[1].split('&')[0]);
+  }
+  return page && PAGE_META[page] ? { page, rvTab } : null;
+}
+
+function restoreAdminPageFromHash() {
+  const parsed = parseAdminHash();
+  if (!parsed) {
+    try {
+      const page = localStorage.getItem('adminActivePage');
+      const rvTab = localStorage.getItem('adminActiveRvTab');
+      if (page && PAGE_META[page]) showPage(page, rvTab ? { rvTab } : {});
+    } catch (_) {}
+    return;
+  }
+  showPage(parsed.page, parsed.rvTab ? { rvTab: parsed.rvTab } : {});
+}
+
+window.addEventListener('hashchange', () => {
+  const parsed = parseAdminHash();
+  if (!parsed) return;
+  const active = document.querySelector('.page.active');
+  const activeId = active?.id?.replace(/^page-/, '');
+  if (activeId === parsed.page) return;
+  showPage(parsed.page, parsed.rvTab ? { rvTab: parsed.rvTab } : {});
+});

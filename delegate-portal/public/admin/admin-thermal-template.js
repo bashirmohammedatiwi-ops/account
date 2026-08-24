@@ -3,8 +3,51 @@
 const thermalTplAdmin = {
   template: null,
   defaults: null,
-  preview: null
+  preview: null,
+  hydrating: false
 };
+
+const THERMAL_LOCAL_KEY = 'edari_thermal_print_template_v2';
+
+function saveThermalLocalBackup(template) {
+  try {
+    localStorage.setItem(
+      THERMAL_LOCAL_KEY,
+      JSON.stringify({ template, updatedAt: new Date().toISOString(), customized: true })
+    );
+  } catch (_) {}
+}
+
+function readThermalLocalBackup() {
+  try {
+    const raw = localStorage.getItem(THERMAL_LOCAL_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function isDefaultishThermalTemplate(t) {
+  if (!t || t.customized) return false;
+  if (t.branding?.logoUrl) return false;
+  const b = t.branding || {};
+  return (
+    (b.legalName || '') === 'شركة التوزيع' &&
+    (b.companyName || '') === 'Edari' &&
+    (b.title || '') === 'وصل قبض'
+  );
+}
+
+function pickThermalTemplate(serverTemplate, localPack) {
+  if (!localPack?.template) return serverTemplate;
+  if (!serverTemplate) return localPack.template;
+  if (localPack.customized && isDefaultishThermalTemplate(serverTemplate)) return localPack.template;
+  const localTs = Date.parse(localPack.updatedAt || '') || 0;
+  const serverTs = Date.parse(serverTemplate.updatedAt || '') || 0;
+  if (localPack.customized && localTs > serverTs) return localPack.template;
+  return serverTemplate;
+}
 
 function thermalFromForm() {
   const t = thermalTplAdmin.template || {};
@@ -56,6 +99,7 @@ function thermalFromForm() {
 }
 
 function fillThermalForm(template) {
+  thermalTplAdmin.hydrating = true;
   const t = template || {};
   const b = t.branding || {};
   const ty = t.typography || {};
@@ -94,6 +138,7 @@ function fillThermalForm(template) {
   set('thermalPaperMm', t.paperMm ?? 80);
   set('thermalDividerStyle', c.dividerStyle || 'light');
   updateLogoPreview(b.logoUrl);
+  thermalTplAdmin.hydrating = false;
 }
 
 function updateLogoPreview(url) {
@@ -334,9 +379,11 @@ function buildClientPreview(template) {
 }
 
 function onThermalFormChange() {
+  if (thermalTplAdmin.hydrating) return;
   thermalTplAdmin.template = thermalFromForm();
   thermalTplAdmin.preview = buildClientPreview(thermalTplAdmin.template);
   renderThermalPreview();
+  saveThermalLocalBackup(thermalTplAdmin.template);
 }
 
 function bindThermalGlobals() {
@@ -373,6 +420,7 @@ function bindThermalGlobals() {
       thermalTplAdmin.preview = data.preview;
       fillThermalForm(data.template);
       renderThermalPreview();
+      saveThermalLocalBackup(data.template);
       showToast('تم رفع الشعار');
     } catch (err) {
       showToast(err.message, 'err');
@@ -387,6 +435,7 @@ function bindThermalGlobals() {
       thermalTplAdmin.preview = data.preview;
       fillThermalForm(data.template);
       renderThermalPreview();
+      saveThermalLocalBackup(data.template);
       showToast('تمت إزالة الشعار');
     } catch (err) {
       showToast(err.message, 'err');
@@ -399,38 +448,82 @@ function bindThermalGlobals() {
     fillThermalForm(thermalTplAdmin.template);
     thermalTplAdmin.preview = buildClientPreview(thermalTplAdmin.template);
     renderThermalPreview();
+    try {
+      localStorage.removeItem(THERMAL_LOCAL_KEY);
+    } catch (_) {}
   });
 
   document.getElementById('btnThermalSave')?.addEventListener('click', () => saveThermalTemplate());
 }
 
 async function loadThermalTemplatePage() {
-  const data = await commerceApi('/delivery-receipts/print-template');
-  thermalTplAdmin.template = data.template;
-  thermalTplAdmin.defaults = data.defaults;
-  thermalTplAdmin.preview = data.preview || buildClientPreview(data.template);
-  fillThermalForm(data.template);
-  renderThermalPreview();
+  const previewBox = document.getElementById('thermalPreviewPaper');
+  if (previewBox) previewBox.innerHTML = '<p class="muted">جاري تحميل التصميم...</p>';
+
+  const localFirst = readThermalLocalBackup();
+  if (localFirst?.template) {
+    thermalTplAdmin.template = localFirst.template;
+    thermalTplAdmin.preview = buildClientPreview(localFirst.template);
+    fillThermalForm(localFirst.template);
+    renderThermalPreview();
+  }
+
+  try {
+    const data = await commerceApi('/delivery-receipts/print-template');
+    const local = readThermalLocalBackup();
+    const picked = pickThermalTemplate(data.template, local || localFirst);
+    const template = picked || data.template || data.defaults || thermalTplAdmin.template;
+    thermalTplAdmin.template = template;
+    thermalTplAdmin.defaults = data.defaults;
+    thermalTplAdmin.preview = buildClientPreview(template);
+    fillThermalForm(template);
+    renderThermalPreview();
+  } catch (err) {
+    const local = readThermalLocalBackup();
+    if (local?.template) {
+      thermalTplAdmin.template = local.template;
+      thermalTplAdmin.defaults = thermalTplAdmin.defaults || {};
+      thermalTplAdmin.preview = buildClientPreview(local.template);
+      fillThermalForm(local.template);
+      renderThermalPreview();
+      showToast('تم تحميل النسخة المحفوظة على المتصفح', 'ok');
+    } else if (previewBox) {
+      previewBox.innerHTML = '<p class="muted">تعذّر تحميل التصميم</p>';
+      showToast(err.message || 'تعذّر تحميل تصميم الفاتورة', 'err');
+    }
+  }
 }
 
 async function saveThermalTemplate() {
+  let template = null;
   try {
-    const template = thermalFromForm();
+    template = thermalFromForm();
     const data = await commerceApi('/delivery-receipts/print-template', {
       method: 'PUT',
       body: JSON.stringify({ template })
     });
     thermalTplAdmin.template = data.template;
-    thermalTplAdmin.preview = data.preview;
+    thermalTplAdmin.preview = buildClientPreview(data.template);
     fillThermalForm(data.template);
     renderThermalPreview();
+    saveThermalLocalBackup(data.template);
     showToast('تم حفظ تصميم الفاتورة الحرارية');
   } catch (err) {
-    showToast(err.message, 'err');
+    if (template) saveThermalLocalBackup(template);
+    showToast(err.message || 'تعذّر الحفظ على السيرفر — نُسخت محلياً', 'err');
   }
 }
 
 bindThermalGlobals();
+
+(function bootstrapThermalFromLocal() {
+  const local = readThermalLocalBackup();
+  if (!local?.template) return;
+  thermalTplAdmin.template = local.template;
+  thermalTplAdmin.preview = buildClientPreview(local.template);
+  fillThermalForm(local.template);
+  renderThermalPreview();
+})();
 
 window.adminPages = window.adminPages || {};
 window.adminPages.thermalReceipt = loadThermalTemplatePage;
