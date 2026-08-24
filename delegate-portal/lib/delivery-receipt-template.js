@@ -37,21 +37,21 @@ const DEFAULT_TEMPLATE = {
   branding: {
     showLogo: true,
     logoUrl: '',
-    logoWidth: 240,
+    logoWidth: 200,
     legalName: 'شركة التوزيع',
-    legalNameFont: 34,
+    legalNameFont: 28,
     companyName: 'Edari',
-    companyFont: 15,
+    companyFont: 14,
     title: 'وصل قبض',
-    titleFont: 28,
-    footer: '★ شكراً لتعاملكم — نتشرف بخدمتكم ★',
-    footerFont: 15
+    titleFont: 24,
+    footer: 'شكراً لتعاملكم — نتشرف بخدمتكم',
+    footerFont: 14
   },
   typography: {
-    bodyFont: 18,
-    labelFont: 14,
-    amountFont: 42,
-    legalFont: 14
+    bodyFont: 17,
+    labelFont: 13,
+    amountFont: 38,
+    legalFont: 13
   },
   content: {
     showLegalName: true,
@@ -325,8 +325,7 @@ function pushDoubleDivider(blocks, char) {
 
 /**
  * يُرجع قائمة blocks للطباعة الحرارية (تطبيق المندوب).
- * الأنواع: logo, text, divider, doubleDivider, ribbon, titleBadge, ornament,
- * blank, row, metaStart, metaEnd, customerBox, amountBox, legalBox, notesBox
+ * الأنواع: logo, text, title, hero, caption, rule, spacer, pair, amount
  */
 function buildDeliveryReceiptPrintBlocks(receipt, agentName, template = null) {
   const tpl = normalizeTemplate(template || getDeliveryReceiptPrintTemplate());
@@ -334,15 +333,10 @@ function buildDeliveryReceiptPrintBlocks(receipt, agentName, template = null) {
   const t = tpl.typography;
   const c = tpl.content;
   const ctx = receiptContext(receipt, agentName, tpl);
-  const div = dividerChar(c.dividerStyle);
-  const heavy = heavyDividerChar(c.dividerStyle);
   const blocks = [];
-
-  blocks.push({ type: 'ornament', char: '✦', repeat: 3 });
 
   if (b.showLogo && b.logoUrl) {
     blocks.push({ type: 'logo', url: b.logoUrl, maxWidth: b.logoWidth });
-    blocks.push({ type: 'blank', count: 1 });
   }
 
   if (c.showLegalName && b.legalName.trim()) {
@@ -361,110 +355,88 @@ function buildDeliveryReceiptPrintBlocks(receipt, agentName, template = null) {
       text: b.companyName.trim(),
       fontSize: b.companyFont,
       align: 'center',
-      bold: false,
       muted: true
     });
   }
 
-  pushDoubleDivider(blocks, heavy);
+  blocks.push({ type: 'spacer', count: 1 });
 
   if (c.showTitle && b.title.trim()) {
-    const subText = c.showDeliveryNo ? `رقم الوصل: ${ctx.deliveryNo}` : '';
     blocks.push({
-      type: 'titleBadge',
+      type: 'title',
       text: b.title.trim(),
-      subText,
       fontSize: b.titleFont,
-      subFontSize: t.labelFont,
-      char: heavy
+      align: 'center',
+      bold: true
     });
   }
 
-  blocks.push({ type: 'blank', count: 1 });
-
-  const metaRows = [];
-  if (c.showDate) metaRows.push({ label: 'التاريخ', value: ctx.date });
-  if (c.showAgent) metaRows.push({ label: 'المندوب', value: ctx.agent });
-  if (c.showDeliveryNo && !c.showTitle) {
-    metaRows.unshift({ label: 'رقم الوصل', value: ctx.deliveryNo });
+  if (c.showDeliveryNo) {
+    blocks.push({
+      type: 'text',
+      text: ctx.deliveryNo,
+      fontSize: t.labelFont,
+      align: 'center',
+      muted: true
+    });
   }
 
-  if (metaRows.length) {
-    blocks.push({ type: 'metaStart' });
-    for (const row of metaRows) {
-      blocks.push({
-        type: 'row',
-        label: row.label,
-        value: row.value,
-        labelFont: t.labelFont,
-        valueFont: t.bodyFont
-      });
-    }
-    blocks.push({ type: 'metaEnd' });
+  blocks.push({ type: 'rule' });
+
+  if (c.showDate) {
+    blocks.push({ type: 'pair', label: 'التاريخ', value: ctx.date, labelFont: t.labelFont, valueFont: t.bodyFont });
+  }
+  if (c.showAgent) {
+    blocks.push({ type: 'pair', label: 'المندوب', value: ctx.agent, labelFont: t.labelFont, valueFont: t.bodyFont });
   }
 
   if (c.showCustomer && ctx.customer && ctx.customer !== '—') {
+    blocks.push({ type: 'spacer', count: 1 });
+    blocks.push({ type: 'text', text: 'الزبون', fontSize: t.labelFont, align: 'right', muted: true });
     blocks.push({
-      type: 'customerBox',
-      label: 'الزبون',
-      value: ctx.customer,
-      labelFont: t.labelFont,
-      valueFont: Math.min(t.bodyFont + 6, 34),
-      char: div
+      type: 'hero',
+      text: ctx.customer,
+      fontSize: Math.min(t.bodyFont + 8, 32),
+      align: 'right',
+      bold: true
     });
   }
 
   if (c.showCustomerNum && ctx.customerNum) {
-    blocks.push({
-      type: 'row',
-      label: 'رقم الحساب',
-      value: ctx.customerNum,
-      labelFont: t.labelFont,
-      valueFont: t.bodyFont
-    });
+    blocks.push({ type: 'pair', label: 'رقم الحساب', value: ctx.customerNum, labelFont: t.labelFont, valueFont: t.bodyFont });
   }
   if (c.showTree && ctx.tree) {
-    blocks.push({
-      type: 'row',
-      label: 'الشجرة',
-      value: ctx.tree,
-      labelFont: t.labelFont,
-      valueFont: t.bodyFont
-    });
+    blocks.push({ type: 'pair', label: 'الشجرة', value: ctx.tree, labelFont: t.labelFont, valueFont: t.bodyFont });
   }
 
-  pushDoubleDivider(blocks, heavy);
+  blocks.push({ type: 'rule' });
 
-  blocks.push({
-    type: 'amountBox',
-    label: 'المبلغ المستلم (نقداً)',
-    value: ctx.amount,
-    fontSize: t.amountFont,
-    char: heavy
-  });
+  blocks.push({ type: 'text', text: 'المبلغ المستلم', fontSize: t.labelFont, align: 'center', muted: true });
+  blocks.push({ type: 'amount', value: ctx.amount, fontSize: t.amountFont });
 
-  blocks.push({ type: 'blank', count: 1 });
+  blocks.push({ type: 'spacer', count: 1 });
 
   if (c.legalText.trim()) {
     blocks.push({
-      type: 'legalBox',
+      type: 'caption',
       text: c.legalText.trim(),
       fontSize: t.legalFont,
-      char: div
+      align: 'center',
+      muted: true
     });
   }
 
   if (c.showNotes && ctx.notes) {
     blocks.push({
-      type: 'notesBox',
-      label: 'ملاحظات',
-      text: ctx.notes,
-      labelFont: t.labelFont,
-      fontSize: t.bodyFont
+      type: 'text',
+      text: `ملاحظات: ${ctx.notes}`,
+      fontSize: t.bodyFont,
+      align: 'center',
+      italic: true
     });
   }
 
-  pushDivider(blocks, div);
+  blocks.push({ type: 'spacer', count: 2 });
 
   if (b.footer.trim()) {
     blocks.push({
@@ -472,11 +444,9 @@ function buildDeliveryReceiptPrintBlocks(receipt, agentName, template = null) {
       text: b.footer.trim(),
       fontSize: b.footerFont,
       align: 'center',
-      bold: false
+      muted: true
     });
   }
-
-  blocks.push({ type: 'ornament', char: '✦', repeat: 3 });
 
   return {
     blocks,
@@ -503,8 +473,16 @@ function buildDeliveryReceiptPrintLines(receipt, agentName, template = null) {
   const { blocks, footerBlankLines } = buildDeliveryReceiptPrintBlocks(receipt, agentName, template);
   const out = [];
   for (const block of blocks) {
-    if (block.type === 'text') {
+    if (block.type === 'text' || block.type === 'title' || block.type === 'hero' || block.type === 'caption') {
       out.push({ text: block.text, size: block.fontSize >= 24 ? 2 : 1, fontSize: block.fontSize, align: block.align, bold: block.bold });
+    } else if (block.type === 'rule') {
+      out.push({ text: '────────────────────────', size: 1 });
+    } else if (block.type === 'spacer' || block.type === 'blank') {
+      for (let i = 0; i < (block.count || 1); i += 1) out.push({ text: '', size: 1 });
+    } else if (block.type === 'pair') {
+      out.push({ text: `${block.label}    ${block.value}`, size: 1, fontSize: block.valueFont, align: 'left' });
+    } else if (block.type === 'amount') {
+      out.push({ text: block.value, size: 2, fontSize: block.fontSize, align: 'center', bold: true });
     } else if (block.type === 'divider') {
       out.push({ text: String(block.char || '─').repeat(32), size: 1 });
     } else if (block.type === 'doubleDivider') {
