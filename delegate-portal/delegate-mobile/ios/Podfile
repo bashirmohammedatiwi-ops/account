@@ -39,4 +39,13 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
   end
+
+  # Fix print_bluetooth_thermal iOS crash on disconnect-before-connect and invalid UUID force-unwrap.
+  require 'fileutils'
+  plugin_swift = File.expand_path(File.join('.symlinks', 'plugins', 'print_bluetooth_thermal', 'ios', 'Classes', 'SwiftPrintBluetoothThermalPlugin.swift'), __FILE__)
+  patched_swift = File.expand_path('plugin_patches/SwiftPrintBluetoothThermalPlugin.swift', __FILE__)
+  if File.exist?(plugin_swift) && File.exist?(patched_swift)
+    FileUtils.cp(patched_swift, plugin_swift)
+    Pod::UI.puts 'Applied print_bluetooth_thermal iOS crash fix'
+  end
 end

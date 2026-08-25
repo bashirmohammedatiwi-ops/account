@@ -49,8 +49,6 @@ Future<Generator> _generatorFor(int paperMm) async {
   return gen;
 }
 
-bool _hasNonAscii(String text) => text.runes.any((r) => r > 127);
-
 bool _looksArabic(String text) {
   for (final r in text.runes) {
     if ((r >= 0x0600 && r <= 0x06FF) || (r >= 0x0750 && r <= 0x077F)) return true;
@@ -64,17 +62,6 @@ TextAlign _toTextAlign(String? align, String text) {
   if (align == 'right') return TextAlign.right;
   if (_looksArabic(text)) return TextAlign.right;
   return TextAlign.center;
-}
-
-PosAlign _toPosAlign(TextAlign align) {
-  switch (align) {
-    case TextAlign.center:
-      return PosAlign.center;
-    case TextAlign.right:
-      return PosAlign.right;
-    default:
-      return PosAlign.left;
-  }
 }
 
 img.Image _trimWhitespace(img.Image src, {int threshold = 248}) {
@@ -259,6 +246,196 @@ Future<img.Image?> _rasterPairRow(
   return img.copyResize(hi, width: paperWidthDots, interpolation: img.Interpolation.cubic);
 }
 
+/// شريط العنوان بخلفية سوداء ونص أبيض — يبرز نوع المستند فوراً.
+Future<img.Image?> _rasterBadge(
+  String text, {
+  required double fontSize,
+  required int paperWidthDots,
+}) async {
+  await _ensurePrintFonts();
+  final trimmed = text.trim();
+  if (trimmed.isEmpty) return null;
+
+  final painter = TextPainter(
+    text: TextSpan(
+      text: trimmed,
+      style: GoogleFonts.cairo(fontSize: fontSize, fontWeight: FontWeight.w700, color: Colors.white, height: 1.2),
+    ),
+    textDirection: _looksArabic(trimmed) ? TextDirection.rtl : TextDirection.ltr,
+    textAlign: TextAlign.center,
+    maxLines: 1,
+  );
+  painter.layout(maxWidth: paperWidthDots * 0.8);
+
+  final boxHeight = painter.height + 18;
+  final totalHeight = boxHeight + 12;
+  const scale = 2;
+
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(
+    recorder,
+    Rect.fromLTWH(0, 0, (paperWidthDots * scale).toDouble(), (totalHeight * scale).ceilToDouble()),
+  );
+  canvas.scale(scale.toDouble());
+  canvas.drawRect(Rect.fromLTWH(0, 0, paperWidthDots.toDouble(), totalHeight), Paint()..color = Colors.white);
+
+  final boxWidth = painter.width + 56;
+  final boxLeft = (paperWidthDots - boxWidth) / 2;
+  canvas.drawRRect(
+    RRect.fromRectAndRadius(
+      Rect.fromLTWH(boxLeft, 6, boxWidth, boxHeight),
+      const Radius.circular(6),
+    ),
+    Paint()..color = Colors.black,
+  );
+  painter.paint(canvas, Offset(boxLeft + 28, 6 + (boxHeight - painter.height) / 2));
+
+  final picture = recorder.endRecording();
+  final uiImage = await picture.toImage(paperWidthDots * scale, (totalHeight * scale).ceil());
+  final hi = await _uiImageToImg(uiImage);
+  if (hi == null) return null;
+  return img.copyResize(hi, width: paperWidthDots, interpolation: img.Interpolation.cubic);
+}
+
+/// صندوق المبلغ — إطار واضح يمنع اللبس في قيمة الاستلام.
+Future<img.Image?> _rasterAmountBox(
+  String label,
+  String value,
+  String? sub, {
+  required double valueFont,
+  required double labelFont,
+  required int paperWidthDots,
+}) async {
+  await _ensurePrintFonts();
+  if (value.trim().isEmpty) return null;
+
+  TextPainter build(String text, double size, FontWeight weight) {
+    final p = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: GoogleFonts.cairo(fontSize: size, fontWeight: weight, color: Colors.black, height: 1.2),
+      ),
+      textDirection: _looksArabic(text) ? TextDirection.rtl : TextDirection.ltr,
+      textAlign: TextAlign.center,
+      maxLines: 1,
+    );
+    p.layout(maxWidth: paperWidthDots * 0.82);
+    return p;
+  }
+
+  final labelPainter = build(label, labelFont, FontWeight.w600);
+  final valuePainter = build(value, valueFont, FontWeight.w700);
+  final subPainter = (sub != null && sub.trim().isNotEmpty) ? build(sub, labelFont, FontWeight.w600) : null;
+
+  const padV = 14.0;
+  final inner = labelPainter.height + 6 + valuePainter.height + (subPainter != null ? 4 + subPainter.height : 0);
+  final boxHeight = inner + padV * 2;
+  final totalHeight = boxHeight + 16;
+  const scale = 2;
+  const margin = 26.0;
+
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(
+    recorder,
+    Rect.fromLTWH(0, 0, (paperWidthDots * scale).toDouble(), (totalHeight * scale).ceilToDouble()),
+  );
+  canvas.scale(scale.toDouble());
+  canvas.drawRect(Rect.fromLTWH(0, 0, paperWidthDots.toDouble(), totalHeight), Paint()..color = Colors.white);
+
+  canvas.drawRRect(
+    RRect.fromRectAndRadius(
+      Rect.fromLTWH(margin, 8, paperWidthDots - margin * 2, boxHeight),
+      const Radius.circular(8),
+    ),
+    Paint()
+      ..color = Colors.black
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2,
+  );
+
+  var y = 8 + padV;
+  labelPainter.paint(canvas, Offset((paperWidthDots - labelPainter.width) / 2, y));
+  y += labelPainter.height + 6;
+  valuePainter.paint(canvas, Offset((paperWidthDots - valuePainter.width) / 2, y));
+  if (subPainter != null) {
+    y += valuePainter.height + 4;
+    subPainter.paint(canvas, Offset((paperWidthDots - subPainter.width) / 2, y));
+  }
+
+  final picture = recorder.endRecording();
+  final uiImage = await picture.toImage(paperWidthDots * scale, (totalHeight * scale).ceil());
+  final hi = await _uiImageToImg(uiImage);
+  if (hi == null) return null;
+  return img.copyResize(hi, width: paperWidthDots, interpolation: img.Interpolation.cubic);
+}
+
+/// سطر توقيع الزبون.
+Future<img.Image?> _rasterSignature(String label, int paperWidthDots) async {
+  await _ensurePrintFonts();
+  final painter = TextPainter(
+    text: TextSpan(
+      text: label,
+      style: GoogleFonts.cairo(fontSize: 15, fontWeight: FontWeight.w600, color: const Color(0xFF334155), height: 1.2),
+    ),
+    textDirection: TextDirection.rtl,
+    maxLines: 1,
+  );
+  painter.layout(maxWidth: paperWidthDots * 0.5);
+
+  final totalHeight = painter.height + 34;
+  const scale = 2;
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(
+    recorder,
+    Rect.fromLTWH(0, 0, (paperWidthDots * scale).toDouble(), (totalHeight * scale).ceilToDouble()),
+  );
+  canvas.scale(scale.toDouble());
+  canvas.drawRect(Rect.fromLTWH(0, 0, paperWidthDots.toDouble(), totalHeight), Paint()..color = Colors.white);
+
+  final lineY = 18.0;
+  canvas.drawLine(
+    Offset(paperWidthDots * 0.12, lineY),
+    Offset(paperWidthDots * 0.62, lineY),
+    Paint()
+      ..color = Colors.black
+      ..strokeWidth = 1.4,
+  );
+  painter.paint(canvas, Offset(paperWidthDots * 0.66, lineY - painter.height / 2));
+
+  final picture = recorder.endRecording();
+  final uiImage = await picture.toImage(paperWidthDots * scale, (totalHeight * scale).ceil());
+  final hi = await _uiImageToImg(uiImage);
+  if (hi == null) return null;
+  return img.copyResize(hi, width: paperWidthDots, interpolation: img.Interpolation.cubic);
+}
+
+/// فاصل منقّط — أخف بصرياً من الخط المصمت ويفصل الأقسام بوضوح.
+Future<img.Image?> _rasterDashedRule(int paperWidthDots) async {
+  const height = 12;
+  const scale = 2;
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(
+    recorder,
+    Rect.fromLTWH(0, 0, (paperWidthDots * scale).toDouble(), (height * scale).toDouble()),
+  );
+  canvas.scale(scale.toDouble());
+  canvas.drawRect(Rect.fromLTWH(0, 0, paperWidthDots.toDouble(), height.toDouble()), Paint()..color = Colors.white);
+  final paint = Paint()
+    ..color = Colors.black
+    ..strokeWidth = 1.6;
+  const dash = 8.0;
+  const gap = 6.0;
+  for (var x = 24.0; x < paperWidthDots - 24; x += dash + gap) {
+    final end = (x + dash).clamp(0.0, paperWidthDots - 24.0);
+    canvas.drawLine(Offset(x, height / 2), Offset(end, height / 2), paint);
+  }
+  final picture = recorder.endRecording();
+  final uiImage = await picture.toImage(paperWidthDots * scale, height * scale);
+  final hi = await _uiImageToImg(uiImage);
+  if (hi == null) return null;
+  return img.copyResize(hi, width: paperWidthDots, interpolation: img.Interpolation.cubic);
+}
+
 Future<img.Image?> _rasterRule(int paperWidthDots) async {
   const height = 10;
   const scale = 2;
@@ -287,21 +464,57 @@ Future<img.Image?> _rasterRule(int paperWidthDots) async {
   return img.copyResize(hi, width: paperWidthDots, interpolation: img.Interpolation.cubic);
 }
 
-Future<List<int>> _appendRasterImage(
-  Generator generator,
-  List<int> bytes,
-  img.Image? raster, {
-  PosAlign align = PosAlign.center,
-}) async {
-  if (raster != null) {
-    bytes += generator.imageRaster(raster, align: align);
+/// ارتفاع سطر التغذية الواحد على طابعة 203dpi.
+const _feedLineDots = 24;
+
+/// يجمّع الفاتورة كلها في صورة واحدة. إرسالها كأمر رسم واحد يجعل الورق
+/// يخرج بحركة متصلة، بدل توقف الطابعة بين كل عنصر وآخر بانتظار البيانات.
+class _ReceiptCanvas {
+  _ReceiptCanvas(this.width);
+
+  final int width;
+  final List<img.Image> _parts = [];
+
+  void add(img.Image? raster) {
+    if (raster == null) return;
+    _parts.add(raster.width == width ? raster : _center(raster));
   }
-  return bytes;
+
+  void feed(int lines) {
+    if (lines <= 0) return;
+    _parts.add(_blank(lines * _feedLineDots));
+  }
+
+  img.Image _blank(int height) {
+    final im = img.Image(width: width, height: height);
+    img.fill(im, color: img.ColorRgb8(255, 255, 255));
+    return im;
+  }
+
+  img.Image _center(img.Image src) {
+    final scaled = src.width > width
+        ? img.copyResize(src, width: width, interpolation: img.Interpolation.average)
+        : src;
+    final canvas = _blank(scaled.height);
+    img.compositeImage(canvas, scaled, dstX: ((width - scaled.width) / 2).round());
+    return canvas;
+  }
+
+  img.Image? build() {
+    if (_parts.isEmpty) return null;
+    final height = _parts.fold<int>(0, (sum, p) => sum + p.height);
+    final out = _blank(height);
+    var y = 0;
+    for (final part in _parts) {
+      img.compositeImage(out, part, dstY: y);
+      y += part.height;
+    }
+    return out;
+  }
 }
 
-Future<List<int>> _appendRasterOrText(
-  Generator generator,
-  List<int> bytes,
+Future<void> _addText(
+  _ReceiptCanvas canvas,
   String text, {
   required double fontSize,
   required TextAlign align,
@@ -310,31 +523,16 @@ Future<List<int>> _appendRasterOrText(
   required bool italic,
   required int paperWidthDots,
 }) async {
-  if (text.trim().isEmpty) return bytes;
-
-  if (_hasNonAscii(text)) {
-    final raster = await _rasterText(
-      text,
-      align: align,
-      fontSize: fontSize,
-      bold: bold,
-      muted: muted,
-      italic: italic,
-      paperWidthDots: paperWidthDots,
-    );
-    return await _appendRasterImage(generator, bytes, raster, align: _toPosAlign(align));
-  }
-
-  bytes += generator.text(
+  if (text.trim().isEmpty) return;
+  canvas.add(await _rasterText(
     text,
-    styles: PosStyles(
-      align: _toPosAlign(align),
-      bold: bold,
-      height: fontSize >= 24 ? PosTextSize.size2 : PosTextSize.size1,
-      width: fontSize >= 24 ? PosTextSize.size2 : PosTextSize.size1,
-    ),
-  );
-  return bytes;
+    align: align,
+    fontSize: fontSize,
+    bold: bold,
+    muted: muted,
+    italic: italic,
+    paperWidthDots: paperWidthDots,
+  ));
 }
 
 Future<List<int>> buildEscPosBytesFromPayload(
@@ -345,95 +543,18 @@ Future<List<int>> buildEscPosBytesFromPayload(
   final paperMm = _normalizePaperMm(payload.paperMm);
   final paperWidthDots = _paperWidthDotsFor(paperMm);
   final generator = await _generatorFor(paperMm);
+  final canvas = _ReceiptCanvas(paperWidthDots);
+
+  for (final block in payload.blocks) {
+    await _renderBlock(canvas, block, paperWidthDots: paperWidthDots, serverUrl: serverUrl);
+  }
+
   var bytes = <int>[];
   bytes += generator.reset();
 
-  for (final block in payload.blocks) {
-    switch (block.type) {
-      case 'logo':
-        if (block.url != null && block.url!.isNotEmpty) {
-          final logo = await _loadLogoImage(block.url!, serverUrl, block.maxWidth ?? 200);
-          if (logo != null) {
-            bytes += generator.imageRaster(logo, align: PosAlign.center);
-          }
-        }
-        break;
-      case 'text':
-      case 'title':
-      case 'hero':
-      case 'caption':
-      case 'receiptId':
-        bytes = await _appendRasterOrText(
-          generator,
-          bytes,
-          block.text ?? '',
-          fontSize: (block.fontSize ?? 18).toDouble(),
-          align: block.type == 'receiptId' ? TextAlign.center : _toTextAlign(block.align, block.text ?? ''),
-          bold: block.bold || block.type == 'hero' || block.type == 'title',
-          muted: block.muted || block.type == 'receiptId' || block.type == 'caption',
-          italic: block.italic,
-          paperWidthDots: paperWidthDots,
-        );
-        break;
-      case 'rule':
-        final rule = await _rasterRule(paperWidthDots);
-        bytes = await _appendRasterImage(generator, bytes, rule);
-        break;
-      case 'spacer':
-        final feeds = block.count.clamp(1, 4);
-        for (var i = 0; i < feeds; i++) {
-          bytes += generator.feed(1);
-        }
-        break;
-      case 'blank':
-        for (var i = 0; i < block.count.clamp(1, 3); i++) {
-          bytes += generator.feed(1);
-        }
-        break;
-      case 'pair':
-        final pair = await _rasterPairRow(
-          block.label ?? '',
-          block.value ?? '',
-          labelFont: (block.labelFont ?? 14).toDouble(),
-          valueFont: (block.valueFont ?? 18).toDouble(),
-          paperWidthDots: paperWidthDots,
-        );
-        bytes = await _appendRasterImage(generator, bytes, pair);
-        break;
-      case 'amount':
-        bytes = await _appendRasterOrText(
-          generator,
-          bytes,
-          block.value ?? '',
-          fontSize: (block.fontSize ?? 38).toDouble(),
-          align: TextAlign.center,
-          bold: true,
-          muted: false,
-          italic: false,
-          paperWidthDots: paperWidthDots,
-        );
-        break;
-      // توافق مع القوالب القديمة
-      case 'divider':
-      case 'doubleDivider':
-      case 'ribbon':
-      case 'titleBadge':
-      case 'ornament':
-      case 'metaStart':
-      case 'metaEnd':
-      case 'customerBox':
-      case 'notesBox':
-      case 'row':
-      case 'amountBox':
-      case 'legalBox':
-        bytes = await _appendLegacyBlock(
-          generator,
-          bytes,
-          block,
-          paperWidthDots: paperWidthDots,
-        );
-        break;
-    }
+  final composite = canvas.build();
+  if (composite != null) {
+    bytes += generator.imageRaster(composite, align: PosAlign.center);
   }
 
   for (var i = 0; i < payload.footerBlankLines; i++) {
@@ -443,63 +564,82 @@ Future<List<int>> buildEscPosBytesFromPayload(
   return bytes;
 }
 
-Future<List<int>> _appendLegacyBlock(
-  Generator generator,
-  List<int> bytes,
+Future<void> _renderBlock(
+  _ReceiptCanvas canvas,
   DeliveryReceiptPrintBlock block, {
   required int paperWidthDots,
+  String? serverUrl,
 }) async {
   switch (block.type) {
-    case 'divider':
-      final rule = await _rasterRule(paperWidthDots);
-      return await _appendRasterImage(generator, bytes, rule);
-    case 'doubleDivider':
-      final rule = await _rasterRule(paperWidthDots);
-      bytes = await _appendRasterImage(generator, bytes, rule);
-      return await _appendRasterImage(generator, bytes, rule);
-    case 'row':
-      return await _appendRasterImage(
-        generator,
-        bytes,
-        await _rasterPairRow(
-          block.label ?? '',
-          block.value ?? '',
-          labelFont: (block.labelFont ?? 14).toDouble(),
-          valueFont: (block.valueFont ?? 18).toDouble(),
-          paperWidthDots: paperWidthDots,
-        ),
-      );
-    case 'amount':
-    case 'amountBox':
-      if (block.label != null && block.label!.trim().isNotEmpty) {
-        bytes = await _appendRasterOrText(
-          generator,
-          bytes,
-          block.label!,
-          fontSize: 14,
-          align: TextAlign.center,
-          bold: false,
-          muted: true,
-          italic: false,
-          paperWidthDots: paperWidthDots,
-        );
+    case 'logo':
+      if (block.url != null && block.url!.isNotEmpty) {
+        final logo = await _loadLogoImage(block.url!, serverUrl, block.maxWidth ?? 200);
+        if (logo != null) {
+          canvas.add(logo);
+          canvas.feed(1);
+        }
       }
-      return await _appendRasterOrText(
-        generator,
-        bytes,
-        block.value ?? '',
-        fontSize: (block.fontSize ?? 36).toDouble(),
-        align: TextAlign.center,
-        bold: true,
-        muted: false,
-        italic: false,
+      return;
+    case 'text':
+    case 'title':
+    case 'hero':
+    case 'caption':
+    case 'receiptId':
+      await _addText(
+        canvas,
+        block.text ?? '',
+        fontSize: (block.fontSize ?? 18).toDouble(),
+        align: block.type == 'receiptId' ? TextAlign.center : _toTextAlign(block.align, block.text ?? ''),
+        bold: block.bold || block.type == 'hero' || block.type == 'title',
+        muted: block.muted || block.type == 'receiptId' || block.type == 'caption',
+        italic: block.italic,
         paperWidthDots: paperWidthDots,
       );
+      return;
+    case 'rule':
+    case 'divider':
+      canvas.add(await _rasterRule(paperWidthDots));
+      return;
+    case 'dashedRule':
+      canvas.add(await _rasterDashedRule(paperWidthDots));
+      return;
+    case 'signature':
+      canvas.add(await _rasterSignature(block.label ?? 'توقيع المستلم', paperWidthDots));
+      return;
+    case 'doubleDivider':
+      canvas.add(await _rasterRule(paperWidthDots));
+      canvas.add(await _rasterRule(paperWidthDots));
+      return;
+    case 'spacer':
+      canvas.feed(block.count.clamp(1, 4));
+      return;
+    case 'blank':
+      canvas.feed(block.count.clamp(1, 3));
+      return;
+    case 'pair':
+    case 'row':
+      canvas.add(await _rasterPairRow(
+        block.label ?? '',
+        block.value ?? '',
+        labelFont: (block.labelFont ?? 14).toDouble(),
+        valueFont: (block.valueFont ?? 18).toDouble(),
+        paperWidthDots: paperWidthDots,
+      ));
+      return;
+    case 'amount':
+    case 'amountBox':
+      canvas.add(await _rasterAmountBox(
+        block.label ?? 'المبلغ المستلم',
+        block.value ?? '',
+        block.subText,
+        valueFont: (block.fontSize ?? 38).toDouble(),
+        labelFont: (block.labelFont ?? 15).toDouble(),
+        paperWidthDots: paperWidthDots,
+      ));
+      return;
     case 'legalBox':
-    case 'caption':
-      bytes = await _appendRasterOrText(
-        generator,
-        bytes,
+      await _addText(
+        canvas,
         block.text ?? '',
         fontSize: (block.fontSize ?? 14).toDouble(),
         align: TextAlign.center,
@@ -508,11 +648,10 @@ Future<List<int>> _appendLegacyBlock(
         italic: false,
         paperWidthDots: paperWidthDots,
       );
-      return bytes;
+      return;
     case 'notesBox':
-      bytes = await _appendRasterOrText(
-        generator,
-        bytes,
+      await _addText(
+        canvas,
         block.label ?? 'ملاحظات',
         fontSize: (block.labelFont ?? 14).toDouble(),
         align: TextAlign.center,
@@ -521,9 +660,8 @@ Future<List<int>> _appendLegacyBlock(
         italic: false,
         paperWidthDots: paperWidthDots,
       );
-      return await _appendRasterOrText(
-        generator,
-        bytes,
+      await _addText(
+        canvas,
         block.text ?? '',
         fontSize: (block.fontSize ?? 16).toDouble(),
         align: TextAlign.center,
@@ -532,10 +670,10 @@ Future<List<int>> _appendLegacyBlock(
         italic: true,
         paperWidthDots: paperWidthDots,
       );
+      return;
     case 'customerBox':
-      bytes = await _appendRasterOrText(
-        generator,
-        bytes,
+      await _addText(
+        canvas,
         block.label ?? 'الزبون',
         fontSize: (block.labelFont ?? 14).toDouble(),
         align: TextAlign.right,
@@ -544,9 +682,8 @@ Future<List<int>> _appendLegacyBlock(
         italic: false,
         paperWidthDots: paperWidthDots,
       );
-      return await _appendRasterOrText(
-        generator,
-        bytes,
+      await _addText(
+        canvas,
         block.value ?? '',
         fontSize: (block.valueFont ?? 24).toDouble(),
         align: TextAlign.right,
@@ -555,23 +692,17 @@ Future<List<int>> _appendLegacyBlock(
         italic: false,
         paperWidthDots: paperWidthDots,
       );
+      return;
     case 'titleBadge':
     case 'ribbon':
-      bytes = await _appendRasterOrText(
-        generator,
-        bytes,
+      canvas.add(await _rasterBadge(
         block.text ?? '',
         fontSize: (block.fontSize ?? 26).toDouble(),
-        align: TextAlign.center,
-        bold: true,
-        muted: false,
-        italic: false,
         paperWidthDots: paperWidthDots,
-      );
+      ));
       if (block.subText != null && block.subText!.trim().isNotEmpty) {
-        bytes = await _appendRasterOrText(
-          generator,
-          bytes,
+        await _addText(
+          canvas,
           block.subText!,
           fontSize: (block.subFontSize ?? 14).toDouble(),
           align: TextAlign.center,
@@ -581,14 +712,9 @@ Future<List<int>> _appendLegacyBlock(
           paperWidthDots: paperWidthDots,
         );
       }
-      return bytes;
-    case 'ornament':
-      return bytes;
-    case 'metaStart':
-    case 'metaEnd':
-      return bytes;
+      return;
     default:
-      return bytes;
+      return;
   }
 }
 
@@ -597,22 +723,19 @@ Future<List<int>> buildTestPrintBytes({
   Map<String, dynamic>? template,
   String? serverUrl,
 }) async {
-  final tpl = template ?? {
-    'version': 2,
-    'branding': {'legalName': 'اختبار', 'title': 'طباعة تجريبية', 'footer': 'Edari Delegate'},
-    'typography': {'bodyFont': 18, 'amountFont': 28},
-    'content': {'legalText': 'اتصال ناجح مع الطابعة'},
-  };
   final built = buildDeliveryReceiptPrintBlocks(
     DeliveryReceipt(
       id: 0,
-      deliveryNo: 'TEST-001',
+      deliveryNo: 'WR-20260824-0001',
       status: 'issued',
       statusLabel: '',
-      amount: 0,
+      amount: 250000,
       receiptDate: DateTime.now().toIso8601String().split('T').first,
+      customerName: 'محل الأمين / بغداد',
+      customerNum: '1201042',
+      treeName: 'شجرة بغداد',
     ),
-    template: tpl,
+    template: template,
     agentName: agentName,
   );
   final sample = DeliveryReceiptPrintPayload(

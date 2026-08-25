@@ -47,7 +47,7 @@ class HomeScreen extends ConsumerWidget {
     Future<void> refresh() async {
       ref.invalidate(treesProvider);
       ref.invalidate(ordersProvider);
-      ref.invalidate(receiptsListProvider);
+      await ref.read(receiptsListProvider.notifier).refresh();
       ref.invalidate(customerRequestsListProvider);
       ref.invalidate(promotionalVisitsListProvider);
     }

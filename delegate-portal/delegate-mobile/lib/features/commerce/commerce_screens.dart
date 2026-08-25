@@ -399,7 +399,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                     customer: o.customerName ?? '—',
                     date: fmtDate(o.createdAt),
                     amount: fmtMoney(o.totalAmount),
-                    statusLabel: orderStatusLabel(o.status),
+                    statusLabel: displayOrderStatusLabel(status: o.status, statusLabel: o.statusLabel),
                     statusColor: AppTheme.orderStatusColor(o.status),
                     onTap: () => context.go('/orders/${o.id}'),
                   );
@@ -528,7 +528,7 @@ class OrderDetailBody extends ConsumerWidget {
         data: (order) {
           return EdOrderInvoiceDetailView(
             order: order,
-            statusLabel: orderStatusLabel(order.status),
+            statusLabel: displayOrderStatusLabel(status: order.status, statusLabel: order.statusLabel),
             statusColor: AppTheme.orderStatusColor(order.status),
           );
         },

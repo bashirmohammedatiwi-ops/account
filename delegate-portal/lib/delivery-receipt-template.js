@@ -423,15 +423,13 @@ function buildDeliveryReceiptPrintBlocks(receipt, agentName, template = null) {
     });
   }
 
-  blocks.push({ type: 'spacer', count: 1 });
+  blocks.push({ type: 'rule' });
 
   if (c.showTitle && b.title.trim()) {
     blocks.push({
-      type: 'title',
+      type: 'titleBadge',
       text: b.title.trim(),
-      fontSize: b.titleFont,
-      align: 'center',
-      bold: true
+      fontSize: b.titleFont
     });
   }
 
@@ -443,7 +441,7 @@ function buildDeliveryReceiptPrintBlocks(receipt, agentName, template = null) {
     });
   }
 
-  blocks.push({ type: 'rule' });
+  blocks.push({ type: 'dashedRule' });
 
   if (c.showDate) {
     blocks.push({ type: 'pair', label: 'التاريخ', value: ctx.date, labelFont: t.labelFont, valueFont: t.bodyFont });
@@ -453,7 +451,7 @@ function buildDeliveryReceiptPrintBlocks(receipt, agentName, template = null) {
   }
 
   if (c.showCustomer && ctx.customer && ctx.customer !== '—') {
-    blocks.push({ type: 'spacer', count: 1 });
+    blocks.push({ type: 'dashedRule' });
     blocks.push({ type: 'text', text: 'الزبون', fontSize: t.labelFont, align: 'right', muted: true });
     blocks.push({
       type: 'hero',
@@ -471,12 +469,16 @@ function buildDeliveryReceiptPrintBlocks(receipt, agentName, template = null) {
     blocks.push({ type: 'pair', label: 'الشجرة', value: ctx.tree, labelFont: t.labelFont, valueFont: t.bodyFont });
   }
 
-  blocks.push({ type: 'rule' });
-
-  blocks.push({ type: 'text', text: 'المبلغ المستلم', fontSize: t.labelFont, align: 'center', muted: true });
-  blocks.push({ type: 'amount', value: ctx.amount, fontSize: t.amountFont });
-
   blocks.push({ type: 'spacer', count: 1 });
+
+  blocks.push({
+    type: 'amountBox',
+    label: 'المبلغ المستلم',
+    value: ctx.amount,
+    subText: 'دينار عراقي',
+    fontSize: t.amountFont,
+    labelFont: t.labelFont
+  });
 
   if (c.legalText.trim()) {
     blocks.push({
@@ -498,7 +500,9 @@ function buildDeliveryReceiptPrintBlocks(receipt, agentName, template = null) {
     });
   }
 
-  blocks.push({ type: 'spacer', count: 2 });
+  blocks.push({ type: 'spacer', count: 1 });
+  blocks.push({ type: 'signature', label: 'توقيع المستلم' });
+  blocks.push({ type: 'dashedRule' });
 
   if (b.footer.trim()) {
     blocks.push({
@@ -539,6 +543,10 @@ function buildDeliveryReceiptPrintLines(receipt, agentName, template = null) {
       out.push({ text: block.text, size: block.fontSize >= 24 ? 2 : 1, fontSize: block.fontSize, align: block.align, bold: block.bold });
     } else if (block.type === 'rule') {
       out.push({ text: '────────────────────────', size: 1 });
+    } else if (block.type === 'dashedRule') {
+      out.push({ text: '- - - - - - - - - - - - - - - -', size: 1 });
+    } else if (block.type === 'signature') {
+      out.push({ text: `______________    ${block.label || 'توقيع المستلم'}`, size: 1 });
     } else if (block.type === 'spacer' || block.type === 'blank') {
       for (let i = 0; i < (block.count || 1); i += 1) out.push({ text: '', size: 1 });
     } else if (block.type === 'pair') {

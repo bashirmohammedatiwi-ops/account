@@ -58,15 +58,22 @@ class _PrinterSettingsScreenState extends ConsumerState<PrinterSettingsScreen> {
   }
 
   Future<void> _scanDevices() async {
-    setState(() => _scanning = true);
-    final list = await ThermalPrintService.scanPrinters();
+    setState(() {
+      _scanning = true;
+      _devices = [];
+    });
+    final list = await ThermalPrintService.scanPrinters(
+      onUpdate: (devices) {
+        if (!mounted) return;
+        setState(() => _devices = devices);
+      },
+    );
     if (mounted) {
       setState(() {
         _devices = list;
         _scanning = false;
       });
     }
-    await _refreshStatus();
   }
 
   Future<void> _requestPermissions() async {
@@ -74,7 +81,7 @@ class _PrinterSettingsScreenState extends ConsumerState<PrinterSettingsScreen> {
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('لم يُمنح إذن البلوتوث — فعّله من إعدادات التطبيق'),
+          content: const Text('لم يُمنح إذن البلوتوث'),
           action: SnackBarAction(label: 'الإعدادات', onPressed: openAppSettings),
           behavior: SnackBarBehavior.floating,
         ),
@@ -88,31 +95,43 @@ class _PrinterSettingsScreenState extends ConsumerState<PrinterSettingsScreen> {
       _connecting = true;
       _selectedMac = device.macAdress;
     });
-    final ok = await ThermalPrintService.selectAndConnectPrinter(device);
-    await _refreshStatus();
-    if (mounted) {
+    try {
+      final ok = await ThermalPrintService.selectAndConnectPrinter(device);
+      final reason = ThermalPrintService.lastError;
+      await _refreshStatus();
+      if (!mounted) return;
       setState(() => _connecting = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(ok ? 'تم حفظ وربط الطابعة بنجاح' : 'تم حفظ الطابعة — فشل الاتصال، تأكد أنها مفعّلة ومقترنة'),
+          content: Text(ok ? 'تم الاتصال بالطابعة' : (reason ?? 'تعذّر الاتصال')),
           backgroundColor: ok ? AppColors.success : null,
           behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: ok ? 3 : 10),
         ),
       );
+    } catch (_) {
+      if (mounted) {
+        setState(() => _connecting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذّر الاتصال'), behavior: SnackBarBehavior.floating),
+        );
+      }
     }
   }
 
   Future<void> _reconnect() async {
     setState(() => _connecting = true);
     final ok = await ThermalPrintService.connectSaved();
+    final reason = ThermalPrintService.lastError;
     await _refreshStatus();
     if (mounted) {
       setState(() => _connecting = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(ok ? 'تم الاتصال بالطابعة' : 'تعذّر الاتصال — تأكد أن الطابعة مفعّلة'),
+          content: Text(ok ? 'تم الاتصال' : (reason ?? 'تعذّر الاتصال')),
           backgroundColor: ok ? AppColors.success : null,
           behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: ok ? 3 : 10),
         ),
       );
     }
@@ -121,21 +140,22 @@ class _PrinterSettingsScreenState extends ConsumerState<PrinterSettingsScreen> {
   Future<void> _testPrint() async {
     setState(() => _testing = true);
     final agent = ref.read(authProvider).agent?.name;
-    final tpl = await ref.read(apiClientProvider).getDeliveryReceiptPrintTemplate();
     final serverUrl = ref.read(apiClientProvider).serverUrl;
     final ok = await ThermalPrintService.printTestPage(
       agentName: agent,
-      template: tpl,
       serverUrl: serverUrl,
+      fetchTemplate: () => ref.read(apiClientProvider).getDeliveryReceiptPrintTemplate(),
     );
+    final reason = ThermalPrintService.lastError;
     await _refreshStatus();
     if (mounted) {
       setState(() => _testing = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(ok ? 'تمت طباعة الاختبار' : 'فشلت الطباعة — أعد الاتصال ثم حاول'),
+          content: Text(ok ? 'تمت الطباعة' : (reason ?? 'فشلت الطباعة')),
           backgroundColor: ok ? AppColors.success : null,
           behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: ok ? 3 : 10),
         ),
       );
     }
@@ -146,48 +166,39 @@ class _PrinterSettingsScreenState extends ConsumerState<PrinterSettingsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('إزالة الطابعة'),
-        content: const Text('سيتم حذف الطابعة المحفوظة. يمكنك اختيار طابعة أخرى لاحقاً.'),
+        content: const Text('حذف الطابعة المحفوظة؟'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('إزالة')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('حذف')),
         ],
       ),
     );
     if (ok != true) return;
     await ThermalPrintService.forgetPrinter();
     if (!mounted) return;
-    setState(() => _selectedMac = null);
+    setState(() {
+      _selectedMac = null;
+      _devices = [];
+    });
     await _refreshStatus();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تمت إزالة الطابعة المحفوظة'), behavior: SnackBarBehavior.floating),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     if (kIsWeb) {
       return AppPage(
-        title: 'الطابعة الحرارية',
+        title: 'الطابعة',
         kicker: 'الإعدادات',
         showBack: true,
         onBack: () => context.pop(),
-        child: const Center(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Text(
-              'الطباعة الحرارية متاحة على الهاتف والآيباد فقط',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.muted),
-            ),
-          ),
-        ),
+        child: const Center(child: Text('غير متاح على الويب')),
       );
     }
 
     final status = _status;
 
     return AppPage(
-      title: 'الطابعة الحرارية',
+      title: 'الطابعة',
       kicker: 'الإعدادات',
       showBack: true,
       onBack: () => context.pop(),
@@ -198,60 +209,33 @@ class _PrinterSettingsScreenState extends ConsumerState<PrinterSettingsScreen> {
               children: [
                 _StatusCard(status: status),
                 const SizedBox(height: 16),
-                if (status != null && !status.permissionGranted) ...[
-                  EdPanelCard(
-                    title: 'إذن البلوتوث مطلوب',
-                    subtitle: 'Android 12+ يحتاج إذن «الأجهزة القريبة»',
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const Text(
-                          'بدون هذا الإذن يظهر التطبيق أن البلوتوث غير مفعّل حتى لو كان مفعّلاً على الجهاز.',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.muted),
-                        ),
-                        const SizedBox(height: 12),
-                        EdPrimaryButton(label: 'منح إذن البلوتوث', icon: Icons.bluetooth_rounded, onPressed: _requestPermissions),
-                      ],
-                    ),
+                if (status != null && !status.permissionGranted)
+                  EdPrimaryButton(
+                    label: 'إذن البلوتوث',
+                    icon: Icons.bluetooth_rounded,
+                    onPressed: _requestPermissions,
                   ),
-                  const SizedBox(height: 16),
-                ],
+                if (status != null && !status.permissionGranted) const SizedBox(height: 16),
                 EdPanelCard(
-                  title: 'اختر الطابعة',
-                  subtitle: 'مرة واحدة — تُحفظ تلقائياً للطباعة لاحقاً',
+                  title: 'الأجهزة',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Text(
-                        '1. اقترن الطابعة من إعدادات Bluetooth في الجهاز\n2. اخترها من القائمة أدناه\n3. استخدم «طباعة اختبار» للتأكد',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted, height: 1.5),
-                      ),
-                      const SizedBox(height: 14),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _scanning ? null : _scanDevices,
-                              icon: _scanning
-                                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                                  : const Icon(Icons.refresh_rounded, size: 18),
-                              label: Text(_scanning ? 'جاري البحث...' : 'تحديث القائمة'),
-                            ),
-                          ),
-                        ],
+                      OutlinedButton.icon(
+                        onPressed: _scanning ? null : _scanDevices,
+                        icon: _scanning
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.refresh_rounded, size: 18),
+                        label: Text(_scanning ? 'جاري البحث...' : 'تحديث القائمة'),
                       ),
                       const SizedBox(height: 12),
-                      if (_devices.isEmpty)
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceAlt,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.borderLight),
-                          ),
-                          child: const Text(
-                            'لا توجد طابعات مقترنة. افتح إعدادات الجهاز → Bluetooth واقترن الطابعة ثم ارجع واضغط تحديث.',
-                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.muted),
+                      if (_devices.isEmpty && !_scanning)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: Text(
+                            'لا توجد أجهزة',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.muted),
                           ),
                         )
                       else
@@ -264,30 +248,26 @@ class _PrinterSettingsScreenState extends ConsumerState<PrinterSettingsScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
                 if (status?.hasSavedPrinter == true) ...[
+                  const SizedBox(height: 16),
                   EdPanelCard(
-                    title: 'الطابعة المحفوظة',
+                    title: status!.savedName?.trim().isNotEmpty == true ? status.savedName!.trim() : 'الطابعة',
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _infoRow('الاسم', status!.savedName ?? '—'),
-                        const Divider(height: 20),
-                        _infoRow('MAC', status.savedMac ?? '—', ltr: true),
-                        const SizedBox(height: 14),
                         Row(
                           children: [
                             Expanded(
                               child: OutlinedButton.icon(
                                 onPressed: _connecting ? null : _reconnect,
                                 icon: const Icon(Icons.link_rounded, size: 18),
-                                label: Text(_connecting ? 'جاري الاتصال...' : 'إعادة الاتصال'),
+                                label: Text(_connecting ? '...' : 'اتصال'),
                               ),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
                               child: EdPrimaryButton(
-                                label: _testing ? 'طباعة...' : 'طباعة اختبار',
+                                label: _testing ? '...' : 'طباعة',
                                 icon: Icons.print_rounded,
                                 loading: _testing,
                                 onPressed: _testing ? null : _testPrint,
@@ -299,7 +279,7 @@ class _PrinterSettingsScreenState extends ConsumerState<PrinterSettingsScreen> {
                         OutlinedButton.icon(
                           onPressed: _forgetPrinter,
                           icon: const Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.danger),
-                          label: const Text('إزالة الطابعة المحفوظة', style: TextStyle(color: AppColors.danger)),
+                          label: const Text('إزالة', style: TextStyle(color: AppColors.danger)),
                         ),
                       ],
                     ),
@@ -307,23 +287,6 @@ class _PrinterSettingsScreenState extends ConsumerState<PrinterSettingsScreen> {
                 ],
               ],
             ),
-    );
-  }
-
-  Widget _infoRow(String label, String value, {bool ltr = false}) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.muted)),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            value,
-            textDirection: ltr ? TextDirection.ltr : null,
-            style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.navy),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -338,35 +301,34 @@ class _StatusCard extends StatelessWidget {
     final s = status;
     Color color = AppColors.muted;
     IconData icon = Icons.print_outlined;
-    String title = 'جاري التحقق...';
+    String title = '...';
     String subtitle = '';
 
     if (s != null) {
       if (!s.permissionGranted) {
         color = AppColors.warning;
         icon = Icons.bluetooth_disabled_rounded;
-        title = 'إذن البلوتوث';
-        subtitle = 'غير ممنوح';
+        title = 'البلوتوث';
+        subtitle = 'غير مفعّل';
       } else if (!s.bluetoothOn) {
         color = AppColors.warning;
         icon = Icons.bluetooth_disabled_rounded;
         title = 'البلوتوث';
-        subtitle = 'مغلق على الجهاز';
+        subtitle = 'مغلق';
       } else if (s.connected) {
         color = AppColors.success;
         icon = Icons.bluetooth_connected_rounded;
         title = 'متصل';
-        subtitle = s.savedName?.trim().isNotEmpty == true ? s.savedName!.trim() : 'الطابعة جاهزة';
+        subtitle = s.savedName?.trim() ?? '';
       } else if (s.hasSavedPrinter) {
         color = AppColors.warning;
         icon = Icons.bluetooth_searching_rounded;
         title = 'غير متصل';
-        subtitle = s.savedName?.trim().isNotEmpty == true ? s.savedName!.trim() : 'أعد الاتصال من الأسفل';
+        subtitle = s.savedName?.trim() ?? '';
       } else {
         color = AppColors.accentTeal;
         icon = Icons.print_outlined;
         title = 'لا طابعة';
-        subtitle = 'اختر من القائمة أدناه';
       }
     }
 
@@ -394,9 +356,9 @@ class _StatusCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.navy)),
                 if (subtitle.isNotEmpty)
-                  Text(subtitle, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.muted)),
+                  Text(subtitle, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.muted)),
               ],
             ),
           ),
@@ -439,31 +401,19 @@ class _DeviceTile extends StatelessWidget {
             child: Row(
               children: [
                 Icon(
-                  selected ? Icons.check_circle_rounded : Icons.print_outlined,
+                  selected ? Icons.check_circle_rounded : Icons.bluetooth_rounded,
                   color: selected ? AppColors.accentTeal : AppColors.muted,
                   size: 22,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        device.name.trim().isNotEmpty ? device.name : 'طابعة Bluetooth',
-                        style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.navy),
-                      ),
-                      Text(
-                        device.macAdress,
-                        textDirection: TextDirection.ltr,
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
-                      ),
-                    ],
+                  child: Text(
+                    device.name.trim().isNotEmpty ? device.name : 'جهاز Bluetooth',
+                    style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.navy),
                   ),
                 ),
                 if (connecting)
-                  const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                else if (selected)
-                  const Text('محفوظة', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.accentTeal)),
+                  const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
               ],
             ),
           ),

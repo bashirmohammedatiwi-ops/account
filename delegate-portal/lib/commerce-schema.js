@@ -399,6 +399,11 @@ function migratePromotionalVisits(db) {
       FOREIGN KEY (visit_id) REFERENCES promotional_visits(id) ON DELETE CASCADE
     );
   `);
+  if (!columnExists(db, 'promotional_visits', 'center_phone')) {
+    try {
+      db.exec("ALTER TABLE promotional_visits ADD COLUMN center_phone TEXT DEFAULT ''");
+    } catch { /* exists */ }
+  }
 }
 
 function migrateDeliveryReceipts(db) {

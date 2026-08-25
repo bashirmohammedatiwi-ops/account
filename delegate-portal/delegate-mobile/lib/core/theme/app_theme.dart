@@ -174,15 +174,19 @@ abstract final class AppTheme {
   }
 
   static Color orderStatusColor(String? status) {
-    switch (status) {
+    final s = status?.trim().toLowerCase();
+    switch (s) {
       case 'approved':
       case 'delivered':
+      case 'processing':
         return AppColors.success;
       case 'rejected':
+      case 'cancelled':
         return AppColors.danger;
       case 'submitted':
       case 'under_review':
-      case 'processing':
+      case 'pending':
+      case 'draft':
         return AppColors.warning;
       default:
         return AppColors.muted;

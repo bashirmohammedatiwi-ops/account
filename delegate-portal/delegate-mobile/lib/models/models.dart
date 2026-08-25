@@ -5,6 +5,12 @@ int _jsonInt(dynamic value, {int fallback = 0}) {
   return int.tryParse('$value') ?? fallback;
 }
 
+num _jsonNum(dynamic value, {num fallback = 0}) {
+  if (value == null) return fallback;
+  if (value is num) return value;
+  return num.tryParse('$value') ?? fallback;
+}
+
 int? _jsonIntOrNull(dynamic value) {
   if (value == null) return null;
   if (value is int) return value;
@@ -351,6 +357,7 @@ class Order {
     required this.id,
     required this.status,
     required this.createdAt,
+    this.statusLabel,
     this.customerName,
     this.customerAccSeq,
     this.catalogBranchName,
@@ -362,6 +369,7 @@ class Order {
   final int id;
   final String status;
   final String createdAt;
+  final String? statusLabel;
   final String? customerName;
   final String? customerAccSeq;
   final String? catalogBranchName;
@@ -370,9 +378,10 @@ class Order {
   final List<OrderLine> lines;
 
   factory Order.fromJson(Map<String, dynamic> json) => Order(
-        id: json['id'] as int,
+        id: _jsonInt(json['id']),
         status: '${json['status'] ?? ''}',
         createdAt: '${json['createdAt'] ?? json['created_at'] ?? ''}',
+        statusLabel: json['statusLabel'] as String? ?? json['status_label'] as String?,
         customerName: json['customerName'] as String? ?? json['customer_name'] as String?,
         customerAccSeq: json['customerAccSeq']?.toString() ?? json['customer_acc_seq']?.toString(),
         catalogBranchName: json['catalogBranchName'] as String? ?? json['catalog_branch_name'] as String?,
@@ -447,7 +456,7 @@ class SalesReportInvoice {
         ref: '${json['ref'] ?? json['billSeq'] ?? json['seq'] ?? ''}',
         invoiceNum: '${json['num'] ?? json['billNum'] ?? ''}',
         date: '${json['date'] ?? ''}',
-        amount: json['amount'] as num? ?? 0,
+        amount: _jsonNum(json['amount']),
         isReturn: json['isReturn'] == true || json['is_return'] == true,
         customerName: json['customerName'] as String? ?? json['customer_name'] as String?,
         accSeq: json['accSeq']?.toString() ?? json['acc_seq']?.toString(),
@@ -520,7 +529,7 @@ class Receipt {
         receiptNo: '${json['receiptNo'] ?? json['receipt_no'] ?? ''}',
         status: '${json['status'] ?? ''}',
         statusLabel: '${json['statusLabel'] ?? json['status_label'] ?? ''}',
-        amount: json['amount'] as num? ?? 0,
+        amount: _jsonNum(json['amount']),
         commission: json['commission'] as num? ?? 0,
         discount: json['discount'] as num? ?? 0,
         customerName: json['customerName'] as String? ?? json['customer_name'] as String?,
@@ -577,7 +586,7 @@ class DeliveryReceipt {
         deliveryNo: '${json['deliveryNo'] ?? json['delivery_no'] ?? ''}',
         status: '${json['status'] ?? ''}',
         statusLabel: '${json['statusLabel'] ?? json['status_label'] ?? ''}',
-        amount: json['amount'] as num? ?? 0,
+        amount: _jsonNum(json['amount']),
         customerName: json['customerName'] as String? ?? json['customer_name'] as String?,
         customerNum: json['customerNum'] as String? ?? json['customer_num'] as String?,
         customerAccSeq: json['customerAccSeq'] as String? ?? json['customer_acc_seq'] as String?,
@@ -675,6 +684,7 @@ class PromotionalVisit {
     required this.shopName,
     required this.visitOutcome,
     required this.visitOutcomeLabel,
+    this.centerPhone,
     this.notes,
     this.adminNote,
     this.submittedAt,
@@ -691,6 +701,7 @@ class PromotionalVisit {
   final String shopName;
   final String visitOutcome;
   final String visitOutcomeLabel;
+  final String? centerPhone;
   final String? notes;
   final String? adminNote;
   final String? submittedAt;
@@ -699,7 +710,7 @@ class PromotionalVisit {
   bool get canDelete => status == 'pending';
 
   factory PromotionalVisit.fromJson(Map<String, dynamic> json) => PromotionalVisit(
-        id: json['id'] as int,
+        id: _jsonInt(json['id']),
         visitNo: '${json['visitNo'] ?? json['visit_no'] ?? ''}',
         status: '${json['status'] ?? ''}',
         statusLabel: '${json['statusLabel'] ?? json['status_label'] ?? ''}',
@@ -709,6 +720,7 @@ class PromotionalVisit {
         shopName: '${json['shopName'] ?? json['shop_name'] ?? ''}',
         visitOutcome: '${json['visitOutcome'] ?? json['visit_outcome'] ?? ''}',
         visitOutcomeLabel: '${json['visitOutcomeLabel'] ?? json['visit_outcome_label'] ?? ''}',
+        centerPhone: json['centerPhone'] as String? ?? json['center_phone'] as String?,
         notes: json['notes'] as String?,
         adminNote: json['adminNote'] as String? ?? json['admin_note'] as String?,
         submittedAt: json['submittedAt'] as String? ?? json['submitted_at'] as String?,

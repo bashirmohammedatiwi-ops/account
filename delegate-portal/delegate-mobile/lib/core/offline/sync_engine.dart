@@ -207,6 +207,7 @@ class SyncEngine {
           areaName: '${body['areaName']}',
           shopName: '${body['shopName']}',
           visitOutcome: '${body['visitOutcome']}',
+          centerPhone: body['centerPhone'] as String?,
           notes: body['notes'] as String?,
         );
         return;

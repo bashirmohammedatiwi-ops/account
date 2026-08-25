@@ -5347,6 +5347,29 @@ td.row-actions .btn { margin-inline-start: 4px; }
   margin: 10px 20px;
 }
 
+.thermal-preview-paper-v2 .tp-rule-dashed {
+  height: 0;
+  background: none;
+  border-top: 1.5px dashed #94a3b8;
+}
+
+.thermal-preview-paper-v2 .tp-sign {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  direction: rtl;
+  margin: 14px 16px 6px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.thermal-preview-paper-v2 .tp-sign-line {
+  flex: 1;
+  height: 1px;
+  background: #0f172a;
+}
+
 .thermal-preview-paper-v2 .tp-pair {
   display: flex;
   justify-content: space-between;

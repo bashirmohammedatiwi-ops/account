@@ -101,7 +101,10 @@ async function openPromoVisitDetail(id) {
       <label>المنطقة<input id="pvArea" value="${esc(v.areaName)}"></label>
       <label>المحل / المركز<input id="pvShop" value="${esc(v.shopName)}"></label>
       <label>حالة بعد الترويج<select id="pvOutcome">${outcomeOptions}</select></label>
-      <label class="full">ملاحظات المندوب<textarea id="pvNotes" rows="3">${esc(v.notes)}</textarea></label>
+      <label class="full">ملاحظات المندوب
+        ${v.centerPhone ? `<p class="muted" style="margin:0 0 8px">رقم هاتف المركز: <strong dir="ltr">${esc(v.centerPhone)}</strong></p>` : ''}
+        <textarea id="pvNotes" rows="3">${esc(v.notes)}</textarea>
+      </label>
       <label class="full">ملاحظة الإدارة<textarea id="pvAdminNote" rows="2">${esc(v.adminNote)}</textarea></label>
     </div>
     <div class="panel-actions">

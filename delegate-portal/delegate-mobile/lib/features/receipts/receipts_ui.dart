@@ -33,6 +33,217 @@ IconData receiptAgentStatusIcon(String status) {
   }
 }
 
+enum ReceiptsPeriod { all, today, week, month }
+
+extension ReceiptsPeriodLabel on ReceiptsPeriod {
+  String get label => switch (this) {
+        ReceiptsPeriod.all => 'الكل',
+        ReceiptsPeriod.today => 'اليوم',
+        ReceiptsPeriod.week => 'آخر ٧ أيام',
+        ReceiptsPeriod.month => 'هذا الشهر',
+      };
+
+  /// أقدم تاريخ مقبول ضمن الفترة، أو null لعرض كل السجل.
+  DateTime? get since {
+    final now = DateTime.now();
+    return switch (this) {
+      ReceiptsPeriod.all => null,
+      ReceiptsPeriod.today => DateTime(now.year, now.month, now.day),
+      ReceiptsPeriod.week => DateTime(now.year, now.month, now.day).subtract(const Duration(days: 6)),
+      ReceiptsPeriod.month => DateTime(now.year, now.month),
+    };
+  }
+}
+
+bool receiptsMatchesPeriod(String? rawDate, ReceiptsPeriod period) {
+  final since = period.since;
+  if (since == null) return true;
+  final parsed = DateTime.tryParse((rawDate ?? '').trim());
+  if (parsed == null) return true;
+  return !DateTime(parsed.year, parsed.month, parsed.day).isBefore(since);
+}
+
+/// شريط البحث والفترة أعلى السجل — يجعل الحركات القديمة قابلة للوصول.
+class ReceiptsHistoryFilter extends StatelessWidget {
+  const ReceiptsHistoryFilter({
+    super.key,
+    required this.controller,
+    required this.period,
+    required this.onPeriodChanged,
+    required this.onQueryChanged,
+    this.hintText = 'ابحث برقم الوصل أو اسم الزبون',
+  });
+
+  final TextEditingController controller;
+  final ReceiptsPeriod period;
+  final ValueChanged<ReceiptsPeriod> onPeriodChanged;
+  final ValueChanged<String> onQueryChanged;
+  final String hintText;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: controller,
+          onChanged: onQueryChanged,
+          textInputAction: TextInputAction.search,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            isDense: true,
+            hintText: hintText,
+            hintStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
+            prefixIcon: const Icon(Icons.search_rounded, size: 20, color: AppColors.muted),
+            suffixIcon: controller.text.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    color: AppColors.muted,
+                    onPressed: () {
+                      controller.clear();
+                      onQueryChanged('');
+                    },
+                  ),
+            filled: true,
+            fillColor: AppColors.surface,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: AppColors.borderLight),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: AppColors.borderLight),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: AppColors.accentTeal, width: 1.4),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 32,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: ReceiptsPeriod.values.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 6),
+            itemBuilder: (context, index) {
+              final value = ReceiptsPeriod.values[index];
+              final active = value == period;
+              return GestureDetector(
+                onTap: () => onPeriodChanged(value),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: active ? AppColors.navy : AppColors.surface,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: active ? AppColors.navy : AppColors.borderLight),
+                  ),
+                  child: Text(
+                    value.label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: active ? Colors.white : AppColors.muted,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// نموذج قابل للطي — يبقى السجل ظاهراً فور فتح القسم.
+class CollapsibleFormPanel extends StatelessWidget {
+  const CollapsibleFormPanel({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.expanded,
+    required this.onToggle,
+    required this.child,
+    this.accent = AppColors.accentTeal,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final bool expanded;
+  final VoidCallback onToggle;
+  final Widget child;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    if (expanded) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          child,
+          const SizedBox(height: 8),
+          Center(
+            child: TextButton.icon(
+              onPressed: onToggle,
+              icon: const Icon(Icons.keyboard_arrow_up_rounded, size: 18),
+              label: const Text('إخفاء النموذج'),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onToggle,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: accent.withValues(alpha: 0.35)),
+            color: accent.withValues(alpha: 0.05),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: accent, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                    Text(subtitle, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted)),
+                  ],
+                ),
+              ),
+              Icon(Icons.add_circle_outline_rounded, color: accent, size: 22),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class ReceiptsSectionHeader extends StatelessWidget {
   const ReceiptsSectionHeader({
     super.key,
@@ -432,47 +643,102 @@ class DeliveryReceiptCard extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(item.deliveryNo, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppColors.navy)),
-                            const SizedBox(height: 2),
-                            Text(item.customerName ?? '—', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted)),
-                            const SizedBox(height: 4),
-                            Text(item.statusLabel, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: accent)),
-                            if (item.linkedReceiptNo != null)
-                              Text('سند: ${item.linkedReceiptNo}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                            Text(
+                              item.customerName ?? '—',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppColors.navy),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(item.deliveryNo, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
                           ],
                         ),
                       ),
-                      Text(fmtMoney(item.amount), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppColors.navy)),
+                      const SizedBox(width: 8),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(fmtMoney(item.amount), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: AppColors.navy)),
+                          const Text('د.ع', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                        ],
+                      ),
                     ],
                   ),
                   const SizedBox(height: 10),
-                  Row(
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
                     children: [
-                      if (showPrint && onReprint != null)
-                        OutlinedButton.icon(
-                          onPressed: isReprinting ? null : onReprint,
-                          icon: isReprinting
-                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                              : const Icon(Icons.print_rounded, size: 16),
-                          label: Text(isReprinting ? 'جاري الطباعة...' : 'إعادة طباعة'),
-                        ),
-                      if (item.canCreateReceipt && onCreateReceipt != null) ...[
-                        if (showPrint && onReprint != null) const SizedBox(width: 8),
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: onCreateReceipt,
-                            style: FilledButton.styleFrom(backgroundColor: AppColors.navy, foregroundColor: Colors.white),
-                            icon: const Icon(Icons.receipt_long_rounded, size: 18),
-                            label: const Text('إنشاء سند قبض'),
-                          ),
-                        ),
-                      ],
+                      _MetaChip(icon: Icons.event_rounded, label: fmtDate(item.receiptDate)),
+                      _MetaChip(
+                        icon: linked ? Icons.link_rounded : Icons.pending_outlined,
+                        label: item.statusLabel,
+                        color: accent,
+                      ),
+                      if (item.linkedReceiptNo != null && item.linkedReceiptNo!.isNotEmpty)
+                        _MetaChip(icon: Icons.receipt_long_rounded, label: item.linkedReceiptNo!),
+                      if (item.printedAt != null && item.printedAt!.isNotEmpty)
+                        const _MetaChip(icon: Icons.print_rounded, label: 'طُبع'),
                     ],
                   ),
+                  if ((showPrint && onReprint != null) || (item.canCreateReceipt && onCreateReceipt != null)) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        if (showPrint && onReprint != null)
+                          OutlinedButton.icon(
+                            onPressed: isReprinting ? null : onReprint,
+                            icon: isReprinting
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                : const Icon(Icons.print_rounded, size: 16),
+                            label: Text(isReprinting ? 'جاري الطباعة...' : 'إعادة طباعة'),
+                          ),
+                        if (item.canCreateReceipt && onCreateReceipt != null) ...[
+                          if (showPrint && onReprint != null) const SizedBox(width: 8),
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: onCreateReceipt,
+                              style: FilledButton.styleFrom(backgroundColor: AppColors.navy, foregroundColor: Colors.white),
+                              icon: const Icon(Icons.receipt_long_rounded, size: 18),
+                              label: const Text('إنشاء سند قبض'),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetaChip extends StatelessWidget {
+  const _MetaChip({required this.icon, required this.label, this.color});
+
+  final IconData icon;
+  final String label;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = color ?? AppColors.muted;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: c),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: c)),
         ],
       ),
     );
@@ -514,40 +780,65 @@ class InternalReceiptCard extends StatelessWidget {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(14),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
-                    child: Icon(icon, color: color, size: 22),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(receipt.receiptNo, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppColors.navy)),
-                        const SizedBox(height: 2),
-                        Text('${receipt.customerName ?? '—'} · ${fmtMoney(receipt.amount)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted)),
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(999)),
-                          child: Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: color)),
-                        ),
-                        if (isPosted)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text(
-                              'أُرسل المبلغ للشركة عبر الإدارة',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.success.withValues(alpha: 0.9)),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+                        child: Icon(icon, color: color, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              receipt.customerName ?? '—',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppColors.navy),
                             ),
-                          ),
-                      ],
-                    ),
+                            const SizedBox(height: 3),
+                            Text(receipt.receiptNo, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(fmtMoney(receipt.amount), style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: color)),
+                          const Text('د.ع', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                        ],
+                      ),
+                    ],
                   ),
-                  Text(fmtMoney(receipt.amount), style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: color)),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      _MetaChip(icon: Icons.event_rounded, label: fmtDate(receipt.receiptDate ?? receipt.createdAt)),
+                      _MetaChip(icon: icon, label: label, color: color),
+                      if (receipt.commission > 0)
+                        _MetaChip(icon: Icons.percent_rounded, label: 'عمولة ${fmtMoney(receipt.commission)}'),
+                      if (receipt.discount > 0)
+                        _MetaChip(icon: Icons.discount_outlined, label: 'خصم ${fmtMoney(receipt.discount)}'),
+                    ],
+                  ),
+                  if (isPosted)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        'أُرسل المبلغ للشركة عبر الإدارة',
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.success.withValues(alpha: 0.9)),
+                      ),
+                    ),
                 ],
               ),
             ),

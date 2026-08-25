@@ -351,6 +351,7 @@ class ApiClient {
     required String areaName,
     required String shopName,
     required String visitOutcome,
+    String? centerPhone,
     String? notes,
   }) async {
     final data = await _json('POST', '/promotional-visits', body: {
@@ -358,6 +359,7 @@ class ApiClient {
       'areaName': areaName,
       'shopName': shopName,
       'visitOutcome': visitOutcome,
+      if (centerPhone != null && centerPhone.trim().isNotEmpty) 'centerPhone': centerPhone.trim(),
       'notes': notes ?? '',
     });
     return PromotionalVisit.fromJson(Map<String, dynamic>.from(data['visit'] as Map));

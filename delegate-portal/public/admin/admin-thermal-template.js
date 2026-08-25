@@ -243,6 +243,19 @@ function renderThermalPreview() {
       continue;
     }
 
+    if (block.type === 'dashedRule') {
+      closeHeader();
+      closeCustomer();
+      closeAmount();
+      parts.push('<div class="tp-rule tp-rule-dashed"></div>');
+      continue;
+    }
+
+    if (block.type === 'signature') {
+      parts.push(`<div class="tp-sign"><span class="tp-sign-line"></span><span>${esc(block.label || 'توقيع المستلم')}</span></div>`);
+      continue;
+    }
+
     if (block.type === 'spacer' || block.type === 'blank') {
       const n = Math.min(4, block.count || 1);
       parts.push(`<div class="tp-spacer" style="height:${n * 5}px"></div>`);
@@ -296,10 +309,15 @@ function renderThermalPreview() {
     }
 
     if (block.type === 'amount' || block.type === 'amountBox') {
+      parts.push('<div class="tp-amount-box">');
       if (block.label) {
         parts.push(`<div class="tp-amount-label" style="font-size:${tpScale(block.labelFont || 13, paperMm)}px">${esc(block.label)}</div>`);
       }
       parts.push(`<div class="tp-amount-value" style="font-size:${tpScale(block.fontSize, paperMm)}px">${esc(block.value)}</div>`);
+      if (block.subText) {
+        parts.push(`<div class="tp-amount-label" style="font-size:${tpScale(block.labelFont || 13, paperMm)}px">${esc(block.subText)}</div>`);
+      }
+      parts.push('</div>');
       continue;
     }
 

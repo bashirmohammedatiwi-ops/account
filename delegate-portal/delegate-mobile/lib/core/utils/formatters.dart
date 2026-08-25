@@ -73,24 +73,32 @@ const arMonths = [
 ];
 
 String orderStatusLabel(String? status) {
-  switch (status) {
+  final s = status?.trim().toLowerCase();
+  switch (s) {
     case 'draft':
-      return 'مسودة';
     case 'submitted':
-      return 'مُرسل';
     case 'under_review':
-      return 'قيد المراجعة';
+    case 'pending':
+      return 'قيد الانتظار';
     case 'approved':
-      return 'مُوافق';
-    case 'rejected':
-      return 'مرفوض';
     case 'processing':
-      return 'قيد التجهيز';
     case 'delivered':
-      return 'مُسلّم';
+      return 'تم التجهيز';
+    case 'rejected':
     case 'cancelled':
-      return 'ملغى';
+      return 'مرفوض';
     default:
-      return status ?? '—';
+      final raw = status?.trim();
+      if (raw == null || raw.isEmpty) return '—';
+      // إذا كانت الحالة نصاً إنجليزياً غير معروف، لا نعرضه للمستخدم.
+      if (RegExp(r'^[a-z_]+$').hasMatch(raw.toLowerCase())) return 'قيد الانتظار';
+      return raw;
   }
+}
+
+/// يعرض حالة الطلب بالعربية — يفضّل التسمية من السيرفر إن وُجدت.
+String displayOrderStatusLabel({String? status, String? statusLabel}) {
+  final label = statusLabel?.trim();
+  if (label != null && label.isNotEmpty) return label;
+  return orderStatusLabel(status);
 }

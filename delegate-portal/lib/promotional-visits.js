@@ -74,6 +74,7 @@ function mapVisit(row, events = []) {
     visitOutcome: row.visit_outcome || '',
     visitOutcomeLabel: outcomeLabel(row.visit_outcome),
     notes: row.notes || '',
+    centerPhone: row.center_phone || '',
     adminNote: row.admin_note || '',
     createdAt: row.created_at,
     submittedAt: row.submitted_at,
@@ -150,13 +151,14 @@ function createPromotionalVisit(agentId, data = {}) {
   const outcome = String(data.visitOutcome || '').trim();
   if (!VALID_OUTCOMES.has(outcome)) throw new Error('اختر حالة الزيارة بعد الترويج');
   const notes = String(data.notes || '').trim();
+  const centerPhone = String(data.centerPhone || data.center_phone || '').trim();
   const visitNo = nextVisitNo();
   const r = db.prepare(`
     INSERT INTO promotional_visits (
       visit_no, agent_id, governorate_code, governorate_name,
-      area_name, shop_name, visit_outcome, notes,
+      area_name, shop_name, visit_outcome, notes, center_phone,
       status, submitted_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), datetime('now'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), datetime('now'))
   `).run(
     visitNo,
     agentId,
@@ -165,7 +167,8 @@ function createPromotionalVisit(agentId, data = {}) {
     areaName,
     shopName,
     outcome,
-    notes
+    notes,
+    centerPhone
   );
   const id = r.lastInsertRowid;
   logEvent(id, {

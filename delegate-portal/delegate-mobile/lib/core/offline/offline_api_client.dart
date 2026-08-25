@@ -4,10 +4,12 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/models.dart';
+import '../../features/receipts/thermal_print_service.dart';
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
 import '../api/login_api.dart';
 import '../auth/auth_provider.dart';
+import '../utils/formatters.dart';
 import 'cache_store.dart';
 import 'connectivity_service.dart';
 import 'offline_keys.dart';
@@ -16,6 +18,60 @@ import 'outbox_store.dart';
 import 'sync_engine.dart';
 
 int _localId() => -DateTime.now().millisecondsSinceEpoch;
+
+int _rowId(dynamic value) {
+  if (value == null) return 0;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse('$value') ?? 0;
+}
+
+List<Map<String, dynamic>> _rawDeliveryRows(dynamic data) {
+  if (data is! Map) return [];
+  final list = data['deliveryReceipts'] ?? data['delivery_receipts'];
+  if (list is! List) return [];
+  return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+}
+
+List<Map<String, dynamic>> _mergeRowsById(
+  List<Map<String, dynamic>> online,
+  List<Map<String, dynamic>> cached,
+) {
+  if (cached.isEmpty) return online;
+  if (online.isEmpty) return cached;
+  final byId = <int, Map<String, dynamic>>{};
+  for (final row in cached) {
+    byId[_rowId(row['id'])] = row;
+  }
+  for (final row in online) {
+    byId[_rowId(row['id'])] = row;
+  }
+  final merged = byId.values.toList();
+  merged.sort((a, b) => _rowId(b['id']).compareTo(_rowId(a['id'])));
+  return merged;
+}
+
+Map<String, dynamic> _normalizeDeliveryRow(Map<String, dynamic> json) {
+  final status = '${json['status'] ?? 'issued'}';
+  return {
+    'id': json['id'],
+    'deliveryNo': json['deliveryNo'] ?? json['delivery_no'] ?? '',
+    'status': status,
+    'statusLabel': json['statusLabel'] ?? json['status_label'] ?? (status == 'linked' ? 'مرتبط بسند قبض' : 'مُصدَّر'),
+    'amount': json['amount'] ?? 0,
+    'customerName': json['customerName'] ?? json['customer_name'],
+    'customerNum': json['customerNum'] ?? json['customer_num'],
+    'customerAccSeq': json['customerAccSeq'] ?? json['customer_acc_seq'],
+    'treeAccSeq': json['treeAccSeq'] ?? json['tree_acc_seq'],
+    'treeName': json['treeName'] ?? json['tree_name'],
+    'notes': json['notes'],
+    'receiptDate': json['receiptDate'] ?? json['receipt_date'],
+    'printedAt': json['printedAt'] ?? json['printed_at'],
+    'receiptId': json['receiptId'] ?? json['receipt_id'],
+    'linkedReceiptNo': json['linkedReceiptNo'] ?? json['linked_receipt_no'],
+    'createdAt': json['createdAt'] ?? json['created_at'],
+  };
+}
 
 /// عميل API مع تخزين محلي وقائمة إرسال عند عودة الشبكة.
 class OfflineApiClient {
@@ -117,6 +173,7 @@ class OfflineApiClient {
   Map<String, dynamic> _orderMap(Order o) => {
         'id': o.id,
         'status': o.status,
+        'statusLabel': o.statusLabel ?? displayOrderStatusLabel(status: o.status),
         'createdAt': o.createdAt,
         'customerName': o.customerName,
         'customerAccSeq': o.customerAccSeq,
@@ -492,7 +549,7 @@ class OfflineApiClient {
     final out = <DeliveryReceipt>[];
     for (final e in raw) {
       try {
-        out.add(DeliveryReceipt.fromJson(e));
+        out.add(DeliveryReceipt.fromJson(_normalizeDeliveryRow(e)));
       } catch (_) {}
     }
     return out;
@@ -506,8 +563,14 @@ class OfflineApiClient {
                   ?.map((e) => Map<String, dynamic>.from(e as Map))
                   .toList() ??
               <Map<String, dynamic>>[];
-          await _cache.setJson(cacheKey, raw);
-          return _parseReceiptList(raw);
+          // الدمج مع المخزَّن يحفظ السجل القديم بدل استبداله بآخر 500 فقط.
+          final cachedJson = await _cache.getJson(cacheKey);
+          final cachedRaw = cachedJson is List
+              ? cachedJson.map((e) => Map<String, dynamic>.from(e as Map)).toList()
+              : <Map<String, dynamic>>[];
+          final merged = _mergeRowsById(raw, cachedRaw);
+          await _cache.setJson(cacheKey, merged);
+          return _parseReceiptList(merged);
         },
         offlineRead: () async {
           final raw = await _cache.getJson(cacheKey);
@@ -610,12 +673,14 @@ class OfflineApiClient {
         cacheKey: cacheKey,
         onlineFetch: () async {
           final data = await fetch();
-          final raw = (data['deliveryReceipts'] as List?)
-                  ?.map((e) => Map<String, dynamic>.from(e as Map))
-                  .toList() ??
-              <Map<String, dynamic>>[];
-          await _cache.setJson(cacheKey, raw);
-          return _parseDeliveryList(raw);
+          final onlineRaw = _rawDeliveryRows(data);
+          final cachedJson = await _cache.getJson(cacheKey);
+          final cachedRaw = cachedJson is List
+              ? cachedJson.map((e) => Map<String, dynamic>.from(e as Map)).toList()
+              : <Map<String, dynamic>>[];
+          final merged = _mergeRowsById(onlineRaw, cachedRaw);
+          await _cache.setJson(cacheKey, merged);
+          return _parseDeliveryList(merged);
         },
         offlineRead: () async {
           final raw = await _cache.getJson(cacheKey);
@@ -630,16 +695,21 @@ class OfflineApiClient {
   }
 
   Future<Map<String, dynamic>?> getDeliveryReceiptPrintTemplate() async {
-  if (_online) {
+    if (_online) {
       try {
         final data = await _api.requestJson('GET', '/delivery-receipts/print-template');
         final template = Map<String, dynamic>.from(data['template'] as Map);
         await _cache.setJson(OfflineKeys.deliveryPrintTemplate, template);
+        await ThermalPrintService.cacheTemplate(template);
         return template;
       } catch (_) {}
     }
     final raw = await _cache.getJson(OfflineKeys.deliveryPrintTemplate);
-    if (raw is Map) return Map<String, dynamic>.from(raw);
+    if (raw is Map) {
+      final template = Map<String, dynamic>.from(raw);
+      await ThermalPrintService.cacheTemplate(template);
+      return template;
+    }
     return null;
   }
 
@@ -649,6 +719,8 @@ class OfflineApiClient {
     required String treeName,
     required num amount,
     String? notes,
+    String? displayCustomerName,
+    String? displayCustomerNum,
   }) async {
     final body = {
       'customerAccSeq': customerAccSeq,
@@ -667,6 +739,8 @@ class OfflineApiClient {
       'treeName': treeName,
       'customerAccSeq': customerAccSeq,
       'treeAccSeq': treeAccSeq,
+      'customerName': displayCustomerName ?? '',
+      'customerNum': displayCustomerNum ?? '',
       'notes': notes,
       'createdAt': DateTime.now().toIso8601String(),
       'localPending': true,
@@ -681,7 +755,7 @@ class OfflineApiClient {
         optimisticJson: optimistic,
         listCacheKey: OfflineKeys.deliveryReceipts,
       );
-      await _cache.mergeListItem(OfflineKeys.deliveryReceipts, optimistic);
+      await _cache.mergeListItem(OfflineKeys.deliveryReceipts, _normalizeDeliveryRow(optimistic));
       return DeliveryReceipt.fromJson(optimistic);
     }
 
@@ -694,19 +768,22 @@ class OfflineApiClient {
         amount: amount,
         notes: notes,
       );
-      await _cache.mergeListItem(OfflineKeys.deliveryReceipts, Map<String, dynamic>.from({
+      await _cache.mergeListItem(OfflineKeys.deliveryReceipts, _normalizeDeliveryRow(Map<String, dynamic>.from({
         'id': receipt.id,
         'deliveryNo': receipt.deliveryNo,
         'status': receipt.status,
         'statusLabel': receipt.statusLabel,
         'amount': receipt.amount,
-        'customerName': receipt.customerName,
+        'customerName': receipt.customerName ?? displayCustomerName,
+        'customerNum': receipt.customerNum ?? displayCustomerNum,
         'customerAccSeq': receipt.customerAccSeq,
         'treeAccSeq': receipt.treeAccSeq,
         'treeName': receipt.treeName,
         'notes': receipt.notes,
+        'receiptId': receipt.receiptId,
+        'linkedReceiptNo': receipt.linkedReceiptNo,
         'createdAt': receipt.createdAt,
-      }));
+      })));
       return receipt;
     } on ApiException catch (e) {
       if (e.statusCode == 401) throw e;
@@ -957,6 +1034,7 @@ class OfflineApiClient {
     required String areaName,
     required String shopName,
     required String visitOutcome,
+    String? centerPhone,
     String? notes,
   }) async {
     final body = {
@@ -964,6 +1042,7 @@ class OfflineApiClient {
       'areaName': areaName,
       'shopName': shopName,
       'visitOutcome': visitOutcome,
+      if (centerPhone != null && centerPhone.trim().isNotEmpty) 'centerPhone': centerPhone.trim(),
       'notes': notes ?? '',
     };
     final localId = _localId();
@@ -978,6 +1057,7 @@ class OfflineApiClient {
       'shopName': shopName,
       'visitOutcome': visitOutcome,
       'visitOutcomeLabel': visitOutcome,
+      if (centerPhone != null && centerPhone.trim().isNotEmpty) 'centerPhone': centerPhone.trim(),
       'notes': notes,
       'createdAt': DateTime.now().toIso8601String(),
       'localPending': true,
@@ -1003,6 +1083,7 @@ class OfflineApiClient {
         areaName: areaName,
         shopName: shopName,
         visitOutcome: visitOutcome,
+        centerPhone: centerPhone,
         notes: notes,
       );
       await _cache.mergeListItem(OfflineKeys.promoVisits, Map<String, dynamic>.from({
@@ -1016,6 +1097,7 @@ class OfflineApiClient {
         'shopName': visit.shopName,
         'visitOutcome': visit.visitOutcome,
         'visitOutcomeLabel': visit.visitOutcomeLabel,
+        'centerPhone': visit.centerPhone,
         'notes': visit.notes,
         'createdAt': visit.createdAt,
       }));

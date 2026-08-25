@@ -1,7 +1,7 @@
 name: edari_delegate
 description: Edari Delegate — تطبيق المندوب للآيباد والهاتف
 publish_to: 'none'
-version: 1.2.8+13
+version: 1.2.25+31
 
 environment:
   sdk: ^3.11.0
@@ -23,6 +23,7 @@ dependencies:
   path_provider: ^2.1.5
   open_filex: ^4.6.0
   print_bluetooth_thermal: ^1.2.1
+  flutter_blue_plus: ^2.3.12
   permission_handler: ^12.0.1
   connectivity_plus: ^6.1.4
   sqflite: ^2.4.2

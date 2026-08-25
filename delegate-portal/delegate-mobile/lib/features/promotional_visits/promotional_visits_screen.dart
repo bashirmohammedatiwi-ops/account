@@ -22,6 +22,7 @@ class PromotionalVisitsScreen extends ConsumerStatefulWidget {
 class _PromotionalVisitsScreenState extends ConsumerState<PromotionalVisitsScreen> {
   final _areaCtrl = TextEditingController();
   final _shopCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
   IraqGovernorate? _governorate;
   VisitOutcome? _outcome;
@@ -31,6 +32,7 @@ class _PromotionalVisitsScreenState extends ConsumerState<PromotionalVisitsScree
   void dispose() {
     _areaCtrl.dispose();
     _shopCtrl.dispose();
+    _phoneCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
   }
@@ -61,12 +63,14 @@ class _PromotionalVisitsScreenState extends ConsumerState<PromotionalVisitsScree
             areaName: area,
             shopName: shop,
             visitOutcome: _outcome!.code,
+            centerPhone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
             notes: _notesCtrl.text.trim(),
           );
       ref.invalidate(promotionalVisitsListProvider);
       if (!mounted) return;
       _areaCtrl.clear();
       _shopCtrl.clear();
+      _phoneCtrl.clear();
       _notesCtrl.clear();
       setState(() {
         _governorate = null;
@@ -174,6 +178,14 @@ class _PromotionalVisitsScreenState extends ConsumerState<PromotionalVisitsScree
             EdLabeledField(label: 'اسم المنطقة', controller: _areaCtrl, hint: 'الحي أو المنطقة', prefixIcon: Icons.map_outlined),
             const SizedBox(height: EdSpacing.md),
             EdLabeledField(label: 'المحل أو المركز', controller: _shopCtrl, hint: 'اسم المحل الذي زرته', prefixIcon: Icons.storefront_outlined),
+            const SizedBox(height: EdSpacing.md),
+            EdLabeledField(
+              label: 'رقم هاتف المركز (اختياري)',
+              controller: _phoneCtrl,
+              hint: '07XXXXXXXX',
+              prefixIcon: Icons.phone_outlined,
+              keyboardType: TextInputType.phone,
+            ),
             const SizedBox(height: EdSpacing.md),
             Padding(
               padding: const EdgeInsets.only(bottom: EdSpacing.sm, right: 4),

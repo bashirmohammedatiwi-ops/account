@@ -134,7 +134,7 @@ router.get('/receipts', authAgent, (req, res) => {
     receipts: listReceipts({
       agentId: req.agent.id,
       status: status || undefined,
-      limit: 100
+      limit: 500
     })
   });
 });
@@ -190,7 +190,7 @@ router.get('/delivery-receipts', authAgent, (req, res) => {
     deliveryReceipts: listDeliveryReceipts({
       agentId: req.agent.id,
       status: status || undefined,
-      limit: 100
+      limit: 500
     })
   });
 });
