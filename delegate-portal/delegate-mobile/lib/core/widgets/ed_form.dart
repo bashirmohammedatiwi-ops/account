@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_colors.dart';
+import '../utils/numeric_input.dart';
 import 'ed_components.dart';
 
 /// بطاقة نموذج أنيقة — لجميع الشاشات
@@ -217,7 +218,94 @@ class EdLabeledField extends StatelessWidget {
     this.suffix,
     this.obscureText = false,
     this.onSubmitted,
+    this.textDirection,
+    this.enableSuggestions = true,
+    this.autocorrect = true,
   });
+
+  factory EdLabeledField.integer({
+    Key? key,
+    required String label,
+    required TextEditingController controller,
+    String? hint,
+    int maxLines = 1,
+    IconData? prefixIcon,
+    Widget? suffix,
+    ValueChanged<String>? onSubmitted,
+  }) {
+    final cfg = EdNumericFieldConfig.integer;
+    return EdLabeledField(
+      key: key,
+      label: label,
+      controller: controller,
+      hint: hint,
+      keyboardType: cfg.keyboardType,
+      inputFormatters: cfg.inputFormatters,
+      maxLines: maxLines,
+      prefixIcon: prefixIcon,
+      suffix: suffix,
+      onSubmitted: onSubmitted,
+      textDirection: cfg.textDirection,
+      enableSuggestions: cfg.enableSuggestions,
+      autocorrect: cfg.autocorrect,
+    );
+  }
+
+  factory EdLabeledField.decimal({
+    Key? key,
+    required String label,
+    required TextEditingController controller,
+    String? hint,
+    int maxLines = 1,
+    IconData? prefixIcon,
+    Widget? suffix,
+    ValueChanged<String>? onSubmitted,
+  }) {
+    final cfg = EdNumericFieldConfig.decimal;
+    return EdLabeledField(
+      key: key,
+      label: label,
+      controller: controller,
+      hint: hint,
+      keyboardType: cfg.keyboardType,
+      inputFormatters: cfg.inputFormatters,
+      maxLines: maxLines,
+      prefixIcon: prefixIcon,
+      suffix: suffix,
+      onSubmitted: onSubmitted,
+      textDirection: cfg.textDirection,
+      enableSuggestions: cfg.enableSuggestions,
+      autocorrect: cfg.autocorrect,
+    );
+  }
+
+  factory EdLabeledField.phone({
+    Key? key,
+    required String label,
+    required TextEditingController controller,
+    String? hint,
+    int maxLines = 1,
+    IconData? prefixIcon,
+    Widget? suffix,
+    ValueChanged<String>? onSubmitted,
+  }) {
+    final cfg = EdNumericFieldConfig.phone;
+    return EdLabeledField(
+      key: key,
+      label: label,
+      controller: controller,
+      hint: hint,
+      keyboardType: cfg.keyboardType,
+      inputFormatters: cfg.inputFormatters,
+      maxLines: maxLines,
+      prefixIcon: prefixIcon,
+      suffix: suffix,
+      onSubmitted: onSubmitted,
+      textDirection: cfg.textDirection,
+      enableSuggestions: cfg.enableSuggestions,
+      autocorrect: cfg.autocorrect,
+    );
+  }
 
   final String label;
   final TextEditingController controller;
@@ -229,6 +317,9 @@ class EdLabeledField extends StatelessWidget {
   final Widget? suffix;
   final bool obscureText;
   final ValueChanged<String>? onSubmitted;
+  final TextDirection? textDirection;
+  final bool enableSuggestions;
+  final bool autocorrect;
 
   @override
   Widget build(BuildContext context) {
@@ -246,6 +337,9 @@ class EdLabeledField extends StatelessWidget {
           maxLines: maxLines,
           obscureText: obscureText,
           onSubmitted: onSubmitted,
+          textDirection: textDirection,
+          enableSuggestions: enableSuggestions,
+          autocorrect: autocorrect,
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: AppColors.navy),
           decoration: InputDecoration(
             hintText: hint,

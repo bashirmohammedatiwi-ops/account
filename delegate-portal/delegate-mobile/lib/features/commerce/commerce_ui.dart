@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/utils/numeric_input.dart';
 import '../../core/widgets/adaptive_shell.dart';
 import '../../core/widgets/ed_components.dart';
 import '../../models/models.dart';
@@ -245,6 +246,11 @@ class EdShopToolbar extends StatelessWidget {
               ),
               child: TextField(
                 controller: barcodeController,
+                keyboardType: EdNumericFieldConfig.integer.keyboardType,
+                inputFormatters: EdNumericFieldConfig.integer.inputFormatters,
+                textDirection: EdNumericFieldConfig.integer.textDirection,
+                enableSuggestions: EdNumericFieldConfig.integer.enableSuggestions,
+                autocorrect: EdNumericFieldConfig.integer.autocorrect,
                 decoration: InputDecoration(
                   hintText: 'باركود',
                   isDense: true,
@@ -621,7 +627,7 @@ class _EdShopQtyRowState extends State<EdShopQtyRow> {
   }
 
   void _commit() {
-    final raw = _ctrl.text.trim().replaceAll(',', '').replaceAll('،', '');
+    final raw = WesternDigitsFormatter.toWestern(_ctrl.text.trim()).replaceAll(',', '');
     final parsed = num.tryParse(raw);
     if (parsed != null) {
       widget.onSetValue(parsed.clamp(0, 999999));
@@ -668,7 +674,11 @@ class _EdShopQtyRowState extends State<EdShopQtyRow> {
                         controller: _ctrl,
                         focusNode: _focus,
                         textAlign: TextAlign.center,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: EdNumericFieldConfig.decimal.keyboardType,
+                        inputFormatters: EdNumericFieldConfig.decimal.inputFormatters,
+                        textDirection: EdNumericFieldConfig.decimal.textDirection,
+                        enableSuggestions: EdNumericFieldConfig.decimal.enableSuggestions,
+                        autocorrect: EdNumericFieldConfig.decimal.autocorrect,
                         textInputAction: TextInputAction.done,
                         style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: fg),
                         decoration: InputDecoration(

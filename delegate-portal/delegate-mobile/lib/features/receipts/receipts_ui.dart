@@ -612,18 +612,17 @@ class DeliveryReceiptCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.borderLight),
+        border: Border(
+          top: const BorderSide(color: AppColors.borderLight),
+          bottom: const BorderSide(color: AppColors.borderLight),
+          left: const BorderSide(color: AppColors.borderLight),
+          right: BorderSide(color: accent.withValues(alpha: 0.9), width: 3.5),
+        ),
         boxShadow: AppColors.softShadow,
       ),
-      clipBehavior: Clip.antiAlias,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(width: 3, color: accent.withValues(alpha: 0.75)),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-              child: Column(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Row(
@@ -710,9 +709,6 @@ class DeliveryReceiptCard extends StatelessWidget {
                 ],
               ),
             ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -769,81 +765,77 @@ class InternalReceiptCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: isPosted ? AppColors.success.withValues(alpha: 0.35) : AppColors.borderLight),
+        border: Border(
+          top: BorderSide(color: isPosted ? AppColors.success.withValues(alpha: 0.35) : AppColors.borderLight),
+          bottom: BorderSide(color: isPosted ? AppColors.success.withValues(alpha: 0.35) : AppColors.borderLight),
+          left: BorderSide(color: isPosted ? AppColors.success.withValues(alpha: 0.35) : AppColors.borderLight),
+          right: BorderSide(color: color.withValues(alpha: 0.9), width: 3.5),
+        ),
         boxShadow: AppColors.softShadow,
       ),
-      clipBehavior: Clip.antiAlias,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(width: 3, color: color.withValues(alpha: 0.65)),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+                  child: Icon(icon, color: color, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
-                        child: Icon(icon, color: color, size: 22),
+                      Text(
+                        receipt.customerName ?? '—',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppColors.navy),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              receipt.customerName ?? '—',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppColors.navy),
-                            ),
-                            const SizedBox(height: 3),
-                            Text(receipt.receiptNo, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(fmtMoney(receipt.amount), style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: color)),
-                          const Text('د.ع', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted)),
-                        ],
-                      ),
+                      const SizedBox(height: 3),
+                      Text(receipt.receiptNo, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      _MetaChip(icon: Icons.event_rounded, label: fmtDate(receipt.receiptDate ?? receipt.createdAt)),
-                      _MetaChip(icon: icon, label: label, color: color),
-                      if (receipt.commission > 0)
-                        _MetaChip(icon: Icons.percent_rounded, label: 'عمولة ${fmtMoney(receipt.commission)}'),
-                      if (receipt.discount > 0)
-                        _MetaChip(icon: Icons.discount_outlined, label: 'خصم ${fmtMoney(receipt.discount)}'),
-                    ],
-                  ),
-                  if (isPosted)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(
-                        'أُرسل المبلغ للشركة عبر الإدارة',
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.success.withValues(alpha: 0.9)),
-                      ),
-                    ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(fmtMoney(receipt.amount), style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: color)),
+                    const Text('د.ع', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                  ],
+                ),
+              ],
             ),
-          ),
-        ],
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                _MetaChip(icon: Icons.event_rounded, label: fmtDate(receipt.receiptDate ?? receipt.createdAt)),
+                _MetaChip(icon: icon, label: label, color: color),
+                if (receipt.commission > 0)
+                  _MetaChip(icon: Icons.percent_rounded, label: 'عمولة ${fmtMoney(receipt.commission)}'),
+                if (receipt.discount > 0)
+                  _MetaChip(icon: Icons.discount_outlined, label: 'خصم ${fmtMoney(receipt.discount)}'),
+              ],
+            ),
+            if (isPosted)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  'أُرسل المبلغ للشركة عبر الإدارة',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.success.withValues(alpha: 0.9)),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

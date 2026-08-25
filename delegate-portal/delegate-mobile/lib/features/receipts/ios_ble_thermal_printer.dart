@@ -373,25 +373,19 @@ class IosBleThermalPrinter {
     return _link(live);
   }
 
-  /// يحدّد أكبر دفعة يمكن إرسالها. الكتابة مع الاستجابة تسمح بـ512 بايت
-  /// لأن iOS يقسّمها داخلياً ويتحكم بالتدفق، فتخرج الطباعة متصلة بلا تقطيع.
+  /// الكتابة بلا استجابة أسرع وأكثر سلاسة على طابعات حرارية BLE.
   static Future<void> _resolveWriteMode(
     BluetoothDevice device,
     BluetoothCharacteristic char,
   ) async {
-    // iOS يفاوض على MTU بعد الاتصال بقليل ولا يوجد استدعاء فوري لمعرفته.
-    final deadline = DateTime.now().add(const Duration(seconds: 3));
-    while (device.mtuNow <= 23 && DateTime.now().isBefore(deadline)) {
-      await Future<void>.delayed(const Duration(milliseconds: 150));
-    }
-
-    _withResponse = char.properties.write;
-    if (_withResponse) {
-      _payload = 512;
-    } else {
+    if (char.properties.writeWithoutResponse) {
+      _withResponse = false;
       final mtu = device.mtuNow;
-      _payload = mtu > 23 ? min(mtu - 3, 512) : 20;
+      _payload = mtu > 23 ? min(mtu - 3, 180) : 20;
+      return;
     }
+    _withResponse = char.properties.write;
+    _payload = 512;
   }
 
   static Future<bool> writeBytes(List<int> bytes) async {
@@ -409,6 +403,10 @@ class IosBleThermalPrinter {
       for (var offset = 0; offset < bytes.length; offset += chunkSize) {
         final chunk = bytes.sublist(offset, min(offset + chunkSize, bytes.length));
         await _writeChunk(char, chunk);
+        // مهلة قصيرة بين الدفعات بلا استجابة حتى لا يمتلئ مخزن الطابعة.
+        if (!_withResponse && offset + chunkSize < bytes.length) {
+          await Future<void>.delayed(const Duration(milliseconds: 8));
+        }
       }
       return true;
     } catch (e) {

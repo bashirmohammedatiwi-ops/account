@@ -179,12 +179,11 @@ class _PromotionalVisitsScreenState extends ConsumerState<PromotionalVisitsScree
             const SizedBox(height: EdSpacing.md),
             EdLabeledField(label: 'المحل أو المركز', controller: _shopCtrl, hint: 'اسم المحل الذي زرته', prefixIcon: Icons.storefront_outlined),
             const SizedBox(height: EdSpacing.md),
-            EdLabeledField(
+            EdLabeledField.phone(
               label: 'رقم هاتف المركز (اختياري)',
               controller: _phoneCtrl,
               hint: '07XXXXXXXX',
               prefixIcon: Icons.phone_outlined,
-              keyboardType: TextInputType.phone,
             ),
             const SizedBox(height: EdSpacing.md),
             Padding(

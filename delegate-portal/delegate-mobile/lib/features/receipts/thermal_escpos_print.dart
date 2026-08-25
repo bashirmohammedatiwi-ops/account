@@ -16,6 +16,9 @@ PaperSize _paperSizeFor(int paperMm) => paperMm == 58 ? PaperSize.mm58 : PaperSi
 
 int _normalizePaperMm(int paperMm) => paperMm == 58 ? 58 : 80;
 
+/// 2× للنص العربي — 1× يظهر خشناً على طابعات 203dpi.
+const _kRasterScale = 2;
+
 CapabilityProfile? _profileCache;
 final _generators = <int, Generator>{};
 bool _fontsReady = false;
@@ -118,18 +121,18 @@ Future<img.Image?> _loadLogoImage(String url, String? serverUrl, int maxWidth) a
 }
 
 Future<img.Image?> _uiImageToImg(ui.Image uiImage) async {
+  final width = uiImage.width;
+  final height = uiImage.height;
   final byteData = await uiImage.toByteData(format: ui.ImageByteFormat.rawRgba);
-  if (byteData == null) return null;
-  final out = img.Image(width: uiImage.width, height: uiImage.height);
-  final rgba = byteData.buffer.asUint8List();
-  for (var y = 0; y < uiImage.height; y++) {
-    for (var x = 0; x < uiImage.width; x++) {
-      final i = (y * uiImage.width + x) * 4;
-      out.setPixelRgba(x, y, rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]);
-    }
-  }
   uiImage.dispose();
-  return out;
+  if (byteData == null) return null;
+  return img.Image.fromBytes(
+    width: width,
+    height: height,
+    bytes: byteData.buffer,
+    numChannels: 4,
+    order: img.ChannelOrder.rgba,
+  );
 }
 
 Future<img.Image?> _rasterText(
@@ -166,7 +169,7 @@ Future<img.Image?> _rasterText(
     dx = paperWidthDots - painter.width;
   }
 
-  final scale = 2;
+  const scale = _kRasterScale;
   final scaledWidth = paperWidthDots * scale;
   final scaledHeight = ((painter.height + 6) * scale).ceil();
 
@@ -215,7 +218,7 @@ Future<img.Image?> _rasterPairRow(
   valuePainter.layout(maxWidth: paperWidthDots * 0.52);
 
   final rowHeight = (labelPainter.height > valuePainter.height ? labelPainter.height : valuePainter.height) + 6;
-  final scale = 2;
+  const scale = _kRasterScale;
   final scaledWidth = paperWidthDots * scale;
   final scaledHeight = (rowHeight * scale).ceil();
 
@@ -269,7 +272,7 @@ Future<img.Image?> _rasterBadge(
 
   final boxHeight = painter.height + 18;
   final totalHeight = boxHeight + 12;
-  const scale = 2;
+  const scale = _kRasterScale;
 
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(
@@ -331,7 +334,7 @@ Future<img.Image?> _rasterAmountBox(
   final inner = labelPainter.height + 6 + valuePainter.height + (subPainter != null ? 4 + subPainter.height : 0);
   final boxHeight = inner + padV * 2;
   final totalHeight = boxHeight + 16;
-  const scale = 2;
+  const scale = _kRasterScale;
   const margin = 26.0;
 
   final recorder = ui.PictureRecorder();
@@ -383,7 +386,7 @@ Future<img.Image?> _rasterSignature(String label, int paperWidthDots) async {
   painter.layout(maxWidth: paperWidthDots * 0.5);
 
   final totalHeight = painter.height + 34;
-  const scale = 2;
+  const scale = _kRasterScale;
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(
     recorder,
@@ -412,7 +415,7 @@ Future<img.Image?> _rasterSignature(String label, int paperWidthDots) async {
 /// فاصل منقّط — أخف بصرياً من الخط المصمت ويفصل الأقسام بوضوح.
 Future<img.Image?> _rasterDashedRule(int paperWidthDots) async {
   const height = 12;
-  const scale = 2;
+  const scale = _kRasterScale;
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(
     recorder,
@@ -438,7 +441,7 @@ Future<img.Image?> _rasterDashedRule(int paperWidthDots) async {
 
 Future<img.Image?> _rasterRule(int paperWidthDots) async {
   const height = 10;
-  const scale = 2;
+  const scale = _kRasterScale;
   final scaledWidth = paperWidthDots * scale;
   final scaledHeight = height * scale;
   final recorder = ui.PictureRecorder();
@@ -465,7 +468,7 @@ Future<img.Image?> _rasterRule(int paperWidthDots) async {
 }
 
 /// ارتفاع سطر التغذية الواحد على طابعة 203dpi.
-const _feedLineDots = 24;
+const _feedLineDots = 8;
 
 /// يجمّع الفاتورة كلها في صورة واحدة. إرسالها كأمر رسم واحد يجعل الورق
 /// يخرج بحركة متصلة، بدل توقف الطابعة بين كل عنصر وآخر بانتظار البيانات.
@@ -554,14 +557,48 @@ Future<List<int>> buildEscPosBytesFromPayload(
 
   final composite = canvas.build();
   if (composite != null) {
-    bytes += generator.imageRaster(composite, align: PosAlign.center);
+    bytes += generator.imageRaster(_padRasterHeight(_trimVertical(composite)), align: PosAlign.center);
   }
 
-  for (var i = 0; i < payload.footerBlankLines; i++) {
-    bytes += generator.feed(1);
-  }
-  bytes += generator.cut(mode: PosCutMode.partial);
+  // سطر واحد للتمزيق. cut() على طابعات BLE بدون قاطع يفرّغ ورقاً طويلاً.
+  bytes += generator.feed(1);
   return bytes;
+}
+
+/// ارتفاع الصورة يجب أن يكون مضاعف 8 حتى لا تظهر خطوط بيضاء بين صفوف النقط.
+img.Image _padRasterHeight(img.Image src) {
+  final rem = src.height % 8;
+  if (rem == 0) return src;
+  final padded = img.Image(width: src.width, height: src.height + (8 - rem));
+  img.fill(padded, color: img.ColorRgb8(255, 255, 255));
+  img.compositeImage(padded, src);
+  return padded;
+}
+
+img.Image _trimVertical(img.Image src) {
+  var top = 0;
+  var bottom = src.height - 1;
+
+  bool rowHasInk(int y) {
+    for (var x = 0; x < src.width; x++) {
+      final p = src.getPixel(x, y);
+      if (p.a > 8 && (p.r < 248 || p.g < 248 || p.b < 248)) return true;
+    }
+    return false;
+  }
+
+  while (top < bottom && !rowHasInk(top)) {
+    top++;
+  }
+  while (bottom > top && !rowHasInk(bottom)) {
+    bottom--;
+  }
+
+  final pad = 4;
+  top = (top - pad).clamp(0, src.height - 1);
+  bottom = (bottom + pad).clamp(0, src.height - 1);
+  if (bottom <= top) return src;
+  return img.copyCrop(src, x: 0, y: top, width: src.width, height: bottom - top + 1);
 }
 
 Future<void> _renderBlock(
@@ -740,7 +777,7 @@ Future<List<int>> buildTestPrintBytes({
   );
   final sample = DeliveryReceiptPrintPayload(
     blocks: built.blocks,
-    footerBlankLines: 3,
+    footerBlankLines: 1,
     paperMm: built.paperMm,
   );
   return await buildEscPosBytesFromPayload(sample, serverUrl: serverUrl);

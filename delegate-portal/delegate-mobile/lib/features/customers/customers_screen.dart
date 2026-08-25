@@ -170,7 +170,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
           const SizedBox(height: EdSpacing.lg),
           EdLabeledField(label: 'اسم الزبون', controller: _nameCtrl, hint: 'الاسم الكامل', prefixIcon: Icons.person_outline),
           const SizedBox(height: EdSpacing.md),
-          EdLabeledField(label: 'الهاتف', controller: _phoneCtrl, hint: '07xxxxxxxxx', keyboardType: TextInputType.phone, prefixIcon: Icons.phone_outlined),
+          EdLabeledField.phone(label: 'الهاتف', controller: _phoneCtrl, hint: '07xxxxxxxxx', prefixIcon: Icons.phone_outlined),
           const SizedBox(height: EdSpacing.md),
           EdLabeledField(label: 'العنوان / المنطقة', controller: _addressCtrl, hint: 'المنطقة أو العنوان', prefixIcon: Icons.location_on_outlined),
           const SizedBox(height: EdSpacing.md),

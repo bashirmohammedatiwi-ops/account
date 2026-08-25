@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -452,68 +451,76 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
     final visible = _filterDeliveries(deliveries);
     final filtering = _drSearchCtrl.text.trim().isNotEmpty || _drPeriod != ReceiptsPeriod.all;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
+    return CustomScrollView(
+      physics: _tabScrollPhysics,
+      slivers: [
+        SliverPadding(
           padding: const EdgeInsets.fromLTRB(EdSpacing.page, EdSpacing.md, EdSpacing.page, EdSpacing.sm),
-          child: CollapsibleFormPanel(
-            title: 'إصدار وصل قبض',
-            subtitle: 'اضغط لفتح النموذج وإصدار وصل جديد',
-            icon: Icons.print_outlined,
-            expanded: _drFormOpen,
-            onToggle: () => setState(() => _drFormOpen = !_drFormOpen),
-            child: _deliveryFormCard(),
+          sliver: SliverToBoxAdapter(
+            child: CollapsibleFormPanel(
+              title: 'إصدار وصل قبض',
+              subtitle: 'اضغط لفتح النموذج وإصدار وصل جديد',
+              icon: Icons.print_outlined,
+              expanded: _drFormOpen,
+              onToggle: () => setState(() => _drFormOpen = !_drFormOpen),
+              child: _deliveryFormCard(),
+            ),
           ),
         ),
-        Padding(
+        SliverPadding(
           padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, EdSpacing.sm),
-          child: ReceiptsHistoryFilter(
-            controller: _drSearchCtrl,
-            period: _drPeriod,
-            onPeriodChanged: (p) => setState(() => _drPeriod = p),
-            onQueryChanged: (_) => setState(() {}),
+          sliver: SliverToBoxAdapter(
+            child: ReceiptsHistoryFilter(
+              controller: _drSearchCtrl,
+              period: _drPeriod,
+              onPeriodChanged: (p) => setState(() => _drPeriod = p),
+              onQueryChanged: (_) => setState(() {}),
+            ),
           ),
         ),
-        Padding(
+        SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: EdSpacing.page),
-          child: ReceiptsSectionHeader(
-            title: 'سجل وصول القبض',
-            subtitle: filtering ? 'نتائج البحث ضمن ${_drPeriod.label}' : 'جميع الوصولات المُصدَرة',
-            count: visible.length,
-            accent: AppColors.accentTeal,
+          sliver: SliverToBoxAdapter(
+            child: ReceiptsSectionHeader(
+              title: 'سجل وصول القبض',
+              subtitle: filtering ? 'نتائج البحث ضمن ${_drPeriod.label}' : 'جميع الوصولات المُصدَرة',
+              count: visible.length,
+              accent: AppColors.accentTeal,
+            ),
           ),
         ),
-        Expanded(
-          child: visible.isEmpty
-              ? ListView(
-                  physics: _tabScrollPhysics,
-                  padding: const EdgeInsets.all(24),
-                  children: [
-                    EmptyState(
-                      message: filtering
-                          ? 'لا توجد نتائج مطابقة — جرّب "الكل" أو غيّر كلمة البحث'
-                          : 'لا توجد وصول قبض — أصدر وصلاً من النموذج أعلاه',
-                      icon: filtering ? Icons.search_off_rounded : Icons.print_outlined,
-                    ),
-                  ],
-                )
-              : ListView.builder(
-                  physics: _tabScrollPhysics,
-                  padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, kPhoneBottomInset),
-                  itemCount: visible.length,
-                  itemBuilder: (context, index) {
-                    final d = visible[index];
-                    return DeliveryReceiptCard(
-                      item: d,
-                      showPrint: true,
-                      isReprinting: _reprintingDeliveryId == d.id,
-                      onReprint: () => _reprintDelivery(d),
-                      onCreateReceipt: d.canCreateReceipt ? () => _startReceiptFromDelivery(d) : null,
-                    );
-                  },
-                ),
-        ),
+        if (visible.isEmpty)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: EmptyState(
+                message: filtering
+                    ? 'لا توجد نتائج مطابقة — جرّب "الكل" أو غيّر كلمة البحث'
+                    : 'لا توجد وصول قبض — أصدر وصلاً من النموذج أعلاه',
+                icon: filtering ? Icons.search_off_rounded : Icons.print_outlined,
+              ),
+            ),
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, kPhoneBottomInset),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final d = visible[index];
+                  return DeliveryReceiptCard(
+                    item: d,
+                    showPrint: true,
+                    isReprinting: _reprintingDeliveryId == d.id,
+                    onReprint: () => _reprintDelivery(d),
+                    onCreateReceipt: d.canCreateReceipt ? () => _startReceiptFromDelivery(d) : null,
+                  );
+                },
+                childCount: visible.length,
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -523,68 +530,76 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
     final visible = _filterReceipts(receipts);
     final filtering = _rSearchCtrl.text.trim().isNotEmpty || _rPeriod != ReceiptsPeriod.all;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
+    return CustomScrollView(
+      physics: _tabScrollPhysics,
+      slivers: [
+        SliverPadding(
           padding: const EdgeInsets.fromLTRB(EdSpacing.page, EdSpacing.md, EdSpacing.page, EdSpacing.sm),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (awaiting.isNotEmpty)
-                PendingDeliveriesPanel(items: awaiting, onTap: (d) => _startReceiptFromDelivery(d)),
-              CollapsibleFormPanel(
-                title: 'إرسال سند قبض',
-                subtitle: 'اضغط لفتح النموذج وإرسال سند للإدارة',
-                icon: Icons.receipt_long_rounded,
-                accent: AppColors.navy,
-                expanded: _rFormOpen,
-                onToggle: () => setState(() => _rFormOpen = !_rFormOpen),
-                child: _receiptFormCard(),
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, EdSpacing.sm),
-          child: ReceiptsHistoryFilter(
-            controller: _rSearchCtrl,
-            period: _rPeriod,
-            hintText: 'ابحث برقم السند أو اسم الزبون',
-            onPeriodChanged: (p) => setState(() => _rPeriod = p),
-            onQueryChanged: (_) => setState(() {}),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: EdSpacing.page),
-          child: ReceiptsSectionHeader(
-            title: 'سندات القبض',
-            subtitle: filtering ? 'نتائج البحث ضمن ${_rPeriod.label}' : 'السندات المُرسلة للإدارة',
-            count: visible.length,
-            accent: AppColors.navy,
-          ),
-        ),
-        Expanded(
-          child: visible.isEmpty
-              ? ListView(
-                  physics: _tabScrollPhysics,
-                  padding: const EdgeInsets.all(24),
-                  children: [
-                    EmptyState(
-                      message: filtering
-                          ? 'لا توجد نتائج مطابقة — جرّب "الكل" أو غيّر كلمة البحث'
-                          : 'لا توجد سندات — أرسل سند قبض من النموذج أعلاه',
-                      icon: filtering ? Icons.search_off_rounded : Icons.receipt_long_outlined,
-                    ),
-                  ],
-                )
-              : ListView.builder(
-                  physics: _tabScrollPhysics,
-                  padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, kPhoneBottomInset),
-                  itemCount: visible.length,
-                  itemBuilder: (context, index) => InternalReceiptCard(receipt: visible[index]),
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (awaiting.isNotEmpty)
+                  PendingDeliveriesPanel(items: awaiting, onTap: (d) => _startReceiptFromDelivery(d)),
+                CollapsibleFormPanel(
+                  title: 'إرسال سند قبض',
+                  subtitle: 'اضغط لفتح النموذج وإرسال سند للإدارة',
+                  icon: Icons.receipt_long_rounded,
+                  accent: AppColors.navy,
+                  expanded: _rFormOpen,
+                  onToggle: () => setState(() => _rFormOpen = !_rFormOpen),
+                  child: _receiptFormCard(),
                 ),
+              ],
+            ),
+          ),
         ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, EdSpacing.sm),
+          sliver: SliverToBoxAdapter(
+            child: ReceiptsHistoryFilter(
+              controller: _rSearchCtrl,
+              period: _rPeriod,
+              hintText: 'ابحث برقم السند أو اسم الزبون',
+              onPeriodChanged: (p) => setState(() => _rPeriod = p),
+              onQueryChanged: (_) => setState(() {}),
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: EdSpacing.page),
+          sliver: SliverToBoxAdapter(
+            child: ReceiptsSectionHeader(
+              title: 'سندات القبض',
+              subtitle: filtering ? 'نتائج البحث ضمن ${_rPeriod.label}' : 'السندات المُرسلة للإدارة',
+              count: visible.length,
+              accent: AppColors.navy,
+            ),
+          ),
+        ),
+        if (visible.isEmpty)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: EmptyState(
+                message: filtering
+                    ? 'لا توجد نتائج مطابقة — جرّب "الكل" أو غيّر كلمة البحث'
+                    : 'لا توجد سندات — أرسل سند قبض من النموذج أعلاه',
+                icon: filtering ? Icons.search_off_rounded : Icons.receipt_long_outlined,
+              ),
+            ),
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, kPhoneBottomInset),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) => InternalReceiptCard(receipt: visible[index]),
+                childCount: visible.length,
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -746,12 +761,10 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
             onTap: _pickDrCustomer,
           ),
           const SizedBox(height: EdSpacing.lg),
-          EdLabeledField(
+          EdLabeledField.integer(
             label: 'المبلغ المستلم',
             controller: _drAmountCtrl,
             hint: '0',
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             prefixIcon: Icons.payments_outlined,
           ),
           const SizedBox(height: EdSpacing.md),
@@ -847,34 +860,28 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
               ),
             ),
           const SizedBox(height: EdSpacing.lg),
-          EdLabeledField(
+          EdLabeledField.integer(
             label: 'المبلغ',
             controller: _amountCtrl,
             hint: '0',
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             prefixIcon: Icons.payments_outlined,
           ),
           const SizedBox(height: EdSpacing.md),
           Row(
             children: [
               Expanded(
-                child: EdLabeledField(
+                child: EdLabeledField.integer(
                   label: 'العمولة',
                   controller: _commissionCtrl,
                   hint: '0',
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 ),
               ),
               const SizedBox(width: EdSpacing.md),
               Expanded(
-                child: EdLabeledField(
+                child: EdLabeledField.integer(
                   label: 'الحسم',
                   controller: _discountCtrl,
                   hint: '0',
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 ),
               ),
             ],
