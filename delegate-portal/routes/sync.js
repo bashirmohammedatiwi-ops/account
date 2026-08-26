@@ -9,6 +9,7 @@ const {
   getSyncStatus
 } = require('../lib/accounts');
 const { listCatalogRefreshCodes } = require('../lib/products');
+const { deleteReceiptsByNo } = require('../lib/receipts');
 
 const router = express.Router();
 const VALID_KINDS = new Set(['accounts', 'journal', 'invoices', 'invoiceLines', 'products']);
@@ -95,6 +96,26 @@ router.post('/push', authSync, (req, res) => {
 
 router.get('/status', authSync, (_req, res) => {
   res.json({ ok: true, ...getSyncStatus() });
+});
+
+router.post('/receipts/delete', authSync, (req, res) => {
+  try {
+    const receiptNos = Array.isArray(req.body?.receiptNos) ? req.body.receiptNos : [];
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const force = req.body?.force !== false;
+    if (receiptNos.length) {
+      const result = deleteReceiptsByNo(receiptNos, { force });
+      return res.json({ ok: true, ...result });
+    }
+    if (ids.length) {
+      const { deleteReceipt } = require('../lib/receipts');
+      const deleted = ids.map((id) => deleteReceipt(Number(id), { force })).filter(Boolean);
+      return res.json({ ok: true, deleted, count: deleted.length });
+    }
+    return res.status(400).json({ ok: false, error: 'receiptNos أو ids مطلوب' });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
 });
 
 module.exports = router;

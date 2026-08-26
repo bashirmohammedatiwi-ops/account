@@ -485,14 +485,34 @@ function upsertPostedJournalLines(lines, receiptDate, journalNum) {
   run(lines);
 }
 
-function deleteReceipt(id, { agentId } = {}) {
+function deleteReceipt(id, { agentId, force = false } = {}) {
   const row = db.prepare('SELECT * FROM receipts WHERE id = ?').get(id);
   if (!row) return null;
   if (agentId && Number(row.agent_id) !== Number(agentId)) return null;
-  if (row.status === 'posted') throw new Error('لا يمكن حذف سند مُرحَّل');
+  if (row.status === 'posted' && !force) throw new Error('لا يمكن حذف سند مُرحَّل');
+  db.prepare(`
+    UPDATE delivery_receipts
+    SET receipt_id = NULL, updated_at = datetime('now')
+    WHERE receipt_id = ?
+  `).run(id);
   db.prepare('DELETE FROM receipt_events WHERE receipt_id = ?').run(id);
   db.prepare('DELETE FROM receipts WHERE id = ?').run(id);
-  return { deleted: true, id };
+  return { deleted: true, id, receiptNo: row.receipt_no };
+}
+
+function deleteReceiptsByNo(receiptNos = [], { force = true } = {}) {
+  const nos = [...new Set((Array.isArray(receiptNos) ? receiptNos : [])
+    .map((v) => String(v || '').trim())
+    .filter(Boolean))];
+  if (!nos.length) throw new Error('أرقام السندات مطلوبة');
+  const deleted = [];
+  for (const receiptNo of nos) {
+    const row = db.prepare('SELECT id FROM receipts WHERE receipt_no = ?').get(receiptNo);
+    if (!row) continue;
+    const result = deleteReceipt(row.id, { force });
+    if (result) deleted.push(result);
+  }
+  return { deleted, count: deleted.length };
 }
 
 function postingPayload(id) {
@@ -535,5 +555,6 @@ module.exports = {
   setReceiptStatus,
   markReceiptPosted,
   deleteReceipt,
+  deleteReceiptsByNo,
   postingPayload
 };
