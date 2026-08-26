@@ -36,12 +36,6 @@ function commerceApi(path, opts = {}) {
   return api(`/api/admin${path}`, opts);
 }
 
-function fmtMoney(v) {
-  const n = Number(v);
-  if (Number.isNaN(n)) return '—';
-  return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
-}
-
 function fmtInvInt(v) {
   const n = Number(v);
   if (Number.isNaN(n)) return '—';

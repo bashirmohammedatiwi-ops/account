@@ -137,10 +137,10 @@ async function verifyPriceAppServer() {
     const data = await res.json();
     const posCount = data.productsPosSynced != null ? Number(data.productsPosSynced) : null;
     const total = data.productsTotal != null ? Number(data.productsTotal) : null;
-    const lastPos = data.lastPosSyncAt ? new Date(data.lastPosSyncAt).toLocaleString('ar-IQ') : null;
+    const lastPos = data.lastPosSyncAt ? new Date(data.lastPosSyncAt).toLocaleString('en-US') : null;
     let msg = 'متصل بسيرفر الأسعار';
     if (posCount != null && total != null) {
-      msg += ` — POS: ${posCount}/${total} منتج`;
+      msg += ` — POS: ${fmtNumAlways(posCount)}/${fmtNumAlways(total)} منتج`;
       if (posCount === 0) msg += ' ⚠️ لم تُزامَن أسعار POS بعد';
     }
     if (lastPos) msg += ` · آخر POS: ${lastPos}`;

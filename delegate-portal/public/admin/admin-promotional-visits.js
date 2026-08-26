@@ -32,10 +32,10 @@ async function loadPromotionalVisitsPage() {
   const statsEl = document.getElementById('promoVisitStats');
   if (statsEl) {
     statsEl.innerHTML = `
-      <span class="rv-kpi pending">انتظار <strong>${s.pending || 0}</strong></span>
-      <span class="rv-kpi ok">مراجع <strong>${s.reviewed || 0}</strong></span>
-      <span class="rv-kpi">اليوم <strong>${s.today || 0}</strong></span>
-      <span class="rv-kpi">الإجمالي <strong>${s.total || 0}</strong></span>`;
+      <span class="rv-kpi pending">انتظار <strong class="num-en" dir="ltr">${fmtNumAlways(s.pending || 0)}</strong></span>
+      <span class="rv-kpi ok">مراجع <strong class="num-en" dir="ltr">${fmtNumAlways(s.reviewed || 0)}</strong></span>
+      <span class="rv-kpi">اليوم <strong class="num-en" dir="ltr">${fmtNumAlways(s.today || 0)}</strong></span>
+      <span class="rv-kpi">الإجمالي <strong class="num-en" dir="ltr">${fmtNumAlways(s.total || 0)}</strong></span>`;
   }
   const body = document.getElementById('promoVisitsBody');
   if (!body) return;

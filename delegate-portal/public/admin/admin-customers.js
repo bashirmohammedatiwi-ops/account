@@ -46,10 +46,10 @@ async function loadCustomerRequestsPage() {
   const statsEl = document.getElementById('customerReqStats');
   if (statsEl) {
     statsEl.innerHTML = `
-      <span class="rv-kpi pending">انتظار <strong>${s.pending || 0}</strong></span>
-      <span class="rv-kpi ok">جاهز <strong>${s.reviewed || 0}</strong></span>
-      <span class="rv-kpi posted">مُرحَّل <strong>${s.posted || 0}</strong></span>
-      <span class="rv-kpi">اليوم <strong>${s.today || 0}</strong></span>`;
+      <span class="rv-kpi pending">انتظار <strong class="num-en" dir="ltr">${fmtNumAlways(s.pending || 0)}</strong></span>
+      <span class="rv-kpi ok">جاهز <strong class="num-en" dir="ltr">${fmtNumAlways(s.reviewed || 0)}</strong></span>
+      <span class="rv-kpi posted">مُرحَّل <strong class="num-en" dir="ltr">${fmtNumAlways(s.posted || 0)}</strong></span>
+      <span class="rv-kpi">اليوم <strong class="num-en" dir="ltr">${fmtNumAlways(s.today || 0)}</strong></span>`;
   }
   customerReqAdmin.rows = list.requests || [];
   renderCustomerReqRows(filterCustomerReqRows(customerReqAdmin.rows));

@@ -134,6 +134,23 @@ function fmtNumAlways(v) {
   return Number.isNaN(n) ? '—' : n.toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
+function fmtMoney(v) {
+  const n = Number(v);
+  if (Number.isNaN(n)) return '—';
+  return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
+function fmtDateEn(v) {
+  if (!v) return '—';
+  const raw = String(v).replace('T', ' ').trim();
+  const iso = raw.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const [y, m, d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+  }
+  return raw.slice(0, 10);
+}
+
 function fmtStmtBalance(bal, isOpening = false) {
   if (isOpening) return '';
   const n = Number(bal);
@@ -265,7 +282,7 @@ async function loadDashboard() {
     document.getElementById('lastSyncInfo').innerHTML = `
       <p><span class="badge ${cls}">${esc(syncStatusLabel(last.status))}</span></p>
       <p style="margin:8px 0 0">${fmtDate(last.started_at)}</p>
-      <p class="muted">${last.accounts_count || 0} حساب · ${last.journal_count || 0} حركة</p>
+      <p class="muted"><span class="num-en" dir="ltr">${fmtNumAlways(last.accounts_count || 0)}</span> حساب · <span class="num-en" dir="ltr">${fmtNumAlways(last.journal_count || 0)}</span> حركة</p>
       ${msg ? `<p class="muted sync-last-msg">${esc(msg)}</p>` : ''}`;
   } else {
     document.getElementById('lastSyncInfo').textContent = 'لم تُنفَّذ مزامنة بعد';
@@ -718,7 +735,7 @@ function updateSyncSourceBadge() {
 function appendSyncLiveLine(line, source = syncActivitySource) {
   const feed = document.getElementById('syncLiveFeed');
   if (!feed || !line) return;
-  const stamp = new Date().toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const stamp = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
   syncLiveLines.unshift({ line: String(line), stamp, source });
   if (syncLiveLines.length > SYNC_LIVE_MAX) syncLiveLines.length = SYNC_LIVE_MAX;
   feed.innerHTML = syncLiveLines.map((item) => `

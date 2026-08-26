@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="admin.css?v=20260826ui6">
+  <link rel="stylesheet" href="admin.css?v=20260826rcv1">
 </head>
 <body>
   <div id="topLoader" class="top-loader" hidden aria-live="polite">
@@ -300,7 +300,7 @@
         </section>
 
         <!-- سندات قبض -->
-        <section class="page rv-page" id="page-receipts">
+        <section class="page rv-page rv-page-v2" id="page-receipts">
           <div class="section-hub">
             <div class="section-hub-icon tone-collections" aria-hidden="true">
               <svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
@@ -311,58 +311,85 @@
             </div>
           </div>
 
-          <div class="rv-banner" id="receiptPostAlert">
-            <span class="rv-banner-dot" aria-hidden="true"></span>
-            <p class="panel-desc muted" id="receiptPostAlertText">الترحيل إلى الإداري يتم من تطبيق الإدارة المكتبي المتصل بـ Edari</p>
+          <div class="rcv-banner" id="receiptPostAlert">
+            <div class="rcv-banner-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            </div>
+            <p id="receiptPostAlertText">الترحيل إلى الإداري يتم من تطبيق الإدارة المكتبي المتصل بـ Edari</p>
           </div>
 
-          <div class="rv-card">
-            <div class="rv-card-head">
-              <div>
-                <h2 class="rv-card-title">حسابات الترحيل من الإداري</h2>
-                <p class="rv-card-sub">اختر الصندوق وحسابات العمولة والحسم من دليل الإداري — تُحفظ هنا وتُستخدم عند الترحيل</p>
-              </div>
-              <button type="button" class="btn btn-primary" id="btnSaveReceiptSettings">حفظ الحسابات</button>
-            </div>
-            <div class="rv-settings-grid" id="receiptSettingsGrid"></div>
-          </div>
+          <div class="rcv-stats-grid" id="receiptStats"></div>
 
-          <div class="rv-card rv-card-list">
-            <div class="rv-card-head">
-              <div>
-                <h2 class="rv-card-title">سندات قبض المندوبين</h2>
-                <p class="rv-card-sub">راجع وعدّل ثم احذف أو رحّل قبل الإرسال للإداري</p>
+          <details class="rcv-settings" id="receiptSettingsPanel" open>
+            <summary class="rcv-settings-summary">
+              <span class="rcv-settings-summary-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+              </span>
+              <span class="rcv-settings-summary-text">
+                <strong>حسابات الترحيل</strong>
+                <small>صندوق المبلغ · عمولة · حسم — تُحفظ تلقائياً</small>
+              </span>
+              <span class="rcv-settings-summary-badge" id="receiptSettingsBadge">0/4</span>
+            </summary>
+            <div class="rcv-settings-body">
+              <div class="rcv-settings-grid" id="receiptSettingsGrid"></div>
+              <div class="rcv-settings-foot">
+                <button type="button" class="btn btn-soft btn-sm" id="btnSaveReceiptSettings">حفظ يدوياً</button>
               </div>
-              <select id="receiptStatusFilter" class="search rv-filter">
-                <option value="">كل الحالات</option>
-                <option value="pending">بانتظار المراجعة</option>
-                <option value="reviewed">جاهز للترحيل</option>
-                <option value="posted">مُرحَّل</option>
-                <option value="rejected">مرفوض</option>
-              </select>
             </div>
-            <div class="rv-filter-bar">
-              <input type="search" id="receiptSearchFilter" class="search" placeholder="بحث: رقم السند، زبون، مندوب..." autocomplete="off">
-              <select id="receiptAgentFilter" class="search rv-filter">
-                <option value="">كل المندوبين</option>
-              </select>
-              <input type="date" id="receiptFromFilter" class="search rv-filter" title="من تاريخ">
-              <input type="date" id="receiptToFilter" class="search rv-filter" title="حتى تاريخ">
-              <button type="button" class="btn btn-soft btn-sm" id="btnReceiptFilterReset">مسح الفلاتر</button>
+          </details>
+
+          <div class="rcv-workspace">
+            <div class="rcv-main">
+              <div class="rcv-list-card">
+                <div class="rcv-list-head">
+                  <div>
+                    <h3 class="rcv-list-title">سندات المندوبين</h3>
+                    <p class="rcv-list-sub">راجع · عدّل · رحّل أو احذف</p>
+                  </div>
+                  <div class="rcv-list-count" id="receiptListCount">—</div>
+                </div>
+                <div class="rcv-toolbar">
+                  <div class="rcv-toolbar-search">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
+                    <input type="search" id="receiptSearchFilter" class="search" placeholder="بحث: رقم السند، زبون، مندوب..." autocomplete="off">
+                  </div>
+                  <select id="receiptStatusFilter" class="search rcv-filter">
+                    <option value="">كل الحالات</option>
+                    <option value="pending">بانتظار المراجعة</option>
+                    <option value="reviewed">جاهز للترحيل</option>
+                    <option value="posted">مُرحَّل</option>
+                    <option value="rejected">مرفوض</option>
+                  </select>
+                  <select id="receiptAgentFilter" class="search rcv-filter">
+                    <option value="">كل المندوبين</option>
+                  </select>
+                  <input type="date" id="receiptFromFilter" class="search rcv-filter rcv-date" title="من تاريخ">
+                  <input type="date" id="receiptToFilter" class="search rcv-filter rcv-date" title="حتى تاريخ">
+                  <button type="button" class="btn btn-soft btn-sm" id="btnReceiptFilterReset">مسح</button>
+                </div>
+                <div class="rcv-table-wrap">
+                  <table class="rcv-table">
+                    <thead>
+                      <tr>
+                        <th>السند</th><th>مندوب</th><th>زبون</th><th>مبلغ</th><th>عمولة</th><th>حسم</th><th>حالة</th><th>تاريخ</th><th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="receiptsBody"></tbody>
+                  </table>
+                </div>
+              </div>
             </div>
-            <div class="rv-kpis rv-kpis-wide" id="receiptStats"></div>
-            <div class="table-scroll">
-              <table class="data-table compact">
-                <thead>
-                  <tr>
-                    <th>رقم</th><th>مندوب</th><th>زبون</th><th>مبلغ</th><th>عمولة</th><th>حسم</th><th>حالة</th><th>تاريخ</th><th></th>
-                  </tr>
-                </thead>
-                <tbody id="receiptsBody"></tbody>
-              </table>
-            </div>
+            <aside class="rcv-detail" id="receiptDetailPanel">
+              <div class="rcv-detail-empty" id="receiptDetailEmpty">
+                <div class="rcv-detail-empty-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h6"/></svg>
+                </div>
+                <strong>اختر سند قبض</strong>
+                <p>اضغط «مراجعة» من الجدول لعرض التفاصيل والترحيل</p>
+              </div>
+            </aside>
           </div>
-          <div class="rv-card hidden" id="receiptDetailPanel"></div>
         </section>
 
         <!-- وصول استلام -->
@@ -1350,13 +1377,13 @@
 
   <script src="config.js"></script>
   <script src="admin-ui.js?v=20260826ui6"></script>
-  <script src="admin.js?v=20260826ui6"></script>
-  <script src="admin-shell.js?v=20260826ui6"></script>
-  <script src="admin-commerce.js?v=20260826ui6"></script>
-  <script src="admin-receipts.js?v=20260826ui7"></script>
-  <script src="admin-delivery-receipts.js?v=20260826ui6"></script>
-  <script src="admin-customers.js?v=20260826ui6"></script>
-  <script src="admin-promotional-visits.js?v=20260826ui6"></script>
+  <script src="admin.js?v=20260826rcv1"></script>
+  <script src="admin-shell.js?v=20260826rcv1"></script>
+  <script src="admin-commerce.js?v=20260826rcv1"></script>
+  <script src="admin-receipts.js?v=20260826rcv1"></script>
+  <script src="admin-delivery-receipts.js?v=20260826rcv1"></script>
+  <script src="admin-customers.js?v=20260826rcv1"></script>
+  <script src="admin-promotional-visits.js?v=20260826rcv1"></script>
   <script src="admin-thermal-template.js?v=20260824thermal8"></script>
   <script src="admin-sales-report.js?v=20260709treeFix3"></script>
   <script src="admin-account-statements.js?v=20260826pages1"></script>

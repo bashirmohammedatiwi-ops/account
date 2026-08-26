@@ -34,7 +34,7 @@ function renderDeliveryReceiptRows(rows) {
       <td dir="ltr">${esc(d.deliveryNo)}</td>
       <td>${esc(d.agentName)}</td>
       <td>${esc(d.customerName)}</td>
-      <td dir="ltr">${fmtMoney(d.amount)}</td>
+      <td class="num-en" dir="ltr">${fmtMoney(d.amount)}</td>
       <td><span class="badge ${drBadgeClass(d.status)}">${esc(d.statusLabel)}</span></td>
       <td>${d.printedAt ? '✓' : '—'}</td>
       <td dir="ltr">${esc(d.linkedReceiptNo || '—')}</td>
@@ -67,10 +67,10 @@ async function loadDeliveryReceiptsPage() {
   const statsEl = document.getElementById('deliveryReceiptStats');
   if (statsEl) {
     statsEl.innerHTML = `
-      <span class="rv-kpi pending">مُصدَّر <strong>${s.issued || 0}</strong></span>
-      <span class="rv-kpi ok">مرتبط <strong>${s.linked || 0}</strong></span>
-      <span class="rv-kpi">اليوم <strong>${s.today || 0}</strong></span>
-      <span class="rv-kpi">الإجمالي <strong>${s.total || 0}</strong></span>`;
+      <span class="rv-kpi pending">مُصدَّر <strong class="num-en" dir="ltr">${fmtNumAlways(s.issued || 0)}</strong></span>
+      <span class="rv-kpi ok">مرتبط <strong class="num-en" dir="ltr">${fmtNumAlways(s.linked || 0)}</strong></span>
+      <span class="rv-kpi">اليوم <strong class="num-en" dir="ltr">${fmtNumAlways(s.today || 0)}</strong></span>
+      <span class="rv-kpi">الإجمالي <strong class="num-en" dir="ltr">${fmtNumAlways(s.total || 0)}</strong></span>`;
   }
   deliveryReceiptAdmin.rows = list.deliveryReceipts || [];
   renderDeliveryReceiptRows(filterDeliveryReceiptRows(deliveryReceiptAdmin.rows));
@@ -100,7 +100,7 @@ async function openDeliveryReceiptDetail(id) {
     <div class="rv-detail-grid">
       <div><span class="muted">المندوب</span><strong>${esc(d.agentName)}</strong></div>
       <div><span class="muted">الزبون</span><strong>${esc(d.customerName)}</strong></div>
-      <div><span class="muted">المبلغ</span><strong dir="ltr">${fmtMoney(d.amount)}</strong></div>
+      <div><span class="muted">المبلغ</span><strong class="num-en" dir="ltr">${fmtMoney(d.amount)}</strong></div>
       <div><span class="muted">التاريخ</span><strong>${esc(d.receiptDate || '—')}</strong></div>
       <div><span class="muted">الحالة</span><strong>${esc(d.statusLabel)}</strong></div>
       <div><span class="muted">سند القبض</span><strong dir="ltr">${esc(d.linkedReceiptNo || '—')}</strong></div>
@@ -141,11 +141,6 @@ async function deleteDeliveryReceiptUi(id) {
   document.getElementById('deliveryReceiptDetailPanel')?.classList.add('hidden');
   showToast('تم الحذف');
   await loadDeliveryReceiptsPage();
-}
-
-function fmtMoney(n) {
-  const v = Number(n || 0);
-  return v.toLocaleString('ar-IQ');
 }
 
 document.getElementById('deliveryReceiptStatusFilter')?.addEventListener('change', () => loadDeliveryReceiptsPage());
