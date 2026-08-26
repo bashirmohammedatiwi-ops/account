@@ -1,11 +1,15 @@
-/* Edari Admin — Shell v4: تنقل هرمي، مسارات، لوحة رئيسية محورية */
+/* Edari Admin — Shell v4: صفحة مستقلة لكل قسم فرعي */
+
+const LEGACY_RV_TO_PAGE = {
+  delivery: 'deliveryReceipts',
+  customers: 'customerRequests'
+};
 
 const ADMIN_NAV = [
   {
     id: 'home',
     label: 'عام',
     icon: 'home',
-    defaultOpen: true,
     items: [
       { page: 'dashboard', label: 'الرئيسية', icon: 'home' }
     ]
@@ -14,23 +18,21 @@ const ADMIN_NAV = [
     id: 'commerce',
     label: 'التجارة',
     icon: 'commerce',
-    defaultOpen: true,
     items: [
-      { page: 'catalog', label: 'المنتجات', icon: 'catalog', desc: 'فروع وأقسام وباركود' },
+      { page: 'catalog', label: 'المنتجات', icon: 'catalog', desc: 'فروع · أقسام · باركود' },
       { page: 'orders', label: 'طلبات الشراء', icon: 'orders', desc: 'مراجعة واعتماد' }
     ]
   },
   {
     id: 'collections',
-    label: 'التحصيل والمندوبين',
+    label: 'التحصيل',
     icon: 'receipts',
-    defaultOpen: true,
     items: [
-      { page: 'receipts', rvTab: 'receipts', label: 'سندات قبض', icon: 'receipt', desc: 'مراجعة وترحيل للإداري' },
-      { page: 'receipts', rvTab: 'delivery', label: 'وصول استلام', icon: 'delivery', desc: 'وصل مبلغ للزبون' },
-      { page: 'receipts', rvTab: 'customers', label: 'زبائن جدد', icon: 'customers', desc: 'طلبات ترحيل زبون' },
-      { page: 'promotionalVisits', label: 'الزيادات الترويجية', icon: 'promo', desc: 'زيارات المحلات' },
-      { page: 'thermalReceipt', label: 'تصميم الوصل الحراري', icon: 'thermal', desc: 'قالب الطابعة 80mm' }
+      { page: 'receipts', label: 'سندات قبض', icon: 'receipt', desc: 'مراجعة وترحيل' },
+      { page: 'deliveryReceipts', label: 'وصول استلام', icon: 'delivery', desc: 'وصل مبلغ للزبون' },
+      { page: 'customerRequests', label: 'زبائن جدد', icon: 'customers', desc: 'ترحيل زبون' },
+      { page: 'promotionalVisits', label: 'زيادات ترويجية', icon: 'promo', desc: 'زيارات المحلات' },
+      { page: 'thermalReceipt', label: 'تصميم الوصل', icon: 'thermal', desc: 'قالب 80mm' }
     ]
   },
   {
@@ -38,7 +40,8 @@ const ADMIN_NAV = [
     label: 'التقارير',
     icon: 'reports',
     items: [
-      { page: 'salesReport', label: 'مبيعات وكشوف', icon: 'reports', desc: 'PDF ومبيعات الشجرات' }
+      { page: 'salesReport', label: 'مبيعات الشجرات', icon: 'reports', desc: 'PDF حسب الفترة' },
+      { page: 'accountStatements', label: 'كشف حساب', icon: 'delivery', desc: 'حسابات Edari' }
     ]
   },
   {
@@ -60,24 +63,6 @@ const ADMIN_NAV = [
     ]
   }
 ];
-
-const RV_TAB_META = {
-  receipts: {
-    title: 'سندات قبض',
-    sub: 'مراجعة سندات المندوبين وترحيلها للإداري',
-    crumb: 'سندات قبض'
-  },
-  delivery: {
-    title: 'وصول استلام',
-    sub: 'وصولات المبلغ المُصدَرة للزبون — طباعة حرارية',
-    crumb: 'وصول استلام'
-  },
-  customers: {
-    title: 'زبائن جدد',
-    sub: 'طلبات إضافة زبون من المندوب — مراجعة وترحيل',
-    crumb: 'زبائن جدد'
-  }
-};
 
 const NAV_ICONS = {
   home: '<svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/><path d="M9 20v-6h6v6"/></svg>',
@@ -103,25 +88,32 @@ function navIcon(name) {
   return NAV_ICONS[name] || NAV_ICONS.home;
 }
 
+function resolveAdminPage(name, opts = {}) {
+  if (name === 'receipts' && opts.rvTab && LEGACY_RV_TO_PAGE[opts.rvTab]) {
+    return LEGACY_RV_TO_PAGE[opts.rvTab];
+  }
+  return name;
+}
+
 function renderAdminSidebar() {
   const host = document.getElementById('sidebarNav');
   if (!host) return;
   host.innerHTML = ADMIN_NAV.map((section) => {
-    const single = section.items.length === 1 && section.id === 'home';
+    const single = section.items.length === 1;
     const itemsHtml = section.items.map((item) => `
-      <button type="button" class="nav-item nav-sub${single ? '' : ' nav-sub-item'}" data-page="${item.page}"${item.rvTab ? ` data-rv-tab="${item.rvTab}"` : ''}>
+      <button type="button" class="nav-item nav-sub${single ? '' : ' nav-sub-item'}" data-page="${item.page}">
         <span class="nav-icon" aria-hidden="true">${navIcon(item.icon)}</span>
         <span class="nav-text-wrap">
           <span class="nav-text">${esc(item.label)}</span>
           ${item.desc ? `<span class="nav-desc">${esc(item.desc)}</span>` : ''}
         </span>
       </button>`).join('');
-    if (single) {
+    if (single && section.id === 'home') {
       return `<div class="nav-section" data-section="${section.id}">${itemsHtml}</div>`;
     }
     return `
-      <div class="nav-section${section.defaultOpen ? ' is-open' : ''}" data-section="${section.id}">
-        <button type="button" class="nav-section-toggle" aria-expanded="${section.defaultOpen ? 'true' : 'false'}">
+      <div class="nav-section" data-section="${section.id}">
+        <button type="button" class="nav-section-toggle" aria-expanded="false">
           <span class="nav-section-icon" aria-hidden="true">${navIcon(section.icon)}</span>
           <span class="nav-section-label">${esc(section.label)}</span>
           <span class="nav-section-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
@@ -133,143 +125,112 @@ function renderAdminSidebar() {
   host.querySelectorAll('.nav-section-toggle').forEach((btn) => {
     btn.addEventListener('click', () => {
       const section = btn.closest('.nav-section');
-      section?.classList.toggle('is-open');
-      btn.setAttribute('aria-expanded', section?.classList.contains('is-open') ? 'true' : 'false');
+      const willOpen = !section?.classList.contains('is-open');
+      section?.classList.toggle('is-open', willOpen);
+      btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
     });
   });
 
   host.querySelectorAll('.nav-item').forEach((btn) => {
-    btn.addEventListener('click', () => showPage(btn.dataset.page, { rvTab: btn.dataset.rvTab }));
+    btn.addEventListener('click', () => showPage(btn.dataset.page));
   });
 }
 
-function findNavSection(page, rvTab) {
+function flattenAdminNav() {
+  const out = [];
   for (const section of ADMIN_NAV) {
     for (const item of section.items) {
-      if (item.page !== page) continue;
-      if (item.rvTab && item.rvTab !== rvTab) continue;
-      if (!item.rvTab && rvTab && page === 'receipts' && rvTab !== 'receipts') continue;
-      return { section, item };
+      out.push({
+        page: item.page,
+        label: item.label,
+        desc: item.desc || '',
+        icon: item.icon,
+        section: section.label,
+        sectionId: section.id
+      });
+    }
+  }
+  return out;
+}
+
+function findNavSection(page) {
+  for (const section of ADMIN_NAV) {
+    for (const item of section.items) {
+      if (item.page === page) return { section, item };
     }
   }
   return null;
 }
 
-function updateReceiptsHubHeader(rvTab) {
-  const meta = RV_TAB_META[rvTab || 'receipts'] || RV_TAB_META.receipts;
-  const titleEl = document.getElementById('receiptsHubTitle');
-  const subEl = document.getElementById('receiptsHubSub');
-  if (titleEl) titleEl.textContent = `التحصيل · ${meta.crumb || meta.title}`;
-  if (subEl) subEl.textContent = meta.sub || '';
-}
-
-function getActiveReportTab() {
-  const active = document.querySelector('.rx-tab[data-report-tab].active');
-  return active?.dataset.reportTab || 'sales';
-}
-
-function updateAdminChrome(name, rvTab) {
-  const hit = findNavSection(name, rvTab);
+function updateAdminChrome(name) {
+  const hit = findNavSection(name);
   document.querySelectorAll('.nav-section').forEach((el) => {
     const id = el.dataset.section;
     const section = ADMIN_NAV.find((s) => s.id === id);
-    const hasActive = section?.items.some((item) => {
-      if (item.page !== name) return false;
-      if (item.rvTab) return item.rvTab === rvTab;
-      if (name === 'receipts' && rvTab && rvTab !== 'receipts') return false;
-      return true;
-    });
-    if (hasActive) el.classList.add('is-open');
+    const hasActive = section?.items.some((item) => item.page === name);
+    if (hasActive) {
+      el.classList.add('is-open');
+      el.querySelector('.nav-section-toggle')?.setAttribute('aria-expanded', 'true');
+    }
   });
 
   document.querySelectorAll('#sidebarNav .nav-item').forEach((n) => {
-    const page = n.dataset.page;
-    const tab = n.dataset.rvTab;
-    let active = page === name;
-    if (active && tab) active = tab === rvTab;
-    if (active && name === 'receipts' && !tab && rvTab && rvTab !== 'receipts') active = false;
-    n.classList.toggle('active', active);
+    n.classList.toggle('active', n.dataset.page === name);
   });
+
+  if (typeof setWorkspaceTone === 'function') {
+    setWorkspaceTone(hit?.section?.id || null);
+  }
 
   const crumbs = document.getElementById('pageBreadcrumbs');
   if (crumbs && hit) {
-    const parts = [
+    crumbs.innerHTML = [
       `<span class="crumb-root">${esc(hit.section.label)}</span>`,
       `<span class="crumb-sep">/</span>`,
       `<span class="crumb-current">${esc(hit.item.label)}</span>`
-    ];
-    crumbs.innerHTML = parts.join('');
+    ].join('');
     crumbs.hidden = false;
   } else if (crumbs) {
     crumbs.hidden = true;
   }
 
-  const rvMeta = name === 'receipts' && rvTab ? RV_TAB_META[rvTab] : null;
-  const meta = typeof PAGE_META !== 'undefined' ? PAGE_META[name] : null;
-  const titleEl = document.getElementById('pageTitle');
-  const subEl = document.getElementById('pageSubtitle');
-  if (titleEl) titleEl.textContent = rvMeta?.title || meta?.title || '';
-  if (subEl) subEl.textContent = rvMeta?.sub || meta?.sub || '';
-
-  if (name === 'receipts') updateReceiptsHubHeader(rvTab || 'receipts');
-
-  renderTopbarActions(name, rvTab);
-}
-
-function topbarActionsForPage(name, rvTab) {
-  if (name === 'salesReport') {
-    const tab = getActiveReportTab();
-    if (tab === 'statement') {
-      return [
-        { label: 'معاينة', cls: 'btn-soft', target: 'btnStmtPreview' },
-        { label: 'PDF', cls: 'btn-primary', target: 'btnStmtPdf' }
-      ];
-    }
-  }
-  return TOPBAR_ACTIONS[name] || [{ label: '↻', cls: 'btn-soft', action: 'refresh-all', title: 'تحديث' }];
+  renderTopbarActions(name);
+  if (typeof updateTopbarIcon === 'function') updateTopbarIcon(name);
 }
 
 const TOPBAR_ACTIONS = {
-  dashboard: [
-    { label: '↻ تحديث', cls: 'btn-soft', action: 'refresh-all' }
-  ],
+  dashboard: [{ label: '↻ تحديث', cls: 'btn-soft', action: 'refresh-all' }],
   catalog: [
     { label: '+ منتج', cls: 'btn-primary', target: 'btnAddProduct' },
-    { label: '↻', cls: 'btn-soft', action: 'refresh-catalog', title: 'تحديث الكتالوج' }
+    { label: '↻', cls: 'btn-soft', action: 'refresh-catalog', title: 'تحديث' }
   ],
-  orders: [
-    { label: '↻ تحديث', cls: 'btn-soft', action: 'reload-orders' }
-  ],
+  orders: [{ label: '↻ تحديث', cls: 'btn-soft', action: 'reload-orders' }],
   receipts: [
-    { label: '↻ تحديث', cls: 'btn-soft', action: 'reload-receipts-tab' },
+    { label: '↻ تحديث', cls: 'btn-soft', action: 'reload-receipts' },
     { label: 'تصميم الوصل', cls: 'btn-soft', action: 'goto-thermal' }
   ],
-  promotionalVisits: [
-    { label: '↻ تحديث', cls: 'btn-soft', action: 'reload-promo' }
-  ],
-  thermalReceipt: [
-    { label: 'حفظ', cls: 'btn-primary', target: 'btnThermalSave' }
-  ],
+  deliveryReceipts: [{ label: '↻ تحديث', cls: 'btn-soft', action: 'reload-delivery' }],
+  customerRequests: [{ label: '↻ تحديث', cls: 'btn-soft', action: 'reload-customers' }],
+  promotionalVisits: [{ label: '↻ تحديث', cls: 'btn-soft', action: 'reload-promo' }],
+  thermalReceipt: [{ label: 'حفظ', cls: 'btn-primary', target: 'btnThermalSave' }],
   salesReport: [
     { label: 'معاينة', cls: 'btn-soft', target: 'btnSalesReportPreview' },
     { label: 'PDF', cls: 'btn-primary', target: 'btnSalesReportPdf' }
   ],
-  priceSync: [
-    { label: 'مزامنة', cls: 'btn-primary', target: 'btnPriceSyncNow' }
+  accountStatements: [
+    { label: 'معاينة', cls: 'btn-soft', target: 'btnStmtPreview' },
+    { label: 'PDF', cls: 'btn-primary', target: 'btnStmtPdf' }
   ],
-  sync: [
-    { label: 'رفع الآن', cls: 'btn-primary', target: 'btnSyncNow' }
-  ],
+  priceSync: [{ label: 'مزامنة', cls: 'btn-primary', target: 'btnPriceSyncNow' }],
+  sync: [{ label: 'رفع الآن', cls: 'btn-primary', target: 'btnSyncNow' }],
   database: [
     { label: 'اختبار', cls: 'btn-soft', target: 'btnEdariTest' },
     { label: 'حفظ', cls: 'btn-primary', target: 'btnEdariSave' }
   ],
-  agents: [
-    { label: '+ مندوب', cls: 'btn-primary', target: 'btnAddAgent' }
-  ]
+  agents: [{ label: '+ مندوب', cls: 'btn-primary', target: 'btnAddAgent' }]
 };
 
-function runTopbarAction(action, page, rvTab) {
+function runTopbarAction(action) {
   switch (action) {
     case 'refresh-all':
       if (typeof refreshAll === 'function') void refreshAll();
@@ -280,13 +241,15 @@ function runTopbarAction(action, page, rvTab) {
     case 'reload-orders':
       if (typeof loadOrdersPage === 'function') void loadOrdersPage();
       break;
-    case 'reload-receipts-tab': {
-      const tab = rvTab || 'receipts';
-      if (tab === 'delivery' && typeof loadDeliveryReceiptsPage === 'function') void loadDeliveryReceiptsPage();
-      else if (tab === 'customers' && typeof loadCustomerRequestsPage === 'function') void loadCustomerRequestsPage();
-      else if (typeof loadReceiptsPage === 'function') void loadReceiptsPage();
+    case 'reload-receipts':
+      if (typeof loadReceiptsPage === 'function') void loadReceiptsPage();
       break;
-    }
+    case 'reload-delivery':
+      if (typeof loadDeliveryReceiptsPage === 'function') void loadDeliveryReceiptsPage();
+      break;
+    case 'reload-customers':
+      if (typeof loadCustomerRequestsPage === 'function') void loadCustomerRequestsPage();
+      break;
     case 'reload-promo':
       if (typeof loadPromotionalVisitsPage === 'function') void loadPromotionalVisitsPage();
       break;
@@ -298,16 +261,12 @@ function runTopbarAction(action, page, rvTab) {
   }
 }
 
-function renderTopbarActions(name, rvTab) {
+function renderTopbarActions(name) {
   const host = document.getElementById('topbarActions');
   if (!host) return;
-  const defs = topbarActionsForPage(name, rvTab);
+  const defs = TOPBAR_ACTIONS[name] || [{ label: '↻', cls: 'btn-soft', action: 'refresh-all', title: 'تحديث' }];
   host.innerHTML = defs.map((def, i) => {
-    const attrs = [
-      `type="button"`,
-      `class="btn btn-sm ${def.cls || 'btn-soft'}"`,
-      `data-topbar-action="${i}"`
-    ];
+    const attrs = [`type="button"`, `class="btn btn-sm ${def.cls || 'btn-soft'}"`, `data-topbar-action="${i}"`];
     if (def.title) attrs.push(`title="${esc(def.title)}"`);
     return `<button ${attrs.join(' ')}>${esc(def.label)}</button>`;
   }).join('');
@@ -315,11 +274,8 @@ function renderTopbarActions(name, rvTab) {
   host.querySelectorAll('[data-topbar-action]').forEach((btn) => {
     const def = defs[Number(btn.dataset.topbarAction)];
     btn.addEventListener('click', () => {
-      if (def.target) {
-        document.getElementById(def.target)?.click();
-      } else if (def.action) {
-        runTopbarAction(def.action, name, rvTab);
-      }
+      if (def.target) document.getElementById(def.target)?.click();
+      else if (def.action) runTopbarAction(def.action);
     });
   });
 }
@@ -328,6 +284,14 @@ function activityTimeLabel(raw) {
   const s = String(raw || '').trim();
   if (!s) return '—';
   return s.length > 16 ? s.slice(0, 16) : s;
+}
+
+async function adminCommerceFetch(path) {
+  const base = typeof getApiBase === 'function' ? getApiBase() : '';
+  const res = await fetch(`${base}/api/admin${path}`, { cache: 'no-store' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
 }
 
 async function loadDashboardRecentActivity() {
@@ -347,8 +311,7 @@ async function loadDashboardRecentActivity() {
         sub: `${r.agentName || '—'} · ${r.customerName || '—'}`,
         amount: r.amount,
         time: r.receiptDate || r.createdAt,
-        goto: 'receipts',
-        rvTab: 'receipts'
+        goto: 'receipts'
       });
     });
     (ordData.orders || []).slice(0, 5).forEach((o) => {
@@ -369,7 +332,7 @@ async function loadDashboardRecentActivity() {
     }
 
     host.innerHTML = items.slice(0, 10).map((x) => `
-      <button type="button" class="dash-recent-item kind-${x.kind}" data-goto="${x.goto}"${x.rvTab ? ` data-rv-tab="${x.rvTab}"` : ''}>
+      <button type="button" class="dash-recent-item kind-${x.kind}" data-goto="${x.goto}">
         <span class="dash-recent-badge">${x.kind === 'receipt' ? 'سند' : 'طلب'}</span>
         <span class="dash-recent-main">
           <strong dir="ltr">${esc(x.title)}</strong>
@@ -380,26 +343,25 @@ async function loadDashboardRecentActivity() {
       </button>`).join('');
 
     host.querySelectorAll('[data-goto]').forEach((btn) => {
-      btn.addEventListener('click', () => showPage(btn.dataset.goto, { rvTab: btn.dataset.rvTab }));
+      btn.addEventListener('click', () => showPage(btn.dataset.goto));
     });
   } catch (_) {
     host.innerHTML = '<p class="dash-recent-empty">تعذّر تحميل النشاط</p>';
   }
 }
 
-async function adminCommerceFetch(path) {
-  const base = typeof getApiBase === 'function' ? getApiBase() : '';
-  const res = await fetch(`${base}/api/admin${path}`, { cache: 'no-store' });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || res.statusText);
-  return data;
-}
-
 async function loadDashboardV4(baseData) {
   const statsHost = document.getElementById('dashStats');
   const hubsHost = document.getElementById('dashHubs');
   const pendingHost = document.getElementById('dashPending');
+  const tilesHost = document.getElementById('dashSectionTiles');
+  const quickHost = document.getElementById('dashQuickActions');
+  const greetEl = document.getElementById('dashGreeting');
   if (!statsHost) return;
+
+  if (greetEl && typeof dashGreeting === 'function') {
+    greetEl.textContent = dashGreeting();
+  }
 
   let commerce = {};
   try {
@@ -420,41 +382,101 @@ async function loadDashboardV4(baseData) {
   } catch (_) {}
 
   const counts = baseData?.counts || {};
+
+  if (quickHost) {
+    quickHost.innerHTML = `
+      <button type="button" class="dash-qa" data-goto="receipts">${navIcon('receipt')}<span>سندات قبض</span></button>
+      <button type="button" class="dash-qa" data-goto="orders">${navIcon('orders')}<span>طلبات</span></button>
+      <button type="button" class="dash-qa" data-goto="catalog">${navIcon('catalog')}<span>منتجات</span></button>
+      <button type="button" class="dash-qa" data-goto="sync">${navIcon('sync')}<span>رفع بيانات</span></button>
+      <button type="button" class="dash-qa dash-qa-cmd" id="dashOpenCmdk">${navIcon('home')}<span>⌘K انتقل</span></button>`;
+    quickHost.querySelectorAll('[data-goto]').forEach((b) => {
+      b.addEventListener('click', () => showPage(b.dataset.goto));
+    });
+    quickHost.querySelector('#dashOpenCmdk')?.addEventListener('click', () => {
+      if (typeof openCmdk === 'function') openCmdk();
+    });
+  }
+
+  if (tilesHost) {
+    const tiles = [
+      { id: 'commerce', label: 'التجارة', sub: 'منتجات · طلبات', icon: 'commerce', goto: 'catalog', tone: 'commerce' },
+      { id: 'collections', label: 'التحصيل', sub: 'سندات · وصولات', icon: 'receipts', goto: 'receipts', tone: 'collections' },
+      { id: 'reports', label: 'التقارير', sub: 'مبيعات · كشوف', icon: 'reports', goto: 'salesReport', tone: 'reports' },
+      { id: 'system', label: 'النظام', sub: 'مزامنة · Edari', icon: 'system', goto: 'sync', tone: 'system' },
+      { id: 'team', label: 'الفريق', sub: 'المندوبون', icon: 'team', goto: 'agents', tone: 'team' }
+    ];
+    tilesHost.innerHTML = tiles.map((t) => `
+      <button type="button" class="dash-section-tile tone-${t.tone}" data-goto="${t.goto}">
+        <span class="dash-section-tile-icon">${navIcon(t.icon)}</span>
+        <span class="dash-section-tile-body">
+          <strong>${esc(t.label)}</strong>
+          <span>${esc(t.sub)}</span>
+        </span>
+        <span class="dash-section-tile-arrow" aria-hidden="true">←</span>
+      </button>`).join('');
+    tilesHost.querySelectorAll('[data-goto]').forEach((b) => {
+      b.addEventListener('click', () => showPage(b.dataset.goto));
+    });
+  }
+
   statsHost.innerHTML = `
-    <div class="stat-card tone-teal"><span class="stat-card-icon">${navIcon('db')}</span><div class="stat-card-body"><div class="k">حسابات · مزامَنة</div><div class="v">${fmtNumAlways(counts.accounts)}</div></div></div>
-    <div class="stat-card tone-blue"><span class="stat-card-icon">${navIcon('reports')}</span><div class="stat-card-body"><div class="k">حركات · مزامَنة</div><div class="v">${fmtNumAlways(counts.journal)}</div></div></div>
-    <div class="stat-card tone-violet"><span class="stat-card-icon">${navIcon('agents')}</span><div class="stat-card-body"><div class="k">مندوبون · نشطون</div><div class="v">${fmtNumAlways(counts.agents)}</div></div></div>
-    <div class="stat-card tone-amber"><span class="stat-card-icon">${navIcon('receipt')}</span><div class="stat-card-body"><div class="k">سندات · بانتظار</div><div class="v">${fmtNumAlways(commerce.receipts.pending || 0)}</div></div></div>
-    <div class="stat-card tone-cyan"><span class="stat-card-icon">${navIcon('orders')}</span><div class="stat-card-body"><div class="k">طلبات · جديدة</div><div class="v">${fmtNumAlways(commerce.orders.pending || 0)}</div></div></div>
-    <div class="stat-card tone-indigo"><span class="stat-card-icon">${navIcon('delivery')}</span><div class="stat-card-body"><div class="k">وصولات · اليوم</div><div class="v">${fmtNumAlways(commerce.delivery.today || 0)}</div></div></div>`;
+    <button type="button" class="stat-card stat-card-btn tone-teal" data-goto="database">
+      <span class="stat-card-icon">${navIcon('db')}</span>
+      <div class="stat-card-body"><div class="k">حسابات · مزامَنة</div><div class="v">${fmtNumAlways(counts.accounts)}</div></div>
+    </button>
+    <button type="button" class="stat-card stat-card-btn tone-blue" data-goto="sync">
+      <span class="stat-card-icon">${navIcon('reports')}</span>
+      <div class="stat-card-body"><div class="k">حركات · مزامَنة</div><div class="v">${fmtNumAlways(counts.journal)}</div></div>
+    </button>
+    <button type="button" class="stat-card stat-card-btn tone-violet" data-goto="agents">
+      <span class="stat-card-icon">${navIcon('agents')}</span>
+      <div class="stat-card-body"><div class="k">مندوبون · نشطون</div><div class="v">${fmtNumAlways(counts.agents)}</div></div>
+    </button>
+    <button type="button" class="stat-card stat-card-btn tone-amber" data-goto="receipts">
+      <span class="stat-card-icon">${navIcon('receipt')}</span>
+      <div class="stat-card-body"><div class="k">سندات · بانتظار</div><div class="v">${fmtNumAlways(commerce.receipts.pending || 0)}</div></div>
+    </button>
+    <button type="button" class="stat-card stat-card-btn tone-cyan" data-goto="orders">
+      <span class="stat-card-icon">${navIcon('orders')}</span>
+      <div class="stat-card-body"><div class="k">طلبات · جديدة</div><div class="v">${fmtNumAlways(commerce.orders.pending || 0)}</div></div>
+    </button>
+    <button type="button" class="stat-card stat-card-btn tone-indigo" data-goto="deliveryReceipts">
+      <span class="stat-card-icon">${navIcon('delivery')}</span>
+      <div class="stat-card-body"><div class="k">وصولات · اليوم</div><div class="v">${fmtNumAlways(commerce.delivery.today || 0)}</div></div>
+    </button>`;
+
+  statsHost.querySelectorAll('[data-goto]').forEach((b) => {
+    b.addEventListener('click', () => showPage(b.dataset.goto));
+  });
 
   if (hubsHost) {
     hubsHost.innerHTML = `
       <article class="dash-hub tone-commerce">
-        <header class="dash-hub-head"><span class="dash-hub-icon">${navIcon('commerce')}</span><div><h3>التجارة</h3><p>منتجات وطلبات المندوبين</p></div></header>
+        <header class="dash-hub-head"><span class="dash-hub-icon">${navIcon('commerce')}</span><div><h3>التجارة</h3><p>منتجات وطلبات</p></div></header>
         <div class="dash-hub-links">
           <button type="button" class="dash-hub-link" data-goto="catalog"><strong>المنتجات</strong><span>فروع · أقسام · باركود</span></button>
           <button type="button" class="dash-hub-link" data-goto="orders"><strong>طلبات الشراء</strong><span>${fmtNumAlways(commerce.orders.pending || 0)} بانتظار المراجعة</span></button>
         </div>
       </article>
       <article class="dash-hub tone-collections">
-        <header class="dash-hub-head"><span class="dash-hub-icon">${navIcon('receipts')}</span><div><h3>التحصيل والمندوبين</h3><p>سندات · وصولات · زبائن · ترويج</p></div></header>
+        <header class="dash-hub-head"><span class="dash-hub-icon">${navIcon('receipts')}</span><div><h3>التحصيل</h3><p>سندات · وصولات · زبائن</p></div></header>
         <div class="dash-hub-links">
-          <button type="button" class="dash-hub-link" data-goto="receipts" data-rv-tab="receipts"><strong>سندات قبض</strong><span>${fmtNumAlways(commerce.receipts.pending || 0)} للمراجعة</span></button>
-          <button type="button" class="dash-hub-link" data-goto="receipts" data-rv-tab="delivery"><strong>وصول استلام</strong><span>${fmtNumAlways(commerce.delivery.total || 0)} وصل</span></button>
-          <button type="button" class="dash-hub-link" data-goto="receipts" data-rv-tab="customers"><strong>زبائن جدد</strong><span>${fmtNumAlways(commerce.customers.pending || 0)} طلب</span></button>
+          <button type="button" class="dash-hub-link" data-goto="receipts"><strong>سندات قبض</strong><span>${fmtNumAlways(commerce.receipts.pending || 0)} للمراجعة</span></button>
+          <button type="button" class="dash-hub-link" data-goto="deliveryReceipts"><strong>وصول استلام</strong><span>${fmtNumAlways(commerce.delivery.total || 0)} وصل</span></button>
+          <button type="button" class="dash-hub-link" data-goto="customerRequests"><strong>زبائن جدد</strong><span>${fmtNumAlways(commerce.customers.pending || 0)} طلب</span></button>
           <button type="button" class="dash-hub-link" data-goto="promotionalVisits"><strong>زيادات ترويجية</strong><span>${fmtNumAlways(commerce.promo.total || 0)} زيارة</span></button>
-          <button type="button" class="dash-hub-link" data-goto="thermalReceipt"><strong>تصميم الوصل</strong><span>قالب الطابعة الحرارية</span></button>
         </div>
       </article>
       <article class="dash-hub tone-reports">
-        <header class="dash-hub-head"><span class="dash-hub-icon">${navIcon('reports')}</span><div><h3>التقارير</h3><p>مبيعات وكشوف حساب</p></div></header>
+        <header class="dash-hub-head"><span class="dash-hub-icon">${navIcon('reports')}</span><div><h3>التقارير</h3><p>مبيعات وكشوف</p></div></header>
         <div class="dash-hub-links">
-          <button type="button" class="dash-hub-link" data-goto="salesReport"><strong>التقارير</strong><span>مبيعات الشجرات · PDF</span></button>
+          <button type="button" class="dash-hub-link" data-goto="salesReport"><strong>مبيعات الشجرات</strong><span>PDF</span></button>
+          <button type="button" class="dash-hub-link" data-goto="accountStatements"><strong>كشف حساب</strong><span>Edari</span></button>
         </div>
       </article>
       <article class="dash-hub tone-system">
-        <header class="dash-hub-head"><span class="dash-hub-icon">${navIcon('system')}</span><div><h3>النظام والفريق</h3><p>مزامنة · Edari · مندوبون</p></div></header>
+        <header class="dash-hub-head"><span class="dash-hub-icon">${navIcon('system')}</span><div><h3>النظام</h3><p>مزامنة · Edari</p></div></header>
         <div class="dash-hub-links">
           <button type="button" class="dash-hub-link" data-goto="sync"><strong>رفع البيانات</strong><span>Edari → السيرفر</span></button>
           <button type="button" class="dash-hub-link" data-goto="priceSync"><strong>مزامنة الأسعار</strong><span>تطبيق الويب</span></button>
@@ -463,28 +485,28 @@ async function loadDashboardV4(baseData) {
       </article>`;
 
     hubsHost.querySelectorAll('[data-goto]').forEach((btn) => {
-      btn.addEventListener('click', () => showPage(btn.dataset.goto, { rvTab: btn.dataset.rvTab }));
+      btn.addEventListener('click', () => showPage(btn.dataset.goto));
     });
   }
 
   if (pendingHost) {
     const items = [
-      { n: commerce.receipts.pending, label: 'سندات بانتظار المراجعة', goto: 'receipts', rvTab: 'receipts', tone: 'amber' },
+      { n: commerce.receipts.pending, label: 'سندات بانتظار المراجعة', goto: 'receipts', tone: 'amber' },
       { n: commerce.orders.pending, label: 'طلبات شراء جديدة', goto: 'orders', tone: 'blue' },
-      { n: commerce.customers.pending, label: 'طلبات زبون جديد', goto: 'receipts', rvTab: 'customers', tone: 'teal' },
-      { n: commerce.receipts.reviewed, label: 'سندات جاهزة للترحيل', goto: 'receipts', rvTab: 'receipts', tone: 'violet' }
+      { n: commerce.customers.pending, label: 'طلبات زبون جديد', goto: 'customerRequests', tone: 'teal' },
+      { n: commerce.receipts.reviewed, label: 'سندات جاهزة للترحيل', goto: 'receipts', tone: 'violet' }
     ].filter((x) => Number(x.n) > 0);
 
     pendingHost.innerHTML = items.length
       ? items.map((x) => `
-        <button type="button" class="dash-pending-item tone-${x.tone}" data-goto="${x.goto}"${x.rvTab ? ` data-rv-tab="${x.rvTab}"` : ''}>
+        <button type="button" class="dash-pending-item tone-${x.tone}" data-goto="${x.goto}">
           <span class="dash-pending-num">${fmtNumAlways(x.n)}</span>
           <span class="dash-pending-label">${esc(x.label)}</span>
         </button>`).join('')
       : '<p class="muted dash-pending-empty">لا توجد مهام معلّقة — كل شيء محدّث</p>';
 
     pendingHost.querySelectorAll('[data-goto]').forEach((btn) => {
-      btn.addEventListener('click', () => showPage(btn.dataset.goto, { rvTab: btn.dataset.rvTab }));
+      btn.addEventListener('click', () => showPage(btn.dataset.goto));
     });
   }
 
@@ -495,6 +517,9 @@ function initAdminShell() {
   renderAdminSidebar();
   document.getElementById('btnDashRefreshActivity')?.addEventListener('click', () => {
     void loadDashboardRecentActivity();
+  });
+  document.getElementById('btnDashQuickRefresh')?.addEventListener('click', () => {
+    if (typeof refreshAll === 'function') void refreshAll();
   });
   initSidebarToggle();
 }
@@ -525,5 +550,11 @@ function initSidebarToggle() {
 
 window.initAdminShell = initAdminShell;
 window.loadDashboardRecentActivity = loadDashboardRecentActivity;
+window.loadDashboardV4 = loadDashboardV4;
 window.updateAdminChrome = updateAdminChrome;
-window.getActiveReportTab = getActiveReportTab;
+window.resolveAdminPage = resolveAdminPage;
+window.LEGACY_RV_TO_PAGE = LEGACY_RV_TO_PAGE;
+window.flattenAdminNav = flattenAdminNav;
+window.findNavSection = findNavSection;
+window.navIcon = navIcon;
+window.ADMIN_NAV = ADMIN_NAV;

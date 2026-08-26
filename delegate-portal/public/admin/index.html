@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="admin.css?v=20260826shell3">
+  <link rel="stylesheet" href="admin.css?v=20260826ui6">
 </head>
 <body>
   <div id="topLoader" class="top-loader" hidden aria-live="polite">
@@ -27,6 +27,11 @@
           <strong>Edari</strong>
           <span>لوحة الإدارة</span>
         </div>
+      </div>
+
+      <div class="sidebar-search-wrap">
+        <svg class="sidebar-search-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="search" id="sidebarNavFilter" class="sidebar-search" placeholder="بحث في القائمة…" autocomplete="off" aria-label="بحث في القائمة">
       </div>
 
       <nav class="sidebar-nav" id="sidebarNav" aria-label="التنقل الرئيسي"></nav>
@@ -52,73 +57,109 @@
 
     <div class="workspace">
       <header class="topbar">
-        <div class="topbar-main">
+        <div class="topbar-leading">
           <button type="button" class="btn btn-icon topbar-menu-btn" id="btnSidebarToggle" aria-label="القائمة" title="القائمة">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
           </button>
+          <button type="button" class="btn btn-icon topbar-back-btn hidden" id="btnTopbarBack" title="الرئيسية" aria-label="العودة للرئيسية">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <span class="topbar-page-icon" id="topbarPageIcon" aria-hidden="true"></span>
+        </div>
+        <div class="topbar-main">
           <nav class="page-breadcrumbs" id="pageBreadcrumbs" aria-label="مسار الصفحة" hidden></nav>
           <h1 class="topbar-title" id="pageTitle">الرئيسية</h1>
           <p class="topbar-sub" id="pageSubtitle">نظرة عامة على النظام</p>
         </div>
-        <div class="topbar-actions" id="topbarActions"></div>
+        <div class="topbar-trailing">
+          <button type="button" class="btn btn-soft btn-sm cmdk-trigger" id="btnOpenCmdk" title="⌘K">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            <span>انتقل إلى…</span>
+            <kbd class="kbd-hint">⌘K</kbd>
+          </button>
+          <div class="topbar-actions" id="topbarActions"></div>
+        </div>
       </header>
 
-      <main class="main">
-        <!-- Dashboard v4 -->
+      <main class="main" id="mainScroll">
+        <div class="page-viewport" id="pageViewport">
+        <div class="page-loading-bar hidden" id="pageLoadingBar" aria-hidden="true"></div>
+        <!-- Dashboard v5 -->
         <section class="page active" id="page-dashboard">
-          <div class="dash-hero panel dash-hero-v4">
-            <div class="dash-hero-main">
-              <p class="dash-eyebrow">Edari Admin · v4</p>
-              <h2 class="dash-hero-title">لوحة التحكم</h2>
-              <p class="dash-hero-sub">أقسام متخصصة — كل عمل في مكانه: تجارة، تحصيل، تقارير، نظام</p>
-            </div>
-            <div class="dash-hero-side">
-              <div class="dash-live-status">
-                <span class="status-dot off" id="dashStatusDot"></span>
-                <span id="dashStatusText">جاري الاتصال...</span>
+          <div class="dash-layout">
+            <div class="dash-layout-main">
+              <div class="dash-hero panel dash-hero-v6">
+                <div class="dash-hero-main">
+                  <p class="dash-eyebrow" id="dashGreeting">مرحباً</p>
+                  <h2 class="dash-hero-title">لوحة التحكم</h2>
+                  <p class="dash-hero-sub">نظرة شاملة على التجارة، التحصيل، والمزامنة — كل شيء في مكانه.</p>
+                  <div class="dash-quick-actions" id="dashQuickActions"></div>
+                </div>
+                <div class="dash-hero-side">
+                  <div class="dash-live-status dash-live-card">
+                    <span class="status-dot off" id="dashStatusDot"></span>
+                    <div>
+                      <strong id="dashStatusText">جاري الاتصال...</strong>
+                      <span class="muted">حالة السيرفر</span>
+                    </div>
+                  </div>
+                  <button type="button" class="btn btn-hero-soft" id="btnDashQuickRefresh">↻ تحديث اللوحة</button>
+                </div>
+              </div>
+
+              <div class="dash-section-tiles" id="dashSectionTiles"></div>
+
+              <div class="stats-grid dash-stats-v6" id="dashStats"></div>
+
+              <div class="dash-block">
+                <div class="section-head section-head-inline">
+                  <div>
+                    <h3 class="section-head-title">مهام تحتاج انتباهك</h3>
+                    <p class="section-head-sub">انتقل مباشرةً للعناصر المعلّقة</p>
+                  </div>
+                </div>
+                <div class="dash-pending-row" id="dashPending"></div>
+              </div>
+
+              <div class="dash-block">
+                <div class="section-head section-head-inline">
+                  <div>
+                    <h3 class="section-head-title">الأقسام</h3>
+                    <p class="section-head-sub">تجارة · تحصيل · تقارير · نظام</p>
+                  </div>
+                </div>
+                <div class="dash-hubs-grid dash-hubs-v5" id="dashHubs"></div>
+              </div>
+
+              <div class="dash-block">
+                <div class="section-head section-head-inline">
+                  <div>
+                    <h3 class="section-head-title">آخر النشاط</h3>
+                    <p class="section-head-sub">سندات وطلبات حديثة</p>
+                  </div>
+                  <button type="button" class="btn btn-soft btn-sm" id="btnDashRefreshActivity">تحديث</button>
+                </div>
+                <div class="dash-recent panel panel-flat" id="dashRecentPanel">
+                  <div id="dashRecentActivity" class="dash-recent-list muted">جاري التحميل…</div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div class="stats-grid dash-stats-v4" id="dashStats"></div>
-
-          <div class="section-head">
-            <h3 class="section-head-title">مهام تحتاج انتباهك</h3>
-            <p class="section-head-sub">اختصارات مباشرة للعناصر المعلّقة</p>
-          </div>
-          <div class="dash-pending-row" id="dashPending"></div>
-
-          <div class="section-head">
-            <h3 class="section-head-title">الأقسام الرئيسية</h3>
-            <p class="section-head-sub">كل قسم له أقسام فرعية — اختر التخصص المناسب</p>
-          </div>
-          <div class="dash-hubs-grid" id="dashHubs"></div>
-
-          <div class="section-head">
-            <h3 class="section-head-title">آخر النشاط</h3>
-            <p class="section-head-sub">آخر سندات القبض وطلبات الشراء من المندوبين</p>
-          </div>
-          <div class="dash-recent panel panel-flat" id="dashRecentPanel">
-            <div class="dash-recent-head">
-              <button type="button" class="btn btn-soft btn-sm" id="btnDashRefreshActivity">تحديث</button>
-            </div>
-            <div id="dashRecentActivity" class="dash-recent-list muted">جاري التحميل…</div>
-          </div>
-
-          <div class="panel-row dash-panels">
-            <section class="panel panel-flat">
-              <h2 class="panel-title">آخر مزامنة</h2>
-              <div id="lastSyncInfo" class="panel-body muted">—</div>
-            </section>
-            <section class="panel panel-flat panel-highlight">
-              <h2 class="panel-title">تطبيق المندوب</h2>
-              <p class="panel-desc">رابط الويب للهاتف</p>
-              <div class="btn-row">
-                <a class="btn btn-primary" id="mobileAppLink" href="/m" target="_blank">فتح التطبيق</a>
-                <button type="button" class="btn btn-soft" id="btnCopyMobileUrl">نسخ الرابط</button>
-              </div>
-              <p class="url-preview" id="mobileUrlDisplay">—</p>
-            </section>
+            <aside class="dash-layout-side">
+              <section class="panel panel-flat dash-side-card">
+                <h2 class="panel-title">آخر مزامنة</h2>
+                <div id="lastSyncInfo" class="panel-body muted">—</div>
+              </section>
+              <section class="panel panel-flat panel-highlight dash-side-card">
+                <h2 class="panel-title">تطبيق المندوب</h2>
+                <p class="panel-desc">رابط الويب للهاتف</p>
+                <div class="btn-row">
+                  <a class="btn btn-primary" id="mobileAppLink" href="/m" target="_blank">فتح التطبيق</a>
+                  <button type="button" class="btn btn-soft" id="btnCopyMobileUrl">نسخ الرابط</button>
+                </div>
+                <p class="url-preview" id="mobileUrlDisplay">—</p>
+              </section>
+            </aside>
           </div>
         </section>
 
@@ -258,15 +299,15 @@
           <div class="panel hidden" id="orderDetailPanel"></div>
         </section>
 
-        <!-- Delegate receipts hub -->
+        <!-- سندات قبض -->
         <section class="page rv-page" id="page-receipts">
-          <div class="section-hub" id="receiptsHubHeader">
+          <div class="section-hub">
             <div class="section-hub-icon tone-collections" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8"/></svg>
+              <svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
             </div>
             <div class="section-hub-body">
-              <h2 class="section-hub-title" id="receiptsHubTitle">التحصيل · سندات قبض</h2>
-              <p class="section-hub-sub" id="receiptsHubSub">مراجعة سندات المندوبين وترحيلها للإداري</p>
+              <h2 class="section-hub-title">التحصيل · سندات قبض</h2>
+              <p class="section-hub-sub">مراجعة سندات المندوبين وترحيلها للإداري</p>
             </div>
           </div>
 
@@ -275,22 +316,6 @@
             <p class="panel-desc muted" id="receiptPostAlertText">الترحيل إلى الإداري يتم من تطبيق الإدارة المكتبي المتصل بـ Edari</p>
           </div>
 
-          <div class="rv-tabs rv-tabs-v4" role="tablist">
-            <button type="button" class="rv-tab active" data-rv-tab="receipts">
-              <span class="rv-tab-label">سندات قبض</span>
-              <span class="rv-tab-hint">مراجعة وترحيل للإداري</span>
-            </button>
-            <button type="button" class="rv-tab" data-rv-tab="delivery">
-              <span class="rv-tab-label">وصول استلام</span>
-              <span class="rv-tab-hint">وصل مبلغ للزبون</span>
-            </button>
-            <button type="button" class="rv-tab" data-rv-tab="customers">
-              <span class="rv-tab-label">زبائن جدد</span>
-              <span class="rv-tab-hint">ترحيل زبون جديد</span>
-            </button>
-          </div>
-
-          <div id="rvTabReceipts">
           <div class="rv-card">
             <div class="rv-card-head">
               <div>
@@ -338,14 +363,24 @@
             </div>
           </div>
           <div class="rv-card hidden" id="receiptDetailPanel"></div>
-          </div>
+        </section>
 
-          <div id="rvTabDelivery" class="hidden">
+        <!-- وصول استلام -->
+        <section class="page rv-page" id="page-deliveryReceipts">
+          <div class="section-hub">
+            <div class="section-hub-icon tone-collections" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+            </div>
+            <div class="section-hub-body">
+              <h2 class="section-hub-title">التحصيل · وصول استلام</h2>
+              <p class="section-hub-sub">وصولات المبلغ المُصدَرة للزبون — طباعة حرارية، للعرض والمتابعة فقط</p>
+            </div>
+          </div>
           <div class="rv-card rv-card-list">
             <div class="rv-card-head">
               <div>
                 <h2 class="rv-card-title">وصول استلام المبلغ للزبون</h2>
-                <p class="rv-card-sub">يُصدَّر من المندوب ويُطبع حرارياً — للعرض والمتابعة فقط دون ترحيل للإداري</p>
+                <p class="rv-card-sub">يُصدَّر من المندوب ويُطبع حرارياً — دون ترحيل للإداري</p>
               </div>
               <div class="rv-filter-row">
                 <input type="search" id="deliveryReceiptSearch" class="search rv-filter" placeholder="بحث: رقم، زبون، مندوب…" autocomplete="off">
@@ -369,9 +404,19 @@
             </div>
           </div>
           <div class="rv-card hidden" id="deliveryReceiptDetailPanel"></div>
-          </div>
+        </section>
 
-          <div id="rvTabCustomers" class="hidden">
+        <!-- زبائن جدد -->
+        <section class="page rv-page" id="page-customerRequests">
+          <div class="section-hub">
+            <div class="section-hub-icon tone-collections" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <div class="section-hub-body">
+              <h2 class="section-hub-title">التحصيل · زبائن جدد</h2>
+              <p class="section-hub-sub">طلبات إضافة زبون من المندوب — مراجعة وترحيل فرع جديد للإداري</p>
+            </div>
+          </div>
           <div class="rv-card rv-card-list">
             <div class="rv-card-head">
               <div>
@@ -381,12 +426,12 @@
               <div class="rv-filter-row">
                 <input type="search" id="customerReqSearch" class="search rv-filter" placeholder="بحث: رقم، اسم، هاتف، مندوب…" autocomplete="off">
                 <select id="customerReqStatusFilter" class="search rv-filter">
-                <option value="">كل الحالات</option>
-                <option value="pending">بانتظار المراجعة</option>
-                <option value="reviewed">جاهز للترحيل</option>
-                <option value="posted">مُرحَّل</option>
-                <option value="rejected">مرفوض</option>
-              </select>
+                  <option value="">كل الحالات</option>
+                  <option value="pending">بانتظار المراجعة</option>
+                  <option value="reviewed">جاهز للترحيل</option>
+                  <option value="posted">مُرحَّل</option>
+                  <option value="rejected">مرفوض</option>
+                </select>
               </div>
             </div>
             <div class="rv-kpis" id="customerReqStats"></div>
@@ -402,7 +447,6 @@
             </div>
           </div>
           <div class="rv-card hidden" id="customerReqDetailPanel"></div>
-          </div>
         </section>
 
         <!-- Promotional visits -->
@@ -561,28 +605,16 @@
           </div>
         </section>
 
-        <!-- Reports -->
+        <!-- مبيعات الشجرات -->
         <section class="page page-reports" id="page-salesReport">
           <div class="section-hub">
             <div class="section-hub-icon tone-reports" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 5 5-9"/></svg></div>
             <div class="section-hub-body">
-              <h2 class="section-hub-title">التقارير · مبيعات وكشوف</h2>
-              <p class="section-hub-sub">تقرير مبيعات الشجرات حسب الفترة، وكشف حساب زبون من Edari مع تصدير PDF</p>
+              <h2 class="section-hub-title">التقارير · مبيعات الشجرات</h2>
+              <p class="section-hub-sub">تقرير مبيعات ومرتجعات حسب الفترة والشجرات — معاينة وتصدير PDF</p>
             </div>
           </div>
           <div class="rx">
-            <nav class="rx-tabs rx-tabs-v4 rx-tabs-reports" role="tablist" aria-label="نوع التقرير">
-              <button type="button" class="rx-tab active" data-report-tab="sales" role="tab" aria-selected="true">
-                <span class="rx-tab-label">مبيعات الشجرات</span>
-                <span class="rx-tab-hint">فترة · شجرات · PDF</span>
-              </button>
-              <button type="button" class="rx-tab" data-report-tab="statement" role="tab" aria-selected="false">
-                <span class="rx-tab-label">كشف حساب</span>
-                <span class="rx-tab-hint">حسابات · Edari · PDF</span>
-              </button>
-            </nav>
-
-            <!-- ===== Sales ===== -->
             <div class="report-view" id="reportView-sales">
               <div class="rx-bar">
                 <div class="rx-bar-row">
@@ -701,9 +733,20 @@
                 </main>
               </div>
             </div>
+          </div>
+        </section>
 
-            <!-- ===== Statements ===== -->
-            <div class="report-view hidden" id="reportView-statement">
+        <!-- كشف حساب -->
+        <section class="page page-reports" id="page-accountStatements">
+          <div class="section-hub">
+            <div class="section-hub-icon tone-reports" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
+            <div class="section-hub-body">
+              <h2 class="section-hub-title">التقارير · كشف حساب</h2>
+              <p class="section-hub-sub">كشف حساب زبون أو أكثر من Edari — معاينة وتصدير PDF</p>
+            </div>
+          </div>
+          <div class="rx">
+            <div class="report-view" id="reportView-statement">
               <div class="rx-bar">
                 <div class="rx-bar-group rx-bar-presets" role="group" aria-label="الفترة">
                   <button type="button" class="rx-preset" data-stmt-preset="today">اليوم</button>
@@ -1076,6 +1119,7 @@
           </div>
           <div class="agent-grid" id="agentsGrid"></div>
         </section>
+        </div><!-- /page-viewport -->
       </main>
     </div>
   </div>
@@ -1288,20 +1332,38 @@
     </div>
   </div>
 
+  <!-- Command palette -->
+  <div class="cmdk hidden" id="cmdk" role="dialog" aria-modal="true" aria-label="الانتقال السريع" hidden>
+    <div class="cmdk-backdrop" id="cmdkBackdrop"></div>
+    <div class="cmdk-sheet">
+      <div class="cmdk-head">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="search" id="cmdkInput" class="cmdk-input" placeholder="ابحث عن قسم… (سندات، منتجات، تقارير)" autocomplete="off">
+        <kbd class="kbd-hint">Esc</kbd>
+      </div>
+      <ul class="cmdk-list" id="cmdkList" role="listbox"></ul>
+      <p class="cmdk-foot muted">↑↓ للتنقل · Enter للفتح · Esc للإغلاق</p>
+    </div>
+  </div>
+
+  <div id="toastHost" class="toast-host" aria-live="polite"></div>
+
   <script src="config.js"></script>
-  <script src="admin.js?v=20260826shell3"></script>
-  <script src="admin-shell.js?v=20260826shell3"></script>
-  <script src="admin-commerce.js?v=20260826shell3"></script>
-  <script src="admin-receipts.js?v=20260824admin"></script>
-  <script src="admin-delivery-receipts.js?v=20260826shell2"></script>
-  <script src="admin-customers.js?v=20260826shell3"></script>
-  <script src="admin-promotional-visits.js?v=20260826shell3"></script>
+  <script src="admin-ui.js?v=20260826ui6"></script>
+  <script src="admin.js?v=20260826ui6"></script>
+  <script src="admin-shell.js?v=20260826ui6"></script>
+  <script src="admin-commerce.js?v=20260826ui6"></script>
+  <script src="admin-receipts.js?v=20260826ui7"></script>
+  <script src="admin-delivery-receipts.js?v=20260826ui6"></script>
+  <script src="admin-customers.js?v=20260826ui6"></script>
+  <script src="admin-promotional-visits.js?v=20260826ui6"></script>
   <script src="admin-thermal-template.js?v=20260824thermal8"></script>
   <script src="admin-sales-report.js?v=20260709treeFix3"></script>
-  <script src="admin-account-statements.js?v=20260826shell3"></script>
+  <script src="admin-account-statements.js?v=20260826pages1"></script>
   <script src="admin-price-sync.js?v=20260703"></script>
   <script>
     if (typeof initAdminShell === 'function') initAdminShell();
+    if (typeof initAdminUi === 'function') initAdminUi();
     if (typeof refreshAll === 'function') refreshAll();
     setTimeout(function () {
       if (typeof restoreAdminPageFromHash === 'function') restoreAdminPageFromHash();

@@ -661,7 +661,7 @@ router.post('/receipts/:id/posted', (req, res) => {
       receiptNum: req.body?.receiptNum,
       error: req.body?.error,
       lines: req.body?.lines,
-      receiptDate: req.body?.receiptDate
+      postingDate: req.body?.postingDate || req.body?.receiptDate
     });
     if (!receipt) return res.status(404).json({ ok: false, error: 'سند القبض غير موجود' });
     res.json({ ok: true, receipt });

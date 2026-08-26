@@ -1,5 +1,7 @@
 /* Admin: delegate receipt vouchers */
 
+const RECEIPT_SETTINGS_LS_KEY = 'mandob_receipt_post_accounts';
+
 const receiptAdmin = {
   settings: {
     cash: { seq: '', num: '', name: '' },
@@ -8,10 +10,48 @@ const receiptAdmin = {
     discount: { seq: '', num: '', name: '' }
   },
   searchTimers: {},
+  settingsSaveTimer: null,
   selected: null,
   agents: [],
   filterTimer: null
 };
+
+function todayLocalIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function readReceiptSettingsCache() {
+  try {
+    const raw = localStorage.getItem(RECEIPT_SETTINGS_LS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeReceiptSettingsCache(settings) {
+  try {
+    localStorage.setItem(RECEIPT_SETTINGS_LS_KEY, JSON.stringify(settings || {}));
+  } catch (_) {}
+}
+
+function mergeReceiptSettings(base, incoming) {
+  const out = { ...base };
+  for (const key of ['cash', 'commissionDebit', 'commissionCredit', 'discount']) {
+    const acc = incoming?.[key];
+    if (acc?.seq || acc?.num) out[key] = { seq: acc.seq || '', num: acc.num || '', name: acc.name || '' };
+  }
+  return out;
+}
+
+function receiptSettingsHasAccounts(settings) {
+  return ['cash', 'commissionDebit', 'commissionCredit', 'discount']
+    .some((k) => settings?.[k]?.seq || settings?.[k]?.num);
+}
 
 const RECEIPT_SETTING_FIELDS = [
   { key: 'cash', label: 'صندوق المبلغ', hint: 'من صناديق الإداري', kind: 'cash', browse: 'عرض الصناديق' },
@@ -107,7 +147,9 @@ async function searchReceiptAccount(key, q, kind = 'gl') {
           num: btn.dataset.num,
           name: btn.dataset.name
         };
+        writeReceiptSettingsCache(receiptAdmin.settings);
         renderReceiptSettings();
+        scheduleReceiptSettingsSave();
       });
     });
   } catch (err) {
@@ -115,22 +157,44 @@ async function searchReceiptAccount(key, q, kind = 'gl') {
   }
 }
 
-async function loadReceiptSettings() {
-  const data = await commerceApi('/receipts/settings');
-  receiptAdmin.settings = data.accounts || receiptAdmin.settings;
-  renderReceiptSettings();
+function scheduleReceiptSettingsSave() {
+  clearTimeout(receiptAdmin.settingsSaveTimer);
+  receiptAdmin.settingsSaveTimer = setTimeout(() => saveReceiptSettings({ silent: true }), 400);
 }
 
-async function saveReceiptSettings() {
+async function loadReceiptSettings() {
+  const cached = readReceiptSettingsCache();
+  if (cached) {
+    receiptAdmin.settings = mergeReceiptSettings(receiptAdmin.settings, cached);
+    renderReceiptSettings();
+  }
+  try {
+    const data = await commerceApi('/receipts/settings');
+    const serverAccounts = data.accounts || {};
+    if (receiptSettingsHasAccounts(serverAccounts)) {
+      receiptAdmin.settings = mergeReceiptSettings(receiptAdmin.settings, serverAccounts);
+    } else if (receiptSettingsHasAccounts(receiptAdmin.settings)) {
+      await saveReceiptSettings({ silent: true, skipRender: true });
+    }
+    writeReceiptSettingsCache(receiptAdmin.settings);
+    renderReceiptSettings();
+  } catch (err) {
+    if (!receiptSettingsHasAccounts(receiptAdmin.settings)) showToast(err.message, 'err');
+  }
+}
+
+async function saveReceiptSettings({ silent = false, skipRender = false } = {}) {
   try {
     const data = await commerceApi('/receipts/settings', {
       method: 'PUT',
       body: JSON.stringify(receiptAdmin.settings)
     });
-    receiptAdmin.settings = data.accounts;
-    showToast('تم حفظ حسابات الترحيل');
+    receiptAdmin.settings = mergeReceiptSettings(receiptAdmin.settings, data.accounts || {});
+    writeReceiptSettingsCache(receiptAdmin.settings);
+    if (!skipRender) renderReceiptSettings();
+    if (!silent) showToast('تم حفظ حسابات الترحيل');
   } catch (err) {
-    showToast(err.message, 'err');
+    if (!silent) showToast(err.message, 'err');
   }
 }
 
@@ -460,10 +524,11 @@ async function postReceiptToEdariUi(id) {
       showToast('السند مُرحَّل مسبقاً');
       return;
     }
-    if (!confirm(`ترحيل سند ${data.receipt.receiptNo} إلى الإداري كسند قبض وسند قيد؟`)) return;
+    const postingDate = todayLocalIso();
+    if (!confirm(`ترحيل سند ${data.receipt.receiptNo} إلى الإداري بتاريخ ${postingDate}؟`)) return;
     const result = await window.edariDesktop.postEdariReceipt({
       receiptNo: data.receipt.receiptNo,
-      receiptDate: data.receipt.receiptDate,
+      postingDate,
       lines: posting.lines
     });
     if (!result?.ok) {
@@ -478,7 +543,7 @@ async function postReceiptToEdariUi(id) {
       body: JSON.stringify({
         journalNum: result.journalNum,
         receiptNum: result.receiptNum || data.receipt.receiptNo,
-        receiptDate: data.receipt.receiptDate,
+        postingDate,
         lines: result.lines || posting.lines
       })
     });
@@ -513,12 +578,6 @@ window.commercePages.receipts = async () => {
   await loadReceiptAgents();
   await loadReceiptSettings();
   await loadReceiptsPage();
-  if (typeof window.loadCustomerRequestsPage === 'function') {
-    await window.loadCustomerRequestsPage();
-  }
-  if (typeof window.loadDeliveryReceiptsPage === 'function') {
-    await window.loadDeliveryReceiptsPage();
-  }
 };
 
 initReceiptsAdmin();

@@ -172,46 +172,61 @@ const PAGE_META = {
   dashboard: { title: 'الرئيسية', sub: 'نظرة عامة على النظام والاختصارات' },
   catalog: { title: 'المنتجات', sub: 'فروع، أقسام، وباركود من Edari' },
   orders: { title: 'طلبات الشراء', sub: 'مراجعة طلبات المندوبين واعتمادها' },
-  receipts: { title: 'مبيعات المندوبين', sub: 'سندات قبض وزبائن جدد — مراجعة ثم ترحيل للإداري' },
+  receipts: { title: 'سندات قبض', sub: 'مراجعة سندات المندوبين وترحيلها للإداري' },
+  deliveryReceipts: { title: 'وصول استلام', sub: 'وصولات المبلغ المُصدَرة للزبون — طباعة حرارية' },
+  customerRequests: { title: 'زبائن جدد', sub: 'طلبات إضافة زبون من المندوب — مراجعة وترحيل' },
   promotionalVisits: { title: 'الزيادات الترويجية', sub: 'زيارات المندوبين للمحلات بعد ترويج المنتجات' },
   thermalReceipt: { title: 'تصميم الوصل الحراري', sub: 'تخصيص وصل القبض للطابعة الحرارية 80mm' },
-  salesReport: { title: 'التقارير', sub: 'مبيعات الشجرات وكشوف الحسابات — PDF' },
+  salesReport: { title: 'مبيعات الشجرات', sub: 'تقرير مبيعات ومرتجعات — PDF' },
+  accountStatements: { title: 'كشف حساب', sub: 'كشوف حسابات من Edari — PDF' },
   priceSync: { title: 'مزامنة الأسعار', sub: 'رفع المشتريات وسعر المستهلك لتطبيق الويب' },
   sync: { title: 'رفع البيانات', sub: 'مزامنة EdariNX مع سيرفر المندوبين' },
   database: { title: 'قاعدة البيانات', sub: 'اتصال EdariNX — Alias والمسارات' },
   agents: { title: 'المندوبون', sub: 'حسابات الدخول وصلاحيات الشجرات' }
 };
 
-let pendingRvTab = null;
-
 function showPage(name, opts = {}) {
-  if (opts.rvTab) pendingRvTab = opts.rvTab;
-  else if (name === 'receipts') pendingRvTab = 'receipts';
-  else pendingRvTab = null;
-  const rvTab = opts.rvTab || pendingRvTab;
+  if (typeof resolveAdminPage === 'function') {
+    name = resolveAdminPage(name, opts);
+  } else if (name === 'receipts' && opts.rvTab) {
+    const map = { delivery: 'deliveryReceipts', customers: 'customerRequests' };
+    if (map[opts.rvTab]) name = map[opts.rvTab];
+  }
+  if (!PAGE_META[name]) return;
+
+  if (!opts.fromHash && location.hash !== `#page=${name}`) {
+    location.hash = `page=${name}`;
+    return;
+  }
+
+  const currentActive = document.querySelector('.page.active')?.id?.replace(/^page-/, '');
+  if (currentActive === name && !opts.force) return;
+
   try {
     localStorage.setItem('adminActivePage', name);
-    if (rvTab) localStorage.setItem('adminActiveRvTab', rvTab);
-    else localStorage.removeItem('adminActiveRvTab');
+    localStorage.removeItem('adminActiveRvTab');
   } catch (_) {}
-  const hashRv = rvTab ? `&rvTab=${encodeURIComponent(rvTab)}` : '';
-  if (location.hash !== `#page=${name}${hashRv}`) {
-    location.hash = `page=${name}${hashRv}`;
-  }
-  document.querySelectorAll('.nav-item').forEach((n) => {
-    const page = n.dataset.page;
-    const tab = n.dataset.rvTab;
-    let active = page === name;
-    if (active && tab) active = tab === rvTab;
-    if (active && name === 'receipts' && !tab && rvTab && rvTab !== 'receipts') active = false;
-    n.classList.toggle('active', active);
-  });
-  document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p.id === `page-${name}`));
+
   const meta = PAGE_META[name] || { title: '', sub: '' };
-  const titleEl = document.getElementById('pageTitle');
-  const subEl = document.getElementById('pageSubtitle');
-  if (titleEl) titleEl.textContent = meta.title;
-  if (subEl) subEl.textContent = meta.sub;
+
+  if (typeof updateAdminChrome === 'function') {
+    updateAdminChrome(name);
+  }
+
+  if (typeof switchAdminPage === 'function') {
+    void switchAdminPage(name, meta);
+  } else {
+    document.querySelectorAll('.page').forEach((p) => {
+      const on = p.id === `page-${name}`;
+      p.classList.toggle('active', on);
+      p.setAttribute('aria-hidden', on ? 'false' : 'true');
+    });
+    const titleEl = document.getElementById('pageTitle');
+    const subEl = document.getElementById('pageSubtitle');
+    if (titleEl) titleEl.textContent = meta.title;
+    if (subEl) subEl.textContent = meta.sub;
+  }
+
   if (name === 'sync') {
     void loadSyncLogs();
     startSyncLogPolling();
@@ -224,18 +239,12 @@ function showPage(name, opts = {}) {
   } else {
     stopSyncLogPolling();
   }
+
   const loadPage = async () => {
     if (window.commercePages?.[name]) await window.commercePages[name]();
     if (window.adminPages?.[name]) await window.adminPages[name]();
-    if (name === 'receipts' && pendingRvTab && typeof setRvTab === 'function') {
-      setRvTab(pendingRvTab);
-      pendingRvTab = null;
-    }
   };
   void loadPage();
-  if (typeof updateAdminChrome === 'function') {
-    updateAdminChrome(name, rvTab || (name === 'receipts' ? 'receipts' : null));
-  }
 }
 
 async function loadDashboard() {
@@ -1484,7 +1493,7 @@ document.getElementById('agentSaveBtn')?.addEventListener('click', (e) => {
 });
 
 document.querySelectorAll('.quick-card[data-goto], .shortcut[data-goto]').forEach((btn) => {
-  btn.addEventListener('click', () => showPage(btn.dataset.goto, { rvTab: btn.dataset.rvTab }));
+  btn.addEventListener('click', () => showPage(btn.dataset.goto));
 });
 
 async function loadConfig() {
@@ -1576,38 +1585,42 @@ function parseAdminHash() {
   const hash = location.hash.replace(/^#/, '');
   if (!hash.startsWith('page=')) return null;
   const rest = hash.slice(5);
-  const page = rest.split('&')[0];
+  let page = rest.split('&')[0];
   let rvTab = null;
   if (rest.includes('rvTab=')) {
     rvTab = decodeURIComponent(rest.split('rvTab=')[1].split('&')[0]);
   }
-  return page && PAGE_META[page] ? { page, rvTab } : null;
+  if (page === 'receipts' && rvTab) {
+    const map = typeof LEGACY_RV_TO_PAGE !== 'undefined' ? LEGACY_RV_TO_PAGE : { delivery: 'deliveryReceipts', customers: 'customerRequests' };
+    if (map[rvTab]) page = map[rvTab];
+  }
+  return page && PAGE_META[page] ? { page } : null;
 }
 
 function restoreAdminPageFromHash() {
   const parsed = parseAdminHash();
   if (!parsed) {
     try {
-      const page = localStorage.getItem('adminActivePage');
-      const rvTab = localStorage.getItem('adminActiveRvTab');
-      if (page && PAGE_META[page]) showPage(page, rvTab ? { rvTab } : {});
+      let page = localStorage.getItem('adminActivePage');
+      const legacyRv = localStorage.getItem('adminActiveRvTab');
+      if (page === 'receipts' && legacyRv) {
+        const map = { delivery: 'deliveryReceipts', customers: 'customerRequests' };
+        if (map[legacyRv]) page = map[legacyRv];
+      }
+      if (page && PAGE_META[page]) {
+        showPage(page, { fromHash: true });
+        return;
+      }
     } catch (_) {}
+    if (typeof updateAdminChrome === 'function') updateAdminChrome('dashboard');
+    if (typeof setWorkspaceTone === 'function') setWorkspaceTone('home');
     return;
   }
-  showPage(parsed.page, parsed.rvTab ? { rvTab: parsed.rvTab } : {});
+  showPage(parsed.page, { fromHash: true });
 }
 
 window.addEventListener('hashchange', () => {
   const parsed = parseAdminHash();
   if (!parsed) return;
-  const active = document.querySelector('.page.active');
-  const activeId = active?.id?.replace(/^page-/, '');
-  let currentRv = null;
-  try { currentRv = localStorage.getItem('adminActiveRvTab'); } catch (_) {}
-  if (activeId === parsed.page && parsed.page === 'receipts' && parsed.rvTab && parsed.rvTab !== currentRv) {
-    if (typeof setRvTab === 'function') setRvTab(parsed.rvTab);
-    return;
-  }
-  if (activeId === parsed.page) return;
-  showPage(parsed.page, parsed.rvTab ? { rvTab: parsed.rvTab } : {});
+  showPage(parsed.page, { fromHash: true });
 });

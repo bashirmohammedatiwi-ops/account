@@ -78,6 +78,9 @@ async function loadDeliveryReceiptsPage() {
 
 window.loadDeliveryReceiptsPage = loadDeliveryReceiptsPage;
 
+window.commercePages = window.commercePages || {};
+window.commercePages.deliveryReceipts = loadDeliveryReceiptsPage;
+
 async function openDeliveryReceiptDetail(id) {
   const data = await commerceApi(`/delivery-receipts/${id}`);
   const d = data.deliveryReceipt;

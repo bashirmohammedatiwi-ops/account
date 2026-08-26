@@ -147,7 +147,7 @@ async function insertJournalLine(ln, bondNum, dateStr, receiptRef) {
 async function postReceiptToEdari(payload = {}) {
   const lines = Array.isArray(payload.lines) ? payload.lines : [];
   if (!lines.length) throw new Error('لا توجد بنود للترحيل');
-  const dateStr = toIsoDate(payload.receiptDate || payload.date);
+  const dateStr = toIsoDate(payload.postingDate || payload.date);
   const receiptRef = buildReceiptRef(payload);
 
   const resolved = [];

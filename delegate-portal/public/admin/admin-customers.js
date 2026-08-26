@@ -20,23 +20,6 @@ function canEditCustomerReq(status) {
   return status !== 'posted';
 }
 
-function setRvTab(name) {
-  document.querySelectorAll('[data-rv-tab]').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.rvTab === name);
-  });
-  document.getElementById('rvTabReceipts')?.classList.toggle('hidden', name !== 'receipts');
-  document.getElementById('rvTabDelivery')?.classList.toggle('hidden', name !== 'delivery');
-  document.getElementById('rvTabCustomers')?.classList.toggle('hidden', name !== 'customers');
-  try { localStorage.setItem('adminActiveRvTab', name); } catch (_) {}
-  const hash = `#page=receipts&rvTab=${encodeURIComponent(name)}`;
-  if (location.hash !== hash) history.replaceState(null, '', hash);
-  if (typeof updateReceiptsHubHeader === 'function') updateReceiptsHubHeader(name);
-  if (typeof updateAdminChrome === 'function') updateAdminChrome('receipts', name);
-  if (name === 'delivery' && typeof window.loadDeliveryReceiptsPage === 'function') {
-    void window.loadDeliveryReceiptsPage();
-  }
-}
-
 function customerReqRowActions(r) {
   const editable = canEditCustomerReq(r.status);
   return `
@@ -120,8 +103,10 @@ function renderCustomerReqRows(rows) {
 
 window.loadCustomerRequestsPage = loadCustomerRequestsPage;
 
+window.commercePages = window.commercePages || {};
+window.commercePages.customerRequests = loadCustomerRequestsPage;
+
 async function openCustomerReqDetail(id) {
-  setRvTab('customers');
   const [data, trees] = await Promise.all([
     commerceApi(`/customer-requests/${id}`),
     loadCustomerTrees()
@@ -294,9 +279,6 @@ function initCustomerReqsAdmin() {
         void loadCustomerRequestsPage();
       }
     }, 220);
-  });
-  document.querySelectorAll('[data-rv-tab]').forEach((btn) => {
-    btn.addEventListener('click', () => setRvTab(btn.dataset.rvTab));
   });
 }
 

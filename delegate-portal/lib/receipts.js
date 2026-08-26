@@ -415,7 +415,7 @@ function setReceiptStatus(id, status, { actorType = 'admin', actorId = 'admin', 
   return loadReceipt(id);
 }
 
-function markReceiptPosted(id, { journalNum, receiptNum, error = '', lines = [], receiptDate } = {}) {
+function markReceiptPosted(id, { journalNum, receiptNum, error = '', lines = [], postingDate } = {}) {
   const row = db.prepare('SELECT * FROM receipts WHERE id = ?').get(id);
   if (!row) return null;
   if (error) {
@@ -441,7 +441,7 @@ function markReceiptPosted(id, { journalNum, receiptNum, error = '', lines = [],
       updated_at = datetime('now')
     WHERE id = ?
   `).run(String(journalNum || ''), String(receiptNum || ''), id);
-  upsertPostedJournalLines(lines, receiptDate || row.receipt_date, journalNum);
+  upsertPostedJournalLines(lines, postingDate || todayIso(), journalNum);
   logEvent(id, {
     actorType: 'admin',
     actorId: 'admin',

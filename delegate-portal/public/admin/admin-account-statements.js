@@ -347,25 +347,6 @@ async function exportStmtPdf() {
   }
 }
 
-function initReportTabs() {
-  const tabs = [...document.querySelectorAll('.rx-tab[data-report-tab]')];
-  if (!tabs.length) return;
-  const show = (name) => {
-    tabs.forEach((t) => {
-      const on = t.dataset.reportTab === name;
-      t.classList.toggle('active', on);
-      t.setAttribute('aria-selected', on ? 'true' : 'false');
-    });
-    document.querySelectorAll('.report-view').forEach((v) => {
-      v.classList.toggle('hidden', v.id !== `reportView-${name}`);
-    });
-    if (typeof updateAdminChrome === 'function') updateAdminChrome('salesReport', null);
-  };
-  tabs.forEach((tab) => {
-    tab.addEventListener('click', () => show(tab.dataset.reportTab));
-  });
-}
-
 function stmtAddFromInput() {
   const input = document.getElementById('stmtAccountInput');
   if (!input) return;
@@ -415,5 +396,12 @@ function initAccountStatements() {
   });
 }
 
-initReportTabs();
 initAccountStatements();
+
+window.adminPages = window.adminPages || {};
+window.adminPages.accountStatements = () => {
+  stmtLoadPersisted();
+  applyStmtPreset('today');
+  renderStmtSelected();
+  renderStmtSaved();
+};
