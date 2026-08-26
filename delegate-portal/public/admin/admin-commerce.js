@@ -1805,6 +1805,8 @@ async function searchEdariInModal(q) {
   }
 }
 
+const orderAdmin = { rows: [] };
+
 async function loadOrdersPage() {
   const status = document.getElementById('orderStatusFilter')?.value || '';
   const data = await commerceApi(`/orders${status ? `?status=${encodeURIComponent(status)}` : ''}`);
@@ -1812,7 +1814,26 @@ async function loadOrdersPage() {
   document.getElementById('orderStats').innerHTML = `
     <span class="badge ok">اليوم: ${stats.stats?.todaySubmitted || 0} طلب</span>`;
 
-  document.getElementById('ordersBody').innerHTML = (data.orders || []).map((o) => `
+  orderAdmin.rows = data.orders || [];
+  renderOrderRows(filterOrderRows(orderAdmin.rows));
+}
+
+function orderSearchQuery() {
+  return String(document.getElementById('orderSearchFilter')?.value || '').trim().toLowerCase();
+}
+
+function filterOrderRows(rows) {
+  const q = orderSearchQuery();
+  if (!q) return rows;
+  return rows.filter((o) => {
+    const hay = [o.orderNo, o.agentName, o.customerName, o.statusLabel, o.submittedAt, o.createdAt]
+      .join(' ').toLowerCase();
+    return hay.includes(q);
+  });
+}
+
+function renderOrderRows(rows) {
+  document.getElementById('ordersBody').innerHTML = rows.map((o) => `
     <tr>
       <td dir="ltr">${esc(o.orderNo)}</td>
       <td>${esc(o.agentName)}</td>
@@ -2166,6 +2187,17 @@ function initCommerceAdmin() {
   });
 
   document.getElementById('orderStatusFilter')?.addEventListener('change', () => loadOrdersPage());
+  let orderSearchTimer;
+  document.getElementById('orderSearchFilter')?.addEventListener('input', () => {
+    clearTimeout(orderSearchTimer);
+    orderSearchTimer = setTimeout(() => {
+      if (orderAdmin.rows.length) {
+        renderOrderRows(filterOrderRows(orderAdmin.rows));
+      } else {
+        void loadOrdersPage();
+      }
+    }, 220);
+  });
 }
 
 window.commercePages = {

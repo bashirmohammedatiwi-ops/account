@@ -127,6 +127,7 @@ class AuthNotifier extends Notifier<AuthState> {
     try {
       final config = ref.read(appConfigProvider);
       final result = await performLogin(config, username.trim(), password);
+      await ref.read(apiClientProvider).resetReceiptCachesForSession();
       await _write(_tokenKey, result.token);
       await _write(_agentKey, jsonEncode(result.agent.toJson()));
       state = AuthState(token: result.token, agent: result.agent, loading: false);
@@ -140,6 +141,7 @@ class AuthNotifier extends Notifier<AuthState> {
   Future<void> logout() async {
     _sessionEpoch++;
     try {
+      await ref.read(apiClientProvider).resetReceiptCachesForSession();
       await _delete(_tokenKey);
       await _delete(_agentKey);
     } catch (_) {}

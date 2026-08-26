@@ -2,7 +2,8 @@
 
 const customerReqAdmin = {
   selected: null,
-  trees: []
+  trees: [],
+  rows: []
 };
 
 function canPostCustomersFromDesktop() {
@@ -26,6 +27,11 @@ function setRvTab(name) {
   document.getElementById('rvTabReceipts')?.classList.toggle('hidden', name !== 'receipts');
   document.getElementById('rvTabDelivery')?.classList.toggle('hidden', name !== 'delivery');
   document.getElementById('rvTabCustomers')?.classList.toggle('hidden', name !== 'customers');
+  try { localStorage.setItem('adminActiveRvTab', name); } catch (_) {}
+  const hash = `#page=receipts&rvTab=${encodeURIComponent(name)}`;
+  if (location.hash !== hash) history.replaceState(null, '', hash);
+  if (typeof updateReceiptsHubHeader === 'function') updateReceiptsHubHeader(name);
+  if (typeof updateAdminChrome === 'function') updateAdminChrome('receipts', name);
   if (name === 'delivery' && typeof window.loadDeliveryReceiptsPage === 'function') {
     void window.loadDeliveryReceiptsPage();
   }
@@ -62,9 +68,28 @@ async function loadCustomerRequestsPage() {
       <span class="rv-kpi posted">مُرحَّل <strong>${s.posted || 0}</strong></span>
       <span class="rv-kpi">اليوم <strong>${s.today || 0}</strong></span>`;
   }
+  customerReqAdmin.rows = list.requests || [];
+  renderCustomerReqRows(filterCustomerReqRows(customerReqAdmin.rows));
+}
+
+function customerReqSearchQuery() {
+  return String(document.getElementById('customerReqSearch')?.value || '').trim().toLowerCase();
+}
+
+function filterCustomerReqRows(rows) {
+  const q = customerReqSearchQuery();
+  if (!q) return rows;
+  return rows.filter((r) => {
+    const hay = [r.requestNo, r.agentName, r.treeName, r.treeNum, r.name, r.phone, r.submittedAt, r.createdAt]
+      .join(' ').toLowerCase();
+    return hay.includes(q);
+  });
+}
+
+function renderCustomerReqRows(rows) {
   const body = document.getElementById('customerReqsBody');
   if (!body) return;
-  body.innerHTML = (list.requests || []).map((r) => `
+  body.innerHTML = rows.map((r) => `
     <tr>
       <td dir="ltr">${esc(r.requestNo)}</td>
       <td>${esc(r.agentName)}</td>
@@ -259,6 +284,17 @@ async function postCustomerReqToEdariUi(id) {
 
 function initCustomerReqsAdmin() {
   document.getElementById('customerReqStatusFilter')?.addEventListener('change', () => loadCustomerRequestsPage());
+  let searchTimer;
+  document.getElementById('customerReqSearch')?.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      if (customerReqAdmin.rows.length) {
+        renderCustomerReqRows(filterCustomerReqRows(customerReqAdmin.rows));
+      } else {
+        void loadCustomerRequestsPage();
+      }
+    }, 220);
+  });
   document.querySelectorAll('[data-rv-tab]').forEach((btn) => {
     btn.addEventListener('click', () => setRvTab(btn.dataset.rvTab));
   });

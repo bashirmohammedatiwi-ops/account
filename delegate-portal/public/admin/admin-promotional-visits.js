@@ -1,6 +1,6 @@
 /* Admin: promotional visits from delegates (الزيادات الترويجية) */
 
-const promoVisitAdmin = { selected: null, governorates: [], outcomes: [] };
+const promoVisitAdmin = { selected: null, governorates: [], outcomes: [], rows: [] };
 
 function pvBadgeClass(status) {
   return ({ pending: 'pending', reviewed: 'ok', archived: 'off' })[status] || 'pending';
@@ -39,7 +39,35 @@ async function loadPromotionalVisitsPage() {
   }
   const body = document.getElementById('promoVisitsBody');
   if (!body) return;
-  body.innerHTML = (list.visits || []).map((v) => `
+  promoVisitAdmin.rows = list.visits || [];
+  renderPromoVisitRows(filterPromoVisitRows(promoVisitAdmin.rows));
+
+  const govFilter = document.getElementById('promoVisitGovFilter');
+  if (govFilter && govFilter.options.length <= 1) {
+    govFilter.innerHTML = '<option value="">كل المحافظات</option>' +
+      promoVisitAdmin.governorates.map((g) => `<option value="${esc(g.code)}">${esc(g.name)}</option>`).join('');
+    if (governorate) govFilter.value = governorate;
+  }
+}
+
+function promoVisitSearchQuery() {
+  return String(document.getElementById('promoVisitSearch')?.value || '').trim().toLowerCase();
+}
+
+function filterPromoVisitRows(rows) {
+  const q = promoVisitSearchQuery();
+  if (!q) return rows;
+  return rows.filter((v) => {
+    const hay = [v.visitNo, v.agentName, v.governorateName, v.areaName, v.shopName, v.visitOutcomeLabel]
+      .join(' ').toLowerCase();
+    return hay.includes(q);
+  });
+}
+
+function renderPromoVisitRows(rows) {
+  const body = document.getElementById('promoVisitsBody');
+  if (!body) return;
+  body.innerHTML = rows.map((v) => `
     <tr>
       <td dir="ltr">${esc(v.visitNo)}</td>
       <td>${esc(v.agentName)}</td>
@@ -64,16 +92,21 @@ async function loadPromotionalVisitsPage() {
       void deletePromoVisitUi(Number(btn.dataset.delPv));
     });
   });
-
-  const govFilter = document.getElementById('promoVisitGovFilter');
-  if (govFilter && govFilter.options.length <= 1) {
-    govFilter.innerHTML = '<option value="">كل المحافظات</option>' +
-      promoVisitAdmin.governorates.map((g) => `<option value="${esc(g.code)}">${esc(g.name)}</option>`).join('');
-    if (governorate) govFilter.value = governorate;
-  }
 }
 
 window.loadPromotionalVisitsPage = loadPromotionalVisitsPage;
+
+let promoSearchTimer;
+document.getElementById('promoVisitSearch')?.addEventListener('input', () => {
+  clearTimeout(promoSearchTimer);
+  promoSearchTimer = setTimeout(() => {
+    if (promoVisitAdmin.rows.length) {
+      renderPromoVisitRows(filterPromoVisitRows(promoVisitAdmin.rows));
+    } else {
+      void loadPromotionalVisitsPage();
+    }
+  }, 220);
+});
 
 async function openPromoVisitDetail(id) {
   await loadPromoMeta();

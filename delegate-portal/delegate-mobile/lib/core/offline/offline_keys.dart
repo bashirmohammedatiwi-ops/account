@@ -1,8 +1,19 @@
 abstract final class OfflineKeys {
   static const trees = 'cache:trees';
   static const orders = 'cache:orders';
+  /// مفاتيح قديمة مشتركة بين كل المندوبين — تُحذف عند تسجيل الدخول.
   static const receipts = 'cache:receipts';
   static const deliveryReceipts = 'cache:delivery_receipts';
+
+  static String receiptsForAgent(int agentId, {String? status}) {
+    final base = 'cache:receipts:agent:$agentId';
+    return status != null ? '$base:$status' : base;
+  }
+
+  static String deliveryReceiptsForAgent(int agentId, {String? status}) {
+    final base = 'cache:delivery_receipts:agent:$agentId';
+    return status != null ? '$base:$status' : base;
+  }
   static const deliveryPrintTemplate = 'cache:delivery_print_template';
   static const customerRequests = 'cache:customer_requests';
   static const promoVisits = 'cache:promo_visits';

@@ -5,6 +5,8 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
+import 'offline_keys.dart';
+
 class OfflineDb {
   OfflineDb._();
   static final OfflineDb instance = OfflineDb._();
@@ -95,6 +97,38 @@ class OfflineDb {
     }
     final db = await database;
     await db.delete('cache_entries', where: 'key = ?', whereArgs: [key]);
+  }
+
+  /// يحذف مفاتيح الوصولات/السندات القديمة غير المقيّدة بالمندوب.
+  Future<void> deleteLegacyReceiptCaches() async {
+    bool isLegacyReceiptKey(String key) {
+      if (key == OfflineKeys.receipts || key == OfflineKeys.deliveryReceipts) return true;
+      if (key.startsWith('${OfflineKeys.receipts}:') && !key.contains(':agent:')) return true;
+      if (key.startsWith('${OfflineKeys.deliveryReceipts}:') && !key.contains(':agent:')) return true;
+      return false;
+    }
+
+    if (kIsWeb) {
+      final sp = await prefs;
+      for (final storageKey in sp.getKeys()) {
+        if (!storageKey.startsWith('oc:')) continue;
+        final key = storageKey.substring(3);
+        if (isLegacyReceiptKey(key)) {
+          await sp.remove(storageKey);
+          await sp.remove('oc_t:$key');
+        }
+      }
+      return;
+    }
+
+    final db = await database;
+    final rows = await db.query('cache_entries', columns: ['key']);
+    for (final row in rows) {
+      final key = row['key'] as String;
+      if (isLegacyReceiptKey(key)) {
+        await deleteCache(key);
+      }
+    }
   }
 
   Future<void> insertOutbox(Map<String, Object?> row) async {

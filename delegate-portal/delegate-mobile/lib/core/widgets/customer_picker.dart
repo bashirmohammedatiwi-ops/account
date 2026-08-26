@@ -49,6 +49,7 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
   bool _loading = true;
   String? _error;
   String _search = '';
+  bool _remoteSearchActive = false;
   final _debounce = Debouncer();
   final _searchCtrl = TextEditingController();
 
@@ -86,13 +87,12 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
     }
   }
 
-  Future<void> _selectTree(AccountTree tree) async {
+  Future<void> _loadTreeBranches() async {
+    final tree = _tree;
+    if (tree == null) return;
     setState(() {
-      _tree = tree;
       _loading = true;
       _error = null;
-      _search = '';
-      _searchCtrl.clear();
     });
     try {
       final api = ref.read(apiClientProvider);
@@ -103,6 +103,7 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
       setState(() {
         _branches = branches;
         _loading = false;
+        _remoteSearchActive = false;
       });
     } catch (e) {
       if (!mounted) return;
@@ -113,18 +114,33 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
     }
   }
 
+  Future<void> _selectTree(AccountTree tree) async {
+    setState(() {
+      _tree = tree;
+      _search = '';
+      _searchCtrl.clear();
+      _remoteSearchActive = false;
+    });
+    await _loadTreeBranches();
+  }
+
   Future<void> _searchRemote(String q) async {
-    if (q.trim().length < 2) {
-      if (_tree != null) await _selectTree(_tree!);
+    final trimmed = q.trim();
+    if (trimmed.length < 2) {
+      // أقل من حرفين: تصفية محلية فقط — لا نعيد تحميل الشجرة ولا نمسح النص.
+      if (_remoteSearchActive) {
+        await _loadTreeBranches();
+      }
       return;
     }
     setState(() => _loading = true);
     try {
-      final results = await ref.read(apiClientProvider).searchAccounts(q.trim());
+      final results = await ref.read(apiClientProvider).searchAccounts(trimmed);
       if (!mounted) return;
       setState(() {
         _branches = results;
         _loading = false;
+        _remoteSearchActive = true;
       });
     } catch (e) {
       if (!mounted) return;
@@ -178,6 +194,7 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
                         _branches = null;
                         _search = '';
                         _searchCtrl.clear();
+                        _remoteSearchActive = false;
                       }),
                       icon: const Icon(Icons.arrow_forward_rounded, color: AppColors.navy),
                     ),
@@ -224,7 +241,7 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
               child: _loading
                   ? const LoadingView(message: 'جاري التحميل...')
                   : _error != null
-                      ? ErrorView(message: _error!, onRetry: _tree == null ? _loadTrees : () => _selectTree(_tree!))
+                      ? ErrorView(message: _error!, onRetry: _tree == null ? _loadTrees : _loadTreeBranches)
                       : _tree == null
                           ? _treeList()
                           : _branchList(),

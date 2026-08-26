@@ -2,7 +2,7 @@
 const Map<String, dynamic> kFallbackReceiptPrintTemplate = {
   'version': 2,
   'paperMm': 80,
-  'footerBlankLines': 1,
+  'footerBlankLines': 0,
   'branding': {
     'showLogo': true,
     'logoUrl': '',

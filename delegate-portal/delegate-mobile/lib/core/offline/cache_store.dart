@@ -21,6 +21,10 @@ class CacheStore {
     await _db.deleteCache(key);
   }
 
+  Future<void> deleteLegacyReceiptCaches() async {
+    await _db.deleteLegacyReceiptCaches();
+  }
+
   Future<void> mergeListItem(String listKey, Map<String, dynamic> item, {String idField = 'id'}) async {
     final raw = await getJson(listKey);
     final list = raw is List

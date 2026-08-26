@@ -33,22 +33,30 @@ List<Map<String, dynamic>> _rawDeliveryRows(dynamic data) {
   return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
 }
 
-List<Map<String, dynamic>> _mergeRowsById(
+List<Map<String, dynamic>> _syncListWithServer(
   List<Map<String, dynamic>> online,
   List<Map<String, dynamic>> cached,
 ) {
-  if (cached.isEmpty) return online;
-  if (online.isEmpty) return cached;
+  final onlineIds = online.map((r) => _rowId(r['id'])).where((id) => id > 0).toSet();
+
+  final pending = cached.where((row) {
+    final id = _rowId(row['id']);
+    if (id < 0) return true;
+    if (row['localPending'] == true && !onlineIds.contains(id)) return true;
+    return false;
+  });
+
   final byId = <int, Map<String, dynamic>>{};
-  for (final row in cached) {
-    byId[_rowId(row['id'])] = row;
-  }
   for (final row in online) {
     byId[_rowId(row['id'])] = row;
   }
-  final merged = byId.values.toList();
-  merged.sort((a, b) => _rowId(b['id']).compareTo(_rowId(a['id'])));
-  return merged;
+  for (final row in pending) {
+    byId[_rowId(row['id'])] = row;
+  }
+
+  final synced = byId.values.toList();
+  synced.sort((a, b) => _rowId(b['id']).compareTo(_rowId(a['id'])));
+  return synced;
 }
 
 Map<String, dynamic> _normalizeDeliveryRow(Map<String, dynamic> json) {
@@ -58,6 +66,7 @@ Map<String, dynamic> _normalizeDeliveryRow(Map<String, dynamic> json) {
     'deliveryNo': json['deliveryNo'] ?? json['delivery_no'] ?? '',
     'status': status,
     'statusLabel': json['statusLabel'] ?? json['status_label'] ?? (status == 'linked' ? 'مرتبط بسند قبض' : 'مُصدَّر'),
+    'agentId': json['agentId'] ?? json['agent_id'],
     'amount': json['amount'] ?? 0,
     'customerName': json['customerName'] ?? json['customer_name'],
     'customerNum': json['customerNum'] ?? json['customer_num'],
@@ -85,6 +94,39 @@ class OfflineApiClient {
 
   bool get _online => _ref.read(connectivityProvider).isOnline;
   String get serverUrl => _api.serverUrl;
+
+  int? get _agentId => _ref.read(authProvider).agent?.id;
+
+  String _receiptsCacheKey({String? status}) {
+    final agentId = _agentId;
+    if (agentId == null) {
+      return status != null ? '${OfflineKeys.receipts}:$status' : OfflineKeys.receipts;
+    }
+    return OfflineKeys.receiptsForAgent(agentId, status: status);
+  }
+
+  String _deliveryCacheKey({String? status}) {
+    final agentId = _agentId;
+    if (agentId == null) {
+      return status != null ? '${OfflineKeys.deliveryReceipts}:$status' : OfflineKeys.deliveryReceipts;
+    }
+    return OfflineKeys.deliveryReceiptsForAgent(agentId, status: status);
+  }
+
+  List<Map<String, dynamic>> _filterRowsForCurrentAgent(List<Map<String, dynamic>> rows) {
+    final agentId = _agentId;
+    if (agentId == null) return rows;
+    return rows.where((row) {
+      final rowAgent = row['agentId'] ?? row['agent_id'];
+      if (rowAgent == null) return _rowId(row['id']) < 0 || row['localPending'] == true;
+      return _rowId(rowAgent) == agentId;
+    }).toList();
+  }
+
+  /// يحذف المخزن القديم المشترك بين المندوبين بعد تسجيل الدخول/الخروج.
+  Future<void> resetReceiptCachesForSession() async {
+    await _cache.deleteLegacyReceiptCaches();
+  }
 
   Future<void> _bumpPendingCount() => _ref.read(syncStatusProvider.notifier).refreshPendingCount();
 
@@ -558,29 +600,30 @@ class OfflineApiClient {
   Future<List<Receipt>> _readReceiptsList(String cacheKey, Future<Map<String, dynamic>> Function() fetch) => _withCache(
         cacheKey: cacheKey,
         onlineFetch: () async {
+          await _cache.deleteLegacyReceiptCaches();
           final data = await fetch();
           final raw = (data['receipts'] as List?)
                   ?.map((e) => Map<String, dynamic>.from(e as Map))
                   .toList() ??
               <Map<String, dynamic>>[];
-          // الدمج مع المخزَّن يحفظ السجل القديم بدل استبداله بآخر 500 فقط.
           final cachedJson = await _cache.getJson(cacheKey);
           final cachedRaw = cachedJson is List
               ? cachedJson.map((e) => Map<String, dynamic>.from(e as Map)).toList()
               : <Map<String, dynamic>>[];
-          final merged = _mergeRowsById(raw, cachedRaw);
-          await _cache.setJson(cacheKey, merged);
-          return _parseReceiptList(merged);
+          final synced = _syncListWithServer(raw, cachedRaw);
+          await _cache.setJson(cacheKey, synced);
+          return _parseReceiptList(synced);
         },
         offlineRead: () async {
           final raw = await _cache.getJson(cacheKey);
           if (raw is! List) return null;
-          return _parseReceiptList(raw.map((e) => Map<String, dynamic>.from(e as Map)).toList());
+          final rows = _filterRowsForCurrentAgent(raw.map((e) => Map<String, dynamic>.from(e as Map)).toList());
+          return _parseReceiptList(rows);
         },
       );
 
   Future<List<Receipt>> getReceipts({String? status}) {
-    final cacheKey = status != null ? '${OfflineKeys.receipts}:$status' : OfflineKeys.receipts;
+    final cacheKey = _receiptsCacheKey(status: status);
     return _readReceiptsList(cacheKey, () => _api.requestJson('GET', '/receipts', query: status != null ? {'status': status} : null));
   }
 
@@ -605,6 +648,7 @@ class OfflineApiClient {
       if (deliveryReceiptId != null) 'deliveryReceiptId': deliveryReceiptId,
     };
     final localId = _localId();
+    final cacheKey = _receiptsCacheKey();
     final optimistic = {
       'id': localId,
       'receiptNo': 'LOCAL-${DateTime.now().millisecondsSinceEpoch}',
@@ -617,6 +661,7 @@ class OfflineApiClient {
       'notes': notes,
       'createdAt': DateTime.now().toIso8601String(),
       'localPending': true,
+      if (_agentId != null) 'agentId': _agentId,
     };
 
     Future<Receipt> queueLocal() async {
@@ -626,9 +671,9 @@ class OfflineApiClient {
         entityType: 'receipt',
         body: body,
         optimisticJson: optimistic,
-        listCacheKey: OfflineKeys.receipts,
+        listCacheKey: cacheKey,
       );
-      await _cache.mergeListItem(OfflineKeys.receipts, optimistic);
+      await _cache.mergeListItem(cacheKey, optimistic);
       return Receipt.fromJson(optimistic);
     }
 
@@ -644,7 +689,7 @@ class OfflineApiClient {
         notes: notes,
         deliveryReceiptId: deliveryReceiptId,
       );
-      await _cache.mergeListItem(OfflineKeys.receipts, Map<String, dynamic>.from({
+      await _cache.mergeListItem(cacheKey, Map<String, dynamic>.from({
         'id': receipt.id,
         'receiptNo': receipt.receiptNo,
         'status': receipt.status,
@@ -658,6 +703,7 @@ class OfflineApiClient {
         'notes': receipt.notes,
         'receiptDate': receipt.receiptDate,
         'createdAt': receipt.createdAt,
+        if (_agentId != null) 'agentId': _agentId,
       }));
       return receipt;
     } on ApiException catch (e) {
@@ -672,25 +718,27 @@ class OfflineApiClient {
   Future<List<DeliveryReceipt>> _readDeliveryList(String cacheKey, Future<Map<String, dynamic>> Function() fetch) => _withCache(
         cacheKey: cacheKey,
         onlineFetch: () async {
+          await _cache.deleteLegacyReceiptCaches();
           final data = await fetch();
           final onlineRaw = _rawDeliveryRows(data);
           final cachedJson = await _cache.getJson(cacheKey);
           final cachedRaw = cachedJson is List
               ? cachedJson.map((e) => Map<String, dynamic>.from(e as Map)).toList()
               : <Map<String, dynamic>>[];
-          final merged = _mergeRowsById(onlineRaw, cachedRaw);
-          await _cache.setJson(cacheKey, merged);
-          return _parseDeliveryList(merged);
+          final synced = _syncListWithServer(onlineRaw, cachedRaw);
+          await _cache.setJson(cacheKey, synced);
+          return _parseDeliveryList(synced);
         },
         offlineRead: () async {
           final raw = await _cache.getJson(cacheKey);
           if (raw is! List) return null;
-          return _parseDeliveryList(raw.map((e) => Map<String, dynamic>.from(e as Map)).toList());
+          final rows = _filterRowsForCurrentAgent(raw.map((e) => Map<String, dynamic>.from(e as Map)).toList());
+          return _parseDeliveryList(rows);
         },
       );
 
   Future<List<DeliveryReceipt>> getDeliveryReceipts({String? status}) {
-    final cacheKey = status != null ? '${OfflineKeys.deliveryReceipts}:$status' : OfflineKeys.deliveryReceipts;
+    final cacheKey = _deliveryCacheKey(status: status);
     return _readDeliveryList(cacheKey, () => _api.requestJson('GET', '/delivery-receipts', query: status != null ? {'status': status} : null));
   }
 
@@ -730,6 +778,7 @@ class OfflineApiClient {
       'notes': notes ?? '',
     };
     final localId = _localId();
+    final cacheKey = _deliveryCacheKey();
     final optimistic = {
       'id': localId,
       'deliveryNo': 'LOCAL-${DateTime.now().millisecondsSinceEpoch}',
@@ -744,6 +793,7 @@ class OfflineApiClient {
       'notes': notes,
       'createdAt': DateTime.now().toIso8601String(),
       'localPending': true,
+      if (_agentId != null) 'agentId': _agentId,
     };
 
     Future<DeliveryReceipt> queueLocal() async {
@@ -753,9 +803,9 @@ class OfflineApiClient {
         entityType: 'delivery_receipt',
         body: body,
         optimisticJson: optimistic,
-        listCacheKey: OfflineKeys.deliveryReceipts,
+        listCacheKey: cacheKey,
       );
-      await _cache.mergeListItem(OfflineKeys.deliveryReceipts, _normalizeDeliveryRow(optimistic));
+      await _cache.mergeListItem(cacheKey, _normalizeDeliveryRow(optimistic));
       return DeliveryReceipt.fromJson(optimistic);
     }
 
@@ -768,7 +818,7 @@ class OfflineApiClient {
         amount: amount,
         notes: notes,
       );
-      await _cache.mergeListItem(OfflineKeys.deliveryReceipts, _normalizeDeliveryRow(Map<String, dynamic>.from({
+      await _cache.mergeListItem(cacheKey, _normalizeDeliveryRow(Map<String, dynamic>.from({
         'id': receipt.id,
         'deliveryNo': receipt.deliveryNo,
         'status': receipt.status,
@@ -783,6 +833,7 @@ class OfflineApiClient {
         'receiptId': receipt.receiptId,
         'linkedReceiptNo': receipt.linkedReceiptNo,
         'createdAt': receipt.createdAt,
+        if (_agentId != null) 'agentId': _agentId,
       })));
       return receipt;
     } on ApiException catch (e) {
@@ -812,50 +863,52 @@ class OfflineApiClient {
   }
 
   Future<void> deleteDeliveryReceipt(int id) async {
+    final cacheKey = _deliveryCacheKey();
     if (id < 0) {
-      await _cache.removeListItem(OfflineKeys.deliveryReceipts, id);
+      await _cache.removeListItem(cacheKey, id);
       return;
     }
     if (!_online) {
-      await _outbox.enqueue(method: 'DELETE', path: '/delivery-receipts/$id', entityType: 'delivery_delete', listCacheKey: OfflineKeys.deliveryReceipts);
-      await _cache.removeListItem(OfflineKeys.deliveryReceipts, id);
+      await _outbox.enqueue(method: 'DELETE', path: '/delivery-receipts/$id', entityType: 'delivery_delete', listCacheKey: cacheKey);
+      await _cache.removeListItem(cacheKey, id);
       return;
     }
     try {
       await _api.deleteDeliveryReceipt(id);
-      await _cache.removeListItem(OfflineKeys.deliveryReceipts, id);
+      await _cache.removeListItem(cacheKey, id);
     } on ApiException catch (e) {
       if (e.statusCode == 401) throw e;
-      await _outbox.enqueue(method: 'DELETE', path: '/delivery-receipts/$id', entityType: 'delivery_delete', listCacheKey: OfflineKeys.deliveryReceipts);
-      await _cache.removeListItem(OfflineKeys.deliveryReceipts, id);
+      await _outbox.enqueue(method: 'DELETE', path: '/delivery-receipts/$id', entityType: 'delivery_delete', listCacheKey: cacheKey);
+      await _cache.removeListItem(cacheKey, id);
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
-      await _outbox.enqueue(method: 'DELETE', path: '/delivery-receipts/$id', entityType: 'delivery_delete', listCacheKey: OfflineKeys.deliveryReceipts);
-      await _cache.removeListItem(OfflineKeys.deliveryReceipts, id);
+      await _outbox.enqueue(method: 'DELETE', path: '/delivery-receipts/$id', entityType: 'delivery_delete', listCacheKey: cacheKey);
+      await _cache.removeListItem(cacheKey, id);
     }
   }
 
   Future<void> deleteReceipt(int id) async {
+    final cacheKey = _receiptsCacheKey();
     if (id < 0) {
-      await _cache.removeListItem(OfflineKeys.receipts, id);
+      await _cache.removeListItem(cacheKey, id);
       return;
     }
     if (!_online) {
-      await _outbox.enqueue(method: 'DELETE', path: '/receipts/$id', entityType: 'receipt_delete', listCacheKey: OfflineKeys.receipts);
-      await _cache.removeListItem(OfflineKeys.receipts, id);
+      await _outbox.enqueue(method: 'DELETE', path: '/receipts/$id', entityType: 'receipt_delete', listCacheKey: cacheKey);
+      await _cache.removeListItem(cacheKey, id);
       return;
     }
     try {
       await _api.deleteReceipt(id);
-      await _cache.removeListItem(OfflineKeys.receipts, id);
+      await _cache.removeListItem(cacheKey, id);
     } on ApiException catch (e) {
       if (e.statusCode == 401) throw e;
-      await _outbox.enqueue(method: 'DELETE', path: '/receipts/$id', entityType: 'receipt_delete', listCacheKey: OfflineKeys.receipts);
-      await _cache.removeListItem(OfflineKeys.receipts, id);
+      await _outbox.enqueue(method: 'DELETE', path: '/receipts/$id', entityType: 'receipt_delete', listCacheKey: cacheKey);
+      await _cache.removeListItem(cacheKey, id);
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
-      await _outbox.enqueue(method: 'DELETE', path: '/receipts/$id', entityType: 'receipt_delete', listCacheKey: OfflineKeys.receipts);
-      await _cache.removeListItem(OfflineKeys.receipts, id);
+      await _outbox.enqueue(method: 'DELETE', path: '/receipts/$id', entityType: 'receipt_delete', listCacheKey: cacheKey);
+      await _cache.removeListItem(cacheKey, id);
     }
   }
 

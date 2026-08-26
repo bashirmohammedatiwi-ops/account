@@ -1,30 +1,35 @@
 /* Admin: delivery receipts (وصل استلام) — display only, no Edari posting */
 
-const deliveryReceiptAdmin = { selected: null };
+const deliveryReceiptAdmin = { selected: null, rows: [] };
 
 function drBadgeClass(status) {
   return ({ issued: 'pending', linked: 'ok' })[status] || 'pending';
 }
 
-async function loadDeliveryReceiptsPage() {
-  const status = document.getElementById('deliveryReceiptStatusFilter')?.value || '';
-  const path = `/delivery-receipts${status ? `?status=${encodeURIComponent(status)}` : ''}`;
-  const [list, stats] = await Promise.all([
-    commerceApi(path),
-    commerceApi('/delivery-receipts/stats')
-  ]);
-  const s = stats.stats || {};
-  const statsEl = document.getElementById('deliveryReceiptStats');
-  if (statsEl) {
-    statsEl.innerHTML = `
-      <span class="rv-kpi pending">مُصدَّر <strong>${s.issued || 0}</strong></span>
-      <span class="rv-kpi ok">مرتبط <strong>${s.linked || 0}</strong></span>
-      <span class="rv-kpi">اليوم <strong>${s.today || 0}</strong></span>
-      <span class="rv-kpi">الإجمالي <strong>${s.total || 0}</strong></span>`;
-  }
+function deliveryReceiptSearchQuery() {
+  return String(document.getElementById('deliveryReceiptSearch')?.value || '').trim().toLowerCase();
+}
+
+function filterDeliveryReceiptRows(rows) {
+  const q = deliveryReceiptSearchQuery();
+  if (!q) return rows;
+  return rows.filter((d) => {
+    const hay = [
+      d.deliveryNo,
+      d.agentName,
+      d.customerName,
+      d.linkedReceiptNo,
+      d.receiptDate,
+      d.createdAt
+    ].join(' ').toLowerCase();
+    return hay.includes(q);
+  });
+}
+
+function renderDeliveryReceiptRows(rows) {
   const body = document.getElementById('deliveryReceiptsBody');
   if (!body) return;
-  body.innerHTML = (list.deliveryReceipts || []).map((d) => `
+  body.innerHTML = rows.map((d) => `
     <tr>
       <td dir="ltr">${esc(d.deliveryNo)}</td>
       <td>${esc(d.agentName)}</td>
@@ -49,6 +54,26 @@ async function loadDeliveryReceiptsPage() {
       void deleteDeliveryReceiptUi(Number(btn.dataset.delDr));
     });
   });
+}
+
+async function loadDeliveryReceiptsPage() {
+  const status = document.getElementById('deliveryReceiptStatusFilter')?.value || '';
+  const path = `/delivery-receipts${status ? `?status=${encodeURIComponent(status)}` : ''}`;
+  const [list, stats] = await Promise.all([
+    commerceApi(path),
+    commerceApi('/delivery-receipts/stats')
+  ]);
+  const s = stats.stats || {};
+  const statsEl = document.getElementById('deliveryReceiptStats');
+  if (statsEl) {
+    statsEl.innerHTML = `
+      <span class="rv-kpi pending">مُصدَّر <strong>${s.issued || 0}</strong></span>
+      <span class="rv-kpi ok">مرتبط <strong>${s.linked || 0}</strong></span>
+      <span class="rv-kpi">اليوم <strong>${s.today || 0}</strong></span>
+      <span class="rv-kpi">الإجمالي <strong>${s.total || 0}</strong></span>`;
+  }
+  deliveryReceiptAdmin.rows = list.deliveryReceipts || [];
+  renderDeliveryReceiptRows(filterDeliveryReceiptRows(deliveryReceiptAdmin.rows));
 }
 
 window.loadDeliveryReceiptsPage = loadDeliveryReceiptsPage;
@@ -121,3 +146,15 @@ function fmtMoney(n) {
 }
 
 document.getElementById('deliveryReceiptStatusFilter')?.addEventListener('change', () => loadDeliveryReceiptsPage());
+
+let deliverySearchTimer;
+document.getElementById('deliveryReceiptSearch')?.addEventListener('input', () => {
+  clearTimeout(deliverySearchTimer);
+  deliverySearchTimer = setTimeout(() => {
+    if (deliveryReceiptAdmin.rows.length) {
+      renderDeliveryReceiptRows(filterDeliveryReceiptRows(deliveryReceiptAdmin.rows));
+    } else {
+      void loadDeliveryReceiptsPage();
+    }
+  }, 220);
+});

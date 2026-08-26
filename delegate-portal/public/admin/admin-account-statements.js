@@ -359,6 +359,7 @@ function initReportTabs() {
     document.querySelectorAll('.report-view').forEach((v) => {
       v.classList.toggle('hidden', v.id !== `reportView-${name}`);
     });
+    if (typeof updateAdminChrome === 'function') updateAdminChrome('salesReport', null);
   };
   tabs.forEach((tab) => {
     tab.addEventListener('click', () => show(tab.dataset.reportTab));

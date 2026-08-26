@@ -233,42 +233,22 @@ function showPage(name, opts = {}) {
     }
   };
   void loadPage();
+  if (typeof updateAdminChrome === 'function') {
+    updateAdminChrome(name, rvTab || (name === 'receipts' ? 'receipts' : null));
+  }
 }
 
 async function loadDashboard() {
   const data = await api('/api/admin/dashboard');
-  const { counts, last } = data;
-  const statDefs = [
-    {
-      tone: 'tone-teal',
-      label: 'حسابات',
-      note: 'مزامَنة',
-      value: counts.accounts,
-      icon: '<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>'
-    },
-    {
-      tone: 'tone-blue',
-      label: 'حركات',
-      note: 'مزامَنة',
-      value: counts.journal,
-      icon: '<svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>'
-    },
-    {
-      tone: 'tone-violet',
-      label: 'مندوبون',
-      note: 'نشطون',
-      value: counts.agents,
-      icon: '<svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>'
-    }
-  ];
-  document.getElementById('dashStats').innerHTML = statDefs.map((s) => `
-    <div class="stat-card ${s.tone}">
-      <span class="stat-card-icon" aria-hidden="true">${s.icon}</span>
-      <div class="stat-card-body">
-        <div class="k">${esc(s.label)} · ${esc(s.note)}</div>
-        <div class="v">${fmtNumAlways(s.value)}</div>
-      </div>
-    </div>`).join('');
+  const { last } = data;
+
+  if (typeof loadDashboardV4 === 'function') {
+    await loadDashboardV4(data);
+  } else {
+    const { counts } = data;
+    document.getElementById('dashStats').innerHTML = `
+      <div class="stat-card tone-teal"><div class="stat-card-body"><div class="k">حسابات</div><div class="v">${fmtNumAlways(counts.accounts)}</div></div></div>`;
+  }
 
   if (last) {
     const cls = last.status === 'success' ? 'ok' : last.status === 'error' ? 'off' : 'pending';
@@ -1503,11 +1483,7 @@ document.getElementById('agentSaveBtn')?.addEventListener('click', (e) => {
   }
 });
 
-document.querySelectorAll('.nav-item').forEach((btn) => {
-  btn.addEventListener('click', () => showPage(btn.dataset.page, { rvTab: btn.dataset.rvTab }));
-});
-
-document.querySelectorAll('.quick-card[data-goto], .shortcut[data-goto], .module-card[data-goto]').forEach((btn) => {
+document.querySelectorAll('.quick-card[data-goto], .shortcut[data-goto]').forEach((btn) => {
   btn.addEventListener('click', () => showPage(btn.dataset.goto, { rvTab: btn.dataset.rvTab }));
 });
 
@@ -1596,8 +1572,6 @@ document.getElementById('edariDatabasePick')?.addEventListener('change', (e) => 
   setEdariConnStatus(`تم اختيار ${item.name}`, 'ok');
 });
 
-refreshAll();
-
 function parseAdminHash() {
   const hash = location.hash.replace(/^#/, '');
   if (!hash.startsWith('page=')) return null;
@@ -1628,6 +1602,12 @@ window.addEventListener('hashchange', () => {
   if (!parsed) return;
   const active = document.querySelector('.page.active');
   const activeId = active?.id?.replace(/^page-/, '');
+  let currentRv = null;
+  try { currentRv = localStorage.getItem('adminActiveRvTab'); } catch (_) {}
+  if (activeId === parsed.page && parsed.page === 'receipts' && parsed.rvTab && parsed.rvTab !== currentRv) {
+    if (typeof setRvTab === 'function') setRvTab(parsed.rvTab);
+    return;
+  }
   if (activeId === parsed.page) return;
   showPage(parsed.page, parsed.rvTab ? { rvTab: parsed.rvTab } : {});
 });

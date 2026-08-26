@@ -557,25 +557,27 @@ Future<List<int>> buildEscPosBytesFromPayload(
 
   final composite = canvas.build();
   if (composite != null) {
-    bytes += generator.imageRaster(_padRasterHeight(_trimVertical(composite)), align: PosAlign.center);
+    final trimmed = _trimVertical(composite, bottomPad: 0);
+    final tight = _trimBottomWhitespace(trimmed, keepBottom: 6);
+    bytes += generator.imageRaster(_padRasterHeight(tight), align: PosAlign.center);
   }
 
-  // سطر واحد للتمزيق. cut() على طابعات BLE بدون قاطع يفرّغ ورقاً طويلاً.
-  bytes += generator.feed(1);
+  // بدون feed/cut — طابعات BLE بدون قاطع تفرّغ ورقاً طويلاً بعد أوامر التغذية.
   return bytes;
 }
 
 /// ارتفاع الصورة يجب أن يكون مضاعف 8 حتى لا تظهر خطوط بيضاء بين صفوف النقط.
 img.Image _padRasterHeight(img.Image src) {
-  final rem = src.height % 8;
-  if (rem == 0) return src;
-  final padded = img.Image(width: src.width, height: src.height + (8 - rem));
+  final tight = _trimBottomWhitespace(src, keepBottom: 0);
+  final rem = tight.height % 8;
+  if (rem == 0) return tight;
+  final padded = img.Image(width: tight.width, height: tight.height + (8 - rem));
   img.fill(padded, color: img.ColorRgb8(255, 255, 255));
-  img.compositeImage(padded, src);
+  img.compositeImage(padded, tight);
   return padded;
 }
 
-img.Image _trimVertical(img.Image src) {
+img.Image _trimVertical(img.Image src, {int topPad = 2, int bottomPad = 0}) {
   var top = 0;
   var bottom = src.height - 1;
 
@@ -594,11 +596,29 @@ img.Image _trimVertical(img.Image src) {
     bottom--;
   }
 
-  final pad = 4;
-  top = (top - pad).clamp(0, src.height - 1);
-  bottom = (bottom + pad).clamp(0, src.height - 1);
+  top = (top - topPad).clamp(0, src.height - 1);
+  bottom = (bottom + bottomPad).clamp(0, src.height - 1);
   if (bottom <= top) return src;
   return img.copyCrop(src, x: 0, y: top, width: src.width, height: bottom - top + 1);
+}
+
+/// يزيل الفراغ الأبيض أسفل الوصل — كل صف أبيض في الصورة = ورق يخرج بلا طباعة.
+img.Image _trimBottomWhitespace(img.Image src, {int keepBottom = 0}) {
+  bool rowHasInk(int y) {
+    for (var x = 0; x < src.width; x++) {
+      final p = src.getPixel(x, y);
+      if (p.a > 8 && (p.r < 248 || p.g < 248 || p.b < 248)) return true;
+    }
+    return false;
+  }
+
+  var bottom = src.height - 1;
+  while (bottom > 0 && !rowHasInk(bottom)) {
+    bottom--;
+  }
+  bottom = (bottom + keepBottom).clamp(0, src.height - 1);
+  if (bottom >= src.height - 1) return src;
+  return img.copyCrop(src, x: 0, y: 0, width: src.width, height: bottom + 1);
 }
 
 Future<void> _renderBlock(
@@ -777,7 +797,7 @@ Future<List<int>> buildTestPrintBytes({
   );
   final sample = DeliveryReceiptPrintPayload(
     blocks: built.blocks,
-    footerBlankLines: 1,
+    footerBlankLines: 0,
     paperMm: built.paperMm,
   );
   return await buildEscPosBytesFromPayload(sample, serverUrl: serverUrl);
