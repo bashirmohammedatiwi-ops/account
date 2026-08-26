@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="admin.css?v=20260826rcv1">
+  <link rel="stylesheet" href="admin.css?v=20260826col1">
 </head>
 <body>
   <div id="topLoader" class="top-loader" hidden aria-live="polite">
@@ -267,47 +267,72 @@
         </section>
 
         <!-- Orders -->
-        <section class="page" id="page-orders">
-          <div class="section-hub">
-            <div class="section-hub-icon tone-commerce" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/></svg></div>
-            <div class="section-hub-body">
-              <h2 class="section-hub-title">التجارة · طلبات الشراء</h2>
-              <p class="section-hub-sub">مراجعة طلبات المندوبين، الموافقة أو الرفض، ومتابعة التجهيز</p>
+        <section class="page rv-page rv-page-v2 rv-page-v3" id="page-orders">
+          <div class="rcv-hero">
+            <div class="rcv-hero-main">
+              <div class="rcv-hero-icon tone-commerce" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/></svg>
+              </div>
+              <div>
+                <h2 class="rcv-hero-title">طلبات الشراء</h2>
+                <p class="rcv-hero-sub">مراجعة · موافقة · رفض · متابعة التجهيز</p>
+              </div>
+            </div>
+            <div class="rcv-hero-actions">
+              <button type="button" class="btn btn-soft btn-sm" id="btnOrdersRefresh">تحديث</button>
             </div>
           </div>
-          <div class="panel">
-            <div class="panel-head">
-              <h2 class="panel-title">طلبات الشراء الواردة</h2>
-              <div class="rv-filter-row">
-                <input type="search" id="orderSearchFilter" class="search rv-filter" placeholder="بحث: رقم، زبون، مندوب…" autocomplete="off">
-                <select id="orderStatusFilter" class="search rv-filter">
+          <div class="rcv-stats-grid" id="orderStats"></div>
+          <div class="rcv-quick-bar">
+            <div class="rcv-chips" id="orderQuickChips">
+              <button type="button" class="rcv-chip is-active" data-order-chip="">الكل</button>
+              <button type="button" class="rcv-chip" data-order-chip="pending">قيد الانتظار</button>
+              <button type="button" class="rcv-chip" data-order-chip="processing">تم التجهيز</button>
+              <button type="button" class="rcv-chip" data-order-chip="rejected">مرفوض</button>
+            </div>
+            <div class="rcv-list-count" id="orderListCount">—</div>
+          </div>
+          <div class="rcv-list-card">
+            <div class="rcv-toolbar">
+              <div class="rcv-toolbar-search">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
+                <input type="search" id="orderSearchFilter" class="search" placeholder="بحث: رقم، زبون، مندوب..." autocomplete="off">
+              </div>
+              <select id="orderStatusFilter" class="search rcv-filter hidden">
                 <option value="">كل الحالات</option>
                 <option value="pending">قيد الانتظار</option>
                 <option value="processing">تم التجهيز</option>
                 <option value="rejected">مرفوض</option>
               </select>
-              </div>
             </div>
-            <p id="orderStats" class="panel-desc"></p>
-            <div class="table-scroll">
-              <table class="data-table compact">
-                <thead><tr><th>رقم</th><th>مندوب</th><th>زبون</th><th>حالة</th><th>بنود</th><th>مبلغ</th><th>تاريخ</th><th></th></tr></thead>
+            <div class="rcv-table-wrap">
+              <table class="rcv-table">
+                <thead><tr><th>الطلب</th><th>مندوب</th><th>زبون</th><th>حالة</th><th>بنود</th><th>مبلغ</th><th>تاريخ</th><th></th></tr></thead>
                 <tbody id="ordersBody"></tbody>
               </table>
             </div>
           </div>
-          <div class="panel hidden" id="orderDetailPanel"></div>
+          <div class="rcv-detail hidden" id="orderDetailPanel"></div>
         </section>
 
         <!-- سندات قبض -->
-        <section class="page rv-page rv-page-v2" id="page-receipts">
-          <div class="section-hub">
-            <div class="section-hub-icon tone-collections" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+        <section class="page rv-page rv-page-v2 rv-page-v3" id="page-receipts">
+          <div class="rcv-hero">
+            <div class="rcv-hero-main">
+              <div class="rcv-hero-icon tone-collections" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+              </div>
+              <div>
+                <h2 class="rcv-hero-title">سندات قبض المندوبين</h2>
+                <p class="rcv-hero-sub">مراجعة · تعديل · ترحيل للإداري</p>
+              </div>
             </div>
-            <div class="section-hub-body">
-              <h2 class="section-hub-title">التحصيل · سندات قبض</h2>
-              <p class="section-hub-sub">مراجعة سندات المندوبين وترحيلها للإداري</p>
+            <div class="rcv-hero-actions">
+              <button type="button" class="btn btn-soft btn-sm" id="btnReceiptRefresh" title="تحديث القائمة">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+                تحديث
+              </button>
+              <button type="button" class="btn btn-primary btn-sm" id="btnReceiptQuickReady">جاهزة للترحيل</button>
             </div>
           </div>
 
@@ -320,7 +345,18 @@
 
           <div class="rcv-stats-grid" id="receiptStats"></div>
 
-          <details class="rcv-settings" id="receiptSettingsPanel" open>
+          <div class="rcv-quick-bar">
+            <div class="rcv-chips" id="receiptQuickChips">
+              <button type="button" class="rcv-chip" data-rcv-chip="all">الكل</button>
+              <button type="button" class="rcv-chip" data-rcv-chip="pending">بانتظار المراجعة</button>
+              <button type="button" class="rcv-chip" data-rcv-chip="reviewed">جاهز للترحيل</button>
+              <button type="button" class="rcv-chip" data-rcv-chip="posted">مُرحَّل</button>
+              <button type="button" class="rcv-chip" data-rcv-chip="today">اليوم</button>
+            </div>
+            <div class="rcv-quick-meta" id="receiptQuickMeta"></div>
+          </div>
+
+          <details class="rcv-settings" id="receiptSettingsPanel">
             <summary class="rcv-settings-summary">
               <span class="rcv-settings-summary-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
@@ -328,6 +364,7 @@
               <span class="rcv-settings-summary-text">
                 <strong>حسابات الترحيل</strong>
                 <small>صندوق المبلغ · عمولة · حسم — تُحفظ تلقائياً</small>
+                <span class="rcv-settings-progress"><span id="receiptSettingsProgress"></span></span>
               </span>
               <span class="rcv-settings-summary-badge" id="receiptSettingsBadge">0/4</span>
             </summary>
@@ -348,12 +385,26 @@
                     <p class="rcv-list-sub">راجع · عدّل · رحّل أو احذف</p>
                   </div>
                   <div class="rcv-list-count" id="receiptListCount">—</div>
+                  <div class="rcv-view-toggle" role="group" aria-label="طريقة العرض">
+                    <button type="button" class="rcv-view-btn is-active" data-rcv-view="table" title="جدول">
+                      <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                    </button>
+                    <button type="button" class="rcv-view-btn" data-rcv-view="cards" title="بطاقات">
+                      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                    </button>
+                  </div>
                 </div>
                 <div class="rcv-toolbar">
                   <div class="rcv-toolbar-search">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
                     <input type="search" id="receiptSearchFilter" class="search" placeholder="بحث: رقم السند، زبون، مندوب..." autocomplete="off">
                   </div>
+                  <select id="receiptSortFilter" class="search rcv-filter" title="ترتيب">
+                    <option value="newest">الأحدث أولاً</option>
+                    <option value="oldest">الأقدم أولاً</option>
+                    <option value="amount-desc">أعلى مبلغ</option>
+                    <option value="amount-asc">أقل مبلغ</option>
+                  </select>
                   <select id="receiptStatusFilter" class="search rcv-filter">
                     <option value="">كل الحالات</option>
                     <option value="pending">بانتظار المراجعة</option>
@@ -368,7 +419,7 @@
                   <input type="date" id="receiptToFilter" class="search rcv-filter rcv-date" title="حتى تاريخ">
                   <button type="button" class="btn btn-soft btn-sm" id="btnReceiptFilterReset">مسح</button>
                 </div>
-                <div class="rcv-table-wrap">
+                <div class="rcv-table-wrap" id="receiptTableWrap">
                   <table class="rcv-table">
                     <thead>
                       <tr>
@@ -378,6 +429,7 @@
                     <tbody id="receiptsBody"></tbody>
                   </table>
                 </div>
+                <div class="rcv-cards-grid hidden" id="receiptCardsGrid"></div>
               </div>
             </div>
             <aside class="rcv-detail" id="receiptDetailPanel">
@@ -393,139 +445,213 @@
         </section>
 
         <!-- وصول استلام -->
-        <section class="page rv-page" id="page-deliveryReceipts">
-          <div class="section-hub">
-            <div class="section-hub-icon tone-collections" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
-            </div>
-            <div class="section-hub-body">
-              <h2 class="section-hub-title">التحصيل · وصول استلام</h2>
-              <p class="section-hub-sub">وصولات المبلغ المُصدَرة للزبون — طباعة حرارية، للعرض والمتابعة فقط</p>
-            </div>
-          </div>
-          <div class="rv-card rv-card-list">
-            <div class="rv-card-head">
+        <section class="page rv-page rv-page-v2 rv-page-v3" id="page-deliveryReceipts">
+          <div class="rcv-hero">
+            <div class="rcv-hero-main">
+              <div class="rcv-hero-icon tone-collections" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+              </div>
               <div>
-                <h2 class="rv-card-title">وصول استلام المبلغ للزبون</h2>
-                <p class="rv-card-sub">يُصدَّر من المندوب ويُطبع حرارياً — دون ترحيل للإداري</p>
-              </div>
-              <div class="rv-filter-row">
-                <input type="search" id="deliveryReceiptSearch" class="search rv-filter" placeholder="بحث: رقم، زبون، مندوب…" autocomplete="off">
-                <select id="deliveryReceiptStatusFilter" class="search rv-filter">
-                  <option value="">كل الحالات</option>
-                  <option value="issued">مُصدَّر</option>
-                  <option value="linked">مرتبط بسند قبض</option>
-                </select>
+                <h2 class="rcv-hero-title">وصول استلام المبلغ</h2>
+                <p class="rcv-hero-sub">يُصدَّر من المندوب ويُطبع حرارياً — للعرض فقط دون ترحيل</p>
               </div>
             </div>
-            <div class="rv-kpis" id="deliveryReceiptStats"></div>
-            <div class="table-scroll">
-              <table class="data-table compact">
-                <thead>
-                  <tr>
-                    <th>رقم الوصل</th><th>مندوب</th><th>زبون</th><th>مبلغ</th><th>حالة</th><th>مطبوع</th><th>سند القبض</th><th>تاريخ</th><th></th>
-                  </tr>
-                </thead>
-                <tbody id="deliveryReceiptsBody"></tbody>
-              </table>
+            <div class="rcv-hero-actions">
+              <button type="button" class="btn btn-soft btn-sm" id="btnDrRefresh">تحديث</button>
             </div>
           </div>
-          <div class="rv-card hidden" id="deliveryReceiptDetailPanel"></div>
+          <div class="rcv-stats-grid" id="deliveryReceiptStats"></div>
+          <div class="rcv-quick-bar">
+            <div class="rcv-chips" id="deliveryReceiptChips">
+              <button type="button" class="rcv-chip is-active" data-col-chip="all">الكل</button>
+              <button type="button" class="rcv-chip" data-col-chip="issued">مُصدَّر</button>
+              <button type="button" class="rcv-chip" data-col-chip="linked">مرتبط</button>
+            </div>
+          </div>
+          <div class="rcv-workspace">
+            <div class="rcv-main">
+              <div class="rcv-list-card">
+                <div class="rcv-list-head">
+                  <div>
+                    <h3 class="rcv-list-title">وصولات المندوبين</h3>
+                    <p class="rcv-list-sub">عرض · ملاحظة · حذف</p>
+                  </div>
+                  <div class="rcv-list-count" id="deliveryReceiptListCount">—</div>
+                  <div class="rcv-view-toggle" role="group">
+                    <button type="button" class="rcv-view-btn is-active" data-col-view="dr" data-col-view-mode="table" title="جدول"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+                    <button type="button" class="rcv-view-btn" data-col-view="dr" data-col-view-mode="cards" title="بطاقات"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
+                  </div>
+                </div>
+                <div class="rcv-toolbar">
+                  <div class="rcv-toolbar-search">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
+                    <input type="search" id="deliveryReceiptSearch" class="search" placeholder="بحث: رقم، زبون، مندوب..." autocomplete="off">
+                  </div>
+                  <select id="deliveryReceiptStatusFilter" class="search rcv-filter hidden">
+                    <option value="">كل الحالات</option>
+                    <option value="issued">مُصدَّر</option>
+                    <option value="linked">مرتبط بسند قبض</option>
+                  </select>
+                </div>
+                <div class="rcv-table-wrap" id="drTableWrap">
+                  <table class="rcv-table">
+                    <thead><tr><th>الوصل</th><th>مندوب</th><th>زبون</th><th>مبلغ</th><th>حالة</th><th>طباعة</th><th>سند قبض</th><th>تاريخ</th><th></th></tr></thead>
+                    <tbody id="deliveryReceiptsBody"></tbody>
+                  </table>
+                </div>
+                <div class="rcv-cards-grid hidden" id="drCardsGrid"></div>
+              </div>
+            </div>
+            <aside class="rcv-detail" id="deliveryReceiptDetailPanel">
+              <div class="rcv-detail-empty"><strong>اختر وصل استلام</strong><p>اضغط «عرض» من القائمة</p></div>
+            </aside>
+          </div>
         </section>
 
         <!-- زبائن جدد -->
-        <section class="page rv-page" id="page-customerRequests">
-          <div class="section-hub">
-            <div class="section-hub-icon tone-collections" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            </div>
-            <div class="section-hub-body">
-              <h2 class="section-hub-title">التحصيل · زبائن جدد</h2>
-              <p class="section-hub-sub">طلبات إضافة زبون من المندوب — مراجعة وترحيل فرع جديد للإداري</p>
-            </div>
-          </div>
-          <div class="rv-card rv-card-list">
-            <div class="rv-card-head">
+        <section class="page rv-page rv-page-v2 rv-page-v3" id="page-customerRequests">
+          <div class="rcv-hero">
+            <div class="rcv-hero-main">
+              <div class="rcv-hero-icon tone-collections" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </div>
               <div>
-                <h2 class="rv-card-title">زبائن جدد من المندوبين</h2>
-                <p class="rv-card-sub">راجع الاسم والشجرة ثم رحّل فرعاً جديداً إلى الإداري</p>
-              </div>
-              <div class="rv-filter-row">
-                <input type="search" id="customerReqSearch" class="search rv-filter" placeholder="بحث: رقم، اسم، هاتف، مندوب…" autocomplete="off">
-                <select id="customerReqStatusFilter" class="search rv-filter">
-                  <option value="">كل الحالات</option>
-                  <option value="pending">بانتظار المراجعة</option>
-                  <option value="reviewed">جاهز للترحيل</option>
-                  <option value="posted">مُرحَّل</option>
-                  <option value="rejected">مرفوض</option>
-                </select>
+                <h2 class="rcv-hero-title">زبائن جدد</h2>
+                <p class="rcv-hero-sub">مراجعة طلبات المندوبين وترحيل فرع جديد للإداري</p>
               </div>
             </div>
-            <div class="rv-kpis" id="customerReqStats"></div>
-            <div class="table-scroll">
-              <table class="data-table compact">
-                <thead>
-                  <tr>
-                    <th>رقم</th><th>مندوب</th><th>الشجرة</th><th>الاسم</th><th>الهاتف</th><th>حالة</th><th>تاريخ</th><th></th>
-                  </tr>
-                </thead>
-                <tbody id="customerReqsBody"></tbody>
-              </table>
+            <div class="rcv-hero-actions">
+              <button type="button" class="btn btn-soft btn-sm" id="btnCrRefresh">تحديث</button>
+              <button type="button" class="btn btn-primary btn-sm" id="btnCrQuickReady">جاهزة للترحيل</button>
             </div>
           </div>
-          <div class="rv-card hidden" id="customerReqDetailPanel"></div>
+          <div class="rcv-stats-grid" id="customerReqStats"></div>
+          <div class="rcv-quick-bar">
+            <div class="rcv-chips">
+              <button type="button" class="rcv-chip is-active" data-col-chip="all">الكل</button>
+              <button type="button" class="rcv-chip" data-col-chip="pending">بانتظار</button>
+              <button type="button" class="rcv-chip" data-col-chip="reviewed">جاهز</button>
+              <button type="button" class="rcv-chip" data-col-chip="posted">مُرحَّل</button>
+            </div>
+          </div>
+          <div class="rcv-workspace">
+            <div class="rcv-main">
+              <div class="rcv-list-card">
+                <div class="rcv-list-head">
+                  <div>
+                    <h3 class="rcv-list-title">طلبات الزبائن</h3>
+                    <p class="rcv-list-sub">راجع · عدّل · رحّل</p>
+                  </div>
+                  <div class="rcv-list-count" id="customerReqListCount">—</div>
+                  <div class="rcv-view-toggle" role="group">
+                    <button type="button" class="rcv-view-btn is-active" data-col-view="cr" data-col-view-mode="table"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+                    <button type="button" class="rcv-view-btn" data-col-view="cr" data-col-view-mode="cards"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
+                  </div>
+                </div>
+                <div class="rcv-toolbar">
+                  <div class="rcv-toolbar-search">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
+                    <input type="search" id="customerReqSearch" class="search" placeholder="بحث: رقم، اسم، هاتف، مندوب..." autocomplete="off">
+                  </div>
+                  <select id="customerReqStatusFilter" class="search rcv-filter hidden">
+                    <option value="">كل الحالات</option>
+                    <option value="pending">بانتظار المراجعة</option>
+                    <option value="reviewed">جاهز للترحيل</option>
+                    <option value="posted">مُرحَّل</option>
+                    <option value="rejected">مرفوض</option>
+                  </select>
+                </div>
+                <div class="rcv-table-wrap" id="crTableWrap">
+                  <table class="rcv-table">
+                    <thead><tr><th>الطلب</th><th>مندوب</th><th>الشجرة</th><th>الاسم</th><th>الهاتف</th><th>حالة</th><th>تاريخ</th><th></th></tr></thead>
+                    <tbody id="customerReqsBody"></tbody>
+                  </table>
+                </div>
+                <div class="rcv-cards-grid hidden" id="crCardsGrid"></div>
+              </div>
+            </div>
+            <aside class="rcv-detail" id="customerReqDetailPanel">
+              <div class="rcv-detail-empty"><strong>اختر طلب زبون</strong><p>اضغط «مراجعة» من القائمة</p></div>
+            </aside>
+          </div>
         </section>
 
         <!-- Promotional visits -->
-        <section class="page rv-page" id="page-promotionalVisits">
-          <div class="section-hub">
-            <div class="section-hub-icon tone-collections" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg></div>
-            <div class="section-hub-body">
-              <h2 class="section-hub-title">التحصيل · الزيادات الترويجية</h2>
-              <p class="section-hub-sub">سجل زيارات المندوبين للمحلات — محافظة، منطقة، نتيجة الترويج</p>
-            </div>
-          </div>
-          <div class="rv-card rv-card-list">
-            <div class="rv-card-head">
+        <section class="page rv-page rv-page-v2 rv-page-v3" id="page-promotionalVisits">
+          <div class="rcv-hero">
+            <div class="rcv-hero-main">
+              <div class="rcv-hero-icon tone-collections" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg></div>
               <div>
-                <h2 class="rv-card-title">الزيادات الترويجية</h2>
-                <p class="rv-card-sub">زيارات المندوبين للمحلات والمراكز بعد ترويج المنتجات</p>
-              </div>
-              <div class="rv-filter-row">
-                <input type="search" id="promoVisitSearch" class="search rv-filter" placeholder="بحث: رقم، محل، منطقة، مندوب…" autocomplete="off">
-                <select id="promoVisitGovFilter" class="search rv-filter" onchange="loadPromotionalVisitsPage()">
-                  <option value="">كل المحافظات</option>
-                </select>
-                <select id="promoVisitStatusFilter" class="search rv-filter" onchange="loadPromotionalVisitsPage()">
-                  <option value="">كل الحالات</option>
-                  <option value="pending">بانتظار المراجعة</option>
-                  <option value="reviewed">تمت المراجعة</option>
-                  <option value="archived">مؤرشف</option>
-                </select>
+                <h2 class="rcv-hero-title">الزيادات الترويجية</h2>
+                <p class="rcv-hero-sub">زيارات المندوبين للمحلات بعد ترويج المنتجات</p>
               </div>
             </div>
-            <div class="rv-kpis" id="promoVisitStats"></div>
-            <div class="table-scroll">
-              <table class="data-table compact">
-                <thead>
-                  <tr>
-                    <th>رقم</th><th>مندوب</th><th>المحافظة</th><th>المنطقة</th><th>المحل</th><th>الحالة بعد الترويج</th><th>مراجعة</th><th>تاريخ</th><th></th>
-                  </tr>
-                </thead>
-                <tbody id="promoVisitsBody"></tbody>
-              </table>
+            <div class="rcv-hero-actions">
+              <button type="button" class="btn btn-soft btn-sm" id="btnPvRefresh">تحديث</button>
             </div>
           </div>
-          <div class="rv-card hidden" id="promoVisitDetailPanel"></div>
+          <div class="rcv-stats-grid" id="promoVisitStats"></div>
+          <div class="rcv-quick-bar">
+            <div class="rcv-chips">
+              <button type="button" class="rcv-chip is-active" data-col-chip="all">الكل</button>
+              <button type="button" class="rcv-chip" data-col-chip="pending">بانتظار</button>
+              <button type="button" class="rcv-chip" data-col-chip="reviewed">مراجع</button>
+              <button type="button" class="rcv-chip" data-col-chip="archived">مؤرشف</button>
+            </div>
+          </div>
+          <div class="rcv-workspace">
+            <div class="rcv-main">
+              <div class="rcv-list-card">
+                <div class="rcv-list-head">
+                  <div>
+                    <h3 class="rcv-list-title">زيارات المندوبين</h3>
+                    <p class="rcv-list-sub">محافظة · منطقة · محل · نتيجة الترويج</p>
+                  </div>
+                  <div class="rcv-list-count" id="promoVisitListCount">—</div>
+                  <div class="rcv-view-toggle" role="group">
+                    <button type="button" class="rcv-view-btn is-active" data-col-view="pv" data-col-view-mode="table"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+                    <button type="button" class="rcv-view-btn" data-col-view="pv" data-col-view-mode="cards"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
+                  </div>
+                </div>
+                <div class="rcv-toolbar">
+                  <div class="rcv-toolbar-search">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
+                    <input type="search" id="promoVisitSearch" class="search" placeholder="بحث: رقم، محل، منطقة، مندوب..." autocomplete="off">
+                  </div>
+                  <select id="promoVisitGovFilter" class="search rcv-filter">
+                    <option value="">كل المحافظات</option>
+                  </select>
+                  <select id="promoVisitStatusFilter" class="search rcv-filter hidden">
+                    <option value="">كل الحالات</option>
+                    <option value="pending">بانتظار المراجعة</option>
+                    <option value="reviewed">تمت المراجعة</option>
+                    <option value="archived">مؤرشف</option>
+                  </select>
+                </div>
+                <div class="rcv-table-wrap" id="pvTableWrap">
+                  <table class="rcv-table">
+                    <thead><tr><th>الزيارة</th><th>مندوب</th><th>المحافظة</th><th>المنطقة</th><th>المحل</th><th>النتيجة</th><th>حالة</th><th>تاريخ</th><th></th></tr></thead>
+                    <tbody id="promoVisitsBody"></tbody>
+                  </table>
+                </div>
+                <div class="rcv-cards-grid hidden" id="pvCardsGrid"></div>
+              </div>
+            </div>
+            <aside class="rcv-detail" id="promoVisitDetailPanel">
+              <div class="rcv-detail-empty"><strong>اختر زيارة</strong><p>اضغط «عرض» من القائمة</p></div>
+            </aside>
+          </div>
         </section>
 
         <!-- Thermal receipt designer -->
-        <section class="page rv-page" id="page-thermalReceipt">
-          <div class="section-hub">
-            <div class="section-hub-icon tone-collections" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><path d="M6 14h12v8H6z"/></svg></div>
-            <div class="section-hub-body">
-              <h2 class="section-hub-title">التحصيل · تصميم الوصل الحراري</h2>
-              <p class="section-hub-sub">شعار، هوية، أحجام خط — يُطبَّق فوراً على طباعة وصل القبض في تطبيق المندوب</p>
+        <section class="page rv-page rv-page-v2 rv-page-v3" id="page-thermalReceipt">
+          <div class="rcv-hero">
+            <div class="rcv-hero-main">
+              <div class="rcv-hero-icon tone-collections" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><path d="M6 14h12v8H6z"/></svg></div>
+              <div>
+                <h2 class="rcv-hero-title">تصميم الوصل الحراري</h2>
+                <p class="rcv-hero-sub">شعار · هوية · أحجام خط — يُطبَّق على تطبيق المندوب</p>
+              </div>
             </div>
           </div>
           <div class="thermal-design-layout thermal-design-layout-v2">
@@ -633,12 +759,14 @@
         </section>
 
         <!-- مبيعات الشجرات -->
-        <section class="page page-reports" id="page-salesReport">
-          <div class="section-hub">
-            <div class="section-hub-icon tone-reports" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 5 5-9"/></svg></div>
-            <div class="section-hub-body">
-              <h2 class="section-hub-title">التقارير · مبيعات الشجرات</h2>
-              <p class="section-hub-sub">تقرير مبيعات ومرتجعات حسب الفترة والشجرات — معاينة وتصدير PDF</p>
+        <section class="page page-reports rv-page-v3" id="page-salesReport">
+          <div class="rcv-hero">
+            <div class="rcv-hero-main">
+              <div class="rcv-hero-icon tone-reports" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 5 5-9"/></svg></div>
+              <div>
+                <h2 class="rcv-hero-title">مبيعات الشجرات</h2>
+                <p class="rcv-hero-sub">مبيعات · مرتجعات · هدايا — معاينة وتصدير PDF</p>
+              </div>
             </div>
           </div>
           <div class="rx">
@@ -764,12 +892,14 @@
         </section>
 
         <!-- كشف حساب -->
-        <section class="page page-reports" id="page-accountStatements">
-          <div class="section-hub">
-            <div class="section-hub-icon tone-reports" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
-            <div class="section-hub-body">
-              <h2 class="section-hub-title">التقارير · كشف حساب</h2>
-              <p class="section-hub-sub">كشف حساب زبون أو أكثر من Edari — معاينة وتصدير PDF</p>
+        <section class="page page-reports rv-page-v3" id="page-accountStatements">
+          <div class="rcv-hero">
+            <div class="rcv-hero-main">
+              <div class="rcv-hero-icon tone-reports" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
+              <div>
+                <h2 class="rcv-hero-title">كشف حساب</h2>
+                <p class="rcv-hero-sub">كشف حساب زبون أو أكثر من Edari — معاينة وتصدير PDF</p>
+              </div>
             </div>
           </div>
           <div class="rx">
@@ -1377,13 +1507,14 @@
 
   <script src="config.js"></script>
   <script src="admin-ui.js?v=20260826ui6"></script>
-  <script src="admin.js?v=20260826rcv1"></script>
-  <script src="admin-shell.js?v=20260826rcv1"></script>
-  <script src="admin-commerce.js?v=20260826rcv1"></script>
-  <script src="admin-receipts.js?v=20260826rcv1"></script>
-  <script src="admin-delivery-receipts.js?v=20260826rcv1"></script>
-  <script src="admin-customers.js?v=20260826rcv1"></script>
-  <script src="admin-promotional-visits.js?v=20260826rcv1"></script>
+  <script src="admin.js?v=20260826col1"></script>
+  <script src="admin-shell.js?v=20260826col1"></script>
+  <script src="admin-commerce.js?v=20260826col1"></script>
+  <script src="admin-collection-kit.js?v=20260826col1"></script>
+  <script src="admin-receipts.js?v=20260826col1"></script>
+  <script src="admin-delivery-receipts.js?v=20260826col1"></script>
+  <script src="admin-customers.js?v=20260826col1"></script>
+  <script src="admin-promotional-visits.js?v=20260826col1"></script>
   <script src="admin-thermal-template.js?v=20260824thermal8"></script>
   <script src="admin-sales-report.js?v=20260709treeFix3"></script>
   <script src="admin-account-statements.js?v=20260826pages1"></script>

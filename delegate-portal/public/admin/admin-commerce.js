@@ -1799,17 +1799,37 @@ async function searchEdariInModal(q) {
   }
 }
 
+const ORDER_PILL = { pending: 'pending', processing: 'ready', rejected: 'rejected' };
+
 const orderAdmin = { rows: [] };
+
+function orderApplyChip(chip) {
+  const sel = document.getElementById('orderStatusFilter');
+  if (sel) sel.value = chip;
+  document.querySelectorAll('[data-order-chip]').forEach((btn) => {
+    btn.classList.toggle('is-active', btn.dataset.orderChip === chip);
+  });
+  void loadOrdersPage();
+}
 
 async function loadOrdersPage() {
   const status = document.getElementById('orderStatusFilter')?.value || '';
   const data = await commerceApi(`/orders${status ? `?status=${encodeURIComponent(status)}` : ''}`);
   const stats = await commerceApi('/orders/stats');
-  document.getElementById('orderStats').innerHTML = `
-    <span class="badge ok">اليوم: ${stats.stats?.todaySubmitted || 0} طلب</span>`;
+  const byStatus = {};
+  (stats.stats?.byStatus || []).forEach((r) => { byStatus[r.status] = r; });
+  colRenderStatGrid(document.getElementById('orderStats'), [
+    { key: 'pending', cls: 'pending', label: 'قيد الانتظار', count: byStatus.pending?.c || 0, subMoney: byStatus.pending?.amount, filterKey: 'pending' },
+    { key: 'processing', cls: 'ready', label: 'تم التجهيز', count: byStatus.processing?.c || 0, subMoney: byStatus.processing?.amount, filterKey: 'processing' },
+    { key: 'rejected', cls: 'warn', label: 'مرفوض', count: byStatus.rejected?.c || 0, subMoney: byStatus.rejected?.amount, filterKey: 'rejected' },
+    { key: 'today', cls: 'neutral', label: 'اليوم', count: stats.stats?.todaySubmitted || 0, filterKey: '', subText: 'طلب' }
+  ], (key) => orderApplyChip(key));
 
   orderAdmin.rows = data.orders || [];
-  renderOrderRows(filterOrderRows(orderAdmin.rows));
+  const filtered = filterOrderRows(orderAdmin.rows);
+  const countEl = document.getElementById('orderListCount');
+  if (countEl) countEl.innerHTML = `<span class="num-en" dir="ltr">${fmtNumAlways(filtered.length)}</span> طلب`;
+  renderOrderRows(filtered);
 }
 
 function orderSearchQuery() {
@@ -1828,19 +1848,26 @@ function filterOrderRows(rows) {
 
 function renderOrderRows(rows) {
   document.getElementById('ordersBody').innerHTML = rows.map((o) => `
-    <tr>
-      <td dir="ltr">${esc(o.orderNo)}</td>
-      <td>${esc(o.agentName)}</td>
-      <td>${esc(o.customerName || '—')}</td>
-      <td><span class="badge ${orderStatusBadgeClass(o.status)}">${esc(o.statusLabel)}</span></td>
-      <td dir="ltr">${o.lines?.length || 0}</td>
-      <td dir="ltr">${fmtMoney(o.totalAmount)}</td>
-      <td>${esc(o.submittedAt || o.createdAt || '—')}</td>
-      <td class="orders-row-actions">
-        <button type="button" class="btn btn-soft btn-sm" data-order-id="${o.id}">عرض</button>
-        <button type="button" class="btn btn-danger btn-sm" data-order-delete="${o.id}" data-order-no="${esc(o.orderNo)}" title="حذف الطلب">حذف</button>
+    <tr class="rcv-row">
+      <td><span class="rcv-no num-en" dir="ltr">${esc(o.orderNo)}</span></td>
+      <td>
+        <div class="rcv-cell-agent">
+          <span class="rcv-agent-avatar">${esc(colAgentInitial(o.agentName))}</span>
+          <span>${esc(o.agentName)}</span>
+        </div>
       </td>
-    </tr>`).join('') || '<tr><td colspan="8">لا توجد طلبات</td></tr>';
+      <td><strong>${esc(o.customerName || '—')}</strong></td>
+      <td>${colStatusPill(o.status, o.statusLabel, ORDER_PILL)}</td>
+      <td class="num-en" dir="ltr">${fmtNumAlways(o.lines?.length || 0)}</td>
+      <td class="rcv-amt num-en" dir="ltr">${fmtMoney(o.totalAmount)}</td>
+      <td class="rcv-date num-en" dir="ltr">${fmtDateEn(o.submittedAt || o.createdAt)}</td>
+      <td>
+        <div class="rcv-row-actions">
+          <button type="button" class="btn btn-soft btn-sm" data-order-id="${o.id}">عرض</button>
+          <button type="button" class="btn btn-danger btn-sm" data-order-delete="${o.id}" data-order-no="${esc(o.orderNo)}" title="حذف الطلب">حذف</button>
+        </div>
+      </td>
+    </tr>`).join('') || '<tr><td colspan="8"><div class="rcv-empty">لا توجد طلبات</div></td></tr>';
 
   document.querySelectorAll('[data-order-id]').forEach((btn) => {
     btn.addEventListener('click', () => openOrderDetail(Number(btn.dataset.orderId)));
@@ -2180,16 +2207,19 @@ function initCommerceAdmin() {
     }
   });
 
+  document.getElementById('btnOrdersRefresh')?.addEventListener('click', () => loadOrdersPage());
+  document.querySelectorAll('[data-order-chip]').forEach((btn) => {
+    btn.addEventListener('click', () => orderApplyChip(btn.dataset.orderChip));
+  });
   document.getElementById('orderStatusFilter')?.addEventListener('change', () => loadOrdersPage());
   let orderSearchTimer;
   document.getElementById('orderSearchFilter')?.addEventListener('input', () => {
     clearTimeout(orderSearchTimer);
     orderSearchTimer = setTimeout(() => {
-      if (orderAdmin.rows.length) {
-        renderOrderRows(filterOrderRows(orderAdmin.rows));
-      } else {
-        void loadOrdersPage();
-      }
+      const filtered = filterOrderRows(orderAdmin.rows);
+      renderOrderRows(filtered);
+      const countEl = document.getElementById('orderListCount');
+      if (countEl) countEl.innerHTML = `<span class="num-en" dir="ltr">${fmtNumAlways(filtered.length)}</span> طلب`;
     }, 220);
   });
 }

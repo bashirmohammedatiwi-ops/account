@@ -1,9 +1,19 @@
-/* Admin: delivery receipts (وصل استلام) — display only, no Edari posting */
+/* Admin: delivery receipts (وصل استلام) */
 
-const deliveryReceiptAdmin = { selected: null, rows: [] };
+const DR_PILL = { issued: 'pending', linked: 'ready' };
 
-function drBadgeClass(status) {
-  return ({ issued: 'pending', linked: 'ok' })[status] || 'pending';
+const deliveryReceiptAdmin = {
+  selected: null,
+  rows: [],
+  listIds: [],
+  viewMode: 'table'
+};
+
+function drApplyChip(chip) {
+  const sel = document.getElementById('deliveryReceiptStatusFilter');
+  if (sel) sel.value = chip === 'all' ? '' : chip;
+  colSyncChips(chip === 'all' ? 'all' : chip);
+  void loadDeliveryReceiptsPage();
 }
 
 function deliveryReceiptSearchQuery() {
@@ -14,39 +24,26 @@ function filterDeliveryReceiptRows(rows) {
   const q = deliveryReceiptSearchQuery();
   if (!q) return rows;
   return rows.filter((d) => {
-    const hay = [
-      d.deliveryNo,
-      d.agentName,
-      d.customerName,
-      d.linkedReceiptNo,
-      d.receiptDate,
-      d.createdAt
-    ].join(' ').toLowerCase();
+    const hay = [d.deliveryNo, d.agentName, d.customerName, d.linkedReceiptNo, d.receiptDate, d.createdAt]
+      .join(' ').toLowerCase();
     return hay.includes(q);
   });
 }
 
-function renderDeliveryReceiptRows(rows) {
-  const body = document.getElementById('deliveryReceiptsBody');
-  if (!body) return;
-  body.innerHTML = rows.map((d) => `
-    <tr>
-      <td dir="ltr">${esc(d.deliveryNo)}</td>
-      <td>${esc(d.agentName)}</td>
-      <td>${esc(d.customerName)}</td>
-      <td class="num-en" dir="ltr">${fmtMoney(d.amount)}</td>
-      <td><span class="badge ${drBadgeClass(d.status)}">${esc(d.statusLabel)}</span></td>
-      <td>${d.printedAt ? '✓' : '—'}</td>
-      <td dir="ltr">${esc(d.linkedReceiptNo || '—')}</td>
-      <td>${esc(d.receiptDate || d.createdAt || '—')}</td>
-      <td class="row-actions">
-        <button type="button" class="btn btn-soft btn-sm" data-dr-id="${d.id}">عرض</button>
-        <button type="button" class="btn btn-danger btn-sm" data-del-dr="${d.id}">حذف</button>
-      </td>
-    </tr>`).join('') || '<tr><td colspan="9"><div class="rv-empty">لا توجد وصول استلام بعد</div></td></tr>';
+function drRowActions(d) {
+  return `
+    <div class="rcv-row-actions">
+      <button type="button" class="btn btn-soft btn-sm" data-dr-id="${d.id}">عرض</button>
+      <button type="button" class="btn btn-danger btn-sm" data-del-dr="${d.id}">حذف</button>
+    </div>`;
+}
 
+function bindDeliveryReceiptInteractions() {
   document.querySelectorAll('[data-dr-id]').forEach((btn) => {
-    btn.addEventListener('click', () => openDeliveryReceiptDetail(Number(btn.dataset.drId)));
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      void openDeliveryReceiptDetail(Number(btn.dataset.drId));
+    });
   });
   document.querySelectorAll('[data-del-dr]').forEach((btn) => {
     btn.addEventListener('click', (e) => {
@@ -54,6 +51,75 @@ function renderDeliveryReceiptRows(rows) {
       void deleteDeliveryReceiptUi(Number(btn.dataset.delDr));
     });
   });
+  document.querySelectorAll('[data-dr-row]').forEach((row) => {
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      void openDeliveryReceiptDetail(Number(row.dataset.drRow));
+    });
+  });
+}
+
+function renderDeliveryReceiptRows(rows) {
+  const body = document.getElementById('deliveryReceiptsBody');
+  if (!body) return;
+  body.innerHTML = rows.map((d) => {
+    const active = deliveryReceiptAdmin.selected === d.id ? ' is-active' : '';
+    return `
+    <tr class="rcv-row${active}" data-dr-row="${d.id}">
+      <td><span class="rcv-no num-en" dir="ltr">${esc(d.deliveryNo)}</span></td>
+      <td>
+        <div class="rcv-cell-agent">
+          <span class="rcv-agent-avatar">${esc(colAgentInitial(d.agentName))}</span>
+          <span>${esc(d.agentName)}</span>
+        </div>
+      </td>
+      <td><strong>${esc(d.customerName)}</strong></td>
+      <td class="rcv-amt num-en" dir="ltr">${fmtMoney(d.amount)}</td>
+      <td>${colStatusPill(d.status, d.statusLabel, DR_PILL)}</td>
+      <td>${d.printedAt ? '<span class="rcv-pill rcv-pill-ready">✓</span>' : '—'}</td>
+      <td class="num-en" dir="ltr">${esc(d.linkedReceiptNo || '—')}</td>
+      <td class="rcv-date num-en" dir="ltr">${fmtDateEn(d.receiptDate || d.createdAt)}</td>
+      <td>${drRowActions(d)}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="9"><div class="rcv-empty">لا توجد وصولات استلام</div></td></tr>`;
+  bindDeliveryReceiptInteractions();
+}
+
+function renderDeliveryReceiptCards(rows) {
+  const grid = document.getElementById('drCardsGrid');
+  if (!grid) return;
+  grid.innerHTML = rows.map((d) => {
+    const active = deliveryReceiptAdmin.selected === d.id ? ' is-active' : '';
+    return `
+    <article class="rcv-card-item${active}" data-dr-row="${d.id}">
+      <div class="rcv-card-item-head">
+        <div>
+          <span class="rcv-card-no num-en" dir="ltr">${esc(d.deliveryNo)}</span>
+          ${colStatusPill(d.status, d.statusLabel, DR_PILL)}
+        </div>
+        <span class="rcv-card-date num-en" dir="ltr">${fmtDateEn(d.receiptDate || d.createdAt)}</span>
+      </div>
+      <div class="rcv-card-item-body">
+        <div class="rcv-card-party">
+          <span class="rcv-agent-avatar sm">${esc(colAgentInitial(d.agentName))}</span>
+          <div><strong>${esc(d.agentName)}</strong><small>${esc(d.customerName)}</small></div>
+        </div>
+        <div class="rcv-card-amounts">
+          <div><span>المبلغ</span><strong class="num-en" dir="ltr">${fmtMoney(d.amount)}</strong></div>
+          <div><span>طباعة</span><strong>${d.printedAt ? '✓' : '—'}</strong></div>
+          <div><span>سند قبض</span><strong class="num-en" dir="ltr">${esc(d.linkedReceiptNo || '—')}</strong></div>
+        </div>
+      </div>
+      <div class="rcv-card-item-foot">${drRowActions(d)}</div>
+    </article>`;
+  }).join('') || '<div class="rcv-empty">لا توجد وصولات</div>';
+  bindDeliveryReceiptInteractions();
+}
+
+function renderDeliveryReceiptList(rows) {
+  renderDeliveryReceiptRows(rows);
+  renderDeliveryReceiptCards(rows);
+  colSetViewMode(deliveryReceiptAdmin.viewMode, 'dr', deliveryReceiptAdmin);
 }
 
 async function loadDeliveryReceiptsPage() {
@@ -64,20 +130,22 @@ async function loadDeliveryReceiptsPage() {
     commerceApi('/delivery-receipts/stats')
   ]);
   const s = stats.stats || {};
-  const statsEl = document.getElementById('deliveryReceiptStats');
-  if (statsEl) {
-    statsEl.innerHTML = `
-      <span class="rv-kpi pending">مُصدَّر <strong class="num-en" dir="ltr">${fmtNumAlways(s.issued || 0)}</strong></span>
-      <span class="rv-kpi ok">مرتبط <strong class="num-en" dir="ltr">${fmtNumAlways(s.linked || 0)}</strong></span>
-      <span class="rv-kpi">اليوم <strong class="num-en" dir="ltr">${fmtNumAlways(s.today || 0)}</strong></span>
-      <span class="rv-kpi">الإجمالي <strong class="num-en" dir="ltr">${fmtNumAlways(s.total || 0)}</strong></span>`;
-  }
+  colRenderStatGrid(document.getElementById('deliveryReceiptStats'), [
+    { key: 'issued', cls: 'pending', label: 'مُصدَّر', count: s.issued, filterKey: 'issued' },
+    { key: 'linked', cls: 'ready', label: 'مرتبط', count: s.linked, filterKey: 'linked' },
+    { key: 'today', cls: 'neutral', label: 'اليوم', count: s.today, filterKey: 'all', subText: 'وصل' },
+    { key: 'total', cls: 'total', label: 'الإجمالي', count: s.total, clickable: false, subText: 'وصل' }
+  ], drApplyChip);
+
   deliveryReceiptAdmin.rows = list.deliveryReceipts || [];
-  renderDeliveryReceiptRows(filterDeliveryReceiptRows(deliveryReceiptAdmin.rows));
+  deliveryReceiptAdmin.listIds = deliveryReceiptAdmin.rows.map((d) => d.id);
+  const filtered = filterDeliveryReceiptRows(deliveryReceiptAdmin.rows);
+  const countEl = document.getElementById('deliveryReceiptListCount');
+  if (countEl) countEl.innerHTML = `<span class="num-en" dir="ltr">${fmtNumAlways(filtered.length)}</span> وصل`;
+  renderDeliveryReceiptList(filtered);
 }
 
 window.loadDeliveryReceiptsPage = loadDeliveryReceiptsPage;
-
 window.commercePages = window.commercePages || {};
 window.commercePages.deliveryReceipts = loadDeliveryReceiptsPage;
 
@@ -88,37 +156,46 @@ async function openDeliveryReceiptDetail(id) {
   deliveryReceiptAdmin.selected = d.id;
   const panel = document.getElementById('deliveryReceiptDetailPanel');
   if (!panel) return;
-  panel.classList.remove('hidden');
+  panel.classList.add('has-receipt');
   panel.innerHTML = `
-    <div class="rv-card-head">
-      <div>
-        <h2 class="rv-card-title">وصل استلام <span dir="ltr">${esc(d.deliveryNo)}</span></h2>
-        <p class="rv-card-sub">عرض فقط — لا يُرحَّل للإداري</p>
+    <div class="rcv-detail-inner">
+      <div class="rcv-detail-toolbar">
+        ${colDetailNav(deliveryReceiptAdmin.listIds, id)}
+        <button type="button" class="rcv-detail-close" id="btnCloseDrDetail" title="إغلاق">×</button>
       </div>
-      <button type="button" class="btn btn-soft" id="btnCloseDrDetail">إغلاق</button>
-    </div>
-    <div class="rv-detail-grid">
-      <div><span class="muted">المندوب</span><strong>${esc(d.agentName)}</strong></div>
-      <div><span class="muted">الزبون</span><strong>${esc(d.customerName)}</strong></div>
-      <div><span class="muted">المبلغ</span><strong class="num-en" dir="ltr">${fmtMoney(d.amount)}</strong></div>
-      <div><span class="muted">التاريخ</span><strong>${esc(d.receiptDate || '—')}</strong></div>
-      <div><span class="muted">الحالة</span><strong>${esc(d.statusLabel)}</strong></div>
-      <div><span class="muted">سند القبض</span><strong dir="ltr">${esc(d.linkedReceiptNo || '—')}</strong></div>
-      <div><span class="muted">طباعة</span><strong>${d.printedAt ? esc(d.printedAt) : '—'}</strong></div>
-      <div class="rv-detail-wide"><span class="muted">ملاحظات</span><p>${esc(d.notes || '—')}</p></div>
-      <div class="rv-detail-wide">
-        <label class="muted" for="drAdminNote">ملاحظة الإدارة</label>
-        <textarea id="drAdminNote" class="search" rows="2">${esc(d.adminNote || '')}</textarea>
+      <div class="rcv-detail-head">
+        <div>
+          <span class="rcv-detail-kicker">وصل استلام</span>
+          <h3 class="rcv-detail-title num-en" dir="ltr">${esc(d.deliveryNo)}</h3>
+          <p class="rcv-detail-sub">${esc(d.agentName)} · عرض فقط</p>
+        </div>
+        ${colStatusPill(d.status, d.statusLabel, DR_PILL)}
       </div>
-    </div>
-    <div class="rv-detail-actions">
-      <button type="button" class="btn btn-primary" id="btnSaveDrNote">حفظ الملاحظة</button>
-      <button type="button" class="btn btn-danger" id="btnDeleteDr">حذف</button>
+      <div class="rcv-detail-amounts">
+        <div class="rcv-detail-amt rcv-detail-amt-main">
+          <span>المبلغ</span>
+          <strong class="num-en" dir="ltr">${fmtMoney(d.amount)}</strong>
+        </div>
+        <div class="rcv-detail-amt"><span>الزبون</span><strong>${esc(d.customerName)}</strong></div>
+        <div class="rcv-detail-amt"><span>التاريخ</span><strong class="num-en" dir="ltr">${fmtDateEn(d.receiptDate)}</strong></div>
+        <div class="rcv-detail-amt"><span>سند القبض</span><strong class="num-en" dir="ltr">${esc(d.linkedReceiptNo || '—')}</strong></div>
+        <div class="rcv-detail-amt"><span>طباعة</span><strong>${d.printedAt ? fmtDateEn(d.printedAt) : '—'}</strong></div>
+      </div>
+      <label class="rcv-field"><span>ملاحظات</span><p class="rcv-muted">${esc(d.notes || '—')}</p></label>
+      <label class="rcv-field"><span>ملاحظة الإدارة</span>
+        <textarea id="drAdminNote" rows="2">${esc(d.adminNote || '')}</textarea></label>
+      <div class="rcv-detail-actions">
+        <button type="button" class="btn btn-primary" id="btnSaveDrNote">حفظ الملاحظة</button>
+        <button type="button" class="btn btn-danger" id="btnDeleteDr">حذف</button>
+      </div>
     </div>`;
 
+  colHighlightRows('[data-dr-row]', id);
+  colBindDetailNav(openDeliveryReceiptDetail);
   document.getElementById('btnCloseDrDetail')?.addEventListener('click', () => {
-    panel.classList.add('hidden');
     deliveryReceiptAdmin.selected = null;
+    colShowDetailEmpty(panel, 'اختر وصل استلام', 'اضغط «عرض» من القائمة');
+    colHighlightRows('[data-dr-row]', null);
   });
   document.getElementById('btnSaveDrNote')?.addEventListener('click', () => saveDeliveryReceiptNote(d.id));
   document.getElementById('btnDeleteDr')?.addEventListener('click', () => deleteDeliveryReceiptUi(d.id));
@@ -138,21 +215,24 @@ async function saveDeliveryReceiptNote(id) {
 async function deleteDeliveryReceiptUi(id) {
   if (!confirm('حذف وصل الاستلام؟')) return;
   await commerceApi(`/delivery-receipts/${id}`, { method: 'DELETE' });
-  document.getElementById('deliveryReceiptDetailPanel')?.classList.add('hidden');
+  deliveryReceiptAdmin.selected = null;
+  colShowDetailEmpty(document.getElementById('deliveryReceiptDetailPanel'), 'اختر وصل استلام', 'اضغط «عرض» من القائمة');
   showToast('تم الحذف');
   await loadDeliveryReceiptsPage();
 }
 
+document.getElementById('btnDrRefresh')?.addEventListener('click', () => loadDeliveryReceiptsPage());
 document.getElementById('deliveryReceiptStatusFilter')?.addEventListener('change', () => loadDeliveryReceiptsPage());
+colInitChips(drApplyChip);
+colInitViewToggle('dr', deliveryReceiptAdmin, () => renderDeliveryReceiptList(filterDeliveryReceiptRows(deliveryReceiptAdmin.rows)));
 
 let deliverySearchTimer;
 document.getElementById('deliveryReceiptSearch')?.addEventListener('input', () => {
   clearTimeout(deliverySearchTimer);
   deliverySearchTimer = setTimeout(() => {
-    if (deliveryReceiptAdmin.rows.length) {
-      renderDeliveryReceiptRows(filterDeliveryReceiptRows(deliveryReceiptAdmin.rows));
-    } else {
-      void loadDeliveryReceiptsPage();
-    }
+    const filtered = filterDeliveryReceiptRows(deliveryReceiptAdmin.rows);
+    renderDeliveryReceiptList(filtered);
+    const countEl = document.getElementById('deliveryReceiptListCount');
+    if (countEl) countEl.innerHTML = `<span class="num-en" dir="ltr">${fmtNumAlways(filtered.length)}</span> وصل`;
   }, 220);
 });

@@ -1,32 +1,66 @@
 /* Admin: new customers from delegates */
 
+const CR_PILL = { pending: 'pending', reviewed: 'ready', posted: 'posted', rejected: 'rejected' };
+
 const customerReqAdmin = {
   selected: null,
   trees: [],
-  rows: []
+  rows: [],
+  listIds: [],
+  viewMode: 'table'
 };
 
 function canPostCustomersFromDesktop() {
   return !!window.edariDesktop?.postEdariCustomer;
 }
 
-function crBadgeClass(status) {
-  if (typeof receiptBadgeClass === 'function') return receiptBadgeClass(status);
-  return ({ pending: 'pending', reviewed: 'ok', posted: 'ok', rejected: 'off' })[status] || 'pending';
+function canEditCustomerReq(status) {
+  return status !== 'posted';
 }
 
-function canEditCustomerReq(status) {
-  if (typeof canEditReceipt === 'function') return canEditReceipt(status);
-  return status !== 'posted';
+function crApplyChip(chip) {
+  const sel = document.getElementById('customerReqStatusFilter');
+  if (sel) sel.value = chip === 'all' ? '' : chip;
+  colSyncChips(chip === 'all' ? 'all' : chip);
+  void loadCustomerRequestsPage();
 }
 
 function customerReqRowActions(r) {
   const editable = canEditCustomerReq(r.status);
   return `
-    <button type="button" class="btn btn-soft btn-sm" data-creq-id="${r.id}">${editable ? 'تعديل' : 'عرض'}</button>
-    ${editable ? `<button type="button" class="btn btn-danger btn-sm" data-del-creq="${r.id}">حذف</button>` : ''}
-    ${r.status !== 'posted' && r.status !== 'rejected' ? `
-    <button type="button" class="btn btn-primary btn-sm" data-post-creq="${r.id}">ترحيل</button>` : ''}`;
+    <div class="rcv-row-actions">
+      <button type="button" class="btn btn-soft btn-sm" data-creq-id="${r.id}">${editable ? 'مراجعة' : 'عرض'}</button>
+      ${editable ? `<button type="button" class="btn btn-danger btn-sm" data-del-creq="${r.id}">حذف</button>` : ''}
+      ${r.status !== 'posted' && r.status !== 'rejected' ? `
+      <button type="button" class="btn btn-primary btn-sm" data-post-creq="${r.id}">ترحيل</button>` : ''}
+    </div>`;
+}
+
+function bindCustomerReqInteractions() {
+  document.querySelectorAll('[data-creq-id]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      void openCustomerReqDetail(Number(btn.dataset.creqId));
+    });
+  });
+  document.querySelectorAll('[data-del-creq]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      void deleteCustomerReqUi(Number(btn.dataset.delCreq));
+    });
+  });
+  document.querySelectorAll('[data-post-creq]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      void postCustomerReqToEdariUi(Number(btn.dataset.postCreq));
+    });
+  });
+  document.querySelectorAll('[data-cr-row]').forEach((row) => {
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      void openCustomerReqDetail(Number(row.dataset.crRow));
+    });
+  });
 }
 
 async function loadCustomerTrees() {
@@ -34,25 +68,6 @@ async function loadCustomerTrees() {
   const data = await commerceApi('/customer-requests/trees');
   customerReqAdmin.trees = data.trees || [];
   return customerReqAdmin.trees;
-}
-
-async function loadCustomerRequestsPage() {
-  const status = document.getElementById('customerReqStatusFilter')?.value || '';
-  const [list, stats] = await Promise.all([
-    commerceApi(`/customer-requests${status ? `?status=${encodeURIComponent(status)}` : ''}`),
-    commerceApi('/customer-requests/stats')
-  ]);
-  const s = stats.stats || {};
-  const statsEl = document.getElementById('customerReqStats');
-  if (statsEl) {
-    statsEl.innerHTML = `
-      <span class="rv-kpi pending">انتظار <strong class="num-en" dir="ltr">${fmtNumAlways(s.pending || 0)}</strong></span>
-      <span class="rv-kpi ok">جاهز <strong class="num-en" dir="ltr">${fmtNumAlways(s.reviewed || 0)}</strong></span>
-      <span class="rv-kpi posted">مُرحَّل <strong class="num-en" dir="ltr">${fmtNumAlways(s.posted || 0)}</strong></span>
-      <span class="rv-kpi">اليوم <strong class="num-en" dir="ltr">${fmtNumAlways(s.today || 0)}</strong></span>`;
-  }
-  customerReqAdmin.rows = list.requests || [];
-  renderCustomerReqRows(filterCustomerReqRows(customerReqAdmin.rows));
 }
 
 function customerReqSearchQuery() {
@@ -72,37 +87,87 @@ function filterCustomerReqRows(rows) {
 function renderCustomerReqRows(rows) {
   const body = document.getElementById('customerReqsBody');
   if (!body) return;
-  body.innerHTML = rows.map((r) => `
-    <tr>
-      <td dir="ltr">${esc(r.requestNo)}</td>
-      <td>${esc(r.agentName)}</td>
+  body.innerHTML = rows.map((r) => {
+    const active = customerReqAdmin.selected?.id === r.id ? ' is-active' : '';
+    return `
+    <tr class="rcv-row${active}" data-cr-row="${r.id}">
+      <td><span class="rcv-no num-en" dir="ltr">${esc(r.requestNo)}</span></td>
+      <td>
+        <div class="rcv-cell-agent">
+          <span class="rcv-agent-avatar">${esc(colAgentInitial(r.agentName))}</span>
+          <span>${esc(r.agentName)}</span>
+        </div>
+      </td>
       <td>${esc(r.treeName || r.treeNum || '—')}</td>
-      <td>${esc(r.name || '—')}</td>
-      <td dir="ltr">${esc(r.phone || '—')}</td>
-      <td><span class="badge ${crBadgeClass(r.status)}">${esc(r.statusLabel)}</span></td>
-      <td>${esc(r.submittedAt || r.createdAt || '—')}</td>
-      <td class="row-actions">${customerReqRowActions(r)}</td>
-    </tr>`).join('') || '<tr><td colspan="8"><div class="rv-empty">لا توجد طلبات زبون جديد بعد — تظهر هنا بعد إرسال المندوب</div></td></tr>';
+      <td><strong>${esc(r.name || '—')}</strong></td>
+      <td class="num-en" dir="ltr">${esc(r.phone || '—')}</td>
+      <td>${colStatusPill(r.status, r.statusLabel, CR_PILL)}</td>
+      <td class="rcv-date num-en" dir="ltr">${fmtDateEn(r.submittedAt || r.createdAt)}</td>
+      <td>${customerReqRowActions(r)}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="8"><div class="rcv-empty">لا توجد طلبات زبون جديد</div></td></tr>`;
+  bindCustomerReqInteractions();
+}
 
-  document.querySelectorAll('[data-creq-id]').forEach((btn) => {
-    btn.addEventListener('click', () => openCustomerReqDetail(Number(btn.dataset.creqId)));
-  });
-  document.querySelectorAll('[data-del-creq]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      void deleteCustomerReqUi(Number(btn.dataset.delCreq));
-    });
-  });
-  document.querySelectorAll('[data-post-creq]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      void postCustomerReqToEdariUi(Number(btn.dataset.postCreq));
-    });
-  });
+function renderCustomerReqCards(rows) {
+  const grid = document.getElementById('crCardsGrid');
+  if (!grid) return;
+  grid.innerHTML = rows.map((r) => {
+    const active = customerReqAdmin.selected?.id === r.id ? ' is-active' : '';
+    return `
+    <article class="rcv-card-item${active}" data-cr-row="${r.id}">
+      <div class="rcv-card-item-head">
+        <div>
+          <span class="rcv-card-no num-en" dir="ltr">${esc(r.requestNo)}</span>
+          ${colStatusPill(r.status, r.statusLabel, CR_PILL)}
+        </div>
+        <span class="rcv-card-date num-en" dir="ltr">${fmtDateEn(r.submittedAt || r.createdAt)}</span>
+      </div>
+      <div class="rcv-card-item-body">
+        <div class="rcv-card-party">
+          <span class="rcv-agent-avatar sm">${esc(colAgentInitial(r.agentName))}</span>
+          <div><strong>${esc(r.name || '—')}</strong><small>${esc(r.agentName)} · ${esc(r.treeName || r.treeNum || '')}</small></div>
+        </div>
+        <div class="rcv-card-amounts">
+          <div><span>الهاتف</span><strong class="num-en" dir="ltr">${esc(r.phone || '—')}</strong></div>
+        </div>
+      </div>
+      <div class="rcv-card-item-foot">${customerReqRowActions(r)}</div>
+    </article>`;
+  }).join('') || '<div class="rcv-empty">لا توجد طلبات</div>';
+  bindCustomerReqInteractions();
+}
+
+function renderCustomerReqList(rows) {
+  renderCustomerReqRows(rows);
+  renderCustomerReqCards(rows);
+  colSetViewMode(customerReqAdmin.viewMode, 'cr', customerReqAdmin);
+}
+
+async function loadCustomerRequestsPage() {
+  const status = document.getElementById('customerReqStatusFilter')?.value || '';
+  const [list, stats] = await Promise.all([
+    commerceApi(`/customer-requests${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+    commerceApi('/customer-requests/stats')
+  ]);
+  const s = stats.stats || {};
+  colRenderStatGrid(document.getElementById('customerReqStats'), [
+    { key: 'pending', cls: 'pending', label: 'بانتظار المراجعة', count: s.pending, filterKey: 'pending' },
+    { key: 'reviewed', cls: 'ready', label: 'جاهز للترحيل', count: s.reviewed, filterKey: 'reviewed' },
+    { key: 'posted', cls: 'posted', label: 'مُرحَّل', count: s.posted, filterKey: 'posted' },
+    { key: 'today', cls: 'neutral', label: 'اليوم', count: s.today, filterKey: 'all', subText: 'طلب' }
+  ], crApplyChip);
+
+  customerReqAdmin.rows = list.requests || [];
+  customerReqAdmin.listIds = customerReqAdmin.rows.map((r) => r.id);
+  const filtered = filterCustomerReqRows(customerReqAdmin.rows);
+  const countEl = document.getElementById('customerReqListCount');
+  if (countEl) countEl.innerHTML = `<span class="num-en" dir="ltr">${fmtNumAlways(filtered.length)}</span> طلب`;
+  renderCustomerReqList(filtered);
+  colSyncChips(status || 'all');
 }
 
 window.loadCustomerRequestsPage = loadCustomerRequestsPage;
-
 window.commercePages = window.commercePages || {};
 window.commercePages.customerRequests = loadCustomerRequestsPage;
 
@@ -114,7 +179,7 @@ async function openCustomerReqDetail(id) {
   const r = data.request;
   customerReqAdmin.selected = r;
   const panel = document.getElementById('customerReqDetailPanel');
-  panel.classList.remove('hidden');
+  panel.classList.add('has-receipt');
   const locked = !canEditCustomerReq(r.status);
   const treeList = [...trees];
   if (r.treeAccSeq && !treeList.some((t) => String(t.seq) === String(r.treeAccSeq))) {
@@ -124,42 +189,55 @@ async function openCustomerReqDetail(id) {
     <option value="${esc(t.seq)}" ${String(t.seq) === String(r.treeAccSeq) ? 'selected' : ''}>
       ${esc(t.name)} · ${esc(t.num)}
     </option>`).join('');
+
   panel.innerHTML = `
-    <div class="panel-head">
-      <div>
-        <h2 class="panel-title">طلب ${esc(r.requestNo)}</h2>
-        <p class="panel-desc">${esc(r.agentName)} · يُضاف تحت ${esc(r.treeName || r.treeNum || '')}</p>
+    <div class="rcv-detail-inner">
+      <div class="rcv-detail-toolbar">
+        ${colDetailNav(customerReqAdmin.listIds, id)}
+        <button type="button" class="rcv-detail-close" id="btnCloseCrDetail" title="إغلاق">×</button>
       </div>
-      <span class="badge ${crBadgeClass(r.status)}">${esc(r.statusLabel)}</span>
-    </div>
-    <label class="field">
-      <span>الشجرة</span>
-      <select id="crEditTree" ${locked ? 'disabled' : ''}>${treeOptions}</select>
-    </label>
-    <div class="rv-edit-grid">
-      <label class="field"><span>الاسم</span>
-        <input type="text" id="crEditName" value="${esc(r.name)}" ${locked ? 'readonly' : ''}></label>
-      <label class="field"><span>الهاتف</span>
-        <input type="text" id="crEditPhone" value="${esc(r.phone)}" ${locked ? 'readonly' : ''}></label>
-      <label class="field"><span>العنوان</span>
-        <input type="text" id="crEditAddress" value="${esc(r.address)}" ${locked ? 'readonly' : ''}></label>
-    </div>
-    <label class="field"><span>ملاحظات</span>
-      <textarea id="crEditNotes" rows="2" ${locked ? 'readonly' : ''}>${esc(r.notes)}</textarea></label>
-    <label class="field"><span>ملاحظة الإدارة</span>
-      <textarea id="crEditAdminNote" rows="2" ${locked ? 'readonly' : ''}>${esc(r.adminNote)}</textarea></label>
-    <p class="muted">اسم الحساب في الإداري: <strong>${esc(r.edariName || r.name)}</strong></p>
-    ${r.edariNum ? `<p class="muted">حساب الإداري: <span dir="ltr">${esc(r.edariNum)}</span> · Seq <span dir="ltr">${esc(r.edariSeq)}</span></p>` : ''}
-    ${r.postedError ? `<p class="muted" style="color:#b91c1c">${esc(r.postedError)}</p>` : ''}
-    ${locked ? '' : `
-    <div class="btn-row" style="margin-top:16px">
-      <button type="button" class="btn btn-primary" id="btnSaveCustomerReq">حفظ التعديل</button>
-      <button type="button" class="btn btn-danger" id="btnDeleteCustomerReq">حذف الطلب</button>
-      <button type="button" class="btn btn-soft" id="btnRejectCustomerReq">رفض</button>
-      <button type="button" class="btn btn-soft" id="btnPostCustomerReq">ترحيل للإداري</button>
-    </div>
-    ${canPostCustomersFromDesktop() ? '' : '<p class="muted">أمر الترحيل يعمل من تطبيق الإدارة المكتبي فقط</p>'}`}
-  `;
+      <div class="rcv-detail-head">
+        <div>
+          <span class="rcv-detail-kicker">طلب زبون</span>
+          <h3 class="rcv-detail-title num-en" dir="ltr">${esc(r.requestNo)}</h3>
+          <p class="rcv-detail-sub">${esc(r.agentName)} · ${esc(r.treeName || r.treeNum || '')}</p>
+        </div>
+        ${colStatusPill(r.status, r.statusLabel, CR_PILL)}
+      </div>
+      <label class="rcv-field"><span>الشجرة</span>
+        <select id="crEditTree" class="search" ${locked ? 'disabled' : ''}>${treeOptions}</select></label>
+      <div class="rcv-edit-grid">
+        <label class="rcv-field"><span>الاسم</span>
+          <input type="text" id="crEditName" value="${esc(r.name)}" ${locked ? 'readonly' : ''}></label>
+        <label class="rcv-field"><span>الهاتف</span>
+          <input type="text" class="num-en" id="crEditPhone" value="${esc(r.phone)}" ${locked ? 'readonly' : ''}></label>
+        <label class="rcv-field"><span>العنوان</span>
+          <input type="text" id="crEditAddress" value="${esc(r.address)}" ${locked ? 'readonly' : ''}></label>
+      </div>
+      <label class="rcv-field"><span>ملاحظات</span>
+        <textarea id="crEditNotes" rows="2" ${locked ? 'readonly' : ''}>${esc(r.notes)}</textarea></label>
+      <label class="rcv-field"><span>ملاحظة الإدارة</span>
+        <textarea id="crEditAdminNote" rows="2" ${locked ? 'readonly' : ''}>${esc(r.adminNote)}</textarea></label>
+      <p class="rcv-muted">اسم الإداري: <strong>${esc(r.edariName || r.name)}</strong></p>
+      ${r.edariNum ? `<p class="rcv-muted">حساب: <span class="num-en" dir="ltr">${esc(r.edariNum)}</span> · Seq <span class="num-en" dir="ltr">${esc(r.edariSeq)}</span></p>` : ''}
+      ${r.postedError ? `<p class="rcv-error">${esc(r.postedError)}</p>` : ''}
+      ${locked ? '' : `
+      <div class="rcv-detail-actions">
+        <button type="button" class="btn btn-primary" id="btnSaveCustomerReq">حفظ</button>
+        <button type="button" class="btn btn-soft" id="btnPostCustomerReq">ترحيل للإداري</button>
+        <button type="button" class="btn btn-soft" id="btnRejectCustomerReq">رفض</button>
+        <button type="button" class="btn btn-danger" id="btnDeleteCustomerReq">حذف</button>
+      </div>
+      ${canPostCustomersFromDesktop() ? '' : '<p class="rcv-muted">الترحيل من تطبيق الإدارة المكتبي فقط</p>'}`}
+    </div>`;
+
+  colHighlightRows('[data-cr-row]', id);
+  colBindDetailNav(openCustomerReqDetail);
+  document.getElementById('btnCloseCrDetail')?.addEventListener('click', () => {
+    customerReqAdmin.selected = null;
+    colShowDetailEmpty(panel, 'اختر طلب زبون', 'اضغط «مراجعة» من القائمة');
+    colHighlightRows('[data-cr-row]', null);
+  });
 
   if (!locked) {
     document.getElementById('btnSaveCustomerReq')?.addEventListener('click', () => saveCustomerReqEdit(r.id));
@@ -167,7 +245,6 @@ async function openCustomerReqDetail(id) {
     document.getElementById('btnRejectCustomerReq')?.addEventListener('click', () => rejectCustomerReq(r.id));
     document.getElementById('btnPostCustomerReq')?.addEventListener('click', () => postCustomerReqToEdariUi(r.id));
   }
-  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function saveCustomerReqEdit(id) {
@@ -199,7 +276,8 @@ async function deleteCustomerReqUi(id) {
   try {
     await commerceApi(`/customer-requests/${id}`, { method: 'DELETE' });
     showToast('تم الحذف');
-    document.getElementById('customerReqDetailPanel')?.classList.add('hidden');
+    customerReqAdmin.selected = null;
+    colShowDetailEmpty(document.getElementById('customerReqDetailPanel'), 'اختر طلب زبون', 'اضغط «مراجعة» من القائمة');
     await loadCustomerRequestsPage();
   } catch (err) {
     showToast(err.message, 'err');
@@ -267,19 +345,19 @@ async function postCustomerReqToEdariUi(id) {
   }
 }
 
-function initCustomerReqsAdmin() {
-  document.getElementById('customerReqStatusFilter')?.addEventListener('change', () => loadCustomerRequestsPage());
-  let searchTimer;
-  document.getElementById('customerReqSearch')?.addEventListener('input', () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => {
-      if (customerReqAdmin.rows.length) {
-        renderCustomerReqRows(filterCustomerReqRows(customerReqAdmin.rows));
-      } else {
-        void loadCustomerRequestsPage();
-      }
-    }, 220);
-  });
-}
+document.getElementById('btnCrRefresh')?.addEventListener('click', () => loadCustomerRequestsPage());
+document.getElementById('btnCrQuickReady')?.addEventListener('click', () => crApplyChip('reviewed'));
+document.getElementById('customerReqStatusFilter')?.addEventListener('change', () => loadCustomerRequestsPage());
+colInitChips(crApplyChip);
+colInitViewToggle('cr', customerReqAdmin, () => renderCustomerReqList(filterCustomerReqRows(customerReqAdmin.rows)));
 
-initCustomerReqsAdmin();
+let crSearchTimer;
+document.getElementById('customerReqSearch')?.addEventListener('input', () => {
+  clearTimeout(crSearchTimer);
+  crSearchTimer = setTimeout(() => {
+    const filtered = filterCustomerReqRows(customerReqAdmin.rows);
+    renderCustomerReqList(filtered);
+    const countEl = document.getElementById('customerReqListCount');
+    if (countEl) countEl.innerHTML = `<span class="num-en" dir="ltr">${fmtNumAlways(filtered.length)}</span> طلب`;
+  }, 220);
+});
