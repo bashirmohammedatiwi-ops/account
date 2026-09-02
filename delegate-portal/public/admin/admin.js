@@ -113,7 +113,9 @@ let primaryAgentsCache = [];
 function syncAgentRoleUi() {
   const role = document.getElementById('agentRole')?.value || 'primary';
   const wrap = document.getElementById('agentParentWrap');
+  const parentSel = document.getElementById('agentParentId');
   if (wrap) wrap.classList.toggle('hidden', role !== 'secondary');
+  if (role !== 'secondary' && parentSel) parentSel.value = '';
   document.querySelectorAll('input[name="agentRoleRadio"]').forEach((r) => {
     r.checked = r.value === role;
     r.closest('.ag-role-pill')?.classList.toggle('is-selected', r.checked);
@@ -1437,9 +1439,12 @@ async function saveAgentForm(e) {
     username: String(document.getElementById('agentUsername')?.value || '').trim(),
     active: !!document.getElementById('agentActive')?.checked,
     delegateRole: String(document.getElementById('agentRole')?.value || 'primary'),
-    parentAgentId: String(document.getElementById('agentParentId')?.value || '').trim() || null,
+    parentAgentId: null,
     treeSeqs,
   };
+  if (body.delegateRole === 'secondary') {
+    body.parentAgentId = String(document.getElementById('agentParentId')?.value || '').trim() || null;
+  }
   const pass = String(document.getElementById('agentPassword')?.value || '');
   if (pass) body.password = pass;
 

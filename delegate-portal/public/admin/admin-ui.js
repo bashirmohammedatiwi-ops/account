@@ -278,9 +278,15 @@ function initAdminUi() {
 
 function dashGreeting() {
   const h = new Date().getHours();
-  if (h < 12) return 'صباح الخير';
-  if (h < 17) return 'مساء الخير';
-  return 'مساء النور';
+  let part = 'مساء الخير';
+  if (h < 12) part = 'صباح الخير';
+  else if (h < 17) part = 'مساء الخير';
+  const dateStr = new Date().toLocaleDateString('ar-IQ', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long'
+  });
+  return `${part} — ${dateStr}`;
 }
 
 window.switchAdminPage = switchAdminPage;

@@ -19,7 +19,7 @@ function normalizeRole(role) {
 function mapAgentProfile(row) {
   if (!row) return null;
   const role = normalizeRole(row.delegate_role);
-  const parentId = row.parent_agent_id ? Number(row.parent_agent_id) : null;
+  const parentId = role === 'secondary' && row.parent_agent_id ? Number(row.parent_agent_id) : null;
   let parentName = '';
   if (parentId) {
     const parent = db.prepare('SELECT name FROM agents WHERE id = ?').get(parentId);
@@ -116,17 +116,24 @@ function validateAgentHierarchyInput({ delegateRole, parentAgentId, agentId } = 
 
 function saveAgentHierarchy(agentId, { delegateRole, parentAgentId } = {}) {
   const current = db.prepare('SELECT delegate_role, parent_agent_id FROM agents WHERE id = ?').get(Number(agentId));
-  const parsed = validateAgentHierarchyInput({
-    delegateRole: delegateRole ?? current?.delegate_role,
-    parentAgentId: parentAgentId !== undefined ? parentAgentId : current?.parent_agent_id,
-    agentId
-  });
-  if (parsed.delegateRole === 'primary') {
+  const role = normalizeRole(delegateRole ?? current?.delegate_role);
+  const effectiveParentId = role === 'primary'
+    ? null
+    : (parentAgentId !== undefined ? parentAgentId : current?.parent_agent_id);
+
+  if (role === 'secondary') {
     const hasSecondaries = db.prepare('SELECT COUNT(*) AS c FROM agents WHERE parent_agent_id = ?').get(agentId)?.c;
-    if (hasSecondaries && parentAgentId) {
-      throw new Error('مندوب رئيسي لديه مندوبون ثانويون — لا يمكن تحويله لمندوب ثانوي');
+    if (hasSecondaries) {
+      throw new Error('مندوب رئيسي لديه مندوبون ثانويون — انقلهم أو احذفهم قبل تحويله لمندوب ثانوي');
     }
   }
+
+  const parsed = validateAgentHierarchyInput({
+    delegateRole: role,
+    parentAgentId: effectiveParentId,
+    agentId
+  });
+
   db.prepare(`
     UPDATE agents SET parent_agent_id = ?, delegate_role = ? WHERE id = ?
   `).run(parsed.parentAgentId, parsed.delegateRole, agentId);

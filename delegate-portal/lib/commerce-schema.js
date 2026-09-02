@@ -456,6 +456,10 @@ function migrateAgentHierarchy(db) {
     db.exec("ALTER TABLE agents ADD COLUMN delegate_role TEXT NOT NULL DEFAULT 'primary'");
   }
   db.exec('CREATE INDEX IF NOT EXISTS idx_agents_parent ON agents(parent_agent_id)');
+  db.exec(`
+    UPDATE agents SET parent_agent_id = NULL
+    WHERE COALESCE(delegate_role, 'primary') = 'primary' AND parent_agent_id IS NOT NULL
+  `);
 }
 
 module.exports = {
