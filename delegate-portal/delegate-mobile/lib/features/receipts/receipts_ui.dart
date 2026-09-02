@@ -892,6 +892,56 @@ class _StatBox extends StatelessWidget {
   }
 }
 
+class AgentRoleBanner extends StatelessWidget {
+  const AgentRoleBanner({super.key, required this.agent});
+
+  final Agent agent;
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = agent.isSecondary;
+    final roleLabel = agent.delegateRoleLabel;
+    String message;
+    Color pillColor;
+    Color pillBg;
+
+    if (secondary) {
+      pillColor = AppColors.warning;
+      pillBg = AppColors.warning.withValues(alpha: 0.12);
+      final parent = agent.parentAgentName.trim();
+      message = parent.isNotEmpty ? 'وصل قبض فقط — يتبع $parent' : 'وصل قبض فقط — يُسلّم المبلغ للرئيسي';
+    } else if (agent.secondaryCount > 0) {
+      pillColor = AppColors.success;
+      pillBg = AppColors.success.withValues(alpha: 0.12);
+      message = '${fmtNumAlways(agent.secondaryCount)} مندوب ثانوي · تستلم وصولاتهم وتُصدر سند قبض';
+    } else {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(color: pillBg, borderRadius: BorderRadius.circular(999)),
+            child: Text(roleLabel, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: pillColor)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(message, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted, height: 1.35)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class ReceiptsFlowBanner extends StatelessWidget {
   const ReceiptsFlowBanner({super.key, required this.step});
 
@@ -1103,6 +1153,22 @@ class DeliveryReceiptCard extends StatelessWidget {
                         const _MetaChip(icon: Icons.print_rounded, label: 'طُبع'),
                     ],
                   ),
+                  if ((item.notes ?? '').trim().isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceAlt,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.borderLight),
+                      ),
+                      child: Text(
+                        item.notes!.trim(),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.navy, height: 1.4),
+                      ),
+                    ),
+                  ],
                   if ((showPrint && onReprint != null)
                       || (item.canCreateReceipt && onCreateReceipt != null)
                       || (item.canMarkHandover && onMarkHandover != null)) ...[

@@ -46,7 +46,14 @@ class HomeScreen extends ConsumerWidget {
       },
       orElse: () => null,
     );
-    final receiptBadge = isSecondary ? pendingDeliveries : pendingReceipts;
+    final receiptBadge = isSecondary
+        ? pendingDeliveries
+        : () {
+            final pendingR = int.tryParse(pendingReceipts ?? '') ?? 0;
+            final pendingD = int.tryParse(pendingDeliveries ?? '') ?? 0;
+            final total = pendingR + pendingD;
+            return total > 0 ? '$total' : null;
+          }();
     final pendingCustomers = customersAsync.maybeWhen(
       data: (list) => '${list.where((r) => r.status == 'pending' || r.status == 'reviewed').length}',
       orElse: () => null,

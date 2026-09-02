@@ -71,21 +71,32 @@ function renderAgentStats(agents) {
   if (!el) return;
   const s = agentStats(agents);
   const items = [
-    { key: 'all', dot: 'ink', label: 'الإجمالي', value: s.total, clickable: true },
-    { key: 'primary', dot: 'navy', label: 'رئيسيون', value: s.primary, clickable: true },
-    { key: 'secondary', dot: 'slate', label: 'ثانويون', value: s.secondary, clickable: true },
-    { key: 'active', dot: 'teal', label: 'نشط', value: s.active, clickable: true },
-    { key: 'inactive', dot: 'red', label: 'موقوف', value: s.inactive, clickable: true },
-    { key: 'trees', dot: 'gold', label: 'شجرات مصرّحة', value: s.trees, clickable: false }
+    { key: 'all', dot: 'ink', icon: 'users', label: 'الإجمالي', value: s.total, clickable: true },
+    { key: 'primary', dot: 'navy', icon: 'star', label: 'رئيسيون', value: s.primary, clickable: true },
+    { key: 'secondary', dot: 'slate', icon: 'user', label: 'ثانويون', value: s.secondary, clickable: true },
+    { key: 'active', dot: 'teal', icon: 'check', label: 'نشط', value: s.active, clickable: true },
+    { key: 'inactive', dot: 'red', icon: 'pause', label: 'موقوف', value: s.inactive, clickable: true },
+    { key: 'trees', dot: 'gold', icon: 'tree', label: 'شجرات مصرّحة', value: s.trees, clickable: false }
   ];
+  const icons = {
+    users: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+    star: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.9 6.26L22 9.27l-5 4.87L18.2 22 12 18.56 5.8 22 7 14.14l-5-4.87 7.1-1.01z"/></svg>',
+    user: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+    check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>',
+    tree: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 12l9 5 9-5"/></svg>'
+  };
   el.innerHTML = items.map((item) => {
     const active = item.clickable && agentPage.filter === item.key;
     const tag = item.clickable ? 'button' : 'div';
     const attrs = item.clickable
       ? `type="button" class="ag-kpi${active ? ' is-active' : ''}" data-ag-stat="${item.key}"`
-      : `class="ag-kpi" aria-hidden="true"`;
+      : `class="ag-kpi ag-kpi-static" aria-hidden="true"`;
     return `<${tag} ${attrs}>
-      <i class="ag-kpi-dot ${item.dot}"></i>
+      <span class="ag-kpi-top">
+        <i class="ag-kpi-dot ${item.dot}"></i>
+        <span class="ag-kpi-icon">${icons[item.icon] || ''}</span>
+      </span>
       <span class="ag-kpi-val num-en" dir="ltr">${fmtNumAlways(item.value)}</span>
       <span class="ag-kpi-lbl">${esc(item.label)}</span>
     </${tag}>`;
@@ -113,14 +124,41 @@ function renderAgentResultsBar() {
   const filtered = filteredAgents();
   const total = agentPage.agents.length;
   const filterLabel = AG_FILTER_LABELS[agentPage.filter] || agentPage.filter;
-  const viewLabel = agentPage.view === 'teams' ? 'فرق' : agentPage.view === 'table' ? 'جدول' : 'بطاقات';
+  const viewIcons = {
+    teams: 'فرق',
+    table: 'جدول',
+    cards: 'بطاقات'
+  };
+  const hasFilters = agentPage.filter !== 'all' || agentPage.search.trim();
   el.innerHTML = `
     <div class="ag-results-main">
-      <span class="ag-results-count">عرض <strong class="num-en" dir="ltr">${fmtNumAlways(filtered.length)}</strong> من <strong class="num-en" dir="ltr">${fmtNumAlways(total)}</strong> مندوب</span>
-      ${agentPage.filter !== 'all' ? `<span class="ag-results-filter">تصفية: ${esc(filterLabel)}</span>` : ''}
-      ${agentPage.search.trim() ? `<span class="ag-results-filter">بحث: «${esc(agentPage.search.trim())}»</span>` : ''}
+      <span class="ag-results-count">عرض <strong class="num-en" dir="ltr">${fmtNumAlways(filtered.length)}</strong> من <strong class="num-en" dir="ltr">${fmtNumAlways(total)}</strong></span>
+      ${agentPage.filter !== 'all' ? `<span class="ag-results-filter">${esc(filterLabel)}</span>` : ''}
+      ${agentPage.search.trim() ? `<span class="ag-results-filter">«${esc(agentPage.search.trim())}»</span>` : ''}
+      ${hasFilters ? `<button type="button" class="ag-results-clear" id="agentClearFilters">مسح التصفية</button>` : ''}
     </div>
-    <span class="ag-results-view">عرض: ${esc(viewLabel)}</span>`;
+    <span class="ag-results-view"><i class="ag-results-view-dot"></i>${esc(viewIcons[agentPage.view] || agentPage.view)}</span>`;
+  document.getElementById('agentClearFilters')?.addEventListener('click', () => {
+    agentPage.filter = 'all';
+    agentPage.search = '';
+    const searchEl = document.getElementById('agentSearch');
+    if (searchEl) searchEl.value = '';
+    syncAgentFilterChips();
+    renderAgentStats(agentPage.agents);
+    renderAgentsWorkspace();
+  });
+}
+
+function agRowActions(id) {
+  return `
+    <div class="ag-table-actions">
+      <button type="button" class="ag-icon-btn" data-ag-edit="${id}" title="تعديل">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+      </button>
+      <button type="button" class="ag-icon-btn ag-icon-btn-danger" data-ag-del="${id}" title="حذف">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>
+      </button>
+    </div>`;
 }
 
 function syncAgentFilterChips() {
@@ -168,11 +206,7 @@ function agPermChips(a) {
 }
 
 function agCardActions(id) {
-  return `
-    <div class="ag-card-actions">
-      <button type="button" class="btn btn-soft btn-sm" data-ag-edit="${id}">تعديل</button>
-      <button type="button" class="btn btn-ghost btn-sm ag-btn-del" data-ag-del="${id}">حذف</button>
-    </div>`;
+  return `<div class="ag-card-actions">${agRowActions(id)}</div>`;
 }
 
 function renderAgentCard(a, { compact = false } = {}) {
@@ -229,10 +263,7 @@ function renderTeamMemberRow(m) {
       <td dir="ltr">${m.phone ? esc(m.phone) : '<span class="muted">—</span>'}</td>
       <td>${agStatusBadge(m)}</td>
       <td class="num-en" dir="ltr">${fmtNumAlways(m.treeSeqs?.length || 0)}</td>
-      <td class="ag-table-actions">
-        <button type="button" class="btn btn-soft btn-sm" data-ag-edit="${m.id}">تعديل</button>
-        <button type="button" class="btn btn-ghost btn-sm ag-btn-del" data-ag-del="${m.id}">حذف</button>
-      </td>
+      <td class="ag-table-actions">${agRowActions(m.id)}</td>
     </tr>`;
 }
 
@@ -343,12 +374,9 @@ function renderAgentsTableView(agents) {
         <td>${agRoleBadge(a)}</td>
         <td>${agStatusBadge(a)}</td>
         <td>${a.parentAgentName ? esc(a.parentAgentName) : '<span class="muted">—</span>'}</td>
-        <td class="num-en" dir="ltr">${fmtNumAlways(a.treeSeqs?.length || 0)}</td>
+        <td class="num-en ag-tree-badge" dir="ltr">${fmtNumAlways(a.treeSeqs?.length || 0)}</td>
         <td>${agPermChips(a)}</td>
-        <td class="ag-table-actions">
-          <button type="button" class="btn btn-soft btn-sm" data-ag-edit="${a.id}">تعديل</button>
-          <button type="button" class="btn btn-ghost btn-sm ag-btn-del" data-ag-del="${a.id}">حذف</button>
-        </td>
+        <td class="ag-table-actions">${agRowActions(a.id)}</td>
       </tr>`;
   }).join('');
 

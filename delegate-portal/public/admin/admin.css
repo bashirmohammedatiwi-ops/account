@@ -9003,7 +9003,7 @@ input[type="date"].num-en,
 
 .ag-empty-hero {
   padding: 56px 24px;
-  background: linear-gradient(180deg, #fff, #fdf2f8);
+  background: linear-gradient(180deg, #fff, #f8fafc);
 }
 
 .ag-empty-icon {
@@ -9013,8 +9013,8 @@ input[type="date"].num-en,
   border-radius: 16px;
   display: grid;
   place-items: center;
-  background: #fce7f3;
-  color: #be185d;
+  background: #e8eef5;
+  color: #1a3358;
 }
 
 .ag-empty-icon svg {
@@ -9138,8 +9138,8 @@ input[type="date"].num-en,
 
 .ag-role-pill.is-selected .ag-role-pill-body,
 .ag-role-pill:has(input:checked) .ag-role-pill-body {
-  border-color: #db2777;
-  background: #fdf2f8;
+  border-color: #1a3358;
+  background: #e8eef5;
 }
 
 .ag-modal-col-trees {

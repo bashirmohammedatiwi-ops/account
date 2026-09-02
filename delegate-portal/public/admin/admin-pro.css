@@ -160,9 +160,17 @@ body {
 .crumb-current { color: #1e3a5f; }
 
 /* ── Main layout ── */
+.workspace {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+
 .main {
   padding: 20px 28px 36px;
-  max-width: 1380px;
+  max-width: none;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .page-viewport {

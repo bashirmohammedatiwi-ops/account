@@ -392,6 +392,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
       subtitle: isSecondary ? 'إصدار وصل قبض للزبون — يراجعه المندوب الرئيسي' : 'وصل قبض للزبون — سند قبض للإدارة',
       showBack: true,
       onBack: () => context.go('/home'),
+      unifiedScroll: false,
       child: ColoredBox(
         color: Colors.white,
         child: Stack(
@@ -405,11 +406,17 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
               RefreshIndicator(
                 onRefresh: _refreshAll,
                 child: isWide
-                    ? ((isSecondary || _tabs.index == 0)
-                        ? _deliveryTabBodyWide(deliveries)
-                        : _receiptTabBodyWide(deliveries, receipts))
+                    ? _receiptsWideBody(
+                        agent: agent,
+                        deliveries: deliveries,
+                        receipts: receipts,
+                        isSecondary: isSecondary,
+                        pendingDr: pendingDr,
+                        pendingR: pendingR,
+                      )
                     : _receiptsPhoneScroll(
                         context: context,
+                        agent: agent,
                         deliveries: deliveries,
                         receipts: receipts,
                         isSecondary: isSecondary,
@@ -425,8 +432,55 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
     );
   }
 
+  Widget _receiptsWideBody({
+    required Agent? agent,
+    required List<DeliveryReceipt> deliveries,
+    required List<Receipt> receipts,
+    required bool isSecondary,
+    required int pendingDr,
+    required int pendingR,
+  }) {
+    final onDeliveryTab = isSecondary || _tabs.index == 0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(EdSpacing.page, EdSpacing.md, EdSpacing.page, 0),
+          child: ReceiptsStatsHeader(
+            deliveryCount: deliveries.length,
+            pendingDeliveryReceipt: pendingDr,
+            receiptCount: receipts.length,
+            pendingReceipts: pendingR,
+            large: true,
+          ),
+        ),
+        if (agent != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(EdSpacing.page, 10, EdSpacing.page, 0),
+            child: AgentRoleBanner(agent: agent),
+          ),
+        if (!isSecondary) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(EdSpacing.page, 10, EdSpacing.page, 0),
+            child: ReceiptsFlowBanner(step: _tabs.index),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(EdSpacing.page, 8, EdSpacing.page, 0),
+            child: _pillTabBar(),
+          ),
+        ],
+        Expanded(
+          child: onDeliveryTab
+              ? _deliveryTabBodyWide(deliveries)
+              : _receiptTabBodyWide(deliveries, receipts),
+        ),
+      ],
+    );
+  }
+
   Widget _receiptsPhoneScroll({
     required BuildContext context,
+    required Agent? agent,
     required List<DeliveryReceipt> deliveries,
     required List<Receipt> receipts,
     required bool isSecondary,
@@ -437,7 +491,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
   }) {
     final onDeliveryTab = isSecondary || tabIndex == 0;
     return CustomScrollView(
-      primary: false,
+      primary: true,
       physics: edPageScrollPhysics,
       slivers: [
         SliverPadding(
@@ -452,6 +506,11 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
             ),
           ),
         ),
+        if (agent != null)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(EdSpacing.page, 10, EdSpacing.page, 0),
+            sliver: SliverToBoxAdapter(child: AgentRoleBanner(agent: agent)),
+          ),
         const SliverToBoxAdapter(child: SizedBox(height: 10)),
         if (!isSecondary) ...[
           SliverPadding(
@@ -954,6 +1013,22 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
             maxLines: 2,
             prefixIcon: Icons.notes_outlined,
           ),
+          if (!kIsWeb) ...[
+            const SizedBox(height: EdSpacing.md),
+            if (_printerStatus != null) ...[
+              PrinterStatusBanner(
+                status: _printerStatus!,
+                onConfigure: _openPrinterSettings,
+                onRefresh: _refreshPrinterStatus,
+              ),
+              const SizedBox(height: EdSpacing.sm),
+            ],
+            OutlinedButton.icon(
+              onPressed: _openPrinterSettings,
+              icon: const Icon(Icons.settings_bluetooth_rounded, size: 18),
+              label: const Text('إعدادات الطابعة (لوصول القبض)'),
+            ),
+          ],
           const SizedBox(height: EdSpacing.xl),
           EdSubmitButton(
             label: _submitting ? 'جاري الإرسال...' : 'إرسال للوحة التحكم',
