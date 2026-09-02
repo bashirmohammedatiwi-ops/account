@@ -9,9 +9,9 @@ import '../../core/layout/breakpoints.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/debounce.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/widgets/ed_page_scroll.dart';
 import '../../core/widgets/adaptive_shell.dart';
 import '../../core/widgets/customer_picker.dart';
-import '../../core/widgets/phone_ui.dart';
 import '../../models/models.dart';
 import 'commerce_draft.dart';
 import 'commerce_screens.dart';
@@ -318,123 +318,243 @@ class _ShopCatalogScreenState extends ConsumerState<ShopCatalogScreen> {
       onBack: () => context.go('/shop'),
       child: ColoredBox(
         color: EdCommerceTheme.pageBg,
-        child: Column(
+        child: layout.isTablet
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  EdShopCustomerBar(
+                    customer: customer,
+                    branchLabel: branchName,
+                    onPick: _pickCustomer,
+                  ),
+                  EdShopBranchStrip(
+                    branchName: branchName,
+                    onChangeBranch: () => context.go('/shop'),
+                  ),
+                  sectionsAsync.when(
+                    loading: () => const Padding(padding: EdgeInsets.all(12), child: LinearProgressIndicator(color: EdCommerceTheme.accent)),
+                    error: (e, _) => Padding(padding: const EdgeInsets.all(12), child: Text('$e', style: const TextStyle(color: AppColors.danger))),
+                    data: (sections) => EdShopSectionTabs(
+                      sections: sections,
+                      selectedId: _sectionId!,
+                      onSelect: (id) => _selectSection(id, sections),
+                    ),
+                  ),
+                  EdShopToolbar(
+                    searchHint: 'بحث بالاسم أو الباركود...',
+                    onSearchChanged: (v) {
+                      _filter = v.trim();
+                      _debouncer.run(() {
+                        if (mounted) setState(() {
+                          _filterApplied = _filter;
+                          _selectedProductId = null;
+                        });
+                      });
+                    },
+                    barcodeController: _barcodeCtrl,
+                    onBarcodeSubmit: () => productsAsync.whenData(_lookupBarcode),
+                    onBarcodeScan: () => productsAsync.whenData(_lookupBarcode),
+                  ),
+                  Expanded(child: _buildTabletCatalog(productsAsync, draft, sectionName, layout)),
+                  productsAsync.maybeWhen(
+                    data: (products) => EdShopOrderDock(
+                      lineCount: lineCount,
+                      totalLabel: fmtMoney(_total(products, draft)),
+                      onPressed: () => _openInvoiceSheet(products),
+                    ),
+                    orElse: () => const SizedBox.shrink(),
+                  ),
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _buildPhoneCatalogScroll(
+                      context: context,
+                      customer: customer,
+                      branchName: branchName,
+                      sectionsAsync: sectionsAsync,
+                      productsAsync: productsAsync,
+                      draft: draft,
+                      sectionName: sectionName,
+                    ),
+                  ),
+                  productsAsync.maybeWhen(
+                    data: (products) => EdShopOrderDock(
+                      lineCount: lineCount,
+                      totalLabel: fmtMoney(_total(products, draft)),
+                      onPressed: () => _openInvoiceSheet(products),
+                    ),
+                    orElse: () => const SizedBox.shrink(),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _buildTabletCatalog(
+    AsyncValue<List<Product>> productsAsync,
+    Map<int, DraftLine> draft,
+    String sectionName,
+    EdLayoutData layout,
+  ) {
+    return productsAsync.when(
+      loading: () => const LoadingView(message: 'جاري تحميل المنتجات...'),
+      error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(catalogProductsProvider(_sectionId!))),
+      data: (products) {
+        final filtered = _filterProducts(products);
+        if (filtered.isEmpty) {
+          return const EmptyState(message: 'لا توجد منتجات في هذا التصنيف', icon: Icons.inventory_2_outlined);
+        }
+
+        final selected = _selectedProductId != null
+            ? filtered.cast<Product?>().firstWhere((p) => p!.id == _selectedProductId, orElse: () => null)
+            : null;
+        final selectedLine = selected != null ? draft[selected.id] ?? emptyDraftLine() : emptyDraftLine();
+
+        return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            EdShopCustomerBar(
-              customer: customer,
-              branchLabel: branchName,
-              onPick: _pickCustomer,
-            ),
-            EdShopBranchStrip(
-              branchName: branchName,
-              onChangeBranch: () => context.go('/shop'),
-            ),
-            sectionsAsync.when(
-              loading: () => const Padding(padding: EdgeInsets.all(12), child: LinearProgressIndicator(color: EdCommerceTheme.accent)),
-              error: (e, _) => Padding(padding: const EdgeInsets.all(12), child: Text('$e', style: const TextStyle(color: AppColors.danger))),
-              data: (sections) => EdShopSectionTabs(
-                sections: sections,
-                selectedId: _sectionId!,
-                onSelect: (id) => _selectSection(id, sections),
-              ),
-            ),
-            EdShopToolbar(
-              searchHint: 'بحث بالاسم أو الباركود...',
-              onSearchChanged: (v) {
-                _filter = v.trim();
-                _debouncer.run(() {
-                  if (mounted) setState(() {
-                    _filterApplied = _filter;
-                    _selectedProductId = null;
-                  });
-                });
-              },
-              barcodeController: _barcodeCtrl,
-              onBarcodeSubmit: () => productsAsync.whenData(_lookupBarcode),
-              onBarcodeScan: () => productsAsync.whenData(_lookupBarcode),
-            ),
             Expanded(
-              child: productsAsync.when(
-                loading: () => const LoadingView(message: 'جاري تحميل المنتجات...'),
-                error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(catalogProductsProvider(_sectionId!))),
-                data: (products) {
-                  final filtered = _filterProducts(products);
-                  if (filtered.isEmpty) {
-                    return const EmptyState(message: 'لا توجد منتجات في هذا التصنيف', icon: Icons.inventory_2_outlined);
-                  }
-
-                  final selected = _selectedProductId != null
-                      ? filtered.cast<Product?>().firstWhere((p) => p!.id == _selectedProductId, orElse: () => null)
-                      : null;
-                  final selectedLine = selected != null ? draft[selected.id] ?? emptyDraftLine() : emptyDraftLine();
-
-                  if (layout.isTablet) {
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
-                          flex: 55,
-                          child: _ProductGrid(
-                            products: filtered,
-                            draft: draft,
-                            selectedId: _selectedProductId,
-                            crossAxisCount: layout.isDesktop ? 4 : 3,
-                            onTap: (p) => _selectProduct(p.id, filtered),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 45,
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 8, right: 12, bottom: 8),
-                            child: selected != null
-                                ? EdShopProductDetailPanel(
-                                    product: selected,
-                                    sectionName: sectionName,
-                                    quant: selectedLine.quant,
-                                    bonus: selectedLine.bonus,
-                                    tester: selectedLine.tester,
-                                    onDecQuant: () => _adjust(selected, 'quant', -1),
-                                    onIncQuant: () => _adjust(selected, 'quant', 1),
-                                    onDecBonus: () => _adjust(selected, 'bonus', -1),
-                                    onIncBonus: () => _adjust(selected, 'bonus', 1),
-                                    onDecTester: () => _adjust(selected, 'tester', -1),
-                                    onIncTester: () => _adjust(selected, 'tester', 1),
-                                    onSetQuant: (v) => _setField(selected, 'quant', v),
-                                    onSetBonus: (v) => _setField(selected, 'bonus', v),
-                                    onSetTester: (v) => _setField(selected, 'tester', v),
-                                  )
-                                : const EdShopProductDetailPlaceholder(),
-                          ),
-                        ),
-                      ],
-                    );
-                  }
-
-                  return _ProductGrid(
-                    products: filtered,
-                    draft: draft,
-                    selectedId: _selectedProductId,
-                    crossAxisCount: 2,
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                    onTap: (p) => _selectProduct(p.id, filtered),
-                  );
-                },
+              flex: 55,
+              child: _ProductGrid(
+                products: filtered,
+                draft: draft,
+                selectedId: _selectedProductId,
+                crossAxisCount: layout.isDesktop ? 4 : 3,
+                onTap: (p) => _selectProduct(p.id, filtered),
               ),
             ),
-            productsAsync.maybeWhen(
-              data: (products) => EdShopOrderDock(
-                lineCount: lineCount,
-                totalLabel: fmtMoney(_total(products, draft)),
-                onPressed: () => _openInvoiceSheet(products),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 45,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 8, right: 12, bottom: 8),
+                child: selected != null
+                    ? EdShopProductDetailPanel(
+                        product: selected,
+                        sectionName: sectionName,
+                        quant: selectedLine.quant,
+                        bonus: selectedLine.bonus,
+                        tester: selectedLine.tester,
+                        onDecQuant: () => _adjust(selected, 'quant', -1),
+                        onIncQuant: () => _adjust(selected, 'quant', 1),
+                        onDecBonus: () => _adjust(selected, 'bonus', -1),
+                        onIncBonus: () => _adjust(selected, 'bonus', 1),
+                        onDecTester: () => _adjust(selected, 'tester', -1),
+                        onIncTester: () => _adjust(selected, 'tester', 1),
+                        onSetQuant: (v) => _setField(selected, 'quant', v),
+                        onSetBonus: (v) => _setField(selected, 'bonus', v),
+                        onSetTester: (v) => _setField(selected, 'tester', v),
+                      )
+                    : const EdShopProductDetailPlaceholder(),
               ),
-              orElse: () => const SizedBox.shrink(),
             ),
-            if (layout.isPhone) const SizedBox(height: kPhoneBottomInset - 80),
           ],
+        );
+      },
+    );
+  }
+
+  Widget _buildPhoneCatalogScroll({
+    required BuildContext context,
+    required BranchAccount? customer,
+    required String branchName,
+    required AsyncValue<List<CatalogSection>> sectionsAsync,
+    required AsyncValue<List<Product>> productsAsync,
+    required Map<int, DraftLine> draft,
+    required String sectionName,
+  }) {
+    return CustomScrollView(
+      primary: false,
+      physics: edPageScrollPhysics,
+      slivers: [
+        SliverToBoxAdapter(
+          child: EdShopCustomerBar(
+            customer: customer,
+            branchLabel: branchName,
+            onPick: _pickCustomer,
+          ),
         ),
-      ),
+        SliverToBoxAdapter(
+          child: EdShopBranchStrip(
+            branchName: branchName,
+            onChangeBranch: () => context.go('/shop'),
+          ),
+        ),
+        sectionsAsync.when(
+          loading: () => const SliverToBoxAdapter(
+            child: Padding(padding: EdgeInsets.all(12), child: LinearProgressIndicator(color: EdCommerceTheme.accent)),
+          ),
+          error: (e, _) => SliverToBoxAdapter(
+            child: Padding(padding: const EdgeInsets.all(12), child: Text('$e', style: const TextStyle(color: AppColors.danger))),
+          ),
+          data: (sections) => SliverToBoxAdapter(
+            child: EdShopSectionTabs(
+              sections: sections,
+              selectedId: _sectionId!,
+              onSelect: (id) => _selectSection(id, sections),
+            ),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: EdShopToolbar(
+            searchHint: 'بحث بالاسم أو الباركود...',
+            onSearchChanged: (v) {
+              _filter = v.trim();
+              _debouncer.run(() {
+                if (mounted) setState(() {
+                  _filterApplied = _filter;
+                  _selectedProductId = null;
+                });
+              });
+            },
+            barcodeController: _barcodeCtrl,
+            onBarcodeSubmit: () => productsAsync.whenData(_lookupBarcode),
+            onBarcodeScan: () => productsAsync.whenData(_lookupBarcode),
+          ),
+        ),
+        ...productsAsync.when(
+          loading: () => [const SliverFillRemaining(child: LoadingView(message: 'جاري تحميل المنتجات...'))],
+          error: (e, _) => [
+            SliverFillRemaining(child: ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(catalogProductsProvider(_sectionId!)))),
+          ],
+          data: (products) {
+            final filtered = _filterProducts(products);
+            if (filtered.isEmpty) {
+              return [const SliverFillRemaining(child: EmptyState(message: 'لا توجد منتجات في هذا التصنيف', icon: Icons.inventory_2_outlined))];
+            }
+            return [
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(12, 8, 12, EdPageInsets.bottom(context, extra: 8)),
+                sliver: SliverGrid(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 0.78,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, i) {
+                      final p = filtered[i];
+                      final line = draft[p.id] ?? emptyDraftLine();
+                      return EdShopProductTile(
+                        product: p,
+                        selected: _selectedProductId == p.id,
+                        inDraft: draftLineActive(line),
+                        onTap: () => _selectProduct(p.id, filtered),
+                      );
+                    },
+                    childCount: filtered.length,
+                  ),
+                ),
+              ),
+            ];
+          },
+        ),
+      ],
     );
   }
 }

@@ -4,6 +4,11 @@ const {
   buildReceiptJournalLines,
   validatePostingAccounts
 } = require('./receipt-posting');
+const {
+  assertCanCreateReceipt,
+  canAgentViewDeliveryReceipt,
+  isPrimary
+} = require('./agent-hierarchy');
 
 const STATUS_LABELS = {
   pending: 'بانتظار المراجعة',
@@ -209,7 +214,9 @@ function listReceipts({ agentId, status, fromDate, toDate, q, limit = 200 } = {}
     where.push('r.agent_id = ?');
     params.push(agentId);
   }
-  if (status && AGENT_VISIBLE.has(status)) {
+  if (status === 'unposted') {
+    where.push("r.status NOT IN ('posted', 'rejected')");
+  } else if (status && AGENT_VISIBLE.has(status)) {
     where.push('r.status = ?');
     params.push(status);
   }
@@ -284,6 +291,7 @@ function money(v) {
 }
 
 function createReceipt(agentId, data = {}) {
+  assertCanCreateReceipt(agentId);
   const customerAccSeq = String(data.customerAccSeq || '').trim();
   if (!customerAccSeq) throw new Error('اختر زبوناً من الشجرة');
   const customer = findAccount(customerAccSeq);
@@ -298,8 +306,12 @@ function createReceipt(agentId, data = {}) {
   const deliveryReceiptId = Number(data.deliveryReceiptId || 0);
 
   if (deliveryReceiptId > 0) {
-    const dr = db.prepare('SELECT * FROM delivery_receipts WHERE id = ? AND agent_id = ?').get(deliveryReceiptId, agentId);
+    const dr = db.prepare('SELECT * FROM delivery_receipts WHERE id = ?').get(deliveryReceiptId);
     if (!dr) throw new Error('وصل الاستلام غير موجود');
+    if (!canAgentViewDeliveryReceipt(agentId, dr.agent_id)) {
+      throw new Error('لا تملك صلاحية هذا الوصل');
+    }
+    if (!isPrimary(agentId)) throw new Error('فقط المندوب الرئيسي يستطيع إنشاء سند قبض');
     if (dr.receipt_id) throw new Error('تم إنشاء سند قبض لهذا الوصل مسبقاً');
     if (String(dr.customer_acc_seq) !== String(customer.seq)) {
       throw new Error('الزبون لا يطابق وصل الاستلام');
@@ -418,6 +430,15 @@ function setReceiptStatus(id, status, { actorType = 'admin', actorId = 'admin', 
 function markReceiptPosted(id, { journalNum, receiptNum, error = '', lines = [], postingDate } = {}) {
   const row = db.prepare('SELECT * FROM receipts WHERE id = ?').get(id);
   if (!row) return null;
+  if (!error && row.status === 'posted') {
+    if (journalNum && row.edari_journal_num && String(row.edari_journal_num) !== String(journalNum)) {
+      throw new Error('السند مُرحَّل مسبقاً بسند قيد مختلف');
+    }
+    return loadReceipt(id);
+  }
+  if (!error && row.status !== 'reviewed' && row.status !== 'posted') {
+    throw new Error('يجب مراجعة السند وحفظه قبل الترحيل');
+  }
   if (error) {
     db.prepare(`
       UPDATE receipts SET posted_error = ?, updated_at = datetime('now') WHERE id = ?

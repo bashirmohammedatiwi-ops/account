@@ -159,8 +159,7 @@ function migrateCommerceSchema(db) {
   migrateCustomerRequests(db);
   migratePromotionalVisits(db);
   migrateDeliveryReceipts(db);
-
-  const branchCount = db.prepare('SELECT COUNT(*) AS c FROM catalog_branches').get().c;
+  migrateAgentHierarchy(db); = db.prepare('SELECT COUNT(*) AS c FROM catalog_branches').get().c;
   if (!branchCount) {
     db.prepare(`
       INSERT INTO catalog_branches (code, name, sort_order, is_active)
@@ -437,6 +436,33 @@ function migrateDeliveryReceipts(db) {
   } catch {
     /* column exists */
   }
+  if (!columnExists(db, 'delivery_receipts', 'handover_status')) {
+    db.exec("ALTER TABLE delivery_receipts ADD COLUMN handover_status TEXT NOT NULL DEFAULT 'pending'");
+  }
+  if (!columnExists(db, 'delivery_receipts', 'handover_at')) {
+    db.exec('ALTER TABLE delivery_receipts ADD COLUMN handover_at TEXT');
+  }
+  if (!columnExists(db, 'delivery_receipts', 'handover_by_agent_id')) {
+    db.exec('ALTER TABLE delivery_receipts ADD COLUMN handover_by_agent_id INTEGER');
+  }
 }
 
-module.exports = { migrateCommerceSchema, migrateShorjaOrderFields, migrateReceipts, migrateCustomerRequests, migratePromotionalVisits, migrateDeliveryReceipts };
+function migrateAgentHierarchy(db) {
+  if (!columnExists(db, 'agents', 'parent_agent_id')) {
+    db.exec('ALTER TABLE agents ADD COLUMN parent_agent_id INTEGER REFERENCES agents(id)');
+  }
+  if (!columnExists(db, 'agents', 'delegate_role')) {
+    db.exec("ALTER TABLE agents ADD COLUMN delegate_role TEXT NOT NULL DEFAULT 'primary'");
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_agents_parent ON agents(parent_agent_id)');
+}
+
+module.exports = {
+  migrateCommerceSchema,
+  migrateShorjaOrderFields,
+  migrateReceipts,
+  migrateCustomerRequests,
+  migratePromotionalVisits,
+  migrateDeliveryReceipts,
+  migrateAgentHierarchy
+};

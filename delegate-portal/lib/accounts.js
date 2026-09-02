@@ -65,9 +65,19 @@ function getDescendantSeqs(rootSeq) {
 }
 
 function agentAllowedSeqs(agentId) {
-  const roots = db.prepare(
-    'SELECT account_seq FROM agent_trees WHERE agent_id = ?'
-  ).all(agentId).map((r) => r.account_seq);
+  const { getPrimaryAgentId, normalizeRole } = require('./agent-hierarchy');
+  const agent = db.prepare('SELECT delegate_role, parent_agent_id FROM agents WHERE id = ?').get(Number(agentId));
+  const role = normalizeRole(agent?.delegate_role);
+  const treeAgentIds = [Number(agentId)];
+  if (role === 'secondary' && agent?.parent_agent_id) {
+    treeAgentIds.push(Number(agent.parent_agent_id));
+  }
+
+  const roots = [];
+  for (const tid of treeAgentIds) {
+    const rows = db.prepare('SELECT account_seq FROM agent_trees WHERE agent_id = ?').all(tid);
+    for (const r of rows) roots.push(r.account_seq);
+  }
 
   const allowed = new Set();
   for (const root of roots) {

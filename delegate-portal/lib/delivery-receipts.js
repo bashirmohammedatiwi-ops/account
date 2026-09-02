@@ -1,4 +1,12 @@
 const db = require('./db');
+const {
+  agentScopeIds,
+  canAgentViewDeliveryReceipt,
+  assertCanMarkHandover,
+  handoverStatusLabel,
+  getAgentProfile,
+  isPrimary
+} = require('./agent-hierarchy');
 
 const STATUS_LABELS = {
   issued: 'مُصدَّر',
@@ -46,26 +54,49 @@ function money(v) {
   return Math.round(n);
 }
 
-function mapDeliveryReceipt(row) {
+function mapDeliveryReceipt(row, { viewerAgentId } = {}) {
   if (!row) return null;
   const account = row.customer_acc_seq
     ? db.prepare('SELECT seq, num, name1 FROM accounts WHERE seq = ?').get(String(row.customer_acc_seq))
     : null;
   const agent = row.agent_id
-    ? db.prepare('SELECT id, name FROM agents WHERE id = ?').get(row.agent_id)
+    ? db.prepare('SELECT id, name, delegate_role, parent_agent_id FROM agents WHERE id = ?').get(row.agent_id)
     : null;
   let linkedReceiptNo = '';
   if (row.receipt_id) {
     const rv = db.prepare('SELECT receipt_no FROM receipts WHERE id = ?').get(row.receipt_id);
     linkedReceiptNo = rv?.receipt_no || '';
   }
+  const handoverStatus = String(row.handover_status || 'pending');
+  const agentId = Number(row.agent_id || 0);
+  const viewerId = viewerAgentId ? Number(viewerAgentId) : null;
+  const isTeamDelivery = viewerId != null && agentId !== viewerId;
+  const canMarkHandover = viewerId != null
+    && isPrimary(viewerId)
+    && isTeamDelivery
+    && handoverStatus !== 'received'
+    && row.status === 'issued'
+    && !row.receipt_id;
+  const canCreateReceipt = row.status === 'issued'
+    && !row.receipt_id
+    && viewerId != null
+    && isPrimary(viewerId)
+    && (agentId === viewerId || isTeamDelivery);
   return {
     id: row.id,
     deliveryNo: row.delivery_no,
     status: row.status,
     statusLabel: statusLabel(row.status),
-    agentId: row.agent_id,
+    agentId,
     agentName: agent?.name || '',
+    agentRole: agent?.delegate_role || 'primary',
+    isTeamDelivery,
+    handoverStatus,
+    handoverStatusLabel: handoverStatusLabel(handoverStatus),
+    handoverAt: row.handover_at || '',
+    handoverByAgentId: row.handover_by_agent_id ? Number(row.handover_by_agent_id) : null,
+    canMarkHandover,
+    canCreateReceipt,
     customerAccSeq: row.customer_acc_seq || '',
     customerNum: account?.num || '',
     customerName: account?.name1 || '',
@@ -83,46 +114,64 @@ function mapDeliveryReceipt(row) {
   };
 }
 
-function loadDeliveryReceipt(id) {
+function loadDeliveryReceipt(id, { viewerAgentId } = {}) {
   const row = db.prepare('SELECT * FROM delivery_receipts WHERE id = ?').get(id);
-  return mapDeliveryReceipt(row);
+  return mapDeliveryReceipt(row, { viewerAgentId });
 }
 
-function listDeliveryReceipts({ agentId, status, limit = 200 } = {}) {
+function listDeliveryReceipts({ agentId, agentIds, status, limit = 200, viewerAgentId } = {}) {
   const where = [];
   const params = [];
-  if (agentId) {
-    where.push('agent_id = ?');
-    params.push(agentId);
+  let ids = agentIds;
+  if (!ids && agentId) {
+    ids = viewerAgentId && Number(viewerAgentId) === Number(agentId)
+      ? agentScopeIds(agentId)
+      : [Number(agentId)];
+  }
+  if (ids && ids.length) {
+    where.push(`agent_id IN (${ids.map(() => '?').join(',')})`);
+    params.push(...ids.map(Number));
   }
   if (status && AGENT_VISIBLE.has(status)) {
     where.push('status = ?');
     params.push(status);
   }
   params.push(Math.min(Math.max(Number(limit) || 200, 1), 500));
+  const viewer = viewerAgentId ?? agentId;
   return db.prepare(`
     SELECT * FROM delivery_receipts
     ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
     ORDER BY id DESC
     LIMIT ?
-  `).all(...params).map((row) => mapDeliveryReceipt(row));
+  `).all(...params).map((row) => mapDeliveryReceipt(row, { viewerAgentId: viewer }));
 }
 
-function deliveryReceiptStats() {
+function deliveryReceiptStats({ agentIds } = {}) {
   const today = todayIso();
+  let where = '';
+  const params = [today];
+  if (agentIds && agentIds.length) {
+    where = `WHERE agent_id IN (${agentIds.map(() => '?').join(',')})`;
+    params.unshift(...agentIds.map(Number));
+  }
   const row = db.prepare(`
     SELECT
       COUNT(*) AS total,
       SUM(CASE WHEN status = 'issued' THEN 1 ELSE 0 END) AS issued,
       SUM(CASE WHEN status = 'linked' THEN 1 ELSE 0 END) AS linked,
-      SUM(CASE WHEN date(created_at) = date(?) THEN 1 ELSE 0 END) AS today
+      SUM(CASE WHEN date(created_at) = date(?) THEN 1 ELSE 0 END) AS today,
+      SUM(CASE WHEN handover_status = 'pending' AND status = 'issued' THEN 1 ELSE 0 END) AS handoverPending,
+      SUM(CASE WHEN handover_status = 'received' THEN 1 ELSE 0 END) AS handoverReceived
     FROM delivery_receipts
-  `).get(today);
+    ${where}
+  `).get(...params);
   return {
     total: row?.total || 0,
     issued: row?.issued || 0,
     linked: row?.linked || 0,
-    today: row?.today || 0
+    today: row?.today || 0,
+    handoverPending: row?.handoverPending || 0,
+    handoverReceived: row?.handoverReceived || 0
   };
 }
 
@@ -139,8 +188,8 @@ function createDeliveryReceipt(agentId, data = {}) {
   const r = db.prepare(`
     INSERT INTO delivery_receipts (
       delivery_no, agent_id, customer_acc_seq, tree_acc_seq, tree_name,
-      amount, notes, receipt_date, status, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'issued', datetime('now'), datetime('now'))
+      amount, notes, receipt_date, status, handover_status, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'issued', 'pending', datetime('now'), datetime('now'))
   `).run(
     deliveryNo,
     agentId,
@@ -151,17 +200,39 @@ function createDeliveryReceipt(agentId, data = {}) {
     String(data.notes || '').trim(),
     String(data.receiptDate || todayIso()).slice(0, 10)
   );
-  return loadDeliveryReceipt(r.lastInsertRowid);
+  return loadDeliveryReceipt(r.lastInsertRowid, { viewerAgentId: agentId });
 }
 
 function markDeliveryReceiptPrinted(id, { agentId } = {}) {
   const row = db.prepare('SELECT * FROM delivery_receipts WHERE id = ?').get(id);
   if (!row) return null;
-  if (agentId && row.agent_id !== agentId) throw new Error('لا تملك صلاحية هذا الوصل');
+  if (agentId && !canAgentViewDeliveryReceipt(agentId, row.agent_id)) {
+    throw new Error('لا تملك صلاحية هذا الوصل');
+  }
   db.prepare(`
     UPDATE delivery_receipts SET printed_at = datetime('now'), updated_at = datetime('now') WHERE id = ?
   `).run(id);
-  return loadDeliveryReceipt(id);
+  return loadDeliveryReceipt(id, { viewerAgentId: agentId });
+}
+
+function markDeliveryHandoverReceived(id, primaryAgentId, { note = '' } = {}) {
+  const row = db.prepare('SELECT * FROM delivery_receipts WHERE id = ?').get(id);
+  if (!row) throw new Error('وصل الاستلام غير موجود');
+  assertCanMarkHandover(primaryAgentId, row.agent_id);
+  if (row.receipt_id) throw new Error('تم إنشاء سند قبض لهذا الوصل');
+  if (String(row.handover_status) === 'received') {
+    return loadDeliveryReceipt(id, { viewerAgentId: primaryAgentId });
+  }
+  db.prepare(`
+    UPDATE delivery_receipts SET
+      handover_status = 'received',
+      handover_at = datetime('now'),
+      handover_by_agent_id = ?,
+      updated_at = datetime('now'),
+      admin_note = CASE WHEN ? != '' THEN ? ELSE admin_note END
+    WHERE id = ?
+  `).run(primaryAgentId, String(note || '').trim(), String(note || '').trim(), id);
+  return loadDeliveryReceipt(id, { viewerAgentId: primaryAgentId });
 }
 
 function linkDeliveryReceiptToReceipt(deliveryId, receiptId) {
@@ -179,7 +250,12 @@ function linkDeliveryReceiptToReceipt(deliveryId, receiptId) {
 function deleteDeliveryReceipt(id, { agentId, admin = false } = {}) {
   const row = db.prepare('SELECT * FROM delivery_receipts WHERE id = ?').get(id);
   if (!row) return null;
-  if (agentId && row.agent_id !== agentId) throw new Error('لا تملك صلاحية هذا الوصل');
+  if (agentId && !canAgentViewDeliveryReceipt(agentId, row.agent_id)) {
+    throw new Error('لا تملك صلاحية هذا الوصل');
+  }
+  if (!admin && agentId && Number(row.agent_id) !== Number(agentId)) {
+    throw new Error('لا يمكن حذف وصل مندوب آخر');
+  }
   if (!admin && row.receipt_id) throw new Error('لا يمكن حذف وصل مرتبط بسند قبض');
   db.prepare('DELETE FROM delivery_receipts WHERE id = ?').run(id);
   return { id };
@@ -199,9 +275,11 @@ module.exports = {
   loadDeliveryReceipt,
   createDeliveryReceipt,
   markDeliveryReceiptPrinted,
+  markDeliveryHandoverReceived,
   linkDeliveryReceiptToReceipt,
   deleteDeliveryReceipt,
   updateDeliveryReceiptByAdmin,
   deliveryReceiptStats,
-  statusLabel
+  statusLabel,
+  handoverStatusLabel
 };

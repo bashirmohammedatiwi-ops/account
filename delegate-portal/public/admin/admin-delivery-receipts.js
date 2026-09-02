@@ -76,12 +76,13 @@ function renderDeliveryReceiptRows(rows) {
       <td><strong>${esc(d.customerName)}</strong></td>
       <td class="rcv-amt num-en" dir="ltr">${fmtMoney(d.amount)}</td>
       <td>${colStatusPill(d.status, d.statusLabel, DR_PILL)}</td>
+      <td>${d.handoverStatusLabel ? `<span class="rcv-pill rcv-pill-${d.handoverStatus === 'received' ? 'ready' : 'pending'}">${esc(d.handoverStatusLabel)}</span>` : '—'}</td>
       <td>${d.printedAt ? '<span class="rcv-pill rcv-pill-ready">✓</span>' : '—'}</td>
       <td class="num-en" dir="ltr">${esc(d.linkedReceiptNo || '—')}</td>
       <td class="rcv-date num-en" dir="ltr">${fmtDateEn(d.receiptDate || d.createdAt)}</td>
       <td>${drRowActions(d)}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="9"><div class="rcv-empty">لا توجد وصولات استلام</div></td></tr>`;
+  }).join('') || `<tr><td colspan="10"><div class="rcv-empty">لا توجد وصولات استلام</div></td></tr>`;
   bindDeliveryReceiptInteractions();
 }
 
@@ -106,6 +107,7 @@ function renderDeliveryReceiptCards(rows) {
         </div>
         <div class="rcv-card-amounts">
           <div><span>المبلغ</span><strong class="num-en" dir="ltr">${fmtMoney(d.amount)}</strong></div>
+          <div><span>التسليم</span><strong>${esc(d.handoverStatusLabel || '—')}</strong></div>
           <div><span>طباعة</span><strong>${d.printedAt ? '✓' : '—'}</strong></div>
           <div><span>سند قبض</span><strong class="num-en" dir="ltr">${esc(d.linkedReceiptNo || '—')}</strong></div>
         </div>
@@ -133,6 +135,8 @@ async function loadDeliveryReceiptsPage() {
   colRenderStatGrid(document.getElementById('deliveryReceiptStats'), [
     { key: 'issued', cls: 'pending', label: 'مُصدَّر', count: s.issued, filterKey: 'issued' },
     { key: 'linked', cls: 'ready', label: 'مرتبط', count: s.linked, filterKey: 'linked' },
+    { key: 'handoverPending', cls: 'warn', label: 'بانتظار التسليم', count: s.handoverPending, filterKey: 'issued' },
+    { key: 'handoverReceived', cls: 'posted', label: 'استلمها الرئيسي', count: s.handoverReceived, filterKey: 'issued' },
     { key: 'today', cls: 'neutral', label: 'اليوم', count: s.today, filterKey: 'all', subText: 'وصل' },
     { key: 'total', cls: 'total', label: 'الإجمالي', count: s.total, clickable: false, subText: 'وصل' }
   ], drApplyChip);
@@ -179,6 +183,7 @@ async function openDeliveryReceiptDetail(id) {
         <div class="rcv-detail-amt"><span>الزبون</span><strong>${esc(d.customerName)}</strong></div>
         <div class="rcv-detail-amt"><span>التاريخ</span><strong class="num-en" dir="ltr">${fmtDateEn(d.receiptDate)}</strong></div>
         <div class="rcv-detail-amt"><span>سند القبض</span><strong class="num-en" dir="ltr">${esc(d.linkedReceiptNo || '—')}</strong></div>
+        <div class="rcv-detail-amt"><span>تسليم للرئيسي</span><strong>${esc(d.handoverStatusLabel || '—')}</strong></div>
         <div class="rcv-detail-amt"><span>طباعة</span><strong>${d.printedAt ? fmtDateEn(d.printedAt) : '—'}</strong></div>
       </div>
       <label class="rcv-field"><span>ملاحظات</span><p class="rcv-muted">${esc(d.notes || '—')}</p></label>

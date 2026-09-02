@@ -108,6 +108,27 @@ async function checkBackendHealth() {
 }
 let treesCache = [];
 let agentAssignableTrees = [];
+let primaryAgentsCache = [];
+
+function syncAgentRoleUi() {
+  const role = document.getElementById('agentRole')?.value || 'primary';
+  const wrap = document.getElementById('agentParentWrap');
+  if (wrap) wrap.classList.toggle('hidden', role !== 'secondary');
+}
+
+async function loadPrimaryAgentsForSelect(selectedId = '') {
+  const sel = document.getElementById('agentParentId');
+  if (!sel) return;
+  if (!primaryAgentsCache.length) {
+    const data = await api('/api/admin/agents/primary');
+    primaryAgentsCache = data.agents || [];
+  }
+  sel.innerHTML = '<option value="">— اختر المندوب الرئيسي —</option>' + primaryAgentsCache.map((a) =>
+    `<option value="${a.id}"${String(a.id) === String(selectedId) ? ' selected' : ''}>${esc(a.name)} (@${esc(a.username)})</option>`
+  ).join('');
+}
+
+document.getElementById('agentRole')?.addEventListener('change', syncAgentRoleUi);
 
 const explorer = {
   trees: [],
@@ -637,6 +658,8 @@ async function loadAgents() {
     }
     grid.innerHTML = agents.map((a) => {
       const treeCount = a.treeSeqs?.length || 0;
+      const roleCls = a.delegateRole === 'secondary' ? 'pending' : 'ok';
+      const roleLabel = a.delegateRoleLabel || (a.delegateRole === 'secondary' ? 'ثانوي' : 'رئيسي');
       return `
     <article class="agent-card">
       <div class="agent-card-head">
@@ -644,8 +667,11 @@ async function loadAgents() {
         <span class="badge ${a.active ? 'ok' : 'off'}">${a.active ? 'نشط' : 'موقوف'}</span>
       </div>
       <div class="agent-card-meta">
+        <div><span class="badge ${roleCls}">${esc(roleLabel)}</span></div>
         <div>@${esc(a.username)}</div>
         ${a.phone ? `<div>${esc(a.phone)}</div>` : ''}
+        ${a.parentAgentName ? `<div>يتبع: ${esc(a.parentAgentName)}</div>` : ''}
+        ${a.secondaryCount ? `<div>${fmtNumAlways(a.secondaryCount)} مندوب ثانوي</div>` : ''}
         <div>${treeCount} شجرة مصرّحة</div>
       </div>
       <div class="agent-card-actions">
@@ -1081,10 +1107,11 @@ async function openAgentModal(id = null) {
   document.getElementById('agentModalTitle').textContent = id ? 'تعديل مندوب' : 'إضافة مندوب';
   document.getElementById('agentId').value = id ? String(id) : '';
   document.getElementById('agentPassword').required = !id;
+  syncAgentRoleUi();
 
   if (treeEl) treeEl.innerHTML = '<p class="muted loading">جاري تحميل الشجرات...</p>';
   try {
-    await loadAgentAssignableTrees();
+    await Promise.all([loadAgentAssignableTrees(), loadPrimaryAgentsForSelect()]);
   } catch (e) {
     if (treeEl) treeEl.innerHTML = `<p class="muted">تعذّر تحميل الشجرات: ${esc(e.message)}</p>`;
     return;
@@ -1104,6 +1131,9 @@ async function openAgentModal(id = null) {
       document.getElementById('agentUsername').value = a.username || '';
       document.getElementById('agentPassword').value = '';
       document.getElementById('agentActive').checked = !!a.active;
+      document.getElementById('agentRole').value = a.delegateRole || 'primary';
+      await loadPrimaryAgentsForSelect(a.parentAgentId || '');
+      syncAgentRoleUi();
       selectedTreeSeqs = a.treeSeqs || [];
     } catch (e) {
       if (treeEl) treeEl.innerHTML = `<p class="muted">تعذّر تحميل بيانات المندوب: ${esc(e.message)}</p>`;
@@ -1114,6 +1144,9 @@ async function openAgentModal(id = null) {
     document.getElementById('agentId').value = '';
     document.getElementById('agentActive').checked = true;
     document.getElementById('agentPassword').required = true;
+    document.getElementById('agentRole').value = 'primary';
+    await loadPrimaryAgentsForSelect('');
+    syncAgentRoleUi();
   }
 
   if (!agentAssignableTrees.length && !selectedTreeSeqs.length) {
@@ -1444,6 +1477,8 @@ async function saveAgentForm(e) {
     phone: String(document.getElementById('agentPhone')?.value || '').trim(),
     username: String(document.getElementById('agentUsername')?.value || '').trim(),
     active: !!document.getElementById('agentActive')?.checked,
+    delegateRole: String(document.getElementById('agentRole')?.value || 'primary'),
+    parentAgentId: String(document.getElementById('agentParentId')?.value || '').trim() || null,
     treeSeqs,
   };
   const pass = String(document.getElementById('agentPassword')?.value || '');

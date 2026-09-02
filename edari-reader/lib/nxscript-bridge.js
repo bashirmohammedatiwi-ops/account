@@ -6,11 +6,13 @@ const QUERY_SCRIPT = 'edari-query.nxscript';
 const EXEC_SCRIPT = 'edari-exec.nxscript';
 const AUTOINC_SCRIPT = 'edari-file12n-autoinc.nxscript';
 const TREE_SCRIPT = 'edari-file11n-tree.nxscript';
+const REPAIR_SCRIPT = 'edari-file12n-repair.nxscript';
 const MAINT_KEY = 'edari-receipt-maint';
 const BUNDLED_SCRIPT = path.join(__dirname, '..', 'scripts', QUERY_SCRIPT);
 const BUNDLED_EXEC_SCRIPT = path.join(__dirname, '..', 'scripts', EXEC_SCRIPT);
 const BUNDLED_AUTOINC_SCRIPT = path.join(__dirname, '..', 'scripts', AUTOINC_SCRIPT);
 const BUNDLED_TREE_SCRIPT = path.join(__dirname, '..', 'scripts', TREE_SCRIPT);
+const BUNDLED_REPAIR_SCRIPT = path.join(__dirname, '..', 'scripts', REPAIR_SCRIPT);
 
 /** @type {boolean | null} */
 let nxscriptAvailable = null;
@@ -69,6 +71,10 @@ function ensureAutoIncScriptDeployed() {
 
 function ensureTreeScriptDeployed() {
   return ensureScriptDeployed(TREE_SCRIPT, BUNDLED_TREE_SCRIPT);
+}
+
+function ensureRepairScriptDeployed() {
+  return ensureScriptDeployed(REPAIR_SCRIPT, BUNDLED_REPAIR_SCRIPT);
 }
 
 function sqlToHex(sqlText) {
@@ -365,6 +371,53 @@ async function runTreeRepairViaNxscript(options) {
   return parsed;
 }
 
+async function runFile12nRepairViaNxscript(options) {
+  const alias = String(options.alias || '').trim();
+  const seq = Number(options.seq);
+  const day = Number(options.day);
+  const month = Number(options.month);
+  const year = Number(options.year);
+  const equal = Number(options.equal ?? 1);
+  if (!alias) throw new Error('Database alias is required for nxServer query bridge');
+  if (!Number.isFinite(seq) || seq <= 0) {
+    return { ok: false, error: 'seq required' };
+  }
+  if (!Number.isFinite(day) || !Number.isFinite(month) || !Number.isFinite(year)) {
+    return { ok: false, error: 'day, month, year required' };
+  }
+  if (!ensureRepairScriptDeployed()) {
+    return {
+      ok: false,
+      error: 'Could not deploy edari-file12n-repair.nxscript to nxServer Adminroot.',
+      needsNxScript: true
+    };
+  }
+  const q = new URLSearchParams({
+    alias,
+    key: MAINT_KEY,
+    seq: String(seq),
+    day: String(day),
+    month: String(month),
+    year: String(year),
+    equal: String(Number.isFinite(equal) ? equal : 1)
+  });
+  const url = `${config.nexusAdminUrl}/${REPAIR_SCRIPT}?${q.toString()}`;
+  let response;
+  try {
+    response = await fetch(url, { signal: AbortSignal.timeout(Number(options.timeoutMs) || 60000) });
+  } catch (err) {
+    return {
+      ok: false,
+      error: `nxServer admin unreachable (${config.nexusAdminUrl}): ${err.message}`,
+      needsNxServer: true
+    };
+  }
+  const bodyBuf = Buffer.from(await response.arrayBuffer());
+  const parsed = extractJsonBody(bodyBuf);
+  if (!parsed) return parseNxResponse(bodyBuf, 'Invalid nxServer File12n repair response');
+  return parsed;
+}
+
 async function isNxscriptBridgeAvailable() {
   if (nxscriptAvailable !== null) return nxscriptAvailable;
   try {
@@ -386,6 +439,7 @@ module.exports = {
   runQueryViaNxscript,
   runExecViaNxscript,
   runFile12nAutoIncViaNxscript,
+  runFile12nRepairViaNxscript,
   runTreeRepairViaNxscript,
   testConnectionViaNxscript,
   listTablesViaNxscript

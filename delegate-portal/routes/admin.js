@@ -10,7 +10,13 @@ const {
   getStatementForAccount,
   agentAllowedSeqs
 } = require('../lib/accounts');
-const { debtStatusFromBalance, balanceSummaryLabel } = require('../lib/statement-utils');
+const {
+  mapAgentProfile,
+  saveAgentHierarchy,
+  validateAgentHierarchyInput,
+  listPrimaryAgents,
+  getSecondaryAgentIds
+} = require('../lib/agent-hierarchy');
 const { getPublicBaseUrl } = require('../lib/public-url');
 const { runLocalSync, listEdariTrees, listEdariMaterialTrees, queryEdariSalesReport } = require('../lib/sync-runner');
 const { queryAdminSalesReport, listReportTrees, listSalesBranches, parseTreeSeqList } = require('../lib/admin-sales-report');
@@ -67,7 +73,8 @@ router.get('/trees', (_req, res) => {
 
 router.get('/agents', (_req, res) => {
   const agents = db.prepare(`
-    SELECT id, name, phone, username, active, created_at FROM agents ORDER BY name
+    SELECT id, name, phone, username, active, created_at, parent_agent_id, delegate_role
+    FROM agents ORDER BY name
   `).all();
   const trees = db.prepare('SELECT agent_id, account_seq FROM agent_trees').all();
   const byAgent = {};
@@ -78,23 +85,32 @@ router.get('/agents', (_req, res) => {
   res.json({
     ok: true,
     agents: agents.map((a) => ({
-      ...a,
-      active: !!a.active,
+      ...mapAgentProfile(a),
       treeSeqs: byAgent[a.id] || []
     }))
   });
 });
 
+router.get('/agents/primary', (_req, res) => {
+  res.json({ ok: true, agents: listPrimaryAgents() });
+});
+
 router.post('/agents', (req, res) => {
-  const { name, phone, username, password, treeSeqs = [] } = req.body || {};
+  const { name, phone, username, password, treeSeqs = [], delegateRole, parentAgentId } = req.body || {};
   if (!name || !username || !password) {
     return res.status(400).json({ ok: false, error: 'الاسم واسم المستخدم وكلمة المرور مطلوبة' });
+  }
+  let hierarchy;
+  try {
+    hierarchy = validateAgentHierarchyInput({ delegateRole, parentAgentId });
+  } catch (err) {
+    return res.status(400).json({ ok: false, error: err.message });
   }
   const hash = bcrypt.hashSync(password, 10);
   try {
     const r = db.prepare(
-      'INSERT INTO agents (name, phone, username, password_hash) VALUES (?, ?, ?, ?)'
-    ).run(name, phone || '', username, hash);
+      'INSERT INTO agents (name, phone, username, password_hash, parent_agent_id, delegate_role) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(name, phone || '', username, hash, hierarchy.parentAgentId, hierarchy.delegateRole);
     const agentId = r.lastInsertRowid;
     const { valid, invalid } = assignAgentTrees(agentId, treeSeqs);
     res.json({
@@ -111,7 +127,7 @@ router.post('/agents', (req, res) => {
 
 router.put('/agents/:id', (req, res) => {
   const id = Number(req.params.id);
-  const { name, phone, username, password, active, treeSeqs } = req.body || {};
+  const { name, phone, username, password, active, treeSeqs, delegateRole, parentAgentId } = req.body || {};
   const agent = db.prepare('SELECT id FROM agents WHERE id = ?').get(id);
   if (!agent) return res.status(404).json({ ok: false, error: 'المندوب غير موجود' });
 
@@ -121,6 +137,16 @@ router.put('/agents/:id', (req, res) => {
   if (active != null) db.prepare('UPDATE agents SET active = ? WHERE id = ?').run(active ? 1 : 0, id);
   if (password) {
     db.prepare('UPDATE agents SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(password, 10), id);
+  }
+  if (delegateRole != null || parentAgentId != null) {
+    try {
+      saveAgentHierarchy(id, {
+        delegateRole: delegateRole ?? undefined,
+        parentAgentId: parentAgentId ?? undefined
+      });
+    } catch (err) {
+      return res.status(400).json({ ok: false, error: err.message });
+    }
   }
   if (Array.isArray(treeSeqs)) {
     const { valid, invalid } = assignAgentTrees(id, treeSeqs);
@@ -136,7 +162,12 @@ router.put('/agents/:id', (req, res) => {
 });
 
 router.delete('/agents/:id', (req, res) => {
-  db.prepare('DELETE FROM agents WHERE id = ?').run(Number(req.params.id));
+  const id = Number(req.params.id);
+  const secondaries = getSecondaryAgentIds(id);
+  if (secondaries.length) {
+    return res.status(400).json({ ok: false, error: 'لا يمكن حذف مندوب رئيسي لديه مندوبون ثانويون — انقلهم أو احذفهم أولاً' });
+  }
+  db.prepare('DELETE FROM agents WHERE id = ?').run(id);
   res.json({ ok: true });
 });
 

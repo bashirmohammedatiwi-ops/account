@@ -26,6 +26,37 @@ function getAdminLoadTarget() {
 }
 const START_HIDDEN = process.argv.includes('--background') || process.argv.includes('--hidden');
 
+const edariPostingJobs = new Map();
+
+function edariPostingKey(kind, payload = {}) {
+  const id = payload.id ?? payload.receiptId ?? payload.requestId;
+  if (id != null && String(id).trim()) return `${kind}:id:${id}`;
+  if (kind === 'receipt') {
+    const no = String(payload.receiptNo || payload.receipt_no || '').trim();
+    if (no) return `${kind}:no:${no}`;
+  }
+  if (kind === 'customer') {
+    const tree = String(payload.treeNum || payload.treeAccSeq || '').trim();
+    const name = String(payload.name || '').trim();
+    if (tree && name) return `${kind}:${tree}:${name}`;
+  }
+  return '';
+}
+
+async function runEdariPostingJob(key, fn) {
+  if (!key) return fn();
+  if (edariPostingJobs.has(key)) {
+    return { ok: false, error: 'جاري الترحيل — انتظر اكتمال العملية السابقة' };
+  }
+  const job = (async () => fn())();
+  edariPostingJobs.set(key, job);
+  try {
+    return await job;
+  } finally {
+    edariPostingJobs.delete(key);
+  }
+}
+
 let mainWindow;
 let tray;
 let serverProcess;
@@ -1042,41 +1073,47 @@ ipcMain.handle('search-edari-accounts', async (_e, params) => {
 });
 
 ipcMain.handle('post-edari-receipt', async (_e, payload) => {
-  try {
-    Object.assign(process.env, { EDARI_READER_ROOT: getEdariReaderRoot() }, edariEnvExtra());
-    const portalDir = getPortalDir();
-    const postingPath = path.join(portalDir, 'lib', 'receipt-posting.js');
-    const postPath = path.join(portalDir, 'sync-client', 'post-receipt.js');
-    for (const modPath of [postingPath, postPath]) {
-      try {
-        delete require.cache[require.resolve(modPath)];
-      } catch (_) {}
+  const key = edariPostingKey('receipt', payload || {});
+  return runEdariPostingJob(key, async () => {
+    try {
+      Object.assign(process.env, { EDARI_READER_ROOT: getEdariReaderRoot() }, edariEnvExtra());
+      const portalDir = getPortalDir();
+      const postingPath = path.join(portalDir, 'lib', 'receipt-posting.js');
+      const postPath = path.join(portalDir, 'sync-client', 'post-receipt.js');
+      for (const modPath of [postingPath, postPath]) {
+        try {
+          delete require.cache[require.resolve(modPath)];
+        } catch (_) {}
+      }
+      const { postReceiptToEdari } = require(postPath);
+      const result = await postReceiptToEdari(payload || {});
+      return { ok: true, ...result };
+    } catch (err) {
+      return { ok: false, error: err.message || 'فشل ترحيل سند القبض إلى الإداري' };
     }
-    const { postReceiptToEdari } = require(postPath);
-    const result = await postReceiptToEdari(payload || {});
-    return { ok: true, ...result };
-  } catch (err) {
-    return { ok: false, error: err.message || 'فشل ترحيل سند القبض إلى الإداري' };
-  }
+  });
 });
 
 ipcMain.handle('post-edari-customer', async (_e, payload) => {
-  try {
-    Object.assign(process.env, { EDARI_READER_ROOT: getEdariReaderRoot() }, edariEnvExtra());
-    const portalDir = getPortalDir();
-    const postingPath = path.join(portalDir, 'lib', 'customer-posting.js');
-    const postPath = path.join(portalDir, 'sync-client', 'post-customer.js');
-    for (const modPath of [postingPath, postPath]) {
-      try {
-        delete require.cache[require.resolve(modPath)];
-      } catch (_) {}
+  const key = edariPostingKey('customer', payload || {});
+  return runEdariPostingJob(key, async () => {
+    try {
+      Object.assign(process.env, { EDARI_READER_ROOT: getEdariReaderRoot() }, edariEnvExtra());
+      const portalDir = getPortalDir();
+      const postingPath = path.join(portalDir, 'lib', 'customer-posting.js');
+      const postPath = path.join(portalDir, 'sync-client', 'post-customer.js');
+      for (const modPath of [postingPath, postPath]) {
+        try {
+          delete require.cache[require.resolve(modPath)];
+        } catch (_) {}
+      }
+      const { postCustomerToEdari } = require(postPath);
+      const result = await postCustomerToEdari(payload || {});
+      return { ok: true, ...result };
+    } catch (err) {
+      return { ok: false, error: err.message || 'فشل ترحيل الزبون إلى الإداري' };
     }
-    const { postCustomerToEdari } = require(postPath);
-    const result = await postCustomerToEdari(payload || {});
-    return { ok: true, ...result };
-  } catch (err) {
-    return { ok: false, error: err.message || 'فشل ترحيل الزبون إلى الإداري' };
-  }
+  });
 });
 
 function showStartupError(err) {

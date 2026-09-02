@@ -1,7 +1,8 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../lib/db');
-const { signAgent, authAgent } = require('../lib/auth');
+const { authAgent } = require('../lib/auth');
+const { mapAgentProfile, isSecondary, getPrimaryAgentId } = require('../lib/agent-hierarchy');
 const {
   canAgentAccess,
   getChildren,
@@ -24,11 +25,12 @@ router.post('/login', (req, res) => {
     return res.status(401).json({ ok: false, error: 'بيانات الدخول غير صحيحة' });
   }
   const token = signAgent({ id: agent.id, username: agent.username, name: agent.name });
-  res.json({ ok: true, token, agent: { id: agent.id, name: agent.name, username: agent.username } });
+  res.json({ ok: true, token, agent: mapAgentProfile(agent) });
 });
 
 router.get('/me', authAgent, (req, res) => {
-  res.json({ ok: true, agent: { id: req.agent.id, name: req.agent.name, username: req.agent.username } });
+  const row = db.prepare('SELECT * FROM agents WHERE id = ?').get(req.agent.id);
+  res.json({ ok: true, agent: mapAgentProfile(row) });
 });
 
 function mapBranchAccount(c, { rootSeq = '', includeGroupPath = false } = {}) {
@@ -51,9 +53,17 @@ function mapBranchAccount(c, { rootSeq = '', includeGroupPath = false } = {}) {
 }
 
 router.get('/trees', authAgent, (req, res) => {
+  let treeAgentId = req.agent.id;
+  if (isSecondary(req.agent.id)) {
+    const ownRoots = db.prepare('SELECT account_seq FROM agent_trees WHERE agent_id = ?').all(req.agent.id);
+    if (!ownRoots.length) {
+      const parentId = getPrimaryAgentId(req.agent.id);
+      if (parentId) treeAgentId = parentId;
+    }
+  }
   const roots = db.prepare(`
     SELECT at.account_seq AS seq FROM agent_trees at WHERE at.agent_id = ?
-  `).all(req.agent.id);
+  `).all(treeAgentId);
 
   const trees = roots.map((r) => {
     const acc = db.prepare('SELECT * FROM accounts WHERE seq = ?').get(r.seq);

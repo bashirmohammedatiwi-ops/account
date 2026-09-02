@@ -351,6 +351,7 @@
               <button type="button" class="rcv-chip" data-rcv-chip="pending">بانتظار المراجعة</button>
               <button type="button" class="rcv-chip" data-rcv-chip="reviewed">جاهز للترحيل</button>
               <button type="button" class="rcv-chip" data-rcv-chip="posted">مُرحَّل</button>
+              <button type="button" class="rcv-chip" data-rcv-chip="unposted">غير مُرحَّل</button>
               <button type="button" class="rcv-chip" data-rcv-chip="today">اليوم</button>
             </div>
             <div class="rcv-quick-meta" id="receiptQuickMeta"></div>
@@ -410,6 +411,7 @@
                     <option value="pending">بانتظار المراجعة</option>
                     <option value="reviewed">جاهز للترحيل</option>
                     <option value="posted">مُرحَّل</option>
+                    <option value="unposted">غير مُرحَّل</option>
                     <option value="rejected">مرفوض</option>
                   </select>
                   <select id="receiptAgentFilter" class="search rcv-filter">
@@ -495,7 +497,7 @@
                 </div>
                 <div class="rcv-table-wrap" id="drTableWrap">
                   <table class="rcv-table">
-                    <thead><tr><th>الوصل</th><th>مندوب</th><th>زبون</th><th>مبلغ</th><th>حالة</th><th>طباعة</th><th>سند قبض</th><th>تاريخ</th><th></th></tr></thead>
+                    <thead><tr><th>الوصل</th><th>مندوب</th><th>زبون</th><th>مبلغ</th><th>حالة</th><th>التسليم</th><th>طباعة</th><th>سند قبض</th><th>تاريخ</th><th></th></tr></thead>
                     <tbody id="deliveryReceiptsBody"></tbody>
                   </table>
                 </div>
@@ -1478,6 +1480,19 @@
           <input type="checkbox" id="agentActive" checked>
           <span>حساب نشط</span>
         </label>
+        <label class="field">
+          <span>نوع المندوب</span>
+          <select id="agentRole" class="search">
+            <option value="primary">مندوب رئيسي</option>
+            <option value="secondary">مندوب ثانوي</option>
+          </select>
+        </label>
+        <label class="field hidden" id="agentParentWrap">
+          <span>يتبع للمندوب الرئيسي</span>
+          <select id="agentParentId" class="search">
+            <option value="">— اختر المندوب الرئيسي —</option>
+          </select>
+        </label>
         <div class="panel panel-inset">
           <h4 class="panel-title-sm">صلاحية الشجرات</h4>
           <div class="tree-picks tree-picks-sm" id="agentTreeChecks"></div>
@@ -1510,10 +1525,10 @@
   <script src="admin.js?v=20260826col1"></script>
   <script src="admin-shell.js?v=20260826col1"></script>
   <script src="admin-commerce.js?v=20260826col1"></script>
-  <script src="admin-collection-kit.js?v=20260826col1"></script>
-  <script src="admin-receipts.js?v=20260826col1"></script>
+  <script src="admin-collection-kit.js?v=20260901post1"></script>
+  <script src="admin-receipts.js?v=20260901post1"></script>
   <script src="admin-delivery-receipts.js?v=20260826col1"></script>
-  <script src="admin-customers.js?v=20260826col1"></script>
+  <script src="admin-customers.js?v=20260901post1"></script>
   <script src="admin-promotional-visits.js?v=20260826col1"></script>
   <script src="admin-thermal-template.js?v=20260824thermal8"></script>
   <script src="admin-sales-report.js?v=20260709treeFix3"></script>

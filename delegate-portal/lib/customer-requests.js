@@ -326,6 +326,12 @@ function markCustomerRequestPosted(id, {
 } = {}) {
   const row = db.prepare('SELECT * FROM customer_requests WHERE id = ?').get(id);
   if (!row) return null;
+  if (!error && row.status === 'posted') {
+    if (edariNum && row.edari_num && String(row.edari_num) !== String(edariNum)) {
+      throw new Error('الزبون مُرحَّل مسبقاً برقم حساب مختلف');
+    }
+    return loadCustomerRequest(id);
+  }
   if (error) {
     db.prepare(`
       UPDATE customer_requests SET posted_error = ?, updated_at = datetime('now') WHERE id = ?

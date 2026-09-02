@@ -461,9 +461,17 @@ function renderHomeScreen() {
   if (homeName) homeName.textContent = name ? `مرحباً، ${name}` : 'مرحباً';
   const homeSub = document.getElementById('homeWelcomeSub');
   if (homeSub) {
-    homeSub.textContent = state.trees.length
+    const role = state.agent?.delegateRoleLabel;
+    const parent = state.agent?.parentAgentName;
+    let sub = state.trees.length
       ? `${state.trees.length} شجرة · اختر تطبيقاً للمتابعة`
       : 'اختر تطبيقاً للبدء';
+    if (state.agent?.delegateRole === 'secondary' && role) {
+      sub = parent ? `${role} · يتبع ${parent}` : role;
+    } else if (Number(state.agent?.secondaryCount) > 0) {
+      sub = `${role || 'مندوب رئيسي'} · ${fmtNumAlways(state.agent.secondaryCount)} ثانوي`;
+    }
+    homeSub.textContent = sub;
   }
 
   const treesBadge = document.getElementById('homeBadgeTrees');
@@ -1339,6 +1347,7 @@ async function login(username, password) {
     setSession(data.token, data.agent);
     showApp();
     updateUserChrome();
+    window.receiptsNav?.onLogin?.();
     await loadTrees('home');
   } catch (e) {
     errEl.textContent = e.message;
@@ -1371,6 +1380,7 @@ async function tryRestoreSession() {
     const data = await api('/me');
     setSession(token, data.agent);
     updateUserChrome();
+    window.receiptsNav?.onLogin?.();
     renderHomeScreen();
     await loadTrees('home');
   } catch {

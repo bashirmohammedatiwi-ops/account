@@ -862,6 +862,13 @@ class OfflineApiClient {
     }
   }
 
+  Future<DeliveryReceipt> markDeliveryHandoverReceived(int id) async {
+    if (!_online) {
+      throw ApiException('يتطلب تأكيد الاستلام اتصالاً بالإنترنت');
+    }
+    return _api.markDeliveryHandoverReceived(id);
+  }
+
   Future<void> deleteDeliveryReceipt(int id) async {
     final cacheKey = _deliveryCacheKey();
     if (id < 0) {

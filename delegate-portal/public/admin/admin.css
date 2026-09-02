@@ -647,6 +647,13 @@ body {
   cursor: wait;
 }
 
+.btn:disabled,
+.btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .btn-soft {
   background: var(--surface-2);
   border-color: var(--border);
@@ -8097,6 +8104,11 @@ input[type="date"].num-en,
   box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
 }
 
+.rcv-stat-btn.is-active {
+  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.28), 0 10px 28px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
+}
+
 .rcv-list-head {
   align-items: center;
 }
@@ -8320,6 +8332,208 @@ input[type="date"].num-en,
 }
 
 .rcv-tab-panel { padding-top: 4px; }
+
+.rcv-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rcv-form-block {
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
+}
+
+.rcv-form-block-money {
+  background: linear-gradient(180deg, #f0fdfa 0%, #ffffff 100%);
+  border-color: #99f6e4;
+}
+
+.rcv-form-block-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.rcv-form-block-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: #f1f5f9;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.rcv-form-block-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rcv-form-block-icon.tone-money {
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
+.rcv-form-block-icon.tone-notes {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.rcv-form-block-title {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.rcv-form-block-sub {
+  margin: 2px 0 0;
+  font-size: 0.72rem;
+  color: #94a3b8;
+}
+
+.rcv-input,
+.rcv-textarea {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 0.88rem;
+  color: #0f172a;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.rcv-input:focus,
+.rcv-textarea:focus {
+  outline: none;
+  border-color: #14b8a6;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.14);
+}
+
+.rcv-input[readonly],
+.rcv-textarea[readonly] {
+  background: #f8fafc;
+  color: #475569;
+  cursor: default;
+}
+
+.rcv-input:disabled {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.rcv-field-customer {
+  gap: 8px;
+}
+
+.rcv-customer-picked {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #ecfeff;
+  border: 1px dashed #99f6e4;
+  color: #0f766e;
+  font-weight: 700;
+}
+
+.rcv-money-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.rcv-money-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rcv-money-field > span {
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: #64748b;
+  letter-spacing: 0.02em;
+}
+
+.rcv-money-input-wrap {
+  position: relative;
+}
+
+.rcv-money-input {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  padding: 11px 12px;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: 0.02em;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.rcv-money-input:focus {
+  outline: none;
+  border-color: #14b8a6;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.14);
+}
+
+.rcv-money-input[readonly] {
+  background: #f8fafc;
+  color: #334155;
+}
+
+.rcv-money-field-main .rcv-money-input {
+  font-size: 1.15rem;
+  padding: 13px 12px;
+  border-color: #5eead4;
+  background: #fff;
+  color: #0f766e;
+}
+
+.rcv-money-field-comm .rcv-money-input {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.rcv-money-field-disc .rcv-money-input {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.rcv-field-date .rcv-input {
+  font-weight: 700;
+}
+
+.rcv-textarea {
+  resize: vertical;
+  min-height: 72px;
+  line-height: 1.55;
+}
+
+.rcv-textarea-admin {
+  background: #fafafa;
+  border-style: dashed;
+}
+
+@media (max-width: 720px) {
+  .rcv-money-grid { grid-template-columns: 1fr; }
+}
 
 .rcv-timeline {
   list-style: none;

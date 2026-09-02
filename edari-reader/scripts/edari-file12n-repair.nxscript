@@ -1,0 +1,85 @@
+<%
+function UrlDecode(const s: string): string;
+var
+  i: integer;
+  hex: string;
+begin
+  Result := '';
+  i := 1;
+  while i <= Length(s) do
+  begin
+    if s[i] = '+' then
+    begin
+      Result := Result + ' ';
+      Inc(i);
+    end
+    else if (s[i] = '%') and (i + 2 <= Length(s)) then
+    begin
+      hex := Copy(s, i + 1, 2);
+      Result := Result + Chr(StrToInt('$' + hex));
+      i := i + 3;
+    end
+    else
+    begin
+      Result := Result + s[i];
+      Inc(i);
+    end;
+  end;
+end;
+
+var
+  aSession: TnxSession;
+  adb: TnxDatabase;
+  aTable: TnxTable;
+  aliasName, maintKey: string;
+  seqVal, dayVal, monthVal, yearVal, equalVal: integer;
+begin
+  aliasName := UrlDecode(Trim(Request('alias')));
+  maintKey := UrlDecode(Trim(Request('key')));
+  seqVal := StrToIntDef(UrlDecode(Trim(Request('seq'))), 0);
+  dayVal := StrToIntDef(UrlDecode(Trim(Request('day'))), 0);
+  monthVal := StrToIntDef(UrlDecode(Trim(Request('month'))), 0);
+  yearVal := StrToIntDef(UrlDecode(Trim(Request('year'))), 0);
+  equalVal := StrToIntDef(UrlDecode(Trim(Request('equal'))), 1);
+
+  if (aliasName = '') or (seqVal <= 0) or (dayVal <= 0) or (monthVal <= 0) or (yearVal <= 0) then
+  begin
+    Output.Write('{"ok":false,"error":"alias, seq, day, month, year required"}');
+    Exit;
+  end;
+
+  if maintKey <> 'edari-receipt-maint' then
+  begin
+    Output.Write('{"ok":false,"error":"maintenance key required"}');
+    Exit;
+  end;
+
+  aSession := TnxSession.Create(nil);
+  adb := TnxDatabase.Create(nil);
+  aTable := TnxTable.Create(nil);
+  try
+    aSession.ServerEngine := ServerEngine;
+    aSession.Active := true;
+    adb.AliasName := aliasName;
+    adb.Session := aSession;
+    adb.Open;
+    aTable.Database := adb;
+    aTable.TableName := 'File12n';
+    aTable.Open;
+    if not aTable.Locate('Seq', seqVal, []) then
+    begin
+      Output.Write('{"ok":false,"error":"Seq not found"}');
+      Exit;
+    end;
+    aTable.Edit;
+    aTable.FieldByName('Date').AsDateTime := EncodeDate(yearVal, monthVal, dayVal);
+    aTable.FieldByName('Equal').AsInteger := equalVal;
+    aTable.Post;
+    Output.Write('{"ok":true,"driver":"nxServer","seq":'+IntToStr(seqVal)+',"equal":'+IntToStr(equalVal)+',"viaFile12nRepair":true}');
+  finally
+    aTable.Free;
+    adb.Free;
+    aSession.Free;
+  end;
+end.
+%>

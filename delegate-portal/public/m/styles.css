@@ -4552,6 +4552,91 @@ body.inv-sheet-open { overflow: hidden; }
   gap: 10px;
 }
 
+.rv-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 4px;
+  margin: 0 0 14px;
+  background: #f1f5f9;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+}
+
+.rv-tab {
+  border: none;
+  background: transparent;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.rv-tab.active {
+  background: #fff;
+  color: #0f766e;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+.rv-role-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.rv-role-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.rv-role-pill.ok {
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
+.rv-role-pill.warn {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.rv-linked-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #ecfdf5;
+  border: 1px solid #99f6e4;
+}
+
+.rv-linked-copy {
+  display: grid;
+  gap: 4px;
+  font-size: 0.88rem;
+  color: #0f766e;
+}
+
+.rv-linked-copy strong {
+  font-size: 0.95rem;
+}
+
 .inv-order-card-notes {
   margin: 8px 0 0;
   color: #64748b;

@@ -2,31 +2,49 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../auth/auth_provider.dart';
 import '../layout/breakpoints.dart';
 import '../offline/offline_banner.dart';
 import '../theme/app_colors.dart';
 import 'ed_components.dart';
 import 'ed_page_background.dart';
+import 'ed_page_scroll.dart';
 import 'phone_ui.dart';
 
 class _NavItem {
-  const _NavItem({required this.icon, required this.label, required this.path});
+  const _NavItem({required this.icon, required this.label, required this.path, this.isReceipt = false});
 
   final IconData icon;
   final String label;
   final String path;
+  final bool isReceipt;
 }
 
-const _tabletNavItems = [
+const _tabletNavItemsBase = [
   _NavItem(icon: Icons.home_rounded, label: 'الرئيسية', path: '/home'),
   _NavItem(icon: Icons.menu_book_rounded, label: 'الحسابات', path: '/accounts'),
   _NavItem(icon: Icons.inventory_2_outlined, label: 'المنتجات', path: '/shop'),
   _NavItem(icon: Icons.shopping_bag_outlined, label: 'الطلبات', path: '/orders'),
-  _NavItem(icon: Icons.receipt_long_rounded, label: 'سند قبض', path: '/receipts'),
+  _NavItem(icon: Icons.receipt_long_rounded, label: 'سند قبض', path: '/receipts', isReceipt: true),
   _NavItem(icon: Icons.person_add_alt_1_rounded, label: 'زبون جديد', path: '/customers'),
   _NavItem(icon: Icons.bar_chart_rounded, label: 'التقارير', path: '/reports'),
   _NavItem(icon: Icons.settings_outlined, label: 'الإعدادات', path: '/settings'),
 ];
+
+List<_NavItem> _tabletNavItems(WidgetRef ref) {
+  final secondary = ref.watch(authProvider.select((s) => s.agent?.isSecondary ?? false));
+  return _tabletNavItemsBase.map((item) {
+    if (item.isReceipt) {
+      return _NavItem(icon: item.icon, label: secondary ? 'وصل قبض' : 'سند قبض', path: item.path);
+    }
+    return item;
+  }).toList();
+}
+
+String _receiptNavLabel(WidgetRef ref) {
+  final secondary = ref.read(authProvider.select((s) => s.agent?.isSecondary ?? false));
+  return secondary ? 'وصل قبض' : 'سند قبض';
+}
 
 const _phoneNavItems = [
   _NavItem(icon: Icons.home_rounded, label: 'الرئيسية', path: '/home'),
@@ -37,9 +55,9 @@ const _phoneNavItems = [
 
 const _moreRoutes = ['/receipts', '/customers', '/promotional-visits', '/reports', '/settings'];
 
-int _tabletSelectedIndex(String location) {
-  for (var i = _tabletNavItems.length - 1; i >= 0; i--) {
-    final p = _tabletNavItems[i].path;
+int _tabletSelectedIndex(String location, List<_NavItem> items) {
+  for (var i = items.length - 1; i >= 0; i--) {
+    final p = items[i].path;
     if (location == p || location.startsWith('$p/')) return i;
   }
   return 0;
@@ -57,7 +75,8 @@ int _phoneSelectedIndex(String location) {
   return 0;
 }
 
-void showMoreNavSheet(BuildContext context) {
+void showMoreNavSheet(BuildContext context, WidgetRef ref) {
+  final receiptLabel = _receiptNavLabel(ref);
   showModalBottomSheet<void>(
     context: context,
     useSafeArea: true,
@@ -94,7 +113,7 @@ void showMoreNavSheet(BuildContext context) {
               crossAxisSpacing: 12,
               childAspectRatio: 1.35,
               children: [
-                _MoreNavCard(icon: Icons.receipt_long_rounded, label: 'سند قبض', color: AppColors.moduleReceipts, onTap: () {
+                _MoreNavCard(icon: Icons.receipt_long_rounded, label: receiptLabel, color: AppColors.moduleReceipts, onTap: () {
                   Navigator.pop(ctx);
                   context.go('/receipts');
                 }),
@@ -179,6 +198,7 @@ class AdaptiveShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final layout = EdLayout.of(context);
     final location = GoRouterState.of(context).matchedLocation;
+    final tabletItems = _tabletNavItems(ref);
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -194,7 +214,7 @@ class AdaptiveShell extends ConsumerWidget {
                     ? Row(
                         children: [
                           Expanded(child: child),
-                          _TabletNavRail(selected: _tabletSelectedIndex(location)),
+                          _TabletNavRail(selected: _tabletSelectedIndex(location, tabletItems), items: tabletItems),
                         ],
                       )
                     : SizedBox.expand(child: child),
@@ -208,7 +228,7 @@ class AdaptiveShell extends ConsumerWidget {
                 selected: _phoneSelectedIndex(location),
                 onSelect: (i) {
                   if (i == _phoneNavItems.length) {
-                    showMoreNavSheet(context);
+                    showMoreNavSheet(context, ref);
                   } else {
                     context.go(_phoneNavItems[i].path);
                   }
@@ -220,9 +240,10 @@ class AdaptiveShell extends ConsumerWidget {
 }
 
 class _TabletNavRail extends StatelessWidget {
-  const _TabletNavRail({required this.selected});
+  const _TabletNavRail({required this.selected, required this.items});
 
   final int selected;
+  final List<_NavItem> items;
 
   @override
   Widget build(BuildContext context) {
@@ -252,9 +273,9 @@ class _TabletNavRail extends StatelessWidget {
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.symmetric(vertical: 4),
-                itemCount: _tabletNavItems.length,
+                itemCount: items.length,
                 itemBuilder: (context, i) {
-                  final item = _tabletNavItems[i];
+                  final item = items[i];
                   final active = i == selected;
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -337,6 +358,7 @@ class AppPage extends StatelessWidget {
     this.toolbar,
     this.useHeader = false,
     this.showNavBar = true,
+    this.unifiedScroll = true,
   });
 
   final String title;
@@ -350,6 +372,8 @@ class AppPage extends StatelessWidget {
   final Widget? toolbar;
   final bool useHeader;
   final bool showNavBar;
+  /// على الهاتف: رأس يطفو مع المحتوى بدل تثبيته — يحرّر مساحة الشاشة.
+  final bool unifiedScroll;
 
   @override
   Widget build(BuildContext context) {
@@ -361,29 +385,86 @@ class AppPage extends StatelessWidget {
     final phoneBack = shouldShowPhoneBack(context, showBack: showBack);
 
     if (layout.isPhone) {
+      final loc = GoRouterState.of(context).matchedLocation;
+      final tabRoot = isPhoneTabRoot(loc);
+      final useFloatingHeader = unifiedScroll && showNavBar;
+
+      Widget body;
+      if (useFloatingHeader) {
+        body = NestedScrollView(
+          floatHeaderSlivers: true,
+          physics: edPageScrollPhysics,
+          headerSliverBuilder: (context, innerBoxIsScrolled) => [
+            SliverAppBar(
+              floating: true,
+              snap: true,
+              pinned: false,
+              automaticallyImplyLeading: false,
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.transparent,
+              shadowColor: AppColors.borderLight,
+              scrolledUnderElevation: 0.6,
+              elevation: 0,
+              toolbarHeight: tabRoot && !showBack ? 52 : 56,
+              title: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.navy),
+              ),
+              leading: phoneBack
+                  ? IconButton(
+                      icon: const Icon(Icons.arrow_forward_rounded, color: AppColors.navy),
+                      onPressed: back,
+                    )
+                  : null,
+              actions: actions,
+              bottom: toolbar != null
+                  ? PreferredSize(
+                      preferredSize: const Size.fromHeight(52),
+                      child: Material(color: Colors.white, child: toolbar!),
+                    )
+                  : null,
+            ),
+            if (subtitle != null && subtitle!.trim().isNotEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, 8),
+                  child: Text(
+                    subtitle!,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
+                  ),
+                ),
+              ),
+          ],
+          body: child,
+        );
+      } else {
+        body = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (showNavBar)
+              EdPhoneHeader(
+                title: title,
+                subtitle: subtitle,
+                kicker: kicker,
+                showBack: phoneBack,
+                onBack: phoneBack ? back : null,
+                actions: actions,
+                compact: true,
+              ),
+            if (toolbar != null) toolbar!,
+            Expanded(child: child),
+          ],
+        );
+      }
+
       return Directionality(
         textDirection: TextDirection.rtl,
         child: Scaffold(
           backgroundColor: Colors.white,
           floatingActionButton: floatingActionButton,
-          body: EdPageBackground(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (showNavBar)
-                  EdPhoneHeader(
-                    title: title,
-                    subtitle: subtitle,
-                    kicker: kicker,
-                    showBack: phoneBack,
-                    onBack: phoneBack ? back : null,
-                    actions: actions,
-                  ),
-                if (toolbar != null) toolbar!,
-                Expanded(child: child),
-              ],
-            ),
-          ),
+          body: EdPageBackground(child: body),
         ),
       );
     }

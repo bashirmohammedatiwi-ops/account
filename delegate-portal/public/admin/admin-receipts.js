@@ -19,12 +19,38 @@ const receiptAdmin = {
   receipts: [],
   stats: {},
   detailTab: 'overview',
-  quickChip: 'all'
+  quickChip: 'all',
+  detailOpenSeq: 0,
+  detailFocusId: null
 };
 
 function todayLocalIso() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function parseMoneyInput(raw) {
+  const cleaned = String(raw ?? '').replace(/[^\d.-]/g, '');
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
+}
+
+function formatMoneyInput(raw) {
+  return parseMoneyInput(raw).toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
+function receiptMoneyField(id, label, value, locked, { main = false, tone = '' } = {}) {
+  const formatted = fmtNumAlways(Number(value || 0));
+  const toneCls = tone ? ` rcv-money-field-${tone}` : '';
+  const mainCls = main ? ' rcv-money-field-main' : '';
+  return `
+    <label class="rcv-money-field${mainCls}${toneCls}">
+      <span>${label}</span>
+      <div class="rcv-money-input-wrap">
+        <input type="text" class="rcv-money-input num-en" id="${id}" inputmode="numeric" autocomplete="off"
+          value="${formatted}" dir="ltr" ${locked ? 'readonly tabindex="-1"' : ''}>
+      </div>
+    </label>`;
 }
 
 function readReceiptSettingsCache() {
@@ -267,17 +293,32 @@ function sortReceipts(rows) {
   return copy;
 }
 
-function syncReceiptQuickChips() {
+function getReceiptActiveFilter() {
   const status = document.getElementById('receiptStatusFilter')?.value || '';
   const from = document.getElementById('receiptFromFilter')?.value || '';
   const to = document.getElementById('receiptToFilter')?.value || '';
+  const agentId = document.getElementById('receiptAgentFilter')?.value || '';
+  const q = document.getElementById('receiptSearchFilter')?.value?.trim() || '';
+  if (agentId || q) return '';
   const today = todayLocalIso();
-  let active = 'all';
-  if (from === today && to === today) active = 'today';
-  else if (status) active = status;
+  if (from === today && to === today && !status) return 'today';
+  if (status === 'pending' || status === 'reviewed' || status === 'posted' || status === 'unposted') {
+    return status;
+  }
+  if (!status && !from && !to) return 'all';
+  return '';
+}
+
+function syncReceiptFilterUi() {
+  const active = getReceiptActiveFilter();
   receiptAdmin.quickChip = active;
   document.querySelectorAll('[data-rcv-chip]').forEach((btn) => {
     btn.classList.toggle('is-active', btn.dataset.rcvChip === active);
+  });
+  document.querySelectorAll('[data-rcv-stat]').forEach((btn) => {
+    const key = btn.dataset.rcvStat;
+    const isActive = active === 'all' ? key === 'all' : !!active && key === active;
+    btn.classList.toggle('is-active', isActive);
   });
 }
 
@@ -324,30 +365,27 @@ function renderReceiptStatsCards(s) {
   const el = document.getElementById('receiptStats');
   if (!el) return;
   const cards = [
-    { key: 'pending', cls: 'pending', label: 'بانتظار المراجعة', count: s.pending, amt: s.pendingAmount },
-    { key: 'reviewed', cls: 'ready', label: 'جاهز للترحيل', count: s.reviewed, amt: s.reviewedAmount },
-    { key: 'posted', cls: 'posted', label: 'مُرحَّل', count: s.posted, amt: s.postedAmount },
-    { key: 'unposted', cls: 'warn', label: 'غير مُرحَّل', count: s.unpostedCount, amt: s.unpostedAmount },
-    { key: 'today', cls: 'neutral', label: 'اليوم', count: s.today, amt: null, suffix: 'سند' },
-    { key: 'total', cls: 'total', label: 'إجمالي المبالغ', count: s.totalAmount, amt: s.total, countIsMoney: true, suffix: 'سند' }
+    { key: 'pending', filterKey: 'pending', cls: 'pending', label: 'بانتظار المراجعة', count: s.pending, amt: s.pendingAmount },
+    { key: 'reviewed', filterKey: 'reviewed', cls: 'ready', label: 'جاهز للترحيل', count: s.reviewed, amt: s.reviewedAmount },
+    { key: 'posted', filterKey: 'posted', cls: 'posted', label: 'مُرحَّل', count: s.posted, amt: s.postedAmount },
+    { key: 'unposted', filterKey: 'unposted', cls: 'warn', label: 'غير مُرحَّل', count: s.unpostedCount, amt: s.unpostedAmount },
+    { key: 'today', filterKey: 'today', cls: 'neutral', label: 'اليوم', count: s.today, amt: null, suffix: 'سند' },
+    { key: 'total', filterKey: 'all', cls: 'total', label: 'إجمالي المبالغ', count: s.totalAmount, amt: s.total, countIsMoney: true, suffix: 'سند' }
   ];
   el.innerHTML = cards.map((c) => {
-    const filterKey = c.key === 'total' ? 'all' : c.key;
-    const clickable = c.key !== 'unposted' && c.key !== 'total';
+    const filterKey = c.filterKey || c.key;
     const value = c.countIsMoney ? fmtMoney(c.count || 0) : fmtNumAlways(c.count || 0);
     const sub = c.countIsMoney
       ? `<span class="rcv-stat-amt num-en" dir="ltr">${fmtNumAlways(c.amt || 0)} ${c.suffix || ''}</span>`
       : (c.amt != null
         ? `<span class="rcv-stat-amt num-en" dir="ltr">${fmtMoney(c.amt || 0)}</span>`
         : `<span class="rcv-stat-amt">${c.suffix || ''}</span>`);
-    const tag = clickable ? 'button' : 'article';
-    const attrs = clickable ? ` type="button" data-rcv-stat="${filterKey}"` : '';
     return `
-    <${tag}${attrs} class="rcv-stat rcv-stat-${c.cls}${clickable ? ' rcv-stat-btn' : ''}">
+    <button type="button" data-rcv-stat="${filterKey}" class="rcv-stat rcv-stat-${c.cls} rcv-stat-btn">
       <span class="rcv-stat-label">${c.label}</span>
       <strong class="rcv-stat-value num-en" dir="ltr">${value}</strong>
       ${sub}
-    </${tag}>`;
+    </button>`;
   }).join('');
   el.querySelectorAll('[data-rcv-stat]').forEach((btn) => {
     btn.addEventListener('click', () => applyReceiptQuickChip(btn.dataset.rcvStat));
@@ -378,14 +416,28 @@ function canEditReceipt(status) {
   return status !== 'posted';
 }
 
+function canPostReceipt(status) {
+  return status === 'reviewed';
+}
+
+function receiptPostButtonHtml(id, status, { detail = false } = {}) {
+  if (status === 'posted' || status === 'rejected') return '';
+  const cls = detail ? 'btn btn-soft' : 'btn btn-primary btn-sm';
+  const label = detail ? 'ترحيل للإداري' : 'ترحيل';
+  if (canPostReceipt(status)) {
+    const attrs = detail ? ' id="btnPostReceipt"' : ` data-post-receipt="${id}"`;
+    return `<button type="button" class="${cls}"${attrs}>${label}</button>`;
+  }
+  return `<button type="button" class="${cls}" disabled title="احفظ المراجعة أولاً لتفعيل الترحيل">${label}</button>`;
+}
+
 function receiptRowActions(r) {
   const editable = canEditReceipt(r.status);
   return `
     <div class="rcv-row-actions">
       <button type="button" class="btn btn-soft btn-sm" data-receipt-id="${r.id}">${editable ? 'مراجعة' : 'عرض'}</button>
       <button type="button" class="btn btn-danger btn-sm" data-del-receipt="${r.id}">حذف</button>
-      ${r.status !== 'posted' && r.status !== 'rejected' ? `
-      <button type="button" class="btn btn-primary btn-sm" data-post-receipt="${r.id}">ترحيل</button>` : ''}
+      ${receiptPostButtonHtml(r.id, r.status)}
     </div>`;
 }
 
@@ -451,7 +503,7 @@ async function loadReceiptsPage() {
 
   renderReceiptStatsCards(receiptAdmin.stats);
   renderReceiptQuickMeta(receiptAdmin.stats);
-  syncReceiptQuickChips();
+  syncReceiptFilterUi();
 
   const countEl = document.getElementById('receiptListCount');
   if (countEl) countEl.innerHTML = `<span class="num-en" dir="ltr">${fmtNumAlways(receipts.length)}</span> سند`;
@@ -610,42 +662,117 @@ function renderReceiptDetailTab(tab, r, posting, locked) {
     return `<div class="rcv-tab-panel">${receiptEventsTimeline(r.events)}</div>`;
   }
   return `
-    <div class="rcv-tab-panel">
-      <label class="rcv-field">
-        <span>الزبون</span>
-        <input type="search" class="search" id="rvEditCustomerSearch"
-          placeholder="بحث لتغيير الزبون..."
-          value="${esc(customerLabel)}" ${locked ? 'readonly' : ''}>
-        <small id="rvEditCustomerPicked">${esc(customerLabel || 'اختر زبوناً')}</small>
-        <div class="rcv-acc-results" id="rvEditCustomerResults"></div>
-      </label>
-      <div class="rcv-edit-grid">
-        <label class="rcv-field"><span>المبلغ</span>
-          <input type="number" class="num-en" id="rvEditAmount" min="0" step="1" value="${r.amount}" ${locked ? 'readonly' : ''}></label>
-        <label class="rcv-field"><span>العمولة</span>
-          <input type="number" class="num-en" id="rvEditCommission" min="0" step="1" value="${r.commission}" ${locked ? 'readonly' : ''}></label>
-        <label class="rcv-field"><span>الحسم</span>
-          <input type="number" class="num-en" id="rvEditDiscount" min="0" step="1" value="${r.discount}" ${locked ? 'readonly' : ''}></label>
-        <label class="rcv-field"><span>تاريخ السند</span>
-          <input type="date" class="num-en" id="rvEditDate" value="${esc((r.receiptDate || '').slice(0, 10))}" ${locked ? 'readonly' : ''}></label>
-      </div>
-      <label class="rcv-field"><span>ملاحظات / البيان</span>
-        <textarea id="rvEditNotes" rows="2" ${locked ? 'readonly' : ''}>${esc(r.notes)}</textarea></label>
-      <label class="rcv-field"><span>ملاحظة الإدارة</span>
-        <textarea id="rvEditAdminNote" rows="2" ${locked ? 'readonly' : ''}>${esc(r.adminNote)}</textarea></label>
+    <div class="rcv-tab-panel rcv-form">
+      <section class="rcv-form-block">
+        <div class="rcv-form-block-head">
+          <span class="rcv-form-block-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          </span>
+          <div>
+            <h4 class="rcv-form-block-title">الزبون</h4>
+            <p class="rcv-form-block-sub">ابحث لتغيير حساب الزبون في الإداري</p>
+          </div>
+        </div>
+        <label class="rcv-field rcv-field-customer">
+          <input type="search" class="rcv-input search" id="rvEditCustomerSearch"
+            placeholder="رقم أو اسم الزبون..."
+            value="${esc(customerLabel)}" ${locked ? 'readonly tabindex="-1"' : ''}>
+          <small class="rcv-customer-picked" id="rvEditCustomerPicked">${esc(customerLabel || 'اختر زبوناً')}</small>
+          <div class="rcv-acc-results" id="rvEditCustomerResults"></div>
+        </label>
+      </section>
+
+      <section class="rcv-form-block rcv-form-block-money">
+        <div class="rcv-form-block-head">
+          <span class="rcv-form-block-icon tone-money" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 12h4M7 9h6"/></svg>
+          </span>
+          <div>
+            <h4 class="rcv-form-block-title">المبالغ</h4>
+            <p class="rcv-form-block-sub">أدخل المبلغ والعمولة والحسم</p>
+          </div>
+        </div>
+        <div class="rcv-money-grid">
+          ${receiptMoneyField('rvEditAmount', 'المبلغ', r.amount, locked, { main: true })}
+          ${receiptMoneyField('rvEditCommission', 'العمولة', r.commission, locked, { tone: 'comm' })}
+          ${receiptMoneyField('rvEditDiscount', 'الحسم', r.discount, locked, { tone: 'disc' })}
+          <label class="rcv-field rcv-field-date">
+            <span>تاريخ السند</span>
+            <input type="date" class="rcv-input num-en" id="rvEditDate"
+              value="${esc((r.receiptDate || '').slice(0, 10))}" ${locked ? 'disabled' : ''}>
+          </label>
+        </div>
+      </section>
+
+      <section class="rcv-form-block">
+        <div class="rcv-form-block-head">
+          <span class="rcv-form-block-icon tone-notes" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M6 4h12v16H6z"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>
+          </span>
+          <div>
+            <h4 class="rcv-form-block-title">البيان والملاحظات</h4>
+            <p class="rcv-form-block-sub">يُرحَّل للإداري ضمن Exp1 / Exp2 / Remarks</p>
+          </div>
+        </div>
+        <label class="rcv-field">
+          <span>ملاحظات / البيان</span>
+          <textarea class="rcv-textarea" id="rvEditNotes" rows="3" placeholder="بيان سند القبض..."
+            ${locked ? 'readonly tabindex="-1"' : ''}>${esc(r.notes)}</textarea>
+        </label>
+        <label class="rcv-field">
+          <span>ملاحظة الإدارة</span>
+          <textarea class="rcv-textarea rcv-textarea-admin" id="rvEditAdminNote" rows="2" placeholder="ملاحظة داخلية..."
+            ${locked ? 'readonly tabindex="-1"' : ''}>${esc(r.adminNote)}</textarea>
+        </label>
+      </section>
       ${r.postedError ? `<p class="rcv-error">${esc(r.postedError)}</p>` : ''}
     </div>`;
 }
 
-function bindReceiptDetailTabHandlers(r, locked) {
+function renderReceiptDetailContent(tab, r, posting, locked) {
+  document.querySelectorAll('[data-rcv-tab]').forEach((btn) => {
+    btn.classList.toggle('is-active', btn.dataset.rcvTab === tab);
+  });
+  const host = document.getElementById('receiptDetailTabHost');
+  if (host) host.innerHTML = renderReceiptDetailTab(tab, r, posting, locked);
+  if (!locked && tab === 'overview') {
+    bindReceiptCustomerSearch();
+    bindReceiptMoneyFields();
+  }
+}
+
+function bindReceiptMoneyFields() {
+  ['rvEditAmount', 'rvEditCommission', 'rvEditDiscount'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el || el.readOnly) return;
+    el.value = formatMoneyInput(el.value);
+    el.addEventListener('focus', () => {
+      const n = parseMoneyInput(el.value);
+      el.value = n > 0 ? String(n) : '';
+    });
+    el.addEventListener('blur', () => {
+      el.value = formatMoneyInput(el.value);
+    });
+  });
+}
+
+function bindReceiptDetailTabHandlers() {
+  const ctx = receiptAdmin.detailContext;
+  if (!ctx) return;
+  const { r, locked } = ctx;
   document.querySelectorAll('[data-rcv-tab]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      receiptAdmin.detailTab = btn.dataset.rcvTab;
-      void openReceiptDetail(r.id);
+      const next = btn.dataset.rcvTab;
+      if (next === receiptAdmin.detailTab) return;
+      receiptAdmin.detailTab = next;
+      renderReceiptDetailContent(next, ctx.r, ctx.posting, ctx.locked);
     });
   });
   document.getElementById('btnCloseReceiptDetail')?.addEventListener('click', () => {
+    receiptAdmin.detailOpenSeq += 1;
     receiptAdmin.selected = null;
+    receiptAdmin.detailFocusId = null;
+    receiptAdmin.detailContext = null;
     showReceiptDetailEmpty();
     document.querySelectorAll('.rcv-row.is-active, .rcv-card-item.is-active').forEach((el) => el.classList.remove('is-active'));
   });
@@ -659,6 +786,7 @@ function bindReceiptDetailTabHandlers(r, locked) {
   });
   if (!locked) {
     bindReceiptCustomerSearch();
+    bindReceiptMoneyFields();
     document.getElementById('btnSaveReceiptEdit')?.addEventListener('click', () => saveReceiptEdit(r.id));
     document.getElementById('btnRejectReceipt')?.addEventListener('click', () => rejectReceipt(r.id));
     document.getElementById('btnPostReceipt')?.addEventListener('click', () => postReceiptToEdariUi(r.id));
@@ -678,15 +806,28 @@ function journalPreviewTable(lines = []) {
               <td class="num-en" dir="ltr">${ln.isDebit ? fmtMoney(ln.amount) : '—'}</td>
               <td class="num-en" dir="ltr">${ln.isDebit ? '—' : fmtMoney(ln.amount)}</td>
               <td><span class="num-en" dir="ltr">${esc(ln.accNum)}</span> ${esc(ln.accName)}</td>
-              <td>${esc(ln.exp1)}</td>
+              <td>${esc([ln.exp1, ln.noteExp2, ln.noteRemarks].filter(Boolean).join(' / ') || ln.exp1)}</td>
             </tr>`).join('')}
         </tbody>
       </table>
     </div>`;
 }
 
+async function refreshReceiptDetailAfterListChange(preferredId) {
+  await loadReceiptsPage();
+  const focusId = receiptAdmin.detailFocusId ?? preferredId;
+  if (focusId) await openReceiptDetail(focusId);
+}
+
 async function openReceiptDetail(id) {
+  const reqSeq = ++receiptAdmin.detailOpenSeq;
+  receiptAdmin.detailFocusId = id;
+  const prevId = receiptAdmin.selected?.id;
+  if (prevId !== id) receiptAdmin.detailTab = 'overview';
+
   const data = await commerceApi(`/receipts/${id}`);
+  if (reqSeq !== receiptAdmin.detailOpenSeq) return;
+
   const r = data.receipt;
   receiptAdmin.selected = r;
   receiptAdmin.editCustomer = {
@@ -720,10 +861,6 @@ async function openReceiptDetail(id) {
           <span>المبلغ</span>
           <strong class="num-en" dir="ltr">${fmtMoney(r.amount)}</strong>
         </div>
-        <div class="rcv-detail-amt rcv-detail-amt-net">
-          <span>صافي بعد الحسم</span>
-          <strong class="num-en" dir="ltr">${fmtMoney(receiptNetAmount(r))}</strong>
-        </div>
         <div class="rcv-detail-amt">
           <span>عمولة</span>
           <strong class="num-en" dir="ltr">${fmtMoney(r.commission)}</strong>
@@ -745,15 +882,16 @@ async function openReceiptDetail(id) {
         <button type="button" class="rcv-detail-tab${tab === 'history' ? ' is-active' : ''}" data-rcv-tab="history">السجل</button>
       </div>
 
-      ${renderReceiptDetailTab(tab, r, posting, locked)}
+      <div id="receiptDetailTabHost">${renderReceiptDetailTab(tab, r, posting, locked)}</div>
 
       ${locked ? '' : `
       <div class="rcv-detail-actions">
         <button type="button" class="btn btn-primary" id="btnSaveReceiptEdit">حفظ</button>
-        <button type="button" class="btn btn-soft" id="btnPostReceipt">ترحيل للإداري</button>
+        ${receiptPostButtonHtml(r.id, r.status, { detail: true })}
         <button type="button" class="btn btn-soft" id="btnRejectReceipt">رفض</button>
         <button type="button" class="btn btn-danger" id="btnDeleteReceipt">حذف</button>
       </div>
+      ${canPostReceipt(r.status) ? '' : '<p class="rcv-muted">راجع السند واضغط «حفظ» لتفعيل الترحيل</p>'}
       ${canPostReceiptsFromDesktop() ? '' : '<p class="rcv-muted">الترحيل من تطبيق الإدارة المكتبي فقط</p>'}`}
       ${locked ? `
       <div class="rcv-detail-actions">
@@ -767,7 +905,8 @@ async function openReceiptDetail(id) {
     el.classList.toggle('is-active', rid === id);
   });
 
-  bindReceiptDetailTabHandlers(r, locked);
+  receiptAdmin.detailContext = { r, posting, locked };
+  bindReceiptDetailTabHandlers();
 }
 
 function bindReceiptCustomerSearch() {
@@ -822,17 +961,16 @@ async function saveReceiptEdit(id) {
       method: 'PATCH',
       body: JSON.stringify({
         customerAccSeq: receiptAdmin.editCustomer?.seq || undefined,
-        amount: document.getElementById('rvEditAmount')?.value,
-        commission: document.getElementById('rvEditCommission')?.value,
-        discount: document.getElementById('rvEditDiscount')?.value,
+        amount: parseMoneyInput(document.getElementById('rvEditAmount')?.value),
+        commission: parseMoneyInput(document.getElementById('rvEditCommission')?.value),
+        discount: parseMoneyInput(document.getElementById('rvEditDiscount')?.value),
         receiptDate: document.getElementById('rvEditDate')?.value,
         notes: document.getElementById('rvEditNotes')?.value,
         adminNote: document.getElementById('rvEditAdminNote')?.value
       })
     });
     showToast('تم حفظ التعديل');
-    await loadReceiptsPage();
-    await openReceiptDetail(id);
+    await refreshReceiptDetailAfterListChange(id);
   } catch (err) {
     showToast(err.message, 'err');
   }
@@ -870,14 +1008,18 @@ async function rejectReceipt(id) {
       body: JSON.stringify({ status: 'rejected', note: 'رفض من الإدارة' })
     });
     showToast('تم الرفض');
-    await loadReceiptsPage();
-    await openReceiptDetail(id);
+    await refreshReceiptDetailAfterListChange(id);
   } catch (err) {
     showToast(err.message, 'err');
   }
 }
 
 async function postReceiptToEdariUi(id) {
+  const key = `receipt:${id}`;
+  if (!beginEdariPosting(key)) {
+    showToast('جاري الترحيل — انتظر', 'err');
+    return;
+  }
   try {
     const data = await commerceApi(`/receipts/${id}`);
     const posting = data.posting;
@@ -893,9 +1035,14 @@ async function postReceiptToEdariUi(id) {
       showToast('السند مُرحَّل مسبقاً');
       return;
     }
+    if (!canPostReceipt(data.receipt.status)) {
+      showToast('راجع السند واضغط «حفظ» قبل الترحيل', 'err');
+      return;
+    }
     const postingDate = todayLocalIso();
     if (!confirm(`ترحيل سند ${data.receipt.receiptNo} إلى الإداري بتاريخ ${postingDate}؟`)) return;
     const result = await window.edariDesktop.postEdariReceipt({
+      id,
       receiptNo: data.receipt.receiptNo,
       postingDate,
       lines: posting.lines
@@ -907,20 +1054,28 @@ async function postReceiptToEdariUi(id) {
       });
       throw new Error(result?.error || 'فشل الترحيل');
     }
-    await commerceApi(`/receipts/${id}/posted`, {
-      method: 'POST',
-      body: JSON.stringify({
-        journalNum: result.journalNum,
-        receiptNum: result.receiptNum || data.receipt.receiptNo,
-        postingDate,
-        lines: result.lines || posting.lines
-      })
-    });
+    const markBody = {
+      journalNum: result.journalNum,
+      receiptNum: result.receiptNum || data.receipt.receiptNo,
+      postingDate,
+      lines: result.lines || posting.lines
+    };
+    try {
+      await commercePostWithRetry(`/receipts/${id}/posted`, markBody);
+    } catch (markErr) {
+      showToast(
+        `دخل الإداري (سند قيد ${result.journalNum}) لكن تعذّر تحديث اللوحة — حدّث الصفحة`,
+        'err'
+      );
+      await refreshReceiptDetailAfterListChange(id);
+      return;
+    }
     showToast(`تم الترحيل · سند قيد ${result.journalNum}`);
-    await loadReceiptsPage();
-    await openReceiptDetail(id);
+    await refreshReceiptDetailAfterListChange(id);
   } catch (err) {
     showToast(err.message, 'err');
+  } finally {
+    endEdariPosting(key);
   }
 }
 

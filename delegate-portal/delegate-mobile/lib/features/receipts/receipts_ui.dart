@@ -1003,15 +1003,19 @@ class DeliveryReceiptCard extends StatelessWidget {
     required this.item,
     required this.onReprint,
     required this.onCreateReceipt,
+    this.onMarkHandover,
     this.showPrint = true,
     this.isReprinting = false,
+    this.isMarkingHandover = false,
   });
 
   final DeliveryReceipt item;
   final VoidCallback? onReprint;
   final VoidCallback? onCreateReceipt;
+  final VoidCallback? onMarkHandover;
   final bool showPrint;
   final bool isReprinting;
+  final bool isMarkingHandover;
 
   @override
   Widget build(BuildContext context) {
@@ -1087,11 +1091,21 @@ class DeliveryReceiptCard extends StatelessWidget {
                       ),
                       if (item.linkedReceiptNo != null && item.linkedReceiptNo!.isNotEmpty)
                         _MetaChip(icon: Icons.receipt_long_rounded, label: item.linkedReceiptNo!),
+                      if (item.isTeamDelivery && (item.agentName ?? '').isNotEmpty)
+                        _MetaChip(icon: Icons.person_outline_rounded, label: item.agentName!),
+                      if (item.handoverStatusLabel.isNotEmpty)
+                        _MetaChip(
+                          icon: item.handoverReceived ? Icons.verified_rounded : Icons.hourglass_top_rounded,
+                          label: item.handoverStatusLabel,
+                          color: item.handoverReceived ? AppColors.success : AppColors.warning,
+                        ),
                       if (item.printedAt != null && item.printedAt!.isNotEmpty)
                         const _MetaChip(icon: Icons.print_rounded, label: 'طُبع'),
                     ],
                   ),
-                  if ((showPrint && onReprint != null) || (item.canCreateReceipt && onCreateReceipt != null)) ...[
+                  if ((showPrint && onReprint != null)
+                      || (item.canCreateReceipt && onCreateReceipt != null)
+                      || (item.canMarkHandover && onMarkHandover != null)) ...[
                     const SizedBox(height: 10),
                     Row(
                       children: [
@@ -1103,8 +1117,20 @@ class DeliveryReceiptCard extends StatelessWidget {
                                 : const Icon(Icons.print_rounded, size: 16),
                             label: Text(isReprinting ? 'جاري الطباعة...' : 'إعادة طباعة'),
                           ),
-                        if (item.canCreateReceipt && onCreateReceipt != null) ...[
+                        if (item.canMarkHandover && onMarkHandover != null) ...[
                           if (showPrint && onReprint != null) const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: isMarkingHandover ? null : onMarkHandover,
+                              icon: isMarkingHandover
+                                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                  : const Icon(Icons.payments_outlined, size: 18),
+                              label: Text(isMarkingHandover ? 'جاري التأكيد...' : 'استلمت المبلغ'),
+                            ),
+                          ),
+                        ],
+                        if (item.canCreateReceipt && onCreateReceipt != null) ...[
+                          if ((showPrint && onReprint != null) || (item.canMarkHandover && onMarkHandover != null)) const SizedBox(width: 8),
                           Expanded(
                             child: FilledButton.icon(
                               onPressed: onCreateReceipt,

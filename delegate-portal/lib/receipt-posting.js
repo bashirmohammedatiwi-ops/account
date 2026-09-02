@@ -5,8 +5,13 @@
  * Discount → debit discount GL / credit customer
  */
 
+const iconv = require('iconv-lite');
+
 const EDARI_REF_MAX = 30;
-const EDARI_EXP1_MAX = 50;
+/** Observed max in live File12n — was wrongly capped at 50 before. */
+const EDARI_EXP1_MAX = 107;
+const EDARI_EXP2_MAX = 61;
+const EDARI_FILE12N_REMARKS_MAX = 19;
 
 function buildReceiptRef(receipt) {
   const raw = String(receipt?.receiptNo || receipt?.receipt_no || '').trim();
@@ -18,54 +23,74 @@ function buildReceiptRef(receipt) {
   return clampEdariField(`R.V ${compact}`, EDARI_REF_MAX);
 }
 
-const WIN1256_AR = {
-  '،': 0xA1, '؛': 0xBA, '؟': 0xBF,
-  'ء': 0xC1, 'آ': 0xC2, 'أ': 0xC3, 'ؤ': 0xC4, 'إ': 0xC5, 'ئ': 0xC6,
-  'ا': 0xC7, 'ب': 0xC8, 'ة': 0xC9, 'ت': 0xCA, 'ث': 0xCB, 'ج': 0xCC,
-  'ح': 0xCD, 'خ': 0xCE, 'د': 0xCF, 'ذ': 0xD0, 'ر': 0xD1, 'ز': 0xD2,
-  'س': 0xD3, 'ش': 0xD4, 'ص': 0xD5, 'ض': 0xD6, 'ط': 0xD7, 'ظ': 0xD8,
-  'ع': 0xD9, 'غ': 0xDA, 'ـ': 0xDC, 'ف': 0xDD, 'ق': 0xDE, 'ك': 0xDF,
-  'ل': 0xE1, 'م': 0xE3, 'ن': 0xE4, 'ه': 0xE5, 'و': 0xE6, 'ى': 0xEC,
-  'ي': 0xED, 'ً': 0xF0, 'ٌ': 0xF1, 'ٍ': 0xF2, 'َ': 0xF3, 'ُ': 0xF5,
-  'ِ': 0xF6, 'ّ': 0xF8, 'ْ': 0xFA
-};
-
-function num(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
+function normalizeEdariText(value) {
+  return String(value ?? '')
+    .normalize('NFKC')
+    .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[\u06F0-\u06F9]/g, (d) => String(d.charCodeAt(0) - 0x06F0))
+    .replace(/\u06CC/g, '\u064A') // Persian yeh → Arabic yeh
+    .replace(/\u06A9/g, '\u0643') // Persian kaf → Arabic kaf
+    .replace(/\u06AF/g, '\u0642') // Persian gaf → qaf (closest in WIN1256)
+    .replace(/\u067E/g, '\u0628') // Persian pe → beh
+    .replace(/\u0686/g, '\u062C') // Persian che → jeem
+    .replace(/\u0698/g, '\u0632') // Persian zhe → zain
+    .replace(/\u200C|\u200D|\u200E|\u200F|\uFEFF/g, '') // zero-width chars
+    .replace(/\r\n|\r|\n/g, ' / ') // multi-line → single Edari line
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function encodeWin1256Bytes(value) {
-  const s = String(value ?? '');
-  const out = [];
-  for (const ch of s) {
-    const code = ch.codePointAt(0);
-    if (code <= 0x7F) {
-      out.push(code);
-      continue;
-    }
-    const mapped = WIN1256_AR[ch];
-    out.push(mapped != null ? mapped : 0x3F);
-  }
-  return Buffer.from(out);
+  const text = normalizeEdariText(value);
+  if (!text) return Buffer.alloc(0);
+  return iconv.encode(text, 'win1256');
+}
+
+function bytesToEdariSqlLiteral(bytes) {
+  return `'${Buffer.from(bytes).toString('latin1')}'`;
 }
 
 function clampEdariField(value, maxLen) {
-  const s = String(value ?? '');
+  let s = normalizeEdariText(value);
   if (!maxLen || maxLen < 1) return '';
-  if (s.length <= maxLen && encodeWin1256Bytes(s).length <= maxLen) return s;
-  let out = s.length > maxLen ? s.slice(0, maxLen) : s;
-  while (out.length > 0 && encodeWin1256Bytes(out).length > maxLen) {
-    out = out.slice(0, -1);
+  let bytes = encodeWin1256Bytes(s);
+  while (bytes.length > maxLen && s.length > 0) {
+    s = s.slice(0, -1);
+    bytes = encodeWin1256Bytes(s);
   }
-  return out;
+  return s;
+}
+
+function takeEdariPrefix(value, maxLen) {
+  return clampEdariField(value, maxLen);
+}
+
+function splitEdariNarrative(text) {
+  const full = normalizeEdariText(text);
+  if (!full) return { exp1: '', noteExp2: '', noteRemarks: '' };
+  const exp1 = takeEdariPrefix(full, EDARI_EXP1_MAX);
+  const rest1 = full.slice(exp1.length).trim();
+  const noteExp2 = takeEdariPrefix(rest1, EDARI_EXP2_MAX);
+  const rest2 = rest1.slice(noteExp2.length).trim();
+  const noteRemarks = takeEdariPrefix(rest2, EDARI_FILE12N_REMARKS_MAX);
+  return { exp1, noteExp2, noteRemarks };
+}
+
+function journalLineDescription(line = {}) {
+  return [line.exp1, line.noteExp2, line.noteRemarks]
+    .map((part) => String(part || '').trim())
+    .filter(Boolean)
+    .join(' / ');
 }
 
 function edariSqlLiteral(value) {
   const bytes = encodeWin1256Bytes(String(value ?? '').replace(/'/g, "''"));
-  let out = "'";
-  for (const byte of bytes) out += String.fromCharCode(byte);
-  return `${out}'`;
+  return bytesToEdariSqlLiteral(bytes);
+}
+
+function num(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
 }
 
 function sqlQuote(value) {
@@ -81,25 +106,31 @@ function accRef(acc) {
   };
 }
 
-function line(acc, amount, isDebit, exp1, exp2 = '', oppositeAcc = null) {
+function line(acc, amount, isDebit, narrative = {}, oppositeAcc = null) {
   const a = accRef(acc);
   if (!a?.seq || num(amount) <= 0) return null;
   const opp = accRef(oppositeAcc);
+  const exp1 = clampEdariField(String(narrative.exp1 || 'سند قبض').trim(), EDARI_EXP1_MAX);
+  const noteExp2 = clampEdariField(String(narrative.noteExp2 || '').trim(), EDARI_EXP2_MAX);
+  const noteRemarks = clampEdariField(String(narrative.noteRemarks || '').trim(), EDARI_FILE12N_REMARKS_MAX);
+  const receiptRef = clampEdariField(String(narrative.receiptRef || '').trim(), EDARI_REF_MAX);
   return {
     accSeq: a.seq,
     accNum: a.num,
     accName: a.name,
     amount: Math.round(num(amount)),
     isDebit: !!isDebit,
-    exp1: clampEdariField(String(exp1 || '').trim(), EDARI_EXP1_MAX),
-    exp2: clampEdariField(String(exp2 || '').trim(), EDARI_REF_MAX),
+    exp1,
+    noteExp2,
+    noteRemarks,
+    receiptRef,
     oppositeAccSeq: opp?.seq || ''
   };
 }
 
-function pairLines(debitAcc, creditAcc, amount, exp1, exp2) {
-  const debit = line(debitAcc, amount, true, exp1, exp2, creditAcc);
-  const credit = line(creditAcc, amount, false, exp1, exp2, debitAcc);
+function pairLines(debitAcc, creditAcc, amount, narrative) {
+  const debit = line(debitAcc, amount, true, narrative, creditAcc);
+  const credit = line(creditAcc, amount, false, narrative, debitAcc);
   if (!debit || !credit) return [];
   return [debit, credit];
 }
@@ -110,6 +141,9 @@ function buildReceiptJournalLines(receipt, accounts = {}) {
   const discount = num(receipt.discount);
   const notes = String(receipt.notes || '').trim();
   const rv = buildReceiptRef(receipt);
+  const amountNarrative = splitEdariNarrative(notes || 'سند قبض');
+  if (!amountNarrative.exp1) amountNarrative.exp1 = 'سند قبض';
+  amountNarrative.receiptRef = rv;
   const customer = accRef(accounts.customer || {
     seq: receipt.customerAccSeq,
     num: receipt.customerNum,
@@ -121,9 +155,9 @@ function buildReceiptJournalLines(receipt, accounts = {}) {
   const disc = accRef(accounts.discount);
 
   return [
-    ...pairLines(cash, customer, amount, notes || 'سند قبض', rv),
-    ...pairLines(commDebit, commCredit, commission, 'عمولة تحصيل', rv),
-    ...pairLines(disc, customer, discount, 'حسم', rv)
+    ...pairLines(cash, customer, amount, amountNarrative),
+    ...pairLines(commDebit, commCredit, commission, { exp1: 'عمولة تحصيل', receiptRef: rv }),
+    ...pairLines(disc, customer, discount, { exp1: 'حسم', receiptRef: rv })
   ];
 }
 
@@ -165,35 +199,44 @@ function formatEdariDate(isoOrRaw) {
   return `${d}-${mo}-${y}`;
 }
 
+function formatEdariJournalDate(isoOrRaw) {
+  const iso = toIsoDate(isoOrRaw);
+  const [y, mo, d] = iso.split('-');
+  return `'${d}/${mo}/${y}'`;
+}
+
+/** @deprecated use formatEdariJournalDate — journal Date must be date-only, not TIMESTAMP */
 function formatEdariTimestamp(isoOrRaw) {
-  return `TIMESTAMP '${toIsoDate(isoOrRaw)} 12:00:00'`;
+  return formatEdariJournalDate(isoOrRaw);
 }
 
 /** Same INSERT shape as shorja_app insertJournalEntry — Seq is AUTOINC, never set. */
 function buildFile12nInsertSql({ num: bondNum, line: ln, dateStr, billKind = 0, receiptRef }) {
   const dept = ln.isDebit ? 'True' : 'False';
   const exp1 = clampEdariField(ln.exp1 || 'سند قبض', EDARI_EXP1_MAX);
+  const noteExp2 = clampEdariField(ln.noteExp2 || '', EDARI_EXP2_MAX);
+  const noteRemarks = clampEdariField(ln.noteRemarks || '', EDARI_FILE12N_REMARKS_MAX);
   const ref = clampEdariField(
-    receiptRef || ln.exp2 || ln.ref || String(bondNum || ''),
+    receiptRef || ln.receiptRef || ln.ref || String(bondNum || ''),
     EDARI_REF_MAX
   );
-  const forBill = 0;
   return `
-    INSERT INTO File12n (Num, Acc, "Date", Am, Dept, Exp1, Exp2, BillNum, BillSeq, BillKind, BillBook, Remarks, ForBill, Ref, Two)
+    INSERT INTO File12n (Num, Acc, "Date", Am, Dept, Equal, Exp1, Exp2, BillNum, BillSeq, BillKind, BillBook, Remarks, ForBill, Ref, Two)
     VALUES (
       ${Number(bondNum)},
       ${Number(ln.accSeq)},
-      ${formatEdariTimestamp(dateStr)},
+      ${formatEdariJournalDate(dateStr)},
       ${Math.round(num(ln.amount))},
       ${dept},
+      1,
       ${edariSqlLiteral(exp1)},
-      '',
+      ${edariSqlLiteral(noteExp2)},
       0,
       0,
       ${Number(billKind) || 0},
       0,
-      '',
-      ${forBill},
+      ${edariSqlLiteral(noteRemarks)},
+      0,
       ${edariSqlLiteral(ref)},
       ${Number(ln.oppositeAccSeq || ln.oppositeAcc || 0)}
     )
@@ -205,12 +248,17 @@ module.exports = {
   buildReceiptRef,
   validatePostingAccounts,
   formatEdariDate,
+  formatEdariJournalDate,
   formatEdariTimestamp,
   buildFile12nInsertSql,
+  splitEdariNarrative,
+  journalLineDescription,
   sqlQuote,
   edariSqlLiteral,
   clampEdariField,
   toIsoDate,
   EDARI_REF_MAX,
-  EDARI_EXP1_MAX
+  EDARI_EXP1_MAX,
+  EDARI_EXP2_MAX,
+  EDARI_FILE12N_REMARKS_MAX
 };

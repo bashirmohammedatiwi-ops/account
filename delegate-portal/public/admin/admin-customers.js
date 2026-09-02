@@ -299,6 +299,11 @@ async function rejectCustomerReq(id) {
 }
 
 async function postCustomerReqToEdariUi(id) {
+  const key = `customer:${id}`;
+  if (!beginEdariPosting(key)) {
+    showToast('جاري الترحيل — انتظر', 'err');
+    return;
+  }
   try {
     const data = await commerceApi(`/customer-requests/${id}`);
     const posting = data.posting || data.request;
@@ -312,6 +317,7 @@ async function postCustomerReqToEdariUi(id) {
     }
     if (!confirm(`ترحيل ${data.request.name} كفرع جديد تحت ${data.request.treeName || data.request.treeNum}؟`)) return;
     const result = await window.edariDesktop.postEdariCustomer({
+      id,
       name: posting.name,
       phone: posting.phone,
       address: posting.address,
@@ -327,21 +333,31 @@ async function postCustomerReqToEdariUi(id) {
       });
       throw new Error(result?.error || 'فشل الترحيل');
     }
-    await commerceApi(`/customer-requests/${id}/posted`, {
-      method: 'POST',
-      body: JSON.stringify({
-        edariSeq: result.seq,
-        edariNum: result.num,
-        name1: result.name1,
-        address: result.address,
-        remarks: result.remarks
-      })
-    });
+    const markBody = {
+      edariSeq: result.seq,
+      edariNum: result.num,
+      name1: result.name1,
+      address: result.address,
+      remarks: result.remarks
+    };
+    try {
+      await commercePostWithRetry(`/customer-requests/${id}/posted`, markBody);
+    } catch (markErr) {
+      showToast(
+        `دخل الإداري (حساب ${result.num}) لكن تعذّر تحديث اللوحة — حدّث الصفحة`,
+        'err'
+      );
+      await loadCustomerRequestsPage();
+      await openCustomerReqDetail(id);
+      return;
+    }
     showToast(`تم الترحيل · حساب ${result.num}`);
     await loadCustomerRequestsPage();
     await openCustomerReqDetail(id);
   } catch (err) {
     showToast(err.message, 'err');
+  } finally {
+    endEdariPosting(key);
   }
 }
 

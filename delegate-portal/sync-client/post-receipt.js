@@ -1,6 +1,6 @@
 /**
  * Post a receipt voucher to Edari using the same File12n method as shorja_app:
- * AUTOINC Seq, TIMESTAMP date, paired debit/credit with Two, then repair AUTOINC.
+ * AUTOINC Seq, date-only journal Date, Equal=1, paired debit/credit with Two, then repair AUTOINC.
  */
 const path = require('path');
 
@@ -14,6 +14,8 @@ const {
   buildReceiptRef,
   clampEdariField,
   EDARI_EXP1_MAX,
+  EDARI_EXP2_MAX,
+  EDARI_FILE12N_REMARKS_MAX,
   EDARI_REF_MAX,
   toIsoDate,
   sqlQuote
@@ -119,9 +121,16 @@ async function insertJournalLine(ln, bondNum, dateStr, receiptRef) {
   const safeLine = {
     ...ln,
     exp1: clampEdariField(ln.exp1 || 'سند قبض', EDARI_EXP1_MAX),
-    exp2: clampEdariField(receiptRef || ln.exp2 || ln.ref || '', EDARI_REF_MAX)
+    noteExp2: clampEdariField(ln.noteExp2 || '', EDARI_EXP2_MAX),
+    noteRemarks: clampEdariField(ln.noteRemarks || '', EDARI_FILE12N_REMARKS_MAX)
   };
   for (let attempt = 0; attempt < 4; attempt += 1) {
+    if (attempt > 0) {
+      const existing = await lookupJournalSeq({ ...args, bondNum });
+      if (existing > 0) {
+        return { seq: existing, ...ln, accSeq: args.acc, num: bondNum };
+      }
+    }
     const before = await maxJournalSeq();
     await execSql(buildFile12nInsertSql({
       num: bondNum,
@@ -135,6 +144,10 @@ async function insertJournalLine(ln, bondNum, dateStr, receiptRef) {
       const row = await readJournalRow(after);
       if (journalRowMatches(row, args)) {
         return { seq: after, ...ln, accSeq: args.acc, num: bondNum };
+      }
+      const existing = await lookupJournalSeq({ ...args, bondNum });
+      if (existing > 0) {
+        return { seq: existing, ...ln, accSeq: args.acc, num: bondNum };
       }
     }
     if (attempt < 3) await sleep(120);
@@ -161,7 +174,7 @@ async function postReceiptToEdari(payload = {}) {
       ...ln,
       accSeq,
       oppositeAccSeq: oppositeAccSeq || 0,
-      exp2: receiptRef
+      receiptRef: receiptRef
     });
   }
 

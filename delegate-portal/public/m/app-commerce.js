@@ -970,13 +970,17 @@ async function openCustomerPicker(purpose = 'invoice') {
   commerce.pickerSearch = '';
   const searchEl = document.getElementById('customerPickerSearch');
   if (searchEl) searchEl.value = '';
-  const forReceipt = purpose === 'receipt';
-  document.getElementById('customerPickerTitle').textContent = forReceipt
-    ? 'سند قبض — اختر الشجرة'
-    : 'اختر الشجرة';
-  document.getElementById('customerPickerCrumb').textContent = forReceipt
-    ? 'اختر الشجرة ثم الزبون لإصدار سند القبض'
-    : 'الزبائن المُرحّلون + طلبات بانتظار الترحيل (بدون كشف)';
+  const forReceipt = purpose === 'receipt' || purpose === 'delivery';
+  document.getElementById('customerPickerTitle').textContent = purpose === 'delivery'
+    ? 'وصل قبض — اختر الشجرة'
+    : forReceipt
+      ? 'سند قبض — اختر الشجرة'
+      : 'اختر الشجرة';
+  document.getElementById('customerPickerCrumb').textContent = purpose === 'delivery'
+    ? 'اختر الشجرة ثم الزبون لإصدار وصل القبض'
+    : forReceipt
+      ? 'اختر الشجرة ثم الزبون لإصدار سند القبض'
+      : 'الزبائن المُرحّلون + طلبات بانتظار الترحيل (بدون كشف)';
   document.getElementById('customerOverlay')?.classList.remove('hidden');
   document.body.classList.add('inv-sheet-open');
   await renderCustomerTrees();
@@ -1072,7 +1076,7 @@ async function openCustomerTreeBranches(seq) {
   list.innerHTML = '<p class="muted">جاري التحميل...</p>';
   if (metaEl) metaEl.textContent = '';
   try {
-    const endpoint = commerce.pickerPurpose === 'receipt'
+    const endpoint = (commerce.pickerPurpose === 'receipt' || commerce.pickerPurpose === 'delivery')
       ? `/accounts/${encodeURIComponent(seq)}/children?view=leaves`
       : `/accounts/${encodeURIComponent(seq)}/pickable-customers`;
     const data = await commerceApi(endpoint);
@@ -1112,7 +1116,8 @@ function renderCustomerBranches() {
 }
 
 function selectInvoiceCustomer(branch) {
-  if (commerce.pickerPurpose === 'receipt' && typeof window.receiptsOnCustomer === 'function') {
+  if ((commerce.pickerPurpose === 'receipt' || commerce.pickerPurpose === 'delivery')
+      && typeof window.receiptsOnCustomer === 'function') {
     window.receiptsOnCustomer(branch, commerce.pickerTree);
     closeCustomerPicker();
     return;

@@ -128,6 +128,9 @@ const {
 } = require('../lib/receipts');
 
 router.get('/receipts', authAgent, (req, res) => {
+  if (isSecondary(req.agent.id)) {
+    return res.json({ ok: true, receipts: [] });
+  }
   const status = String(req.query.status || '').trim();
   res.json({
     ok: true,
@@ -140,6 +143,9 @@ router.get('/receipts', authAgent, (req, res) => {
 });
 
 router.get('/receipts/:id', authAgent, (req, res) => {
+  if (isSecondary(req.agent.id)) {
+    return res.status(403).json({ ok: false, error: 'المندوب الثانوي لا يستطيع عرض سندات القبض' });
+  }
   const receipt = loadReceipt(Number(req.params.id));
   if (!receipt || receipt.agentId !== req.agent.id) {
     return res.status(404).json({ ok: false, error: 'سند القبض غير موجود' });
@@ -148,6 +154,9 @@ router.get('/receipts/:id', authAgent, (req, res) => {
 });
 
 router.post('/receipts', authAgent, (req, res) => {
+  if (isSecondary(req.agent.id)) {
+    return res.status(403).json({ ok: false, error: 'المندوب الثانوي لا يستطيع إنشاء سند قبض — أنشئ وصل استلام فقط' });
+  }
   const body = req.body || {};
   if (body.customerAccSeq && !canAgentAccess(req.agent.id, body.customerAccSeq)) {
     return res.status(403).json({ ok: false, error: 'لا تملك صلاحية هذا الزبون' });
@@ -161,6 +170,9 @@ router.post('/receipts', authAgent, (req, res) => {
 });
 
 router.delete('/receipts/:id', authAgent, (req, res) => {
+  if (isSecondary(req.agent.id)) {
+    return res.status(403).json({ ok: false, error: 'المندوب الثانوي لا يستطيع حذف سند قبض' });
+  }
   try {
     const result = deleteReceipt(Number(req.params.id), { agentId: req.agent.id });
     if (!result) return res.status(404).json({ ok: false, error: 'سند القبض غير موجود' });
@@ -175,8 +187,15 @@ const {
   listDeliveryReceipts,
   loadDeliveryReceipt,
   markDeliveryReceiptPrinted,
+  markDeliveryHandoverReceived,
   deleteDeliveryReceipt
 } = require('../lib/delivery-receipts');
+const {
+  agentScopeIds,
+  canAgentViewDeliveryReceipt,
+  isSecondary,
+  getAgentProfile
+} = require('../lib/agent-hierarchy');
 const { getDeliveryReceiptPrintTemplate } = require('../lib/delivery-receipt-template');
 
 router.get('/delivery-receipts/print-template', authAgent, (_req, res) => {
@@ -185,19 +204,22 @@ router.get('/delivery-receipts/print-template', authAgent, (_req, res) => {
 
 router.get('/delivery-receipts', authAgent, (req, res) => {
   const status = String(req.query.status || '').trim();
+  const scope = agentScopeIds(req.agent.id);
   res.json({
     ok: true,
     deliveryReceipts: listDeliveryReceipts({
-      agentId: req.agent.id,
+      agentIds: scope,
       status: status || undefined,
-      limit: 500
-    })
+      limit: 500,
+      viewerAgentId: req.agent.id
+    }),
+    teamSummary: getAgentProfile(req.agent.id)
   });
 });
 
 router.get('/delivery-receipts/:id', authAgent, (req, res) => {
-  const item = loadDeliveryReceipt(Number(req.params.id));
-  if (!item || item.agentId !== req.agent.id) {
+  const item = loadDeliveryReceipt(Number(req.params.id), { viewerAgentId: req.agent.id });
+  if (!item || !canAgentViewDeliveryReceipt(req.agent.id, item.agentId)) {
     return res.status(404).json({ ok: false, error: 'وصل الاستلام غير موجود' });
   }
   res.json({ ok: true, deliveryReceipt: item });
@@ -226,9 +248,25 @@ router.post('/delivery-receipts/:id/printed', authAgent, (req, res) => {
   }
 });
 
+router.post('/delivery-receipts/:id/handover', authAgent, (req, res) => {
+  try {
+    const deliveryReceipt = markDeliveryHandoverReceived(
+      Number(req.params.id),
+      req.agent.id,
+      { note: req.body?.note || '' }
+    );
+    res.json({ ok: true, deliveryReceipt });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
 router.delete('/delivery-receipts/:id', authAgent, (req, res) => {
   try {
-    const result = deleteDeliveryReceipt(Number(req.params.id), { agentId: req.agent.id });
+    const result = deleteDeliveryReceipt(Number(req.params.id), {
+      agentId: req.agent.id,
+      admin: false
+    });
     if (!result) return res.status(404).json({ ok: false, error: 'وصل الاستلام غير موجود' });
     res.json({ ok: true, ...result });
   } catch (err) {

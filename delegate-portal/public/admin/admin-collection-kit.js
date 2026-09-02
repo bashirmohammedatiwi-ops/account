@@ -1,5 +1,35 @@
 /* Shared UI helpers for collection pages (receipts, delivery, customers, promo) */
 
+const edariPostingKeys = new Set();
+
+function beginEdariPosting(key) {
+  const k = String(key || '').trim();
+  if (!k || edariPostingKeys.has(k)) return false;
+  edariPostingKeys.add(k);
+  return true;
+}
+
+function endEdariPosting(key) {
+  edariPostingKeys.delete(String(key || '').trim());
+}
+
+function sleepMs(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function commercePostWithRetry(path, body, attempts = 3) {
+  let lastErr;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      return await commerceApi(path, { method: 'POST', body: JSON.stringify(body) });
+    } catch (err) {
+      lastErr = err;
+      if (i < attempts - 1) await sleepMs(450 * (i + 1));
+    }
+  }
+  throw lastErr;
+}
+
 function colAgentInitial(name) {
   const ch = String(name || '?').trim().charAt(0);
   return ch || '?';
