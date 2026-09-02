@@ -223,7 +223,7 @@ body {
 .nav-icon.ic-price { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
 .nav-icon.ic-sync { background: rgba(56, 189, 248, 0.15); color: #7dd3fc; }
 .nav-icon.ic-db { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; }
-.nav-icon.ic-agents { background: rgba(244, 63, 94, 0.15); color: #fda4af; }
+.nav-icon.ic-agents { background: rgba(13, 148, 136, 0.15); color: #5eead4; }
 
 .nav-item.active .nav-icon.ic-home { background: rgba(99, 102, 241, 0.28); color: #c7d2fe; }
 .nav-item.active .nav-icon.ic-catalog { background: rgba(59, 130, 246, 0.28); color: #bfdbfe; }
@@ -233,7 +233,7 @@ body {
 .nav-item.active .nav-icon.ic-price { background: rgba(245, 158, 11, 0.28); color: #fde68a; }
 .nav-item.active .nav-icon.ic-sync { background: rgba(56, 189, 248, 0.28); color: #bae6fd; }
 .nav-item.active .nav-icon.ic-db { background: rgba(148, 163, 184, 0.28); color: #e2e8f0; }
-.nav-item.active .nav-icon.ic-agents { background: rgba(244, 63, 94, 0.28); color: #fecdd3; }
+.nav-item.active .nav-icon.ic-agents { background: rgba(13, 148, 136, 0.28); color: #99f6e4; }
 
 .nav-text { flex: 1; min-width: 0; }
 

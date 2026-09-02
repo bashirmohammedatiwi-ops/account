@@ -118,6 +118,7 @@ function syncAgentRoleUi() {
     r.checked = r.value === role;
     r.closest('.ag-role-pill')?.classList.toggle('is-selected', r.checked);
   });
+  if (typeof syncAgentPermMatrix === 'function') syncAgentPermMatrix();
 }
 
 async function loadPrimaryAgentsForSelect(selectedId = '') {

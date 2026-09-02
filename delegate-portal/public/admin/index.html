@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="admin.css?v=20260826col1">
+  <link rel="stylesheet" href="admin-agents.css?v=20260902agents2">
 </head>
 <body>
   <div id="topLoader" class="top-loader" hidden aria-live="polite">
@@ -1266,40 +1267,71 @@
         <!-- Agents -->
         <section class="page" id="page-agents">
           <div class="ag-page">
-            <header class="ag-hero">
-              <div class="ag-hero-main">
-                <div class="ag-hero-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                </div>
-                <div>
-                  <h2 class="ag-hero-title">إدارة المندوبين</h2>
-                  <p class="ag-hero-sub">حسابات الدخول · التسلسل الهرمي · صلاحيات الشجرات · تطبيق الهاتف</p>
-                </div>
+            <header class="ag-page-head">
+              <div class="ag-page-head-main">
+                <p class="ag-page-kicker">الإدارة · الصلاحيات</p>
+                <h2 class="ag-page-title">المندوبون</h2>
+                <p class="ag-page-desc">إدارة حسابات الدخول، التسلسل الهرمي، وصلاحيات الشجرات في تطبيق الهاتف</p>
               </div>
-              <div class="ag-hero-actions">
-                <button type="button" class="btn btn-soft btn-sm" id="btnAgentsRefresh" title="تحديث القائمة">تحديث</button>
+              <div class="ag-page-head-actions">
+                <button type="button" class="btn btn-soft btn-sm" id="btnAgentsRefresh" title="تحديث القائمة">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+                  تحديث
+                </button>
                 <button type="button" class="btn btn-primary" id="btnAddAgent">+ مندوب جديد</button>
               </div>
             </header>
 
             <div class="ag-stats rcv-stat-grid" id="agentStats" aria-label="إحصائيات المندوبين"></div>
 
-            <div class="ag-toolbar">
-              <div class="ag-toolbar-search">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
-                <input type="search" id="agentSearch" class="search" placeholder="بحث: الاسم، المستخدم، الهاتف..." autocomplete="off">
+            <div class="ag-legend" aria-label="شرح الأدوار">
+              <div class="ag-legend-item">
+                <span class="ag-legend-dot ag-legend-dot-primary"></span>
+                <div>
+                  <strong>مندوب رئيسي</strong>
+                  <span>وصل قبض · سند قبض · إدارة الفريق · استلام من الثانوي</span>
+                </div>
               </div>
-              <div class="ag-toolbar-filters" role="tablist" aria-label="تصفية المندوبين">
-                <button type="button" class="ag-chip is-active" data-ag-filter="all">الكل</button>
-                <button type="button" class="ag-chip" data-ag-filter="primary">رئيسيون</button>
-                <button type="button" class="ag-chip" data-ag-filter="secondary">ثانويون</button>
-                <button type="button" class="ag-chip" data-ag-filter="active">نشط</button>
-                <button type="button" class="ag-chip" data-ag-filter="inactive">موقوف</button>
+              <div class="ag-legend-item">
+                <span class="ag-legend-dot ag-legend-dot-secondary"></span>
+                <div>
+                  <strong>مندوب ثانوي</strong>
+                  <span>وصل قبض فقط · يتبع مندوباً رئيسياً</span>
+                </div>
               </div>
-              <div class="ag-view-toggle" role="group" aria-label="طريقة العرض">
-                <button type="button" class="ag-view-btn is-active" data-ag-view="teams" title="عرض الفرق">فرق</button>
-                <button type="button" class="ag-view-btn" data-ag-view="cards" title="عرض بطاقات">بطاقات</button>
+            </div>
+
+            <div class="ag-panel">
+              <div class="ag-toolbar">
+                <div class="ag-toolbar-search">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
+                  <input type="search" id="agentSearch" class="search" placeholder="بحث بالاسم، المستخدم، الهاتف، أو الرئيسي..." autocomplete="off">
+                </div>
+                <div class="ag-toolbar-filters" role="tablist" aria-label="تصفية المندوبين">
+                  <button type="button" class="ag-chip is-active" data-ag-filter="all">الكل</button>
+                  <button type="button" class="ag-chip" data-ag-filter="primary">رئيسيون</button>
+                  <button type="button" class="ag-chip" data-ag-filter="secondary">ثانويون</button>
+                  <button type="button" class="ag-chip" data-ag-filter="active">نشط</button>
+                  <button type="button" class="ag-chip" data-ag-filter="inactive">موقوف</button>
+                </div>
+                <div class="ag-toolbar-end">
+                  <label class="ag-sort">
+                    <span>ترتيب</span>
+                    <select id="agentSort">
+                      <option value="name">الاسم</option>
+                      <option value="role">الدور</option>
+                      <option value="status">الحالة</option>
+                      <option value="trees">الشجرات</option>
+                    </select>
+                  </label>
+                  <div class="ag-view-toggle" role="group" aria-label="طريقة العرض">
+                    <button type="button" class="ag-view-btn is-active" data-ag-view="teams" title="عرض الفرق">فرق</button>
+                    <button type="button" class="ag-view-btn" data-ag-view="table" title="عرض جدول">جدول</button>
+                    <button type="button" class="ag-view-btn" data-ag-view="cards" title="عرض بطاقات">بطاقات</button>
+                  </div>
+                </div>
               </div>
+              <div class="ag-results-bar" id="agentResultsBar" aria-live="polite"></div>
             </div>
 
             <div class="ag-workspace" id="agentsWorkspace">
@@ -1496,32 +1528,57 @@
   <div class="modal hidden" id="agentModal">
     <div class="modal-sheet modal-sheet-lg ag-modal-sheet">
       <header class="modal-head ag-modal-head">
-        <div>
-          <p class="ag-modal-kicker">حساب المندوب</p>
-          <h3 id="agentModalTitle">مندوب جديد</h3>
+        <div class="ag-modal-head-main">
+          <div class="ag-modal-head-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          </div>
+          <div>
+            <p class="ag-modal-kicker">حساب المندوب</p>
+            <h3 id="agentModalTitle">مندوب جديد</h3>
+          </div>
         </div>
         <button type="button" class="btn btn-icon" id="agentCancel" aria-label="إغلاق">×</button>
       </header>
       <form id="agentForm" class="modal-form ag-modal-form">
         <input type="hidden" id="agentId">
+        <div class="ag-perm-matrix" aria-label="مقارنة الصلاحيات">
+          <div class="ag-perm-col">
+            <span class="ag-perm-head">الصلاحية</span>
+            <span>وصل قبض</span>
+            <span>سند قبض</span>
+            <span>إدارة فريق</span>
+          </div>
+          <div class="ag-perm-col ag-perm-col-primary" id="agentPermPrimary">
+            <span class="ag-perm-head">رئيسي</span>
+            <span class="ag-perm-yes">✓</span>
+            <span class="ag-perm-yes">✓</span>
+            <span class="ag-perm-yes">✓</span>
+          </div>
+          <div class="ag-perm-col ag-perm-col-secondary" id="agentPermSecondary">
+            <span class="ag-perm-head">ثانوي</span>
+            <span class="ag-perm-yes">✓</span>
+            <span class="ag-perm-no">—</span>
+            <span class="ag-perm-no">—</span>
+          </div>
+        </div>
         <div class="ag-modal-grid">
           <div class="ag-modal-col">
             <section class="ag-form-section">
               <h4 class="ag-form-section-title">الهوية والدخول</h4>
-              <label class="field"><span>الاسم الكامل</span><input type="text" id="agentName" required placeholder="اسم المندوب"></label>
+              <label class="field"><span>الاسم الكامل</span><input type="text" id="agentName" required placeholder="اسم المندوب كما يظهر في النظام"></label>
               <div class="ag-field-row">
-                <label class="field"><span>اسم المستخدم</span><input type="text" id="agentUsername" required dir="ltr" placeholder="username"></label>
+                <label class="field"><span>اسم المستخدم</span><input type="text" id="agentUsername" required dir="ltr" placeholder="username" autocomplete="off"></label>
                 <label class="field"><span>الهاتف</span><input type="tel" id="agentPhone" dir="ltr" placeholder="07xxxxxxxxx"></label>
               </div>
-              <label class="field"><span>كلمة المرور</span><input type="password" id="agentPassword" placeholder="فارغ = بدون تغيير عند التعديل"></label>
+              <label class="field"><span>كلمة المرور</span><input type="password" id="agentPassword" placeholder="فارغ = بدون تغيير عند التعديل" autocomplete="new-password"></label>
               <label class="check-row ag-active-row">
                 <input type="checkbox" id="agentActive" checked>
-                <span>حساب نشط — يستطيع تسجيل الدخول للتطبيق</span>
+                <span>حساب نشط — يستطيع تسجيل الدخول لتطبيق المندوب</span>
               </label>
             </section>
             <section class="ag-form-section">
               <h4 class="ag-form-section-title">التسلسل الهرمي</h4>
-              <p class="ag-form-hint">الرئيسي يستلم المبالغ من الثانوي ويُصدر سند قبض. الثانوي يُصدر وصل قبض فقط.</p>
+              <p class="ag-form-hint">حدد نوع المندوب. الثانوي يصدر وصل قبض فقط ويُسلّم المبلغ للرئيسي الذي يصدر سند القبض.</p>
               <div class="ag-role-pills" role="radiogroup" aria-label="نوع المندوب">
                 <label class="ag-role-pill"><input type="radio" name="agentRoleRadio" value="primary" checked><span class="ag-role-pill-body"><strong>مندوب رئيسي</strong><small>وصل + سند قبض + فريق</small></span></label>
                 <label class="ag-role-pill"><input type="radio" name="agentRoleRadio" value="secondary"><span class="ag-role-pill-body"><strong>مندوب ثانوي</strong><small>وصل قبض فقط</small></span></label>
@@ -1542,7 +1599,7 @@
             <section class="ag-form-section ag-trees-section">
               <div class="ag-trees-head">
                 <h4 class="ag-form-section-title">صلاحية الشجرات</h4>
-                <p class="ag-form-hint">يظهر للمندوب في التطبيق الزبائن ضمن هذه الشجرات فقط</p>
+                <p class="ag-form-hint">يظهر للمندوب في التطبيق الزبائن ضمن هذه الشجرات فقط. الثانوي يرث شجرات رئيسيه تلقائياً.</p>
               </div>
               <div class="tree-picks tree-picks-sm ag-tree-picks" id="agentTreeChecks"></div>
             </section>
@@ -1578,7 +1635,7 @@
   <script src="admin-shell.js?v=20260826col1"></script>
   <script src="admin-commerce.js?v=20260826col1"></script>
   <script src="admin-collection-kit.js?v=20260901post1"></script>
-  <script src="admin-agents.js?v=20260902agents1"></script>
+  <script src="admin-agents.js?v=20260902agents2"></script>
   <script src="admin-receipts.js?v=20260901post1"></script>
   <script src="admin-delivery-receipts.js?v=20260826col1"></script>
   <script src="admin-customers.js?v=20260901post1"></script>
