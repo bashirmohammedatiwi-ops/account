@@ -672,7 +672,8 @@ router.post('/receipts/:id/posted', (req, res) => {
 
 router.delete('/receipts/:id', (req, res) => {
   try {
-    const result = deleteReceipt(Number(req.params.id));
+    const force = String(req.query.force || '') === '1' || req.body?.force === true;
+    const result = deleteReceipt(Number(req.params.id), { force });
     if (!result) return res.status(404).json({ ok: false, error: 'سند القبض غير موجود' });
     res.json({ ok: true, ...result });
   } catch (err) {

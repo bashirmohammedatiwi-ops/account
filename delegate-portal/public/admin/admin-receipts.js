@@ -383,7 +383,7 @@ function receiptRowActions(r) {
   return `
     <div class="rcv-row-actions">
       <button type="button" class="btn btn-soft btn-sm" data-receipt-id="${r.id}">${editable ? 'مراجعة' : 'عرض'}</button>
-      ${editable ? `<button type="button" class="btn btn-danger btn-sm" data-del-receipt="${r.id}">حذف</button>` : ''}
+      <button type="button" class="btn btn-danger btn-sm" data-del-receipt="${r.id}">حذف</button>
       ${r.status !== 'posted' && r.status !== 'rejected' ? `
       <button type="button" class="btn btn-primary btn-sm" data-post-receipt="${r.id}">ترحيل</button>` : ''}
     </div>`;
@@ -660,10 +660,10 @@ function bindReceiptDetailTabHandlers(r, locked) {
   if (!locked) {
     bindReceiptCustomerSearch();
     document.getElementById('btnSaveReceiptEdit')?.addEventListener('click', () => saveReceiptEdit(r.id));
-    document.getElementById('btnDeleteReceipt')?.addEventListener('click', () => deleteReceiptUi(r.id));
     document.getElementById('btnRejectReceipt')?.addEventListener('click', () => rejectReceipt(r.id));
     document.getElementById('btnPostReceipt')?.addEventListener('click', () => postReceiptToEdariUi(r.id));
   }
+  document.getElementById('btnDeleteReceipt')?.addEventListener('click', () => deleteReceiptUi(r.id));
 }
 
 function journalPreviewTable(lines = []) {
@@ -755,6 +755,11 @@ async function openReceiptDetail(id) {
         <button type="button" class="btn btn-danger" id="btnDeleteReceipt">حذف</button>
       </div>
       ${canPostReceiptsFromDesktop() ? '' : '<p class="rcv-muted">الترحيل من تطبيق الإدارة المكتبي فقط</p>'}`}
+      ${locked ? `
+      <div class="rcv-detail-actions">
+        <button type="button" class="btn btn-danger" id="btnDeleteReceipt">حذف من اللوحة</button>
+      </div>
+      <p class="rcv-muted">الحذف يزيل السند من لوحة التحكم فقط ولا يلغي الترحيل في الإداري.</p>` : ''}
     </div>`;
 
   document.querySelectorAll('[data-receipt-row], [data-receipt-card]').forEach((el) => {
@@ -834,11 +839,18 @@ async function saveReceiptEdit(id) {
 }
 
 async function deleteReceiptUi(id) {
-  const selected = receiptAdmin.selected;
-  const label = selected?.id === id ? selected.receiptNo : String(id);
-  if (!confirm(`حذف سند القبض ${label} نهائياً؟\nلا يمكن التراجع، ولن يُرحَّل للإداري.`)) return;
+  const receipt = receiptAdmin.selected?.id === id
+    ? receiptAdmin.selected
+    : (receiptAdmin.receipts || []).find((r) => r.id === id);
+  const label = receipt?.receiptNo || String(id);
+  const posted = receipt?.status === 'posted';
+  const msg = posted
+    ? `حذف سند القبض ${label} من لوحة التحكم؟\nلن يُلغى الترحيل في الإداري — الحذف من اللوحة فقط.`
+    : `حذف سند القبض ${label} نهائياً؟\nلا يمكن التراجع.`;
+  if (!confirm(msg)) return;
   try {
-    await commerceApi(`/receipts/${id}`, { method: 'DELETE' });
+    const path = posted ? `/receipts/${id}?force=1` : `/receipts/${id}`;
+    await commerceApi(path, { method: 'DELETE' });
     showToast('تم حذف سند القبض');
     if (receiptAdmin.selected?.id === id) {
       receiptAdmin.selected = null;
