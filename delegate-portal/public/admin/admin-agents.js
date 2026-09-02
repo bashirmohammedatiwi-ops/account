@@ -471,6 +471,9 @@ function initAgentsPageUi() {
       if (sel) sel.value = radio.value;
       syncAgentRoleUi();
       syncAgentPermMatrix();
+      if (radio.value === 'secondary') {
+        void refreshAgentParentSelect(document.getElementById('agentParentId')?.value || '');
+      }
     });
   });
 

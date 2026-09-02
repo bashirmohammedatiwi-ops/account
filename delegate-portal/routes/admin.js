@@ -15,7 +15,8 @@ const {
   saveAgentHierarchy,
   validateAgentHierarchyInput,
   listPrimaryAgents,
-  getSecondaryAgentIds
+  getSecondaryAgentIds,
+  normalizeRole
 } = require('../lib/agent-hierarchy');
 const { getPublicBaseUrl } = require('../lib/public-url');
 const { runLocalSync, listEdariTrees, listEdariMaterialTrees, queryEdariSalesReport } = require('../lib/sync-runner');
@@ -138,11 +139,13 @@ router.put('/agents/:id', (req, res) => {
   if (password) {
     db.prepare('UPDATE agents SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(password, 10), id);
   }
-  if (delegateRole != null || parentAgentId != null) {
+  if (delegateRole != null) {
     try {
       saveAgentHierarchy(id, {
-        delegateRole: delegateRole ?? undefined,
-        parentAgentId: parentAgentId ?? undefined
+        delegateRole,
+        parentAgentId: normalizeRole(delegateRole) === 'secondary'
+          ? (parentAgentId != null && parentAgentId !== '' ? parentAgentId : null)
+          : null
       });
     } catch (err) {
       return res.status(400).json({ ok: false, error: err.message });

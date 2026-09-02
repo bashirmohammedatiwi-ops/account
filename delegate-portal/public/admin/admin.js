@@ -115,7 +115,10 @@ function syncAgentRoleUi() {
   const wrap = document.getElementById('agentParentWrap');
   const parentSel = document.getElementById('agentParentId');
   if (wrap) wrap.classList.toggle('hidden', role !== 'secondary');
-  if (role !== 'secondary' && parentSel) parentSel.value = '';
+  if (parentSel) {
+    parentSel.required = role === 'secondary';
+    if (role !== 'secondary') parentSel.value = '';
+  }
   document.querySelectorAll('input[name="agentRoleRadio"]').forEach((r) => {
     r.checked = r.value === role;
     r.closest('.ag-role-pill')?.classList.toggle('is-selected', r.checked);
@@ -123,16 +126,32 @@ function syncAgentRoleUi() {
   if (typeof syncAgentPermMatrix === 'function') syncAgentPermMatrix();
 }
 
-async function loadPrimaryAgentsForSelect(selectedId = '') {
+async function loadPrimaryAgentsForSelect(selectedId = '', excludeAgentId = '') {
   const sel = document.getElementById('agentParentId');
   if (!sel) return;
   if (!primaryAgentsCache.length) {
     const data = await api('/api/admin/agents/primary');
     primaryAgentsCache = data.agents || [];
   }
-  sel.innerHTML = '<option value="">— اختر المندوب الرئيسي —</option>' + primaryAgentsCache.map((a) =>
+  const exclude = String(excludeAgentId || '').trim();
+  const agents = primaryAgentsCache.filter((a) => String(a.id) !== exclude);
+  sel.innerHTML = '<option value="">— اختر المندوب الرئيسي —</option>' + agents.map((a) =>
     `<option value="${a.id}"${String(a.id) === String(selectedId) ? ' selected' : ''}>${esc(a.name)} (@${esc(a.username)})</option>`
   ).join('');
+  if (roleNeedsParentAgent() && !sel.value && agents.length === 1) {
+    sel.value = String(agents[0].id);
+  }
+}
+
+function roleNeedsParentAgent() {
+  const roleRadio = document.querySelector('input[name="agentRoleRadio"]:checked');
+  const role = roleRadio?.value || document.getElementById('agentRole')?.value || 'primary';
+  return role === 'secondary';
+}
+
+async function refreshAgentParentSelect(selectedId = '') {
+  const editId = String(document.getElementById('agentId')?.value || '').trim();
+  await loadPrimaryAgentsForSelect(selectedId, editId);
 }
 
 document.getElementById('agentRole')?.addEventListener('change', syncAgentRoleUi);
@@ -1088,7 +1107,7 @@ async function openAgentModal(id = null) {
       document.getElementById('agentPassword').value = '';
       document.getElementById('agentActive').checked = !!a.active;
       document.getElementById('agentRole').value = a.delegateRole || 'primary';
-      await loadPrimaryAgentsForSelect(a.parentAgentId || '');
+      await loadPrimaryAgentsForSelect(a.parentAgentId || '', id);
       syncAgentRoleUi();
       selectedTreeSeqs = a.treeSeqs || [];
     } catch (e) {
@@ -1456,6 +1475,16 @@ async function saveAgentForm(e) {
     notifyAdmin('كلمة المرور مطلوبة للمندوب الجديد', 'err');
     return;
   }
+  if (body.delegateRole === 'secondary') {
+    if (!body.parentAgentId) {
+      notifyAdmin('اختر المندوب الرئيسي للمندوب الثانوي', 'err');
+      return;
+    }
+    if (id && String(body.parentAgentId) === String(id)) {
+      notifyAdmin('لا يمكن للمندوب أن يتبع نفسه', 'err');
+      return;
+    }
+  }
 
   if (submitBtn) {
     submitBtn.disabled = true;
@@ -1500,13 +1529,8 @@ async function saveAgentForm(e) {
 
 document.getElementById('agentForm')?.addEventListener('submit', saveAgentForm);
 document.getElementById('agentSaveBtn')?.addEventListener('click', (e) => {
-  // Backup path if native submit is blocked by validation/UI quirks
-  const form = document.getElementById('agentForm');
-  if (!form) return;
-  if (typeof form.requestSubmit === 'function') {
-    e.preventDefault();
-    form.requestSubmit();
-  }
+  e.preventDefault();
+  void saveAgentForm(e);
 });
 
 document.querySelectorAll('.quick-card[data-goto], .shortcut[data-goto]').forEach((btn) => {
