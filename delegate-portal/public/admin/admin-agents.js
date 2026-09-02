@@ -3,7 +3,7 @@
 const agentPage = {
   agents: [],
   filter: 'all',
-  view: 'teams',
+  view: 'table',
   sort: 'name',
   search: ''
 };
@@ -67,18 +67,43 @@ function agentStats(agents) {
 }
 
 function renderAgentStats(agents) {
+  const el = document.getElementById('agentStats');
+  if (!el) return;
   const s = agentStats(agents);
-  colRenderStatGrid(document.getElementById('agentStats'), [
-    { key: 'all', cls: 'neutral', label: 'إجمالي المندوبين', count: s.total, filterKey: 'all' },
-    { key: 'primary', cls: 'ready', label: 'رئيسيون', count: s.primary, filterKey: 'primary' },
-    { key: 'secondary', cls: 'pending', label: 'ثانويون', count: s.secondary, filterKey: 'secondary' },
-    { key: 'active', cls: 'posted', label: 'نشط', count: s.active, filterKey: 'active' },
-    { key: 'inactive', cls: 'warn', label: 'موقوف', count: s.inactive, filterKey: 'inactive' },
-    { key: 'trees', cls: 'neutral', label: 'شجرات مصرّحة', count: s.trees, filterKey: 'all', clickable: false }
-  ], (key) => {
-    agentPage.filter = key || 'all';
-    syncAgentFilterChips();
-    renderAgentsWorkspace();
+  const items = [
+    { key: 'all', dot: 'ink', label: 'الإجمالي', value: s.total, clickable: true },
+    { key: 'primary', dot: 'navy', label: 'رئيسيون', value: s.primary, clickable: true },
+    { key: 'secondary', dot: 'slate', label: 'ثانويون', value: s.secondary, clickable: true },
+    { key: 'active', dot: 'teal', label: 'نشط', value: s.active, clickable: true },
+    { key: 'inactive', dot: 'red', label: 'موقوف', value: s.inactive, clickable: true },
+    { key: 'trees', dot: 'gold', label: 'شجرات مصرّحة', value: s.trees, clickable: false }
+  ];
+  el.innerHTML = items.map((item) => {
+    const active = item.clickable && agentPage.filter === item.key;
+    const tag = item.clickable ? 'button' : 'div';
+    const attrs = item.clickable
+      ? `type="button" class="ag-kpi${active ? ' is-active' : ''}" data-ag-stat="${item.key}"`
+      : `class="ag-kpi" aria-hidden="true"`;
+    return `<${tag} ${attrs}>
+      <i class="ag-kpi-dot ${item.dot}"></i>
+      <span class="ag-kpi-val num-en" dir="ltr">${fmtNumAlways(item.value)}</span>
+      <span class="ag-kpi-lbl">${esc(item.label)}</span>
+    </${tag}>`;
+  }).join('');
+
+  el.querySelectorAll('[data-ag-stat]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      agentPage.filter = btn.dataset.agStat || 'all';
+      syncAgentFilterChips();
+      renderAgentStats(agents);
+      renderAgentsWorkspace();
+    });
+  });
+}
+
+function syncAgentStatBtns() {
+  document.querySelectorAll('#agentStats [data-ag-stat]').forEach((btn) => {
+    btn.classList.toggle('is-active', btn.dataset.agStat === agentPage.filter);
   });
 }
 
@@ -102,6 +127,7 @@ function syncAgentFilterChips() {
   document.querySelectorAll('[data-ag-filter]').forEach((btn) => {
     btn.classList.toggle('is-active', btn.dataset.agFilter === agentPage.filter);
   });
+  syncAgentStatBtns();
 }
 
 function syncAgentViewBtns() {
@@ -124,11 +150,11 @@ function agAvatarHtml(name, role) {
 function agRoleBadge(a) {
   const isSec = a.delegateRole === 'secondary';
   const label = a.delegateRoleLabel || (isSec ? 'ثانوي' : 'رئيسي');
-  return `<span class="ag-badge ag-badge-${isSec ? 'secondary' : 'primary'}">${esc(label)}</span>`;
+  return `<span class="ag-badge ag-badge-${isSec ? 'secondary' : 'primary'}"><i class="ag-badge-dot"></i>${esc(label)}</span>`;
 }
 
 function agStatusBadge(a) {
-  return `<span class="ag-badge ag-badge-${a.active ? 'active' : 'off'}">${a.active ? 'نشط' : 'موقوف'}</span>`;
+  return `<span class="ag-badge ag-badge-${a.active ? 'active' : 'off'}"><i class="ag-badge-dot"></i>${a.active ? 'نشط' : 'موقوف'}</span>`;
 }
 
 function agPermChips(a) {
@@ -190,26 +216,24 @@ function buildAgentTeams(agents) {
   return { teams, orphanSecondaries, filtered };
 }
 
-function renderTeamHeader(primary, members) {
-  const treeCount = primary.treeSeqs?.length || 0;
+function renderTeamMemberRow(m) {
   return `
-    <header class="ag-team-header">
-      <div class="ag-team-header-main">
-        ${agAvatarHtml(primary.name, primary.delegateRole)}
-        <div>
-          <strong>${esc(primary.name)}</strong>
-          <span class="ag-team-header-sub" dir="ltr">@${esc(primary.username)}</span>
+    <tr class="ag-row ag-row-secondary${!m.active ? ' ag-row-off' : ''}">
+      <td>
+        <div class="ag-table-name">
+          ${agAvatarHtml(m.name, m.delegateRole)}
+          <div><strong>${esc(m.name)}</strong></div>
         </div>
-      </div>
-      <div class="ag-team-header-stats">
-        <span><strong class="num-en" dir="ltr">${fmtNumAlways(members.length)}</strong> ثانوي</span>
-        <span><strong class="num-en" dir="ltr">${fmtNumAlways(treeCount)}</strong> شجرة</span>
-        ${agStatusBadge(primary)}
-      </div>
-      <div class="ag-team-header-actions">
-        <button type="button" class="btn btn-soft btn-sm" data-ag-edit="${primary.id}">تعديل الرئيسي</button>
-      </div>
-    </header>`;
+      </td>
+      <td dir="ltr" class="ag-table-user">@${esc(m.username)}</td>
+      <td dir="ltr">${m.phone ? esc(m.phone) : '<span class="muted">—</span>'}</td>
+      <td>${agStatusBadge(m)}</td>
+      <td class="num-en" dir="ltr">${fmtNumAlways(m.treeSeqs?.length || 0)}</td>
+      <td class="ag-table-actions">
+        <button type="button" class="btn btn-soft btn-sm" data-ag-edit="${m.id}">تعديل</button>
+        <button type="button" class="btn btn-ghost btn-sm ag-btn-del" data-ag-del="${m.id}">حذف</button>
+      </td>
+    </tr>`;
 }
 
 function renderAgentsTeamsView(agents) {
@@ -220,32 +244,68 @@ function renderAgentsTeamsView(agents) {
 
   let html = '<div class="ag-teams">';
   teams.forEach(({ primary, members }) => {
+    const treeCount = primary.treeSeqs?.length || 0;
     html += `
-      <section class="ag-team-block">
-        ${renderTeamHeader(primary, members)}
-        <div class="ag-team-lead">
-          ${renderAgentCard(primary)}
+      <section class="ag-team-section">
+        <div class="ag-team-section-head">
+          <div class="ag-team-section-title">
+            ${agAvatarHtml(primary.name, primary.delegateRole)}
+            <div>
+              <strong>${esc(primary.name)}</strong>
+              <span dir="ltr">@${esc(primary.username)} · ${fmtNumAlways(treeCount)} شجرة مصرّحة</span>
+            </div>
+          </div>
+          <div class="ag-team-section-actions">
+            <span class="ag-team-count">${fmtNumAlways(members.length)} ثانوي</span>
+            ${agRoleBadge(primary)}
+            ${agStatusBadge(primary)}
+            <button type="button" class="btn btn-soft btn-sm" data-ag-edit="${primary.id}">تعديل</button>
+          </div>
         </div>
         ${members.length ? `
-          <div class="ag-team-members">
-            <div class="ag-team-members-label">المندوبون الثانويون (${fmtNumAlways(members.length)})</div>
-            <div class="ag-team-grid">
-              ${members.map((m) => renderAgentCard(m, { compact: true })).join('')}
-            </div>
-          </div>` : `
-          <div class="ag-team-empty muted">لا يوجد مندوبون ثانويون مرتبطون بهذا الرئيسي</div>`}
+          <div class="ag-team-table-wrap">
+            <table class="ag-table ag-table-compact">
+              <thead>
+                <tr>
+                  <th>الثانوي</th>
+                  <th>المستخدم</th>
+                  <th>الهاتف</th>
+                  <th>الحالة</th>
+                  <th>شجرات</th>
+                  <th>إجراءات</th>
+                </tr>
+              </thead>
+              <tbody>${members.map((m) => renderTeamMemberRow(m)).join('')}</tbody>
+            </table>
+          </div>` : `<p class="ag-team-empty-inline muted">لا يوجد مندوبون ثانويون تحت هذا الرئيسي</p>`}
       </section>`;
   });
 
   if (orphanSecondaries.length) {
     html += `
-      <section class="ag-team-block ag-team-orphan">
-        <header class="ag-team-header ag-team-header-warn">
-          <strong>ثانويون بدون رئيسي مُعرَّف</strong>
-          <span>يُنصح بربطهم بمندوب رئيسي من التعديل</span>
-        </header>
-        <div class="ag-team-grid ag-team-grid-pad">
-          ${orphanSecondaries.map((m) => renderAgentCard(m, { compact: true })).join('')}
+      <section class="ag-team-section ag-team-orphan">
+        <div class="ag-team-section-head">
+          <div class="ag-team-section-title">
+            <div>
+              <strong>ثانويون بدون رئيسي</strong>
+              <span>يُنصح بربطهم بمندوب رئيسي</span>
+            </div>
+          </div>
+        </div>
+        <div class="ag-team-table-wrap">
+          <table class="ag-table ag-table-compact">
+            <thead>
+              <tr>
+                <th>الثانوي</th>
+                <th>المستخدم</th>
+                <th>الهاتف</th>
+                <th>الحالة</th>
+                <th>شجرات</th>
+                <th>إجراءات</th>
+              </tr>
+            </thead>
+            <tbody>${orphanSecondaries.map((m) => renderTeamMemberRow(m)).join('')}</tbody>
+          </table>
         </div>
       </section>`;
   }
@@ -267,8 +327,9 @@ function renderAgentsTableView(agents) {
   }
   const rows = agents.map((a) => {
     const isSec = a.delegateRole === 'secondary';
+    const rowCls = isSec ? 'ag-row-secondary' : 'ag-row-primary';
     return `
-      <tr class="ag-row${!a.active ? ' ag-row-off' : ''}">
+      <tr class="ag-row ${rowCls}${!a.active ? ' ag-row-off' : ''}">
         <td>
           <div class="ag-table-name">
             ${agAvatarHtml(a.name, a.delegateRole)}
@@ -402,6 +463,7 @@ function initAgentsPageUi() {
   });
 
   document.getElementById('btnAgentsRefresh')?.addEventListener('click', () => void loadAgents());
+  document.getElementById('btnAddAgentPage')?.addEventListener('click', () => openAgentModal());
 
   document.querySelectorAll('input[name="agentRoleRadio"]').forEach((radio) => {
     radio.addEventListener('change', () => {

@@ -6009,7 +6009,7 @@ body {
 .section-hub-icon.tone-collections { background: #eff6ff; color: #1d4ed8; }
 .section-hub-icon.tone-reports { background: #f5f3ff; color: #6d28d9; }
 .section-hub-icon.tone-system { background: #fff7ed; color: #c2410c; }
-.section-hub-icon.tone-team { background: #fdf2f8; color: #be185d; }
+.section-hub-icon.tone-team { background: #e8eef5; color: #1a3358; }
 
 .topbar-actions {
   display: flex;
@@ -6383,7 +6383,7 @@ body {
 .workspace.tone-collections::before { --section-accent: #2563eb; opacity: 1; }
 .workspace.tone-reports::before { --section-accent: #7c3aed; opacity: 1; }
 .workspace.tone-system::before { --section-accent: #ea580c; opacity: 1; }
-.workspace.tone-team::before { --section-accent: #db2777; opacity: 1; }
+.workspace.tone-team::before { --section-accent: #1a3358; opacity: 1; }
 
 .topbar {
   padding: 14px 28px;
@@ -6402,7 +6402,7 @@ body {
 .workspace.tone-collections .topbar-title { color: #1d4ed8; }
 .workspace.tone-reports .topbar-title { color: #6d28d9; }
 .workspace.tone-system .topbar-title { color: #c2410c; }
-.workspace.tone-team .topbar-title { color: #be185d; }
+.workspace.tone-team .topbar-title { color: #1e3a5f; }
 
 /* Sidebar v5 */
 .sidebar {
@@ -6686,7 +6686,7 @@ body {
 .workspace.tone-collections .topbar-page-icon { background: #eff6ff; color: #1d4ed8; }
 .workspace.tone-reports .topbar-page-icon { background: #f5f3ff; color: #6d28d9; }
 .workspace.tone-system .topbar-page-icon { background: #fff7ed; color: #c2410c; }
-.workspace.tone-team .topbar-page-icon { background: #fdf2f8; color: #be185d; }
+.workspace.tone-team .topbar-page-icon { background: #e8eef5; color: #1a3358; }
 
 .topbar-back-btn {
   width: 40px;
@@ -7125,13 +7125,13 @@ body.cmdk-open { overflow: hidden; }
 .dash-section-tile.tone-collections .dash-section-tile-icon { background: #eff6ff; color: #1d4ed8; }
 .dash-section-tile.tone-reports .dash-section-tile-icon { background: #f5f3ff; color: #6d28d9; }
 .dash-section-tile.tone-system .dash-section-tile-icon { background: #fff7ed; color: #c2410c; }
-.dash-section-tile.tone-team .dash-section-tile-icon { background: #fdf2f8; color: #be185d; }
+.dash-section-tile.tone-team .dash-section-tile-icon { background: #e8eef5; color: #1a3358; }
 
 .dash-section-tile.tone-commerce:hover { border-color: #99f6e4; }
 .dash-section-tile.tone-collections:hover { border-color: #93c5fd; }
 .dash-section-tile.tone-reports:hover { border-color: #c4b5fd; }
 .dash-section-tile.tone-system:hover { border-color: #fdba74; }
-.dash-section-tile.tone-team:hover { border-color: #f9a8d4; }
+.dash-section-tile.tone-team:hover { border-color: #93c5fd; }
 
 .stat-card-btn {
   cursor: pointer;
