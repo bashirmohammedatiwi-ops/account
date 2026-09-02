@@ -159,7 +159,8 @@ function migrateCommerceSchema(db) {
   migrateCustomerRequests(db);
   migratePromotionalVisits(db);
   migrateDeliveryReceipts(db);
-  migrateAgentHierarchy(db); = db.prepare('SELECT COUNT(*) AS c FROM catalog_branches').get().c;
+  migrateAgentHierarchy(db);
+  const branchCount = db.prepare('SELECT COUNT(*) AS c FROM catalog_branches').get().c;
   if (!branchCount) {
     db.prepare(`
       INSERT INTO catalog_branches (code, name, sort_order, is_active)
