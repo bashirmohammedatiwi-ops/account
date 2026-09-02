@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../lib/db');
-const { authAgent } = require('../lib/auth');
+const { authAgent, signAgent } = require('../lib/auth');
 const { mapAgentProfile, isSecondary, getPrimaryAgentId } = require('../lib/agent-hierarchy');
 const {
   canAgentAccess,
