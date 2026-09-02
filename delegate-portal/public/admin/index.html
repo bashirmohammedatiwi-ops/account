@@ -1265,18 +1265,47 @@
 
         <!-- Agents -->
         <section class="page" id="page-agents">
-          <div class="section-hub">
-            <div class="section-hub-icon tone-team" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
-            <div class="section-hub-body">
-              <h2 class="section-hub-title">الفريق · المندوبون</h2>
-              <p class="section-hub-sub">إنشاء حسابات، تفعيل/تعطيل، وتحديد الشجرات المصرّح بها لكل مندوب</p>
+          <div class="ag-page">
+            <header class="ag-hero">
+              <div class="ag-hero-main">
+                <div class="ag-hero-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                </div>
+                <div>
+                  <h2 class="ag-hero-title">إدارة المندوبين</h2>
+                  <p class="ag-hero-sub">حسابات الدخول · التسلسل الهرمي · صلاحيات الشجرات · تطبيق الهاتف</p>
+                </div>
+              </div>
+              <div class="ag-hero-actions">
+                <button type="button" class="btn btn-soft btn-sm" id="btnAgentsRefresh" title="تحديث القائمة">تحديث</button>
+                <button type="button" class="btn btn-primary" id="btnAddAgent">+ مندوب جديد</button>
+              </div>
+            </header>
+
+            <div class="ag-stats rcv-stat-grid" id="agentStats" aria-label="إحصائيات المندوبين"></div>
+
+            <div class="ag-toolbar">
+              <div class="ag-toolbar-search">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
+                <input type="search" id="agentSearch" class="search" placeholder="بحث: الاسم، المستخدم، الهاتف..." autocomplete="off">
+              </div>
+              <div class="ag-toolbar-filters" role="tablist" aria-label="تصفية المندوبين">
+                <button type="button" class="ag-chip is-active" data-ag-filter="all">الكل</button>
+                <button type="button" class="ag-chip" data-ag-filter="primary">رئيسيون</button>
+                <button type="button" class="ag-chip" data-ag-filter="secondary">ثانويون</button>
+                <button type="button" class="ag-chip" data-ag-filter="active">نشط</button>
+                <button type="button" class="ag-chip" data-ag-filter="inactive">موقوف</button>
+              </div>
+              <div class="ag-view-toggle" role="group" aria-label="طريقة العرض">
+                <button type="button" class="ag-view-btn is-active" data-ag-view="teams" title="عرض الفرق">فرق</button>
+                <button type="button" class="ag-view-btn" data-ag-view="cards" title="عرض بطاقات">بطاقات</button>
+              </div>
+            </div>
+
+            <div class="ag-workspace" id="agentsWorkspace">
+              <p class="muted loading">جاري تحميل المندوبين...</p>
             </div>
           </div>
-          <div class="agents-toolbar">
-            <p class="muted">كل مندوب يرى الشجرات المصرّح بها فقط في تطبيق الهاتف</p>
-            <button type="button" class="btn btn-primary" id="btnAddAgent">+ مندوب جديد</button>
-          </div>
-          <div class="agent-grid" id="agentsGrid"></div>
         </section>
         </div><!-- /page-viewport -->
       </main>
@@ -1465,40 +1494,63 @@
   <div class="toast hidden" id="adminToast"></div>
 
   <div class="modal hidden" id="agentModal">
-    <div class="modal-sheet">
-      <header class="modal-head">
-        <h3 id="agentModalTitle">مندوب جديد</h3>
+    <div class="modal-sheet modal-sheet-lg ag-modal-sheet">
+      <header class="modal-head ag-modal-head">
+        <div>
+          <p class="ag-modal-kicker">حساب المندوب</p>
+          <h3 id="agentModalTitle">مندوب جديد</h3>
+        </div>
         <button type="button" class="btn btn-icon" id="agentCancel" aria-label="إغلاق">×</button>
       </header>
-      <form id="agentForm" class="modal-form">
+      <form id="agentForm" class="modal-form ag-modal-form">
         <input type="hidden" id="agentId">
-        <label class="field"><span>الاسم</span><input type="text" id="agentName" required></label>
-        <label class="field"><span>الهاتف</span><input type="text" id="agentPhone"></label>
-        <label class="field"><span>اسم المستخدم</span><input type="text" id="agentUsername" required></label>
-        <label class="field"><span>كلمة المرور</span><input type="password" id="agentPassword" placeholder="فارغ = بدون تغيير"></label>
-        <label class="check-row">
-          <input type="checkbox" id="agentActive" checked>
-          <span>حساب نشط</span>
-        </label>
-        <label class="field">
-          <span>نوع المندوب</span>
-          <select id="agentRole" class="search">
-            <option value="primary">مندوب رئيسي</option>
-            <option value="secondary">مندوب ثانوي</option>
-          </select>
-        </label>
-        <label class="field hidden" id="agentParentWrap">
-          <span>يتبع للمندوب الرئيسي</span>
-          <select id="agentParentId" class="search">
-            <option value="">— اختر المندوب الرئيسي —</option>
-          </select>
-        </label>
-        <div class="panel panel-inset">
-          <h4 class="panel-title-sm">صلاحية الشجرات</h4>
-          <div class="tree-picks tree-picks-sm" id="agentTreeChecks"></div>
+        <div class="ag-modal-grid">
+          <div class="ag-modal-col">
+            <section class="ag-form-section">
+              <h4 class="ag-form-section-title">الهوية والدخول</h4>
+              <label class="field"><span>الاسم الكامل</span><input type="text" id="agentName" required placeholder="اسم المندوب"></label>
+              <div class="ag-field-row">
+                <label class="field"><span>اسم المستخدم</span><input type="text" id="agentUsername" required dir="ltr" placeholder="username"></label>
+                <label class="field"><span>الهاتف</span><input type="tel" id="agentPhone" dir="ltr" placeholder="07xxxxxxxxx"></label>
+              </div>
+              <label class="field"><span>كلمة المرور</span><input type="password" id="agentPassword" placeholder="فارغ = بدون تغيير عند التعديل"></label>
+              <label class="check-row ag-active-row">
+                <input type="checkbox" id="agentActive" checked>
+                <span>حساب نشط — يستطيع تسجيل الدخول للتطبيق</span>
+              </label>
+            </section>
+            <section class="ag-form-section">
+              <h4 class="ag-form-section-title">التسلسل الهرمي</h4>
+              <p class="ag-form-hint">الرئيسي يستلم المبالغ من الثانوي ويُصدر سند قبض. الثانوي يُصدر وصل قبض فقط.</p>
+              <div class="ag-role-pills" role="radiogroup" aria-label="نوع المندوب">
+                <label class="ag-role-pill"><input type="radio" name="agentRoleRadio" value="primary" checked><span class="ag-role-pill-body"><strong>مندوب رئيسي</strong><small>وصل + سند قبض + فريق</small></span></label>
+                <label class="ag-role-pill"><input type="radio" name="agentRoleRadio" value="secondary"><span class="ag-role-pill-body"><strong>مندوب ثانوي</strong><small>وصل قبض فقط</small></span></label>
+              </div>
+              <select id="agentRole" class="hidden" aria-hidden="true" tabindex="-1">
+                <option value="primary">مندوب رئيسي</option>
+                <option value="secondary">مندوب ثانوي</option>
+              </select>
+              <label class="field hidden" id="agentParentWrap">
+                <span>يتبع للمندوب الرئيسي</span>
+                <select id="agentParentId" class="search">
+                  <option value="">— اختر المندوب الرئيسي —</option>
+                </select>
+              </label>
+            </section>
+          </div>
+          <div class="ag-modal-col ag-modal-col-trees">
+            <section class="ag-form-section ag-trees-section">
+              <div class="ag-trees-head">
+                <h4 class="ag-form-section-title">صلاحية الشجرات</h4>
+                <p class="ag-form-hint">يظهر للمندوب في التطبيق الزبائن ضمن هذه الشجرات فقط</p>
+              </div>
+              <div class="tree-picks tree-picks-sm ag-tree-picks" id="agentTreeChecks"></div>
+            </section>
+          </div>
         </div>
-        <footer class="modal-foot">
-          <button type="submit" class="btn btn-primary" id="agentSaveBtn">حفظ</button>
+        <footer class="modal-foot ag-modal-foot">
+          <button type="button" class="btn btn-soft" id="agentCancelFoot">إلغاء</button>
+          <button type="submit" class="btn btn-primary" id="agentSaveBtn">حفظ المندوب</button>
         </footer>
       </form>
     </div>
@@ -1522,10 +1574,11 @@
 
   <script src="config.js"></script>
   <script src="admin-ui.js?v=20260826ui6"></script>
-  <script src="admin.js?v=20260826col1"></script>
+  <script src="admin.js?v=20260902agents1"></script>
   <script src="admin-shell.js?v=20260826col1"></script>
   <script src="admin-commerce.js?v=20260826col1"></script>
   <script src="admin-collection-kit.js?v=20260901post1"></script>
+  <script src="admin-agents.js?v=20260902agents1"></script>
   <script src="admin-receipts.js?v=20260901post1"></script>
   <script src="admin-delivery-receipts.js?v=20260826col1"></script>
   <script src="admin-customers.js?v=20260901post1"></script>

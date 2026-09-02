@@ -114,6 +114,10 @@ function syncAgentRoleUi() {
   const role = document.getElementById('agentRole')?.value || 'primary';
   const wrap = document.getElementById('agentParentWrap');
   if (wrap) wrap.classList.toggle('hidden', role !== 'secondary');
+  document.querySelectorAll('input[name="agentRoleRadio"]').forEach((r) => {
+    r.checked = r.value === role;
+    r.closest('.ag-role-pill')?.classList.toggle('is-selected', r.checked);
+  });
 }
 
 async function loadPrimaryAgentsForSelect(selectedId = '') {
@@ -642,57 +646,6 @@ async function initExplorer() {
   renderExplorerTrees();
   if (explorer.trees.length && !explorer.selectedTreeSeq) {
     await selectExplorerTree(explorer.trees[0].seq);
-  }
-}
-
-async function loadAgents() {
-  const grid = document.getElementById('agentsGrid');
-  if (!grid) return;
-  grid.innerHTML = '<p class="muted loading">جاري تحميل المندوبين...</p>';
-  try {
-    const data = await api('/api/admin/agents');
-    const agents = data.agents || [];
-    if (!agents.length) {
-      grid.innerHTML = '<p class="muted">لا يوجد مندوبون — اضغط «مندوب جديد»</p>';
-      return;
-    }
-    grid.innerHTML = agents.map((a) => {
-      const treeCount = a.treeSeqs?.length || 0;
-      const roleCls = a.delegateRole === 'secondary' ? 'pending' : 'ok';
-      const roleLabel = a.delegateRoleLabel || (a.delegateRole === 'secondary' ? 'ثانوي' : 'رئيسي');
-      return `
-    <article class="agent-card">
-      <div class="agent-card-head">
-        <strong>${esc(a.name)}</strong>
-        <span class="badge ${a.active ? 'ok' : 'off'}">${a.active ? 'نشط' : 'موقوف'}</span>
-      </div>
-      <div class="agent-card-meta">
-        <div><span class="badge ${roleCls}">${esc(roleLabel)}</span></div>
-        <div>@${esc(a.username)}</div>
-        ${a.phone ? `<div>${esc(a.phone)}</div>` : ''}
-        ${a.parentAgentName ? `<div>يتبع: ${esc(a.parentAgentName)}</div>` : ''}
-        ${a.secondaryCount ? `<div>${fmtNumAlways(a.secondaryCount)} مندوب ثانوي</div>` : ''}
-        <div>${treeCount} شجرة مصرّحة</div>
-      </div>
-      <div class="agent-card-actions">
-        <button type="button" class="btn btn-soft btn-sm" data-edit="${a.id}">تعديل</button>
-        <button type="button" class="btn btn-danger btn-sm" data-del="${a.id}">حذف</button>
-      </div>
-    </article>`;
-    }).join('');
-
-    grid.querySelectorAll('[data-edit]').forEach((btn) => {
-      btn.addEventListener('click', () => openAgentModal(Number(btn.dataset.edit)));
-    });
-    grid.querySelectorAll('[data-del]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        if (!confirm('حذف هذا المندوب؟')) return;
-        await api(`/api/admin/agents/${btn.dataset.del}`, { method: 'DELETE' });
-        loadAgents();
-      });
-    });
-  } catch (e) {
-    grid.innerHTML = `<p class="muted">تعذّر تحميل المندوبين: ${esc(e.message)}</p>`;
   }
 }
 
@@ -1472,6 +1425,11 @@ async function saveAgentForm(e) {
   const treeSeqs = [...document.querySelectorAll('#agentTreeChecks input[name=treeSeq]:checked:not(:disabled)')]
     .map((c) => String(c.value || '').trim())
     .filter(Boolean);
+  const roleRadio = document.querySelector('input[name="agentRoleRadio"]:checked');
+  if (roleRadio) {
+    const sel = document.getElementById('agentRole');
+    if (sel) sel.value = roleRadio.value;
+  }
   const body = {
     name: String(document.getElementById('agentName')?.value || '').trim(),
     phone: String(document.getElementById('agentPhone')?.value || '').trim(),
@@ -1521,6 +1479,7 @@ async function saveAgentForm(e) {
       notifyAdmin(msg, result?.treesSkipped > 0 ? 'warn' : 'ok');
     }
     document.getElementById('agentModal')?.classList.add('hidden');
+    primaryAgentsCache = [];
     await loadAgents();
   } catch (err) {
     console.error('saveAgentForm', err);
