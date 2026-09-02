@@ -49,7 +49,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
   final _drSearchCtrl = TextEditingController();
   final _rSearchCtrl = TextEditingController();
   var _drPeriod = ReceiptsPeriod.all;
-  var _rPeriod = ReceiptsPeriod.all;
+  var _rDateRange = ReceiptsDateRange.all();
   bool _drFormOpen = false;
   bool _rFormOpen = false;
 
@@ -67,7 +67,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
   List<Receipt> _filterReceipts(List<Receipt> items) {
     final q = _rSearchCtrl.text.trim().toLowerCase();
     return items.where((r) {
-      if (!receiptsMatchesPeriod(r.receiptDate ?? r.createdAt, _rPeriod)) return false;
+      if (!receiptsMatchesDateRange(r.receiptDate ?? r.createdAt, _rDateRange)) return false;
       if (q.isEmpty) return true;
       return '${r.receiptNo} ${r.customerName ?? ''} ${r.customerNum ?? ''}'.toLowerCase().contains(q);
     }).toList();
@@ -528,7 +528,8 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
   Widget _receiptPhoneLayout(List<DeliveryReceipt> deliveries, List<Receipt> receipts) {
     final awaiting = deliveries.where((d) => d.canCreateReceipt).toList();
     final visible = _filterReceipts(receipts);
-    final filtering = _rSearchCtrl.text.trim().isNotEmpty || _rPeriod != ReceiptsPeriod.all;
+    final totals = ReceiptAmountTotals.fromReceipts(visible);
+    final filtering = _rSearchCtrl.text.trim().isNotEmpty || !_rDateRange.isAll;
 
     return CustomScrollView(
       physics: _tabScrollPhysics,
@@ -557,12 +558,22 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, EdSpacing.sm),
           sliver: SliverToBoxAdapter(
-            child: ReceiptsHistoryFilter(
-              controller: _rSearchCtrl,
-              period: _rPeriod,
-              hintText: 'ابحث برقم السند أو اسم الزبون',
-              onPeriodChanged: (p) => setState(() => _rPeriod = p),
-              onQueryChanged: (_) => setState(() {}),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ReceiptsDateRangeFilter(
+                  controller: _rSearchCtrl,
+                  dateRange: _rDateRange,
+                  hintText: 'ابحث برقم السند أو اسم الزبون',
+                  onDateRangeChanged: (range) => setState(() => _rDateRange = range),
+                  onQueryChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 10),
+                ReceiptAmountSummaryPanel(
+                  totals: totals,
+                  periodLabel: _rDateRange.label,
+                ),
+              ],
             ),
           ),
         ),
@@ -571,7 +582,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
           sliver: SliverToBoxAdapter(
             child: ReceiptsSectionHeader(
               title: 'سندات القبض',
-              subtitle: filtering ? 'نتائج البحث ضمن ${_rPeriod.label}' : 'السندات المُرسلة للإدارة',
+              subtitle: filtering ? 'نتائج البحث ضمن ${_rDateRange.label}' : 'السندات المُرسلة للإدارة',
               count: visible.length,
               accent: AppColors.navy,
             ),
@@ -667,6 +678,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
   Widget _receiptTabBodyWide(List<DeliveryReceipt> deliveries, List<Receipt> receipts) {
     final awaiting = deliveries.where((d) => d.canCreateReceipt).toList();
     final visible = _filterReceipts(receipts);
+    final totals = ReceiptAmountTotals.fromReceipts(visible);
     return Padding(
       padding: const EdgeInsets.fromLTRB(EdSpacing.page, EdSpacing.md, EdSpacing.page, 0),
       child: Row(
@@ -691,12 +703,17 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              ReceiptsHistoryFilter(
+              ReceiptsDateRangeFilter(
                 controller: _rSearchCtrl,
-                period: _rPeriod,
+                dateRange: _rDateRange,
                 hintText: 'ابحث برقم السند أو اسم الزبون',
-                onPeriodChanged: (p) => setState(() => _rPeriod = p),
+                onDateRangeChanged: (range) => setState(() => _rDateRange = range),
                 onQueryChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: EdSpacing.sm),
+              ReceiptAmountSummaryPanel(
+                totals: totals,
+                periodLabel: _rDateRange.label,
               ),
               const SizedBox(height: EdSpacing.sm),
               ReceiptsSectionHeader(

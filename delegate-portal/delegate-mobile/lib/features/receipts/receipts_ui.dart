@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/models.dart';
+import 'receipts_hub.dart';
 import 'thermal_print_service.dart';
 
 String receiptAgentStatusLabel(Receipt receipt) {
@@ -55,12 +56,81 @@ extension ReceiptsPeriodLabel on ReceiptsPeriod {
   }
 }
 
+/// نطاق زمني (من — إلى) لسجل سندات القبض.
+class ReceiptsDateRange {
+  const ReceiptsDateRange({this.from, this.to});
+
+  final DateTime? from;
+  final DateTime? to;
+
+  bool get isAll => from == null && to == null;
+
+  static ReceiptsDateRange all() => const ReceiptsDateRange();
+
+  static ReceiptsDateRange forPeriod(ReceiptsPeriod period) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return switch (period) {
+      ReceiptsPeriod.all => all(),
+      ReceiptsPeriod.today => ReceiptsDateRange(from: today, to: today),
+      ReceiptsPeriod.week => ReceiptsDateRange(from: today.subtract(const Duration(days: 6)), to: today),
+      ReceiptsPeriod.month => ReceiptsDateRange(from: DateTime(now.year, now.month), to: today),
+    };
+  }
+
+  ReceiptsPeriod? matchingQuickPeriod() {
+    if (isAll) return ReceiptsPeriod.all;
+    for (final p in ReceiptsPeriod.values) {
+      if (p == ReceiptsPeriod.all) continue;
+      final preset = forPeriod(p);
+      if (_sameDay(preset.from, from) && _sameDay(preset.to, to)) return p;
+    }
+    return null;
+  }
+
+  String get label {
+    if (isAll) return 'الكل';
+    final quick = matchingQuickPeriod();
+    if (quick != null) return quick.label;
+    return '${_fmtDay(from)} — ${_fmtDay(to)}';
+  }
+
+  static String _fmtDay(DateTime? d) {
+    if (d == null) return '—';
+    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+  }
+
+  static bool _sameDay(DateTime? a, DateTime? b) {
+    if (a == null && b == null) return true;
+    if (a == null || b == null) return false;
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+}
+
+DateTime? _parseReceiptDay(String? rawDate) {
+  final raw = (rawDate ?? '').trim();
+  if (raw.isEmpty) return null;
+  final cleaned = raw.replaceAll(' 00:00:00', '');
+  final iso = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(cleaned);
+  if (iso != null) {
+    return DateTime(int.parse(iso.group(1)!), int.parse(iso.group(2)!), int.parse(iso.group(3)!));
+  }
+  final parsed = DateTime.tryParse(cleaned);
+  if (parsed != null) return DateTime(parsed.year, parsed.month, parsed.day);
+  return null;
+}
+
 bool receiptsMatchesPeriod(String? rawDate, ReceiptsPeriod period) {
-  final since = period.since;
-  if (since == null) return true;
-  final parsed = DateTime.tryParse((rawDate ?? '').trim());
-  if (parsed == null) return true;
-  return !DateTime(parsed.year, parsed.month, parsed.day).isBefore(since);
+  return receiptsMatchesDateRange(rawDate, ReceiptsDateRange.forPeriod(period));
+}
+
+bool receiptsMatchesDateRange(String? rawDate, ReceiptsDateRange range) {
+  if (range.isAll) return true;
+  final day = _parseReceiptDay(rawDate);
+  if (day == null) return true;
+  if (range.from != null && day.isBefore(range.from!)) return false;
+  if (range.to != null && day.isAfter(range.to!)) return false;
+  return true;
 }
 
 /// شريط البحث والفترة أعلى السجل — يجعل الحركات القديمة قابلة للوصول.
@@ -157,6 +227,347 @@ class ReceiptsHistoryFilter extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// فلتر زمني من — إلى مع اختصارات سريعة، مخصص لسندات القبض.
+class ReceiptsDateRangeFilter extends StatelessWidget {
+  const ReceiptsDateRangeFilter({
+    super.key,
+    required this.controller,
+    required this.dateRange,
+    required this.onDateRangeChanged,
+    required this.onQueryChanged,
+    this.hintText = 'ابحث برقم السند أو اسم الزبون',
+  });
+
+  final TextEditingController controller;
+  final ReceiptsDateRange dateRange;
+  final ValueChanged<ReceiptsDateRange> onDateRangeChanged;
+  final ValueChanged<String> onQueryChanged;
+  final String hintText;
+
+  Future<void> _pickDate(BuildContext context, {required bool isFrom}) async {
+    final now = DateTime.now();
+    final initial = isFrom ? (dateRange.from ?? now) : (dateRange.to ?? dateRange.from ?? now);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2010),
+      lastDate: DateTime(2100),
+      helpText: isFrom ? 'اختر تاريخ البداية' : 'اختر تاريخ النهاية',
+    );
+    if (picked == null) return;
+    final day = DateTime(picked.year, picked.month, picked.day);
+    if (isFrom) {
+      final to = dateRange.to;
+      onDateRangeChanged(ReceiptsDateRange(from: day, to: to != null && to.isBefore(day) ? day : to));
+    } else {
+      final from = dateRange.from;
+      onDateRangeChanged(ReceiptsDateRange(from: from != null && from.isAfter(day) ? day : from, to: day));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final activeQuick = dateRange.matchingQuickPeriod();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: controller,
+          onChanged: onQueryChanged,
+          textInputAction: TextInputAction.search,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            isDense: true,
+            hintText: hintText,
+            hintStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
+            prefixIcon: const Icon(Icons.search_rounded, size: 20, color: AppColors.muted),
+            suffixIcon: controller.text.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    color: AppColors.muted,
+                    onPressed: () {
+                      controller.clear();
+                      onQueryChanged('');
+                    },
+                  ),
+            filled: true,
+            fillColor: AppColors.surface,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: AppColors.borderLight),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: AppColors.borderLight),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: AppColors.accentTeal, width: 1.4),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 32,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: ReceiptsPeriod.values.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 6),
+            itemBuilder: (context, index) {
+              final value = ReceiptsPeriod.values[index];
+              final active = activeQuick == value;
+              return GestureDetector(
+                onTap: () => onDateRangeChanged(ReceiptsDateRange.forPeriod(value)),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: active ? AppColors.navy : AppColors.surface,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: active ? AppColors.navy : AppColors.borderLight),
+                  ),
+                  child: Text(
+                    value.label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: active ? Colors.white : AppColors.muted,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _ReceiptDateChip(
+                label: 'من',
+                value: dateRange.from,
+                onTap: () => _pickDate(context, isFrom: true),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _ReceiptDateChip(
+                label: 'إلى',
+                value: dateRange.to,
+                onTap: () => _pickDate(context, isFrom: false),
+              ),
+            ),
+            if (!dateRange.isAll) ...[
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: 'إظهار الكل',
+                onPressed: () => onDateRangeChanged(ReceiptsDateRange.all()),
+                icon: const Icon(Icons.filter_alt_off_outlined, size: 18),
+                color: AppColors.muted,
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ReceiptDateChip extends StatelessWidget {
+  const _ReceiptDateChip({required this.label, required this.value, required this.onTap});
+
+  final String label;
+  final DateTime? value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = value == null
+        ? '—'
+        : '${value!.day.toString().padLeft(2, '0')}/${value!.month.toString().padLeft(2, '0')}/${value!.year}';
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.borderLight),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.calendar_today_rounded, size: 14, color: AppColors.muted.withValues(alpha: 0.9)),
+              const SizedBox(width: 6),
+              Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppColors.muted)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  text,
+                  textAlign: TextAlign.end,
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.navy),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// ملخص المبلغ المسلّم للشركة والمبلغ الذي لم يُسلّم بعد — ضمن الفترة المحددة.
+class ReceiptAmountSummaryPanel extends StatelessWidget {
+  const ReceiptAmountSummaryPanel({
+    super.key,
+    required this.totals,
+    required this.periodLabel,
+  });
+
+  final ReceiptAmountTotals totals;
+  final String periodLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.borderLight),
+        boxShadow: AppColors.softShadow,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            color: AppColors.surfaceAlt,
+            child: Row(
+              children: [
+                const Icon(Icons.account_balance_wallet_outlined, size: 16, color: AppColors.navy),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'ملخص المبالغ',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.navy),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.navy.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    periodLabel,
+                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.navy),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _AmountSummaryTile(
+                    icon: Icons.verified_rounded,
+                    label: 'مسلّم للشركة',
+                    hint: 'تم ترحيله للإدارة',
+                    amount: totals.postedAmount,
+                    count: totals.postedCount,
+                    color: AppColors.success,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _AmountSummaryTile(
+                    icon: Icons.schedule_rounded,
+                    label: 'لم يُسلّم بعد',
+                    hint: 'قيد المراجعة أو الترحيل',
+                    amount: totals.unpostedAmount,
+                    count: totals.unpostedCount,
+                    color: AppColors.warning,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AmountSummaryTile extends StatelessWidget {
+  const _AmountSummaryTile({
+    required this.icon,
+    required this.label,
+    required this.hint,
+    required this.amount,
+    required this.count,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String hint;
+  final num amount;
+  final int count;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: color),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            fmtMoney(amount),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.1),
+          ),
+          const Text('د.ع', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted)),
+          const SizedBox(height: 6),
+          Text(hint, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: AppColors.muted, height: 1.3)),
+          const SizedBox(height: 4),
+          Text(
+            '$count ${count == 1 ? 'سند' : 'سندات'}',
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: color.withValues(alpha: 0.95)),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -25,6 +25,43 @@ class ReceiptsHubData {
   List<Receipt> get rejected => receipts.where((r) => r.status == 'rejected').toList();
 }
 
+/// ملخص مبالغ سندات القبض ضمن قائمة مُصفّاة.
+class ReceiptAmountTotals {
+  const ReceiptAmountTotals({
+    required this.postedAmount,
+    required this.postedCount,
+    required this.unpostedAmount,
+    required this.unpostedCount,
+  });
+
+  final num postedAmount;
+  final int postedCount;
+  final num unpostedAmount;
+  final int unpostedCount;
+
+  static ReceiptAmountTotals fromReceipts(List<Receipt> receipts) {
+    num postedAmount = 0;
+    num unpostedAmount = 0;
+    var postedCount = 0;
+    var unpostedCount = 0;
+    for (final r in receipts) {
+      if (r.status == 'posted') {
+        postedAmount += r.amount;
+        postedCount++;
+      } else if (r.status == 'pending' || r.status == 'reviewed') {
+        unpostedAmount += r.amount;
+        unpostedCount++;
+      }
+    }
+    return ReceiptAmountTotals(
+      postedAmount: postedAmount,
+      postedCount: postedCount,
+      unpostedAmount: unpostedAmount,
+      unpostedCount: unpostedCount,
+    );
+  }
+}
+
 /// قائمة وصول القبض — تُحدَّث مباشرة بعد الإصدار ولا تعتمد على IndexedStack.
 class DeliveriesListNotifier extends AsyncNotifier<List<DeliveryReceipt>> {
   @override
