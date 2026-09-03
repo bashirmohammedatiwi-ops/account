@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>Edari Admin Client — إعداد الاتصال</title>
+  <style>
+    body { font-family:Segoe UI,Tahoma,sans-serif; background:#0f172a; color:#f8fafc; display:grid; place-items:center; min-height:100vh; margin:0; }
+    .card { width:min(420px,92vw); background:#fff; color:#0f172a; padding:1.75rem; border-radius:16px; }
+    input { width:100%; padding:.65rem; margin:.5rem 0 1rem; border:1px solid #cbd5e1; border-radius:8px; direction:ltr; }
+    button { width:100%; padding:.75rem; background:#0369a1; color:#fff; border:0; border-radius:8px; font-weight:700; cursor:pointer; }
+    p { color:#64748b; font-size:.9rem; }
+    .err { color:#dc2626; min-height:1.2em; font-size:.85rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Edari Admin Client</h2>
+    <p>أدخل عنوان الجهاز الرئيسي على الشبكة المحلية</p>
+    <input id="url" placeholder="http://192.168.1.10:5005" autofocus>
+    <p class="err" id="err"></p>
+    <button id="go">اتصال</button>
+  </div>
+  <script>
+    document.getElementById('go').onclick = async () => {
+      const url = document.getElementById('url').value.trim().replace(/\/$/, '');
+      document.getElementById('err').textContent = '';
+      if (!url) return document.getElementById('err').textContent = 'أدخل العنوان';
+      try {
+        const r = await fetch(url + '/api/health');
+        if (!r.ok) throw new Error('السيرفر لا يستجيب');
+        await window.lanSetup.save(url);
+        location.href = 'about:blank';
+      } catch (e) {
+        document.getElementById('err').textContent = e.message || 'تعذّر الاتصال';
+      }
+    };
+    document.getElementById('url').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('go').click();
+    });
+  </script>
+</body>
+</html>

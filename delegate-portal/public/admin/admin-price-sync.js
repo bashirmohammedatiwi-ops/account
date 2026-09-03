@@ -194,7 +194,7 @@ async function runPriceAppSync(mode = 'incremental') {
 
   try {
     if (!window.edariDesktop?.runPriceAppSync) {
-      throw new Error('المزامنة متاحة من تطبيق الإدارة على سطح المكتب فقط');
+      throw new Error('الاتصال بالسيرفر الرئيسي مطلوب لمزامنة الأسعار');
     }
 
     const result = await window.edariDesktop.runPriceAppSync({

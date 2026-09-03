@@ -1,0 +1,12 @@
+{
+  "productName": "Edari Admin Server",
+  "directories": { "output": "dist" },
+  "win": {
+    "artifactName": "Edari-Admin-Server-${version}.${ext}",
+    "signAndEditExecutable": false
+  },
+  "nsis": {
+    "shortcutName": "Edari Admin Server",
+    "artifactName": "Edari-Admin-Server-Setup-${version}.${ext}"
+  }
+}

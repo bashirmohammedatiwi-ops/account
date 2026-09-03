@@ -228,7 +228,7 @@ async function openCustomerReqDetail(id) {
         <button type="button" class="btn btn-soft" id="btnRejectCustomerReq">رفض</button>
         <button type="button" class="btn btn-danger" id="btnDeleteCustomerReq">حذف</button>
       </div>
-      ${canPostCustomersFromDesktop() ? '' : '<p class="rcv-muted">الترحيل من تطبيق الإدارة المكتبي فقط</p>'}`}
+      ${canPostCustomersFromDesktop() ? '' : '<p class="rcv-muted">الترحيل يتم عبر الجهاز الرئيسي على الشبكة</p>'}`}
     </div>`;
 
   colHighlightRows('[data-cr-row]', id);
@@ -308,7 +308,7 @@ async function postCustomerReqToEdariUi(id) {
     const data = await commerceApi(`/customer-requests/${id}`);
     const posting = data.posting || data.request;
     if (!canPostCustomersFromDesktop()) {
-      showToast('افتح تطبيق الإدارة على Windows للترحيل', 'err');
+      showToast('الاتصال بالسيرفر الرئيسي مطلوب للترحيل — تحقق من عنوان LAN', 'err');
       return;
     }
     if (data.request.status === 'posted') {

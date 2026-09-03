@@ -49,6 +49,7 @@ const ADMIN_NAV = [
     label: 'النظام',
     icon: 'system',
     items: [
+      { page: 'lan', label: 'الشبكة المحلية', icon: 'sync', desc: 'LAN · رئيسي / عميل' },
       { page: 'priceSync', label: 'مزامنة الأسعار', icon: 'price' },
       { page: 'sync', label: 'رفع البيانات', icon: 'sync' },
       { page: 'database', label: 'قاعدة البيانات', icon: 'db' }
@@ -288,7 +289,8 @@ function activityTimeLabel(raw) {
 
 async function adminCommerceFetch(path) {
   const base = typeof getApiBase === 'function' ? getApiBase() : '';
-  const res = await fetch(`${base}/api/admin${path}`, { cache: 'no-store' });
+  const auth = window.adminAuth?.authHeaders?.() || {};
+  const res = await fetch(`${base}/api/admin${path}`, { cache: 'no-store', headers: auth });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
@@ -404,6 +406,7 @@ async function loadDashboardV4(baseData) {
       { id: 'collections', label: 'التحصيل', sub: 'سندات · وصولات', icon: 'receipts', goto: 'receipts', tone: 'collections' },
       { id: 'reports', label: 'التقارير', sub: 'مبيعات · كشوف', icon: 'reports', goto: 'salesReport', tone: 'reports' },
       { id: 'system', label: 'النظام', sub: 'مزامنة · Edari', icon: 'system', goto: 'sync', tone: 'system' },
+      { id: 'lan', label: 'الشبكة', sub: 'LAN · رئيسي/عميل', icon: 'sync', goto: 'lan', tone: 'system' },
       { id: 'team', label: 'الفريق', sub: 'المندوبون', icon: 'team', goto: 'agents', tone: 'team' }
     ];
     tilesHost.innerHTML = tiles.map((t) => `

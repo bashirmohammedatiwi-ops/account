@@ -6,12 +6,33 @@ const https = require('https');
 const fs = require('fs');
 const { createBackgroundSync } = require('./background-sync');
 const { startStaticAdmin } = require('./static-admin');
+const appMode = require('./app-mode');
 
 const PORT = Number(process.env.PORT || 4100);
-const BACKEND_URL = (process.env.BACKEND_URL || 'http://187.124.23.65:5005').replace(/\/$/, '');
-const USE_LOCAL_SERVER = process.env.USE_LOCAL_SERVER === '1';
-/** Packaged: bundled admin HTML (new UI) + remote API. USE_REMOTE=1 forces old remote UI. */
-const USE_BUNDLED_UI = app.isPackaged && process.env.USE_REMOTE !== '1' && !USE_LOCAL_SERVER;
+const ADMIN_LAN_CLIENT = process.env.ADMIN_LAN_CLIENT === '1' || appMode.mode === 'lan-client';
+
+function getLanClientConfigPath() {
+  return path.join(app.getPath('userData'), 'lan-client.json');
+}
+
+function readLanClientBackendUrl() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(getLanClientConfigPath(), 'utf8'));
+    return String(raw.backendUrl || '').trim().replace(/\/$/, '');
+  } catch {
+    return '';
+  }
+}
+
+function defaultBackendUrl() {
+  if (ADMIN_LAN_CLIENT) return readLanClientBackendUrl();
+  return 'http://187.124.23.65:5005';
+}
+
+let BACKEND_URL = (process.env.BACKEND_URL || defaultBackendUrl()).replace(/\/$/, '');
+const USE_LOCAL_SERVER = process.env.USE_LOCAL_SERVER === '1' || appMode.mode === 'lan-server';
+const LAN_SERVER = process.env.LAN_SERVER === '1' || appMode.mode === 'lan-server';
+const USE_BUNDLED_UI = app.isPackaged && process.env.USE_REMOTE !== '1' && !USE_LOCAL_SERVER && !ADMIN_LAN_CLIENT;
 const USE_REMOTE_UI = !USE_LOCAL_SERVER && !USE_BUNDLED_UI;
 const BUNDLED_ADMIN_PORT = PORT;
 
@@ -21,6 +42,12 @@ function getAdminLoadTarget() {
   }
   if (USE_BUNDLED_UI) {
     return { type: 'url', url: `http://127.0.0.1:${BUNDLED_ADMIN_PORT}/admin/` };
+  }
+  if (ADMIN_LAN_CLIENT && !BACKEND_URL) {
+    return { type: 'setup' };
+  }
+  if (ADMIN_LAN_CLIENT) {
+    return { type: 'url', url: `${BACKEND_URL}/admin` };
   }
   return { type: 'url', url: `${BACKEND_URL}/admin` };
 }
@@ -136,10 +163,12 @@ function portalChildEnv(extra = {}) {
 
 function serverEnv() {
   const portalDir = getPortalDir();
+  const bindHost = LAN_SERVER ? (process.env.HOST || '0.0.0.0') : '127.0.0.1';
   return {
     ...process.env,
     PORT: String(PORT),
-    HOST: '127.0.0.1',
+    HOST: bindHost,
+    LAN_SERVER: LAN_SERVER ? '1' : '',
     DATABASE_PATH: getDatabasePath(),
     EDARI_READER_ROOT: getEdariReaderRoot(),
     NODE_BIN: getNodeBin()
@@ -444,22 +473,29 @@ function showMainWindow() {
 }
 
 function createWindow({ show = !START_HIDDEN } = {}) {
+  const titles = {
+    'lan-server': 'Edari Admin Server — الجهاز الرئيسي',
+    'lan-client': 'Edari Admin Client — عميل LAN',
+    default: 'Edari Admin — لوحة التحكم'
+  };
+  const isSetup = ADMIN_LAN_CLIENT && !BACKEND_URL;
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 920,
     minWidth: 1100,
     minHeight: 700,
     show: false,
-    title: 'Edari Admin — لوحة التحكم',
+    title: isSetup ? 'Edari Admin Client — إعداد' : (titles[appMode.mode] || titles.default),
     icon: getAppIcon(),
     backgroundColor: '#f0f4f8',
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      preload: path.join(__dirname, 'preload.js'),
-      additionalArguments: [
+      preload: path.join(__dirname, isSetup ? 'lan-setup-preload.js' : 'preload.js'),
+      additionalArguments: isSetup ? [] : [
         `--edari-backend=${BACKEND_URL}`,
-        `--edari-remote=${USE_REMOTE_UI ? '1' : '0'}`
+        `--edari-remote=${USE_REMOTE_UI ? '1' : '0'}`,
+        `--edari-lan-client=${ADMIN_LAN_CLIENT ? '1' : '0'}`
       ]
     }
   });
@@ -470,7 +506,11 @@ function createWindow({ show = !START_HIDDEN } = {}) {
   });
 
   const target = getAdminLoadTarget();
-  mainWindow.loadURL(target.url);
+  if (target.type === 'setup') {
+    mainWindow.loadFile(path.join(__dirname, 'lan-setup.html'));
+  } else {
+    mainWindow.loadURL(target.url);
+  }
 
   mainWindow.on('close', (e) => {
     if (!appIsQuitting) {
@@ -744,6 +784,18 @@ function initBackgroundSync() {
   });
   backgroundSync.init();
 }
+
+ipcMain.handle('lan-client:save-url', (_e, url) => {
+  const norm = String(url || '').trim().replace(/\/$/, '');
+  if (!norm) return { ok: false, error: 'عنوان فارغ' };
+  fs.mkdirSync(path.dirname(getLanClientConfigPath()), { recursive: true });
+  fs.writeFileSync(getLanClientConfigPath(), JSON.stringify({ backendUrl: norm }, null, 2), 'utf8');
+  BACKEND_URL = norm;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.loadURL(`${BACKEND_URL}/admin`);
+  }
+  return { ok: true, backendUrl: norm };
+});
 
 ipcMain.handle('run-local-sync', (_e, { serverUrl, syncKey, treeSeqs }) => {
   return runLocalSyncScript(serverUrl, syncKey, treeSeqs, { source: 'manual' });
@@ -1132,6 +1184,10 @@ app.whenReady().then(async () => {
     process.env.DATABASE_PATH = getDatabasePath();
     if (USE_LOCAL_SERVER || USE_BUNDLED_UI) {
       await startBackend();
+    } else if (ADMIN_LAN_CLIENT) {
+      if (BACKEND_URL) {
+        try { await checkHealth(BACKEND_URL); } catch { /* setup wizard in UI */ }
+      }
     } else {
       await checkHealth(BACKEND_URL);
     }

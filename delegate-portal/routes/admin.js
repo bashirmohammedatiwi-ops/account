@@ -1,7 +1,17 @@
 const express = require('express');
+const os = require('os');
 const bcrypt = require('bcryptjs');
 const db = require('../lib/db');
 const { signAdmin } = require('../lib/auth');
+const {
+  adminAuthPolicy,
+  clientIp,
+  isLocalClient,
+  optionalAuthAdmin,
+  requireAdminAuthUnlessPublic
+} = require('../lib/admin-access');
+const { runPostingJob } = require('../lib/edari-posting-queue');
+const { readServerSettings, writeServerSettings, applyEdariSettingsToEnv } = require('../lib/server-settings');
 const {
   getAssignableTrees,
   assignAgentTrees,
@@ -22,8 +32,26 @@ const { getPublicBaseUrl } = require('../lib/public-url');
 const { runLocalSync, listEdariTrees, listEdariMaterialTrees, queryEdariSalesReport } = require('../lib/sync-runner');
 const { queryAdminSalesReport, listReportTrees, listSalesBranches, parseTreeSeqList } = require('../lib/admin-sales-report');
 const { buildTreeSalesReportPdf, buildTreeSalesReportSummaryPdf } = require('../lib/pdf-export');
+const { listLanAddresses, getPrimaryLanAddress } = require('../lib/lan-host');
+const {
+  postReceiptToEdari,
+  postCustomerToEdari,
+  searchEdariAccounts,
+  queryEdariAccountStatements,
+  exportEdariAccountStatementsPdf,
+  listEdariMaterialTreesLive,
+  listEdariSalesBranchesLive,
+  exportEdariSalesReportPdf,
+  lookupEdariMaterial,
+  fetchEdariCatalogMaterials,
+  fetchEdariMaterials,
+  testEdariConnection,
+  listEdariDatabases,
+  runPriceAppSync
+} = require('../lib/edari-server-handlers');
 
 const router = express.Router();
+const HOST_BIND = process.env.HOST || '0.0.0.0';
 
 function readSalesReportQuery(req) {
   const treeSeqs = parseTreeSeqList(req.query.treeSeqs || req.query.trees || '');
@@ -49,19 +77,212 @@ router.post('/login', (req, res) => {
   res.json({ ok: true, token, username: admin.username });
 });
 
-router.get('/me', (_req, res) => {
-  res.json({ ok: true, admin: { username: 'admin' } });
+router.get('/me', optionalAuthAdmin, (req, res) => {
+  if (req.admin) {
+    return res.json({ ok: true, admin: { id: req.admin.id, username: req.admin.username } });
+  }
+  const policy = adminAuthPolicy();
+  res.json({
+    ok: true,
+    admin: policy.enabled ? null : { username: 'admin', guest: true },
+    guest: !req.admin,
+    requireAuth: policy.enabled
+  });
 });
 
 router.get('/config', (req, res) => {
   const base = getPublicBaseUrl(req);
+  const port = Number(process.env.PORT || 5005);
+  const lanAddresses = listLanAddresses();
+  const primaryLan = getPrimaryLanAddress();
+  const policy = adminAuthPolicy();
   res.json({
     ok: true,
     syncApiKey: process.env.SYNC_API_KEY || '',
     serverUrl: base,
     mobileUrl: `${base}/m`,
-    adminUrl: `${base}/admin`
+    adminUrl: `${base}/admin`,
+    hostname: os.hostname(),
+    requireAuth: policy.enabled,
+    authMode: policy.global ? 'always' : (policy.lanOnly ? 'lan' : 'none'),
+    clientIsLocal: isLocalClient(req),
+    lan: {
+      enabled: process.env.LAN_SERVER === '1' || HOST_BIND !== '127.0.0.1',
+      host: process.env.HOST || '0.0.0.0',
+      port,
+      addresses: lanAddresses,
+      primaryAddress: primaryLan,
+      adminLanUrl: primaryLan ? `http://${primaryLan}:${port}/admin` : null
+    }
   });
+});
+
+router.get('/lan-info', (req, res) => {
+  const port = Number(process.env.PORT || 5005);
+  const lanAddresses = listLanAddresses();
+  const primaryLan = getPrimaryLanAddress();
+  const base = getPublicBaseUrl(req);
+  let agentCount = 0;
+  let accountCount = 0;
+  try {
+    agentCount = db.prepare('SELECT COUNT(*) AS c FROM agents').get()?.c || 0;
+    accountCount = db.prepare('SELECT COUNT(*) AS c FROM accounts').get()?.c || 0;
+  } catch { /* ignore */ }
+  res.json({
+    ok: true,
+    role: 'server',
+    service: 'edari-delegate-portal',
+    hostname: os.hostname(),
+    host: HOST_BIND,
+    port,
+    baseUrl: base,
+    addresses: lanAddresses,
+    primaryAddress: primaryLan,
+    adminUrl: primaryLan ? `http://${primaryLan}:${port}/admin` : `${base}/admin`,
+    mobileUrl: primaryLan ? `http://${primaryLan}:${port}/m` : `${base}/m`,
+    uptimeSec: Math.floor(process.uptime()),
+    clientIp: clientIp(req),
+    stats: { agents: agentCount, accounts: accountCount },
+    lanServer: process.env.LAN_SERVER === '1' || HOST_BIND !== '127.0.0.1'
+  });
+});
+
+router.use(requireAdminAuthUnlessPublic);
+
+router.post('/edari/post-receipt', async (req, res) => {
+  try {
+    const result = await runPostingJob('receipt', req.body || {}, () => postReceiptToEdari(req.body || {}));
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'فشل ترحيل سند القبض' });
+  }
+});
+
+router.post('/edari/post-customer', async (req, res) => {
+  try {
+    const result = await runPostingJob('customer', req.body || {}, () => postCustomerToEdari(req.body || {}));
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'فشل ترحيل الزبون' });
+  }
+});
+
+router.post('/edari/search-accounts', async (req, res) => {
+  try {
+    const result = await searchEdariAccounts(req.body || {});
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'فشل البحث في حسابات الإداري' });
+  }
+});
+
+router.post('/edari/account-statements', async (req, res) => {
+  try {
+    const result = await queryEdariAccountStatements(req.body || {});
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'فشل إنشاء كشف الحساب' });
+  }
+});
+
+router.post('/edari/account-statements.pdf', async (req, res) => {
+  try {
+    const result = await exportEdariAccountStatementsPdf(req.body || {});
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'فشل تصدير PDF' });
+  }
+});
+
+router.post('/edari/sales-report.pdf', async (req, res) => {
+  try {
+    const result = await exportEdariSalesReportPdf(req.body || {});
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'فشل تصدير تقرير المبيعات' });
+  }
+});
+
+router.get('/edari/sales-branches', async (req, res) => {
+  try {
+    const result = await listEdariSalesBranchesLive({
+      dateFrom: req.query.dateFrom || req.query.from || '',
+      dateTo: req.query.dateTo || req.query.to || ''
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'فشل قراءة الفروع' });
+  }
+});
+
+router.post('/edari/lookup-material', async (req, res) => {
+  try {
+    const code = req.body?.code ?? req.query?.code ?? '';
+    const result = await lookupEdariMaterial(code);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'فشل البحث عن المادة' });
+  }
+});
+
+router.post('/edari/catalog-materials', async (req, res) => {
+  try {
+    const result = await fetchEdariCatalogMaterials(req.body?.codes || []);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'فشل قراءة المواد' });
+  }
+});
+
+router.post('/edari/materials', async (_req, res) => {
+  try {
+    const result = await fetchEdariMaterials();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'فشل تحديث المواد من Edari' });
+  }
+});
+
+router.get('/server-settings', (_req, res) => {
+  const settings = readServerSettings();
+  res.json({ ok: true, ...settings });
+});
+
+router.put('/server-settings', (req, res) => {
+  try {
+    const next = writeServerSettings(req.body || {});
+    applyEdariSettingsToEnv(next.edari);
+    res.json({ ok: true, ...next });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message || 'فشل حفظ الإعدادات' });
+  }
+});
+
+router.post('/edari/test-connection', async (req, res) => {
+  try {
+    const result = await testEdariConnection(req.body?.edari || req.body || {});
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'فشل اختبار الاتصال' });
+  }
+});
+
+router.post('/edari/list-databases', async (req, res) => {
+  try {
+    const result = await listEdariDatabases(req.body || {});
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'فشل اكتشاف القواعد' });
+  }
+});
+
+router.post('/edari/price-sync', async (req, res) => {
+  try {
+    const result = await runPriceAppSync(req.body || {});
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'فشل مزامنة الأسعار' });
+  }
 });
 
 router.get('/dashboard', (_req, res) => {

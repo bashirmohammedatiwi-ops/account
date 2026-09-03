@@ -10,8 +10,44 @@
   <link rel="stylesheet" href="admin.css?v=20260826col1">
   <link rel="stylesheet" href="admin-agents.css?v=20260902agents6">
   <link rel="stylesheet" href="admin-pro.css?v=20260902pro2">
+  <link rel="stylesheet" href="admin-lan.css?v=20260903lan2">
 </head>
 <body>
+  <div id="adminLoginGate" class="admin-login-gate hidden" aria-hidden="true">
+    <div class="admin-login-card">
+      <h2>تسجيل الدخول</h2>
+      <p class="muted">مطلوب للوصول من الشبكة المحلية</p>
+      <form id="adminLoginForm" class="form-stack">
+        <label class="field">
+          <span>اسم المستخدم</span>
+          <input type="text" id="adminLoginUser" autocomplete="username" required>
+        </label>
+        <label class="field">
+          <span>كلمة المرور</span>
+          <input type="password" id="adminLoginPass" autocomplete="current-password" required>
+        </label>
+        <p class="admin-login-error" id="adminLoginError"></p>
+        <button type="submit" class="btn btn-primary" id="adminLoginSubmit">دخول</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="lanSetupGate" class="lan-setup-gate hidden" aria-hidden="true">
+    <div class="admin-login-card" style="width:min(480px,92vw)">
+      <h2>اتصال بالجهاز الرئيسي</h2>
+      <p class="muted">هذا الجهاز عميل LAN — أدخل IP الجهاز الذي يشغّل قاعدة البيانات وEdari</p>
+      <div class="form-stack">
+        <label class="field">
+          <span>عنوان السيرفر</span>
+          <input type="text" id="lanSetupInput" placeholder="http://192.168.1.10:5005" dir="ltr">
+        </label>
+        <div class="btn-row">
+          <button type="button" class="btn btn-primary" id="btnLanSetupConnect">اتصال</button>
+          <button type="button" class="btn btn-soft" id="btnLanSetupScan">بحث تلقائي</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <div id="topLoader" class="top-loader" hidden aria-live="polite">
     <div class="top-loader-bar"></div>
     <div class="top-loader-pill">
@@ -74,6 +110,9 @@
           <p class="topbar-sub" id="pageSubtitle">نظرة عامة على النظام</p>
         </div>
         <div class="topbar-trailing">
+          <span class="lan-topbar-badge hidden" id="lanTopbarBadge" title="وضع الشبكة">LAN</span>
+          <span class="admin-auth-badge hidden" id="adminAuthBadge"></span>
+          <button type="button" class="btn btn-soft btn-sm hidden" id="btnAdminLogout">خروج</button>
           <button type="button" class="btn btn-soft btn-sm cmdk-trigger" id="btnOpenCmdk" title="⌘K">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
             <span>انتقل إلى…</span>
@@ -1133,12 +1172,29 @@
                 </label>
               </section>
 
+              <details class="panel panel-details" id="lanNetworkPanel">
+                <summary>الشبكة المحلية (LAN)</summary>
+                <p class="field-hint" id="lanNetworkStatus">—</p>
+                <div id="lanAdminUrls"></div>
+                <div class="form-stack lan-client-only">
+                  <label class="field">
+                    <span>عنوان الجهاز الرئيسي</span>
+                    <input type="text" id="lanServerInput" placeholder="http://192.168.1.10:5005">
+                  </label>
+                  <div class="btn-row">
+                    <button type="button" class="btn btn-primary btn-sm" id="btnLanConnect">اتصال</button>
+                    <button type="button" class="btn btn-soft btn-sm" id="btnLanRefresh">تحديث</button>
+                  </div>
+                  <p class="field-hint">على الأجهزة الثانوية: أدخل IP الجهاز الرئيسي ثم «اتصال». قاعدة البيانات وEdari تبقى على الجهاز الرئيسي فقط.</p>
+                </div>
+              </details>
+
               <details class="panel panel-details">
                 <summary>إعدادات الاتصال</summary>
                 <div class="form-stack">
                   <label class="field">
                     <span>عنوان السيرفر</span>
-                    <input type="text" id="syncServerUrl" value="http://187.124.23.65:5005">
+                    <input type="text" id="syncServerUrl" value="" placeholder="http://192.168.1.10:5005">
                   </label>
                   <label class="field">
                     <span>مفتاح المزامنة</span>
@@ -1146,7 +1202,7 @@
                   </label>
                   <label class="field">
                     <span>عنوان API (محلي)</span>
-                    <input type="text" id="backendUrl" value="http://187.124.23.65:5005">
+                    <input type="text" id="backendUrl" value="" placeholder="http://192.168.1.10:5005">
                   </label>
                   <p class="field-hint">اضغط Enter بعد تغيير عنوان API</p>
                 </div>
@@ -1174,6 +1230,62 @@
                     </thead>
                     <tbody id="syncLogsBody"></tbody>
                   </table>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
+
+        <!-- LAN Network Center -->
+        <section class="page" id="page-lan">
+          <div class="lan-deck">
+            <div class="lan-hero panel">
+              <div>
+                <span class="lan-role-badge is-client" id="lanRoleBadge">—</span>
+                <h2>مركز الشبكة المحلية</h2>
+                <p id="lanPageStatus">جاري التحميل…</p>
+                <p class="field-hint">الجهاز الرئيسي يحتفظ بقاعدة البيانات وEdari — الأجهزة الأخرى تتصل عبر LAN وتنفّذ كل العمليات عن بُعد.</p>
+              </div>
+              <div class="btn-row">
+                <button type="button" class="btn btn-hero-soft" id="btnLanPageRefresh">↻ تحديث</button>
+              </div>
+            </div>
+
+            <div id="lanServerBlock" class="lan-grid" hidden>
+              <section class="panel lan-card">
+                <h3 class="panel-title">حالة السيرفر</h3>
+                <div class="lan-stat-grid" id="lanServerStats"></div>
+              </section>
+              <section class="panel lan-card" style="grid-column: 1 / -1">
+                <h3 class="panel-title">روابط للأجهزة الأخرى</h3>
+                <div id="lanUrlCards"></div>
+                <div class="lan-firewall-hint" id="lanFirewallHint" style="margin-top:1rem"></div>
+              </section>
+            </div>
+
+            <div id="lanClientBlock" class="lan-grid" hidden>
+              <section class="panel lan-card">
+                <h3 class="panel-title">الاتصال بالرئيسي</h3>
+                <div class="form-stack">
+                  <label class="field">
+                    <span>عنوان الجهاز الرئيسي</span>
+                    <input type="text" id="lanServerInput" placeholder="http://192.168.1.10:5005" dir="ltr">
+                  </label>
+                  <label class="field">
+                    <span>منفذ البحث</span>
+                    <input type="number" id="lanScanPort" value="5005" min="1" max="65535" dir="ltr">
+                  </label>
+                  <div class="btn-row">
+                    <button type="button" class="btn btn-primary" id="btnLanPageConnect">اتصال</button>
+                    <button type="button" class="btn btn-soft" id="btnLanScan">بحث تلقائي في الشبكة</button>
+                  </div>
+                  <div class="lan-scan-progress" id="lanScanBar" hidden><div class="lan-scan-progress-fill" id="lanScanBarFill"></div></div>
+                </div>
+              </section>
+              <section class="panel lan-card">
+                <h3 class="panel-title">سيرفرات تم العثور عليها</h3>
+                <div class="lan-scan-list" id="lanScanResults">
+                  <p class="muted">اضغط «بحث تلقائي» للعثور على الجهاز الرئيسي</p>
                 </div>
               </section>
             </div>
@@ -1636,6 +1748,8 @@
   <div id="toastHost" class="toast-host" aria-live="polite"></div>
 
   <script src="config.js"></script>
+  <script src="admin-auth.js?v=20260903lan2"></script>
+  <script src="admin-edari-bridge.js?v=20260903lan2"></script>
   <script src="admin-ui.js?v=20260902pro1"></script>
   <script src="admin.js?v=20260902agents2"></script>
   <script src="admin-shell.js?v=20260826col1"></script>
@@ -1650,6 +1764,7 @@
   <script src="admin-sales-report.js?v=20260709treeFix3"></script>
   <script src="admin-account-statements.js?v=20260826pages1"></script>
   <script src="admin-price-sync.js?v=20260703"></script>
+  <script src="admin-lan.js?v=20260903lan2"></script>
   <script>
     if (typeof initAdminShell === 'function') initAdminShell();
     if (typeof initAdminUi === 'function') initAdminUi();

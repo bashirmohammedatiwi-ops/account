@@ -4,6 +4,9 @@ const cors = require('cors');
 const path = require('path');
 
 require('./lib/db');
+try {
+  require('./lib/server-settings').applyEdariSettingsToEnv();
+} catch { /* ignore */ }
 
 const adminRoutes = require('./routes/admin');
 const syncRoutes = require('./routes/sync');
@@ -15,6 +18,7 @@ const empRoutes = require('./routes/emp');
 const integrationShorjaRoutes = require('./routes/integration-shorja');
 const priceAppRoutes = require('./routes/price-app');
 const { UPLOAD_ROOT } = require('./lib/products');
+const { listLanAddresses, getPrimaryLanAddress } = require('./lib/lan-host');
 
 const app = express();
 const PORT = Number(process.env.PORT || 5005);
@@ -90,7 +94,16 @@ app.use((err, _req, res, _next) => {
 app.listen(PORT, HOST, () => {
   const shorjaUrl = String(process.env.SHORJA_HUB_URL || '').trim();
   const syncKey = String(process.env.SYNC_API_KEY || '').trim();
+  const lan = listLanAddresses();
+  const primaryLan = getPrimaryLanAddress();
   console.log(`Edari Delegate Portal: http://${HOST}:${PORT}/admin`);
+  if (primaryLan && HOST === '0.0.0.0') {
+    console.log(`LAN admin: http://${primaryLan}:${PORT}/admin`);
+    console.log(`LAN mobile: http://${primaryLan}:${PORT}/m`);
+  }
+  if (lan.length) {
+    console.log(`LAN addresses: ${lan.map((a) => a.address).join(', ')}`);
+  }
   console.log(`Delegate mobile: http://${HOST}:${PORT}/m`);
   console.log(`Employee prep: http://${HOST}:${PORT}/emp`);
   console.log(`Employee Flutter app API: http://${HOST}:${PORT}/api/emp`);

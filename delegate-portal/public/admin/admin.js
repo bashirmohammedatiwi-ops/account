@@ -225,9 +225,13 @@ function fmtDate(v) {
 }
 
 async function api(path, opts = {}) {
-  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  const auth = window.adminAuth?.authHeaders?.() || {};
+  const headers = { 'Content-Type': 'application/json', ...auth, ...(opts.headers || {}) };
   const res = await fetch(`${getApiBase()}${path}`, { ...opts, headers });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && window.adminAuth) {
+    window.adminAuth.logout();
+  }
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
 }
@@ -243,6 +247,7 @@ const PAGE_META = {
   thermalReceipt: { title: 'تصميم الوصل الحراري', sub: 'تخصيص وصل القبض للطابعة الحرارية 80mm' },
   salesReport: { title: 'مبيعات الشجرات', sub: 'تقرير مبيعات ومرتجعات — PDF' },
   accountStatements: { title: 'كشف حساب', sub: 'كشوف حسابات من Edari — PDF' },
+  lan: { title: 'الشبكة المحلية', sub: 'مركز LAN — سيرفر رئيسي أو عميل على الشبكة' },
   priceSync: { title: 'مزامنة الأسعار', sub: 'رفع المشتريات وسعر المستهلك لتطبيق الويب' },
   sync: { title: 'رفع البيانات', sub: 'مزامنة EdariNX مع سيرفر المندوبين' },
   database: { title: 'قاعدة البيانات', sub: 'اتصال EdariNX — Alias والمسارات' },
@@ -296,6 +301,8 @@ function showPage(name, opts = {}) {
     startSyncLogPolling();
   } else if (name === 'database') {
     void loadEdariConnectionSettings();
+    stopSyncLogPolling();
+  } else if (name === 'lan') {
     stopSyncLogPolling();
   } else if (name === 'agents') {
     void loadAgents();
@@ -914,8 +921,13 @@ async function loadEdariConnectionSettings() {
       const data = await window.edariDesktop.getEdariSettings();
       edari = { ...edari, ...(data.edari || {}) };
     } else {
-      const saved = localStorage.getItem(EDARI_LS_KEY);
-      if (saved) edari = { ...edari, ...JSON.parse(saved) };
+      try {
+        const remote = await api('/api/admin/server-settings');
+        edari = { ...edari, ...(remote.edari || {}) };
+      } catch {
+        const saved = localStorage.getItem(EDARI_LS_KEY);
+        if (saved) edari = { ...edari, ...JSON.parse(saved) };
+      }
     }
   } catch {
     /* ignore */
@@ -930,7 +942,11 @@ async function saveEdariConnectionSettings() {
   if (window.edariDesktop?.saveEdariSettings) {
     await window.edariDesktop.saveEdariSettings(edari);
   } else {
-    await persistBackgroundSyncSettings({ edari });
+    try {
+      await api('/api/admin/server-settings', { method: 'PUT', body: JSON.stringify({ edari }) });
+    } catch {
+      await persistBackgroundSyncSettings({ edari });
+    }
   }
   setEdariConnStatus('تم حفظ إعدادات قاعدة البيانات', 'ok');
 }
@@ -938,12 +954,13 @@ async function saveEdariConnectionSettings() {
 async function testEdariConnectionSettings() {
   const edari = readEdariForm();
   setEdariConnStatus('جاري اختبار الاتصال...');
-  if (!window.edariDesktop?.testEdariConnection) {
-    setEdariConnStatus('اختبار الاتصال متاح من تطبيق Admin (Electron) فقط', 'warn');
-    return;
-  }
   try {
-    const data = await window.edariDesktop.testEdariConnection(edari);
+    let data;
+    if (window.edariDesktop?.testEdariConnection) {
+      data = await window.edariDesktop.testEdariConnection(edari);
+    } else {
+      data = await api('/api/admin/edari/test-connection', { method: 'POST', body: JSON.stringify({ edari }) });
+    }
     if (!data.ok) throw new Error(data.error || 'فشل الاتصال');
     setEdariConnStatus(data.message || `تم الاتصال — ${data.alias}`, 'ok');
   } catch (e) {
@@ -958,12 +975,13 @@ async function discoverEdariDatabases() {
     return;
   }
   setEdariConnStatus('جاري البحث عن القواعد...');
-  if (!window.edariDesktop?.listEdariDatabases) {
-    setEdariConnStatus('الاكتشاف متاح من تطبيق Admin (Electron) فقط', 'warn');
-    return;
-  }
   try {
-    const data = await window.edariDesktop.listEdariDatabases({ dataRoot });
+    let data;
+    if (window.edariDesktop?.listEdariDatabases) {
+      data = await window.edariDesktop.listEdariDatabases({ dataRoot });
+    } else {
+      data = await api('/api/admin/edari/list-databases', { method: 'POST', body: JSON.stringify({ dataRoot }) });
+    }
     if (!data.ok) throw new Error(data.error || 'فشل الاكتشاف');
     const pick = document.getElementById('edariDatabasePick');
     const items = [];
@@ -1566,6 +1584,9 @@ function saveBackendUrl() {
 }
 
 async function refreshAll() {
+  if (window.adminAuth?.initAdminAuth) {
+    try { await window.adminAuth.initAdminAuth(); } catch { /* ignore */ }
+  }
   await checkBackendHealth();
   const tasks = [
     loadConfig,
@@ -1665,3 +1686,5 @@ window.addEventListener('hashchange', () => {
   if (!parsed) return;
   showPage(parsed.page, { fromHash: true });
 });
+
+window.refreshAll = refreshAll;

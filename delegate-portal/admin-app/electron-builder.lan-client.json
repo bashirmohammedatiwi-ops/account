@@ -1,0 +1,12 @@
+{
+  "productName": "Edari Admin Client",
+  "directories": { "output": "dist" },
+  "win": {
+    "artifactName": "Edari-Admin-Client-${version}.${ext}",
+    "signAndEditExecutable": false
+  },
+  "nsis": {
+    "shortcutName": "Edari Admin Client",
+    "artifactName": "Edari-Admin-Client-Setup-${version}.${ext}"
+  }
+}

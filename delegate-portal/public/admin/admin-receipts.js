@@ -1028,7 +1028,7 @@ async function postReceiptToEdariUi(id) {
       return;
     }
     if (!canPostReceiptsFromDesktop()) {
-      showToast('افتح تطبيق الإدارة على Windows للترحيل', 'err');
+      showToast('الاتصال بالسيرفر الرئيسي مطلوب للترحيل — تحقق من عنوان LAN', 'err');
       return;
     }
     if (data.receipt.status === 'posted') {
