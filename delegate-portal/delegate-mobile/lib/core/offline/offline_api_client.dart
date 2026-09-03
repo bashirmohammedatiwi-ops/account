@@ -67,6 +67,13 @@ Map<String, dynamic> _normalizeDeliveryRow(Map<String, dynamic> json) {
     'status': status,
     'statusLabel': json['statusLabel'] ?? json['status_label'] ?? (status == 'linked' ? 'مرتبط بسند قبض' : 'مُصدَّر'),
     'agentId': json['agentId'] ?? json['agent_id'],
+    'agentName': json['agentName'] ?? json['agent_name'],
+    'isTeamDelivery': json['isTeamDelivery'] == true || json['is_team_delivery'] == true,
+    'handoverStatus': json['handoverStatus'] ?? json['handover_status'] ?? 'pending',
+    'handoverStatusLabel': json['handoverStatusLabel'] ?? json['handover_status_label'] ?? '',
+    'handoverAt': json['handoverAt'] ?? json['handover_at'],
+    'canMarkHandover': json['canMarkHandover'] == true || json['can_mark_handover'] == true,
+    'canCreateReceipt': json['canCreateReceipt'] == true || json['can_create_receipt'] == true,
     'amount': json['amount'] ?? 0,
     'customerName': json['customerName'] ?? json['customer_name'],
     'customerNum': json['customerNum'] ?? json['customer_num'],
@@ -79,6 +86,7 @@ Map<String, dynamic> _normalizeDeliveryRow(Map<String, dynamic> json) {
     'receiptId': json['receiptId'] ?? json['receipt_id'],
     'linkedReceiptNo': json['linkedReceiptNo'] ?? json['linked_receipt_no'],
     'createdAt': json['createdAt'] ?? json['created_at'],
+    if (json['localPending'] == true) 'localPending': true,
   };
 }
 
@@ -113,9 +121,11 @@ class OfflineApiClient {
     return OfflineKeys.deliveryReceiptsForAgent(agentId, status: status);
   }
 
-  List<Map<String, dynamic>> _filterRowsForCurrentAgent(List<Map<String, dynamic>> rows) {
+  List<Map<String, dynamic>> _filterRowsForCurrentAgent(List<Map<String, dynamic>> rows, {bool deliveries = false}) {
     final agentId = _agentId;
     if (agentId == null) return rows;
+    final agent = _ref.read(authProvider).agent;
+    if (deliveries && agent?.isPrimary == true) return rows;
     return rows.where((row) {
       final rowAgent = row['agentId'] ?? row['agent_id'];
       if (rowAgent == null) return _rowId(row['id']) < 0 || row['localPending'] == true;
@@ -732,7 +742,7 @@ class OfflineApiClient {
         offlineRead: () async {
           final raw = await _cache.getJson(cacheKey);
           if (raw is! List) return null;
-          final rows = _filterRowsForCurrentAgent(raw.map((e) => Map<String, dynamic>.from(e as Map)).toList());
+          final rows = _filterRowsForCurrentAgent(raw.map((e) => Map<String, dynamic>.from(e as Map)).toList(), deliveries: true);
           return _parseDeliveryList(rows);
         },
       );
@@ -824,6 +834,14 @@ class OfflineApiClient {
         'status': receipt.status,
         'statusLabel': receipt.statusLabel,
         'amount': receipt.amount,
+        'agentId': receipt.agentId ?? _agentId,
+        'agentName': receipt.agentName,
+        'isTeamDelivery': receipt.isTeamDelivery,
+        'handoverStatus': receipt.handoverStatus,
+        'handoverStatusLabel': receipt.handoverStatusLabel,
+        'handoverAt': receipt.handoverAt,
+        'canMarkHandover': receipt.canMarkHandover,
+        'canCreateReceipt': receipt.canCreateReceipt,
         'customerName': receipt.customerName ?? displayCustomerName,
         'customerNum': receipt.customerNum ?? displayCustomerNum,
         'customerAccSeq': receipt.customerAccSeq,
@@ -833,7 +851,6 @@ class OfflineApiClient {
         'receiptId': receipt.receiptId,
         'linkedReceiptNo': receipt.linkedReceiptNo,
         'createdAt': receipt.createdAt,
-        if (_agentId != null) 'agentId': _agentId,
       })));
       return receipt;
     } on ApiException catch (e) {
@@ -860,6 +877,13 @@ class OfflineApiClient {
       if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
       await _outbox.enqueue(method: 'POST', path: '/delivery-receipts/$id/printed', entityType: 'delivery_printed');
     }
+  }
+
+  Future<DeliveryReceipt> markDeliveryHandoverReceived(int id) async {
+    if (!_online) {
+      throw ApiException('يتطلب تأكيد الاستلام اتصالاً بالإنترنت');
+    }
+    return _api.markDeliveryHandoverReceived(id);
   }
 
   Future<void> deleteDeliveryReceipt(int id) async {

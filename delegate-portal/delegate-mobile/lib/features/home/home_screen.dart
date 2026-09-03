@@ -9,6 +9,7 @@ import '../receipts/receipts_hub.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
+import '../../models/models.dart';
 import 'home_ui.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -17,9 +18,11 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final agent = ref.watch(authProvider).agent;
+    final isSecondary = agent?.isSecondary ?? false;
     final treesAsync = ref.watch(treesProvider);
     final ordersAsync = ref.watch(ordersProvider);
-    final receiptsAsync = ref.watch(receiptsListProvider);
+    final receiptsAsync = isSecondary ? const AsyncData<List<Receipt>>([]) : ref.watch(receiptsListProvider);
+    final deliveriesAsync = ref.watch(deliveriesListNotifierProvider);
     final customersAsync = ref.watch(customerRequestsListProvider);
     final promoVisitsAsync = ref.watch(promotionalVisitsListProvider);
     final layout = EdLayout.of(context);
@@ -34,6 +37,23 @@ class HomeScreen extends ConsumerWidget {
       data: (list) => '${list.where((r) => r.status == 'pending' || r.status == 'reviewed').length}',
       orElse: () => null,
     );
+    final pendingDeliveries = deliveriesAsync.maybeWhen(
+      data: (list) {
+        if (isSecondary) {
+          return '${list.where((d) => d.status == 'issued' && !d.handoverReceived).length}';
+        }
+        return '${list.where((d) => d.canCreateReceipt).length}';
+      },
+      orElse: () => null,
+    );
+    final receiptBadge = isSecondary
+        ? pendingDeliveries
+        : () {
+            final pendingR = int.tryParse(pendingReceipts ?? '') ?? 0;
+            final pendingD = int.tryParse(pendingDeliveries ?? '') ?? 0;
+            final total = pendingR + pendingD;
+            return total > 0 ? '$total' : null;
+          }();
     final pendingCustomers = customersAsync.maybeWhen(
       data: (list) => '${list.where((r) => r.status == 'pending' || r.status == 'reviewed').length}',
       orElse: () => null,
@@ -47,7 +67,10 @@ class HomeScreen extends ConsumerWidget {
     Future<void> refresh() async {
       ref.invalidate(treesProvider);
       ref.invalidate(ordersProvider);
-      await ref.read(receiptsListProvider.notifier).refresh();
+      await ref.read(deliveriesListNotifierProvider.notifier).refresh();
+      if (!isSecondary) {
+        await ref.read(receiptsListProvider.notifier).refresh();
+      }
       ref.invalidate(customerRequestsListProvider);
       ref.invalidate(promotionalVisitsListProvider);
     }
@@ -93,11 +116,11 @@ class HomeScreen extends ConsumerWidget {
       ),
       EdHomeApp(
         icon: Icons.receipt_long_rounded,
-        name: 'سند قبض',
-        hint: 'تحصيل من الزبون',
+        name: isSecondary ? 'وصل قبض' : 'سند قبض',
+        hint: isSecondary ? 'إصدار وصل قبض للزبون' : 'تحصيل من الزبون',
         iconColor: AppColors.moduleReceipts,
         iconBg: EdHomeThemes.receiptsBg,
-        badge: pendingReceipts,
+        badge: receiptBadge,
         category: 'الميدان والزبائن',
         onTap: () => context.go('/receipts'),
       ),

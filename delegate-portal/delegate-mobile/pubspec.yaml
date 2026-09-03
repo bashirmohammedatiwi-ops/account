@@ -1,7 +1,7 @@
 name: edari_delegate
 description: Edari Delegate — تطبيق المندوب للآيباد والهاتف
 publish_to: 'none'
-version: 1.2.30+36
+version: 1.2.32+38
 
 environment:
   sdk: ^3.11.0

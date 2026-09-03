@@ -892,6 +892,56 @@ class _StatBox extends StatelessWidget {
   }
 }
 
+class AgentRoleBanner extends StatelessWidget {
+  const AgentRoleBanner({super.key, required this.agent});
+
+  final Agent agent;
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = agent.isSecondary;
+    final roleLabel = agent.delegateRoleLabel;
+    String message;
+    Color pillColor;
+    Color pillBg;
+
+    if (secondary) {
+      pillColor = AppColors.warning;
+      pillBg = AppColors.warning.withValues(alpha: 0.12);
+      final parent = agent.parentAgentName.trim();
+      message = parent.isNotEmpty ? 'وصل قبض فقط — يتبع $parent' : 'وصل قبض فقط — يُسلّم المبلغ للرئيسي';
+    } else if (agent.secondaryCount > 0) {
+      pillColor = AppColors.success;
+      pillBg = AppColors.success.withValues(alpha: 0.12);
+      message = '${fmtNumAlways(agent.secondaryCount)} مندوب ثانوي · تستلم وصولاتهم وتُصدر سند قبض';
+    } else {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(color: pillBg, borderRadius: BorderRadius.circular(999)),
+            child: Text(roleLabel, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: pillColor)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(message, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted, height: 1.35)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class ReceiptsFlowBanner extends StatelessWidget {
   const ReceiptsFlowBanner({super.key, required this.step});
 
@@ -1003,15 +1053,19 @@ class DeliveryReceiptCard extends StatelessWidget {
     required this.item,
     required this.onReprint,
     required this.onCreateReceipt,
+    this.onMarkHandover,
     this.showPrint = true,
     this.isReprinting = false,
+    this.isMarkingHandover = false,
   });
 
   final DeliveryReceipt item;
   final VoidCallback? onReprint;
   final VoidCallback? onCreateReceipt;
+  final VoidCallback? onMarkHandover;
   final bool showPrint;
   final bool isReprinting;
+  final bool isMarkingHandover;
 
   @override
   Widget build(BuildContext context) {
@@ -1087,11 +1141,37 @@ class DeliveryReceiptCard extends StatelessWidget {
                       ),
                       if (item.linkedReceiptNo != null && item.linkedReceiptNo!.isNotEmpty)
                         _MetaChip(icon: Icons.receipt_long_rounded, label: item.linkedReceiptNo!),
+                      if (item.isTeamDelivery && (item.agentName ?? '').isNotEmpty)
+                        _MetaChip(icon: Icons.person_outline_rounded, label: item.agentName!),
+                      if (item.handoverStatusLabel.isNotEmpty)
+                        _MetaChip(
+                          icon: item.handoverReceived ? Icons.verified_rounded : Icons.hourglass_top_rounded,
+                          label: item.handoverStatusLabel,
+                          color: item.handoverReceived ? AppColors.success : AppColors.warning,
+                        ),
                       if (item.printedAt != null && item.printedAt!.isNotEmpty)
                         const _MetaChip(icon: Icons.print_rounded, label: 'طُبع'),
                     ],
                   ),
-                  if ((showPrint && onReprint != null) || (item.canCreateReceipt && onCreateReceipt != null)) ...[
+                  if ((item.notes ?? '').trim().isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceAlt,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.borderLight),
+                      ),
+                      child: Text(
+                        item.notes!.trim(),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.navy, height: 1.4),
+                      ),
+                    ),
+                  ],
+                  if ((showPrint && onReprint != null)
+                      || (item.canCreateReceipt && onCreateReceipt != null)
+                      || (item.canMarkHandover && onMarkHandover != null)) ...[
                     const SizedBox(height: 10),
                     Row(
                       children: [
@@ -1103,8 +1183,20 @@ class DeliveryReceiptCard extends StatelessWidget {
                                 : const Icon(Icons.print_rounded, size: 16),
                             label: Text(isReprinting ? 'جاري الطباعة...' : 'إعادة طباعة'),
                           ),
-                        if (item.canCreateReceipt && onCreateReceipt != null) ...[
+                        if (item.canMarkHandover && onMarkHandover != null) ...[
                           if (showPrint && onReprint != null) const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: isMarkingHandover ? null : onMarkHandover,
+                              icon: isMarkingHandover
+                                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                  : const Icon(Icons.payments_outlined, size: 18),
+                              label: Text(isMarkingHandover ? 'جاري التأكيد...' : 'استلمت المبلغ'),
+                            ),
+                          ),
+                        ],
+                        if (item.canCreateReceipt && onCreateReceipt != null) ...[
+                          if ((showPrint && onReprint != null) || (item.canMarkHandover && onMarkHandover != null)) const SizedBox(width: 8),
                           Expanded(
                             child: FilledButton.icon(
                               onPressed: onCreateReceipt,

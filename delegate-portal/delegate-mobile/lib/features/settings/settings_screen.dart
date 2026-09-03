@@ -7,6 +7,7 @@ import '../../config/app_config.dart';
 import '../../core/config/app_config_notifier.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/ed_page_scroll.dart';
 import '../../core/widgets/adaptive_shell.dart';
 import '../../core/widgets/ed_components.dart';
 
@@ -68,7 +69,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       showBack: true,
       onBack: () => context.go('/home'),
       child: ListView(
-        padding: const EdgeInsets.all(20),
+        primary: false,
+        physics: edPageScrollPhysics,
+        padding: EdgeInsets.fromLTRB(20, 12, 20, EdPageInsets.bottom(context)),
         children: [
           Container(
             decoration: BoxDecoration(
@@ -120,6 +123,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           children: [
                             Text(agent?.name ?? '—', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.navy, fontSize: 17, fontWeight: FontWeight.w800)),
                             Text(agent?.username ?? '', style: const TextStyle(color: AppColors.muted, fontWeight: FontWeight.w600, fontSize: 13)),
+                            if ((agent?.delegateRoleLabel ?? '').isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                agent!.isSecondary && agent.parentAgentName.isNotEmpty
+                                    ? '${agent.delegateRoleLabel} · يتبع ${agent.parentAgentName}'
+                                    : agent.delegateRoleLabel,
+                                style: TextStyle(
+                                  color: agent.isSecondary ? AppColors.warning : AppColors.accentTeal,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
