@@ -363,15 +363,13 @@
   }
 
   function needsSetupWizard() {
-    if (window.edariDesktop?.isDesktop && !window.edariDesktop?.lanClient) return false;
+    // نافذة «اتصال بالجهاز الرئيسي» مخصّصة حصراً لتطبيق سطح المكتب في وضع عميل LAN.
+    // على الويب (المتصفح) تُخدَم اللوحة من السيرفر الرئيسي على السحابة مباشرةً،
+    // فلا داعي لها إطلاقاً — window.edariDesktop غير معرّف إلا داخل Electron.
+    if (!window.edariDesktop) return false;
+    if (window.edariDesktop.isDesktop && !window.edariDesktop.lanClient) return false;
     const saved = savedBackend();
     if (saved && !/^https?:\/\/(127\.0\.0\.1|localhost)/i.test(saved)) return false;
-    try {
-      const origin = window.location.origin;
-      if (origin && origin !== 'null' && !/^https?:\/\/(127\.0\.0\.1|localhost)/i.test(origin)) {
-        return false;
-      }
-    } catch { /* ignore */ }
     return !saved;
   }
 
