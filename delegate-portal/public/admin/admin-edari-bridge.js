@@ -9,24 +9,48 @@
   }
 
   function resolveBridgeBase() {
-    const saved = (localStorage.getItem('backendUrl') || '').trim().replace(/\/$/, '');
-    if (saved) {
-      try {
-        if (!isLocalhostHost(new URL(saved).hostname)) return saved;
-      } catch { /* ignore */ }
+    if (typeof window.getLanApiBase === 'function') return window.getLanApiBase();
+    return resolveEdariBase();
+  }
+
+  /**
+   * Live Edari work (posting receipts, reading trees over ODBC) only runs on
+   * the machine where Edari is installed — and that machine is the one serving
+   * this page, so same-origin is correct even when data comes from elsewhere.
+   */
+  function resolveEdariBase() {
+    if (lanClient && typeof window.getLanApiBase === 'function') {
+      return window.getLanApiBase();
     }
-    const remote = (desktop.backendUrl || window.ADMIN_CONFIG?.BACKEND_URL || '').trim().replace(/\/$/, '');
-    if (remote) {
-      try {
-        const origin = window.location.origin;
-        if (origin && origin !== 'null' && new URL(remote).origin === origin) return '';
-      } catch { /* ignore */ }
-      if (!isLocalhostHost(new URL(remote).hostname)) return remote;
-    }
-    if (window.location.origin && window.location.origin !== 'null') {
-      return window.location.origin;
-    }
-    return remote || '';
+    const override = String(
+      desktop.edariHostUrl || localStorage.getItem('edariHostUrl') || ''
+    ).trim().replace(/\/$/, '');
+    const origin = (window.location.origin && window.location.origin !== 'null')
+      ? window.location.origin
+      : '';
+    if (!override) return /^https?:/i.test(origin) ? '' : resolveBridgeBase();
+    try {
+      if (origin && new URL(override).origin === origin) return '';
+    } catch { /* ignore */ }
+    return override;
+  }
+
+  function isEdariPath(path) {
+    return path.startsWith('/api/admin/edari/')
+      || path.startsWith('/api/admin/trigger-sync')
+      || path.startsWith('/api/admin/reports/')
+      || path.startsWith('/api/admin/receipts/accounts/')
+      || path.startsWith('/api/admin/server-settings')
+      || path.startsWith('/api/admin/trees')
+      || path.startsWith('/api/admin/accounts/')
+      || path.startsWith('/api/admin/search')
+      || path.startsWith('/api/admin/sync/');
+  }
+
+  /** Same as apiJson but always aimed at the machine that owns Edari. */
+  function edariJson(path, opts = {}) {
+    const base = resolveEdariBase();
+    return apiJson(path, { ...opts, __base: base });
   }
 
   function bridgeHeaders(extra = {}) {
@@ -34,24 +58,36 @@
     return { 'Content-Type': 'application/json', Accept: 'application/json', ...auth, ...extra };
   }
 
-  async function apiJson(path, opts = {}) {
-    const base = resolveBridgeBase();
+  async function apiJson(path, opts = {}, attempt = 0) {
+    const { __base, ...fetchOpts } = opts;
+    const base = __base ?? (isEdariPath(path) ? resolveEdariBase() : resolveBridgeBase());
     const url = `${base}${path}`;
-    const res = await fetch(url, {
-      headers: bridgeHeaders(opts.headers),
-      ...opts
-    });
-    let data = {};
     try {
-      data = await res.json();
-    } catch {
-      data = {};
+      const res = await fetch(url, {
+        headers: bridgeHeaders(fetchOpts.headers),
+        ...fetchOpts
+      });
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {
+        data = {};
+      }
+      if (res.status === 401 && window.adminAuth) window.adminAuth.logout();
+      if (!res.ok) {
+        throw new Error(data.error || data.message || `HTTP ${res.status}`);
+      }
+      return data;
+    } catch (err) {
+      const retry = isEdariPath(path)
+        && attempt < 2
+        && window.adminLanConnection?.isNetworkFailure?.(err);
+      if (retry) {
+        await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
+        return apiJson(path, opts, attempt + 1);
+      }
+      throw err;
     }
-    if (res.status === 401 && window.adminAuth) window.adminAuth.logout();
-    if (!res.ok) {
-      throw new Error(data.error || data.message || `HTTP ${res.status}`);
-    }
-    return data;
   }
 
   function wrap(name, path, { method = 'POST', queryFromParams = false } = {}) {
@@ -65,19 +101,24 @@
     };
   }
 
-  const lanClient = Boolean(desktop.lanClient) || (!desktop.isDesktop && !desktop.postEdariReceipt);
+  const lanClient = Boolean(desktop.lanClient || desktop.isLanClient);
 
   window.edariDesktop = {
     ...desktop,
+    isDesktop: desktop.isDesktop === true && !lanClient,
     isLanClient: lanClient,
+    lanClient,
     backendUrl: desktop.backendUrl || resolveBridgeBase() || window.ADMIN_CONFIG?.BACKEND_URL || '',
+    edariHostUrl: resolveEdariBase(),
     postEdariReceipt: wrap('postEdariReceipt', '/api/admin/edari/post-receipt'),
     postEdariCustomer: wrap('postEdariCustomer', '/api/admin/edari/post-customer'),
     searchEdariAccounts: wrap('searchEdariAccounts', '/api/admin/edari/search-accounts'),
+    searchEdariMaterialTrees: wrap('searchEdariMaterialTrees', '/api/admin/edari/search-material-trees'),
     queryEdariAccountStatements: wrap('queryEdariAccountStatements', '/api/admin/edari/account-statements'),
     exportEdariAccountStatementsPdf: wrap('exportEdariAccountStatementsPdf', '/api/admin/edari/account-statements.pdf'),
     exportEdariSalesReportPdf: wrap('exportEdariSalesReportPdf', '/api/admin/edari/sales-report.pdf'),
     listEdariSalesBranches: wrap('listEdariSalesBranches', '/api/admin/edari/sales-branches', { method: 'GET', queryFromParams: true }),
+    searchEdariSalesBranches: wrap('searchEdariSalesBranches', '/api/admin/edari/search-sales-branches'),
     lookupEdariMaterial: wrap('lookupEdariMaterial', '/api/admin/edari/lookup-material'),
     fetchEdariCatalogMaterials: wrap('fetchEdariCatalogMaterials', '/api/admin/edari/catalog-materials'),
     fetchEdariMaterials: wrap('fetchEdariMaterials', '/api/admin/edari/materials'),
@@ -85,12 +126,36 @@
     listEdariMaterialTrees: wrap('listEdariMaterialTrees', '/api/admin/edari/material-trees', { method: 'GET' }),
     getEdariSettings: async () => {
       if (typeof desktop.getEdariSettings === 'function') return desktop.getEdariSettings();
-      const data = await apiJson('/api/admin/server-settings', { method: 'GET' });
+      const data = await edariJson('/api/admin/server-settings', { method: 'GET' });
       return { ok: true, edari: data.edari || {} };
     },
     saveEdariSettings: async (edari) => {
       if (typeof desktop.saveEdariSettings === 'function') return desktop.saveEdariSettings(edari);
-      return apiJson('/api/admin/server-settings', { method: 'PUT', body: JSON.stringify({ edari }) });
+      return edariJson('/api/admin/server-settings', { method: 'PUT', body: JSON.stringify({ edari }) });
+    },
+    saveBackgroundSyncSettings: async (patch = {}) => {
+      if (typeof desktop.saveBackgroundSyncSettings === 'function') {
+        return desktop.saveBackgroundSyncSettings(patch);
+      }
+      const current = await edariJson('/api/admin/server-settings', { method: 'GET' });
+      const backgroundSync = {
+        ...(current.backgroundSync || {}),
+        serverUrl: patch.serverUrl,
+        syncKey: patch.syncKey,
+        treeSeqs: patch.treeSeqs,
+        autoSyncEnabled: patch.autoSyncEnabled
+      };
+      Object.keys(backgroundSync).forEach((k) => backgroundSync[k] === undefined && delete backgroundSync[k]);
+      const body = { backgroundSync };
+      if (patch.edari) body.edari = { ...(current.edari || {}), ...patch.edari };
+      if (Array.isArray(patch.treeSeqs)) {
+        body.uiPrefs = {
+          ...(current.uiPrefs || {}),
+          syncTreeSeqs: patch.treeSeqs,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return edariJson('/api/admin/server-settings', { method: 'PUT', body: JSON.stringify(body) });
     },
     testEdariConnection: async (edari) => {
       if (typeof desktop.testEdariConnection === 'function') return desktop.testEdariConnection(edari);
@@ -115,6 +180,7 @@
       if (p.includeReturns === false) qs.set('includeReturns', '0');
       if (p.onlyGifts) qs.set('onlyGifts', '1');
       if (Array.isArray(p.branches) && p.branches.length) qs.set('branches', p.branches.join(','));
+      if (Number(p.previewLines) > 0) qs.set('previewLines', String(Number(p.previewLines)));
       return apiJson(`/api/admin/reports/sales?${qs.toString()}`, { method: 'GET' });
     },
     runLocalSync: async (serverUrl, syncKey, treeSeqs) => {
@@ -126,7 +192,8 @@
     },
     verifySyncTarget: async (serverUrl, syncKey) => {
       if (typeof desktop.verifySyncTarget === 'function') return desktop.verifySyncTarget(serverUrl, syncKey);
-      const base = String(serverUrl || resolveBridgeBase()).replace(/\/$/, '');
+      const fallback = typeof window.getApiBase === 'function' ? window.getApiBase() : resolveBridgeBase();
+      const base = String(serverUrl || fallback).replace(/\/$/, '');
       const res = await fetch(`${base}/api/sync/status`, {
         headers: { 'X-Sync-Key': String(syncKey || '').trim(), ...bridgeHeaders() }
       });

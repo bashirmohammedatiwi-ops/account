@@ -296,6 +296,10 @@ function initSchema() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_invoice_lines_bill ON invoice_lines(bill_seq);
+    -- تقرير مبيعات الشجرات يفلتر بنود الفواتير بـ mat / mat_num، وبلا هذين
+    -- الفهرسين كان كل استعلام شجرة يمسح جدول البنود بالكامل.
+    CREATE INDEX IF NOT EXISTS idx_invoice_lines_mat ON invoice_lines(mat);
+    CREATE INDEX IF NOT EXISTS idx_invoice_lines_mat_num ON invoice_lines(mat_num);
 
     CREATE TABLE IF NOT EXISTS agent_trees (
       agent_id INTEGER NOT NULL,

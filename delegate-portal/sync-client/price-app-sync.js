@@ -79,6 +79,25 @@ function reportProgress(step, total, pct, msg) {
   console.log(`@PROGRESS|${step}|${total}|${pct}|${msg || ''}`);
 }
 
+/** أقصى وقت لمرحلة Edari — بعده تُلغى وتُكمَل المزامنة دون تعليق. */
+const EDARI_PHASE_TIMEOUT_MS = Number(process.env.PRICE_EDARI_TIMEOUT_MS) || 4 * 60 * 1000;
+
+/** ينفّذ عملية مع مهلة قصوى؛ يرمي خطأ عند تجاوزها بدل التعليق للأبد. */
+function withTimeout(factory, ms, label) {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      reject(new Error(label || `انتهت المهلة (${Math.round(ms / 1000)} ثانية)`));
+    }, ms);
+    Promise.resolve()
+      .then(factory)
+      .then((v) => { if (done) return; done = true; clearTimeout(timer); resolve(v); })
+      .catch((e) => { if (done) return; done = true; clearTimeout(timer); reject(e); });
+  });
+}
+
 /** Edari final stock = inbound − outbound */
 function edariStockQty(inTot, outTot) {
   return Number(inTot || 0) - Number(outTot || 0);
@@ -512,7 +531,7 @@ async function uploadAll(serverUrl, syncKey, products, movements) {
   return { productsUpserted, consumerPricesUpdated, stockBalancesUpdated, movementsUpserted };
 }
 
-async function runPosPricingUpload(serverUrl, syncKey, options = {}) {
+async function runPosPricingUpload(serverUrl, syncKey, options = {}, progress = { step: 4, total: 4 }) {
   return syncPosPricing({
     serverUrl,
     syncKey,
@@ -522,7 +541,7 @@ async function runPosPricingUpload(serverUrl, syncKey, options = {}) {
       user: options.posSqlUser,
       password: options.posSqlPassword,
     },
-    onProgress: (pct, msg) => reportProgress(4, 4, pct, msg),
+    onProgress: (pct, msg) => reportProgress(progress.step, progress.total, pct, msg),
   });
 }
 
@@ -540,91 +559,97 @@ async function main(options = {}) {
     throw new Error('لا توجد مزامنة سابقة — نفّذ مزامنة كاملة أولاً');
   }
 
-  const purchaseData = await fetchPurchaseMovements({ incremental, syncState: prevState });
-
-  if (!incremental) {
-    reportProgress(1, 4, 92, 'جلب مشتريات بدون تفاصيل فواتير...');
-    try {
-      const aggregate = await fetchAggregatePurchaseMovements();
-      if (aggregate.movements.length) {
-        purchaseData.movements.push(...aggregate.movements);
-        purchaseData.products = mergeProducts(purchaseData.products || [], aggregate.products);
-        purchaseData.aggregateMovements = aggregate.count;
-      }
-    } catch (err) {
-      console.error(`تحذير: تعذر جلب مشتريات مجمّعة: ${err.message || err}`);
-    }
-  }
-
-  reportProgress(2, 4, 0, incremental ? 'تحديث أسعار المواد المتأثرة...' : 'قراءة الأسعار والرصيد...');
-  const catalogProducts = incremental
-    ? await fetchProductCatalogForMats(purchaseData.matSeqs)
-    : await fetchProductCatalog();
-  const products = mergeProducts(purchaseData.products, catalogProducts);
-  reportProgress(2, 4, 100, `منتجات: ${products.length}`);
-
-  if (!purchaseData.movements.length && !products.length) {
-    reportProgress(3, 4, 100, 'لا تحديثات Edari — الانتقال إلى POS...');
-    let posResult = { posSynced: 0, posFailed: 0, posOffers: 0 };
-    try {
-      posResult = await runPosPricingUpload(serverUrl, syncKey, options);
-      console.log(`✓ POS: ${posResult.posSynced} منتج (${posResult.posOffers || 0} بعرض)`);
-    } catch (err) {
-      posResult.posError = err.message || String(err);
-      console.error(`تحذير POS: ${posResult.posError}`);
-    }
-
-    const summary = {
-      ok: true,
-      posOk: !posResult.posError,
-      mode: incremental ? 'incremental' : 'full',
-      bills: 0,
-      rawLines: 0,
-      products: 0,
-      movements: 0,
-      productsUpserted: 0,
-      consumerPricesUpdated: 0,
-      stockBalancesUpdated: 0,
-      movementsUpserted: 0,
-      ...posResult,
-      message: posResult.posError
-        ? `Edari: لا تحديثات — تحذير POS: ${posResult.posError}`
-        : `Edari: لا تحديثات — POS: ${posResult.posSynced} سعر (${posResult.posOffers || 0} عرض)`,
-    };
-    console.log(`@SYNC_RESULT|${JSON.stringify(summary)}`);
-    return summary;
-  }
-
-  reportProgress(3, 4, 0, 'رفع بيانات Edari إلى سيرفر الأسعار...');
-  const uploadResult = await uploadAll(serverUrl, syncKey, products, purchaseData.movements);
-
+  // ── (1) مرحلة POS أولاً — المصدر الأساسي للأسعار/المنتجات، سريعة وموثوقة ومستقلة تماماً ──
+  reportProgress(1, 2, 0, 'رفع أسعار POS إلى سيرفر الأسعار...');
   let posResult = { posSynced: 0, posFailed: 0, posOffers: 0 };
   try {
-    posResult = await runPosPricingUpload(serverUrl, syncKey, options);
+    posResult = await runPosPricingUpload(serverUrl, syncKey, options, { step: 1, total: 2 });
     console.log(`✓ POS: ${posResult.posSynced} منتج (${posResult.posOffers || 0} بعرض)`);
   } catch (err) {
     posResult.posError = err.message || String(err);
     console.error(`تحذير POS: ${posResult.posError}`);
   }
 
-  const now = new Date().toISOString();
-  const nextState = {
-    lastSyncAt: now,
-    lastLineSeq: Math.max(sqlInt(prevState?.lastLineSeq), purchaseData.maxLineSeq || 0),
-    lastFullSyncAt: incremental ? (prevState?.lastFullSyncAt || null) : now,
-    stats: {
-      bills: purchaseData.bills,
-      movements: purchaseData.movements.length,
-    },
+  // ── (2) مرحلة Edari (تفاصيل المشتريات) — أفضل جهد بمهلة صارمة كي لا تعلّق المزامنة أبداً ──
+  let edariError = null;
+  let edariHadUpdates = false;
+  let uploadResult = { productsUpserted: 0, consumerPricesUpdated: 0, stockBalancesUpdated: 0, movementsUpserted: 0 };
+  let products = [];
+  let purchaseData = {
+    movements: [], products: [], bills: 0, rawLines: 0, maxLineSeq: 0, matSeqs: [],
+    skippedNoBarcode: 0, skippedDedupe: 0, aggregateMovements: 0,
   };
+
   try {
-    saveSyncState(nextState);
+    await withTimeout(async () => {
+      reportProgress(2, 2, 0, 'جلب تفاصيل المشتريات من Edari...');
+      purchaseData = await fetchPurchaseMovements({ incremental, syncState: prevState });
+
+      if (!incremental) {
+        reportProgress(2, 2, 40, 'جلب مشتريات بدون تفاصيل فواتير...');
+        try {
+          const aggregate = await fetchAggregatePurchaseMovements();
+          if (aggregate.movements.length) {
+            purchaseData.movements.push(...aggregate.movements);
+            purchaseData.products = mergeProducts(purchaseData.products || [], aggregate.products);
+            purchaseData.aggregateMovements = aggregate.count;
+          }
+        } catch (err) {
+          console.error(`تحذير: تعذر جلب مشتريات مجمّعة: ${err.message || err}`);
+        }
+      }
+
+      reportProgress(2, 2, 55, incremental ? 'تحديث أسعار المواد المتأثرة...' : 'قراءة الأسعار والرصيد...');
+      const catalogProducts = incremental
+        ? await fetchProductCatalogForMats(purchaseData.matSeqs)
+        : await fetchProductCatalog();
+      products = mergeProducts(purchaseData.products, catalogProducts);
+
+      if (purchaseData.movements.length || products.length) {
+        edariHadUpdates = true;
+        reportProgress(2, 2, 75, 'رفع بيانات Edari إلى سيرفر الأسعار...');
+        uploadResult = await uploadAll(serverUrl, syncKey, products, purchaseData.movements);
+      }
+      reportProgress(2, 2, 100, 'اكتمل Edari');
+    }, EDARI_PHASE_TIMEOUT_MS, 'تجاوزت مرحلة Edari المهلة — تم رفع أسعار POS، وتفاصيل المشتريات ستُكمَل لاحقاً');
   } catch (err) {
-    console.error(`تحذير: تعذر حفظ حالة المزامنة: ${err.message || err}`);
+    // فشل/تعليق Edari لا يمنع رفع POS (تم قبله). المزامنة تُكمَل دون توقف.
+    edariError = err.message || String(err);
+    console.error(`تحذير Edari: ${edariError}`);
+    reportProgress(2, 2, 100, `تعذّر Edari — ${edariError}`);
   }
 
+  // ── حفظ الحالة فقط عند نجاح Edari (كي لا يتقدّم المؤشر التزايدي فوق بيانات لم تُرفع) ──
+  if (!edariError) {
+    const now = new Date().toISOString();
+    const nextState = {
+      lastSyncAt: now,
+      lastLineSeq: Math.max(sqlInt(prevState?.lastLineSeq), purchaseData.maxLineSeq || 0),
+      lastFullSyncAt: incremental ? (prevState?.lastFullSyncAt || null) : now,
+      stats: {
+        bills: purchaseData.bills,
+        movements: purchaseData.movements.length,
+      },
+    };
+    try {
+      saveSyncState(nextState);
+    } catch (err) {
+      console.error(`تحذير: تعذر حفظ حالة المزامنة: ${err.message || err}`);
+    }
+  }
+
+  const edariMsg = edariError
+    ? `تحذير Edari: ${edariError}`
+    : (edariHadUpdates
+        ? `Edari: ${uploadResult.productsUpserted || 0} منتج، ${uploadResult.movementsUpserted || 0} حركة`
+        : 'Edari: لا تحديثات');
+  const posMsg = posResult.posError
+    ? `تحذير POS: ${posResult.posError}`
+    : `POS: ${posResult.posSynced || 0} سعر (${posResult.posOffers || 0} عرض)`;
+
   const summary = {
-    ok: true,
+    ok: !edariError || !posResult.posError,
+    edariOk: !edariError,
     posOk: !posResult.posError,
     mode: incremental ? 'incremental' : 'full',
     bills: purchaseData.bills || 0,
@@ -636,24 +661,24 @@ async function main(options = {}) {
     movements: purchaseData.movements.length,
     ...uploadResult,
     ...posResult,
-    message: posResult.posError
-      ? `Edari: ${uploadResult.productsUpserted || 0} منتج، ${uploadResult.movementsUpserted || 0} حركة — تحذير POS: ${posResult.posError}`
-      : `Edari: ${uploadResult.productsUpserted || 0} منتج، ${uploadResult.movementsUpserted || 0} حركة | POS: ${posResult.posSynced || 0} سعر (${posResult.posOffers || 0} عرض)`,
+    edariError: edariError || undefined,
+    message: `${edariMsg} | ${posMsg}`,
   };
 
-  console.log(
-    `✓ ${incremental ? 'تحديث' : 'مزامنة كاملة'}: Edari ${summary.productsUpserted} منتج، ${summary.movementsUpserted} حركة | POS ${summary.posSynced || 0} سعر (${summary.posOffers || 0} عرض)`,
-  );
+  console.log(`✓ ${incremental ? 'تحديث' : 'مزامنة كاملة'}: ${edariMsg} | ${posMsg}`);
   console.log(`@SYNC_RESULT|${JSON.stringify(summary)}`);
   return summary;
 }
 
 if (require.main === module) {
   main()
-    .then(() => process.exit(0))
+    .then(() => {
+      // إنهاء فوري — بعض عمليات ODBC/POS على Windows تُبقي event loop نشطاً بعد الانتهاء.
+      setImmediate(() => process.exit(0));
+    })
     .catch((err) => {
       console.error(err.message || err);
-      process.exit(1);
+      setImmediate(() => process.exit(1));
     });
 }
 

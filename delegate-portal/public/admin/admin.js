@@ -14,22 +14,57 @@ function stopTopLoading() {
   }
 }
 
+/**
+ * Delegate data (receipts, agents, orders) only ever reaches the online server,
+ * because phones submit over the internet. The desktop apps therefore point the
+ * data API at it explicitly while the page itself is served by the machine that
+ * owns Edari. An empty value means "use the server that served this page".
+ */
+function resolveDataBackend() {
+  const explicit = (
+    window.edariDesktop?.dataBackendUrl
+    || localStorage.getItem('dataBackendUrl')
+    || ''
+  ).trim().replace(/\/$/, '');
+  return isLocalhostUrl(explicit) ? '' : explicit;
+}
+
 function resolveApiBase() {
+  const origin = (window.location.origin && window.location.origin !== 'null')
+    ? window.location.origin
+    : '';
+
+  const data = resolveDataBackend();
+  if (data) {
+    try {
+      if (origin && new URL(data).origin === origin) return '';
+    } catch { /* ignore */ }
+    return data;
+  }
+
+  if (/^https?:/i.test(origin)) {
+    if (!isLocalhostUrl(origin)) return '';
+    if (window.edariDesktop?.apiSameOrigin) return '';
+  }
+
+  const saved = (localStorage.getItem('backendUrl') || '').trim().replace(/\/$/, '');
+  if (saved && !isLocalhostUrl(saved)) {
+    try {
+      if (origin && new URL(saved).origin === origin) return '';
+    } catch { /* ignore */ }
+    return saved;
+  }
+
   const remote = (
     window.edariDesktop?.backendUrl
     || window.ADMIN_CONFIG?.BACKEND_URL
     || ''
   ).trim().replace(/\/$/, '');
 
-  const saved = (localStorage.getItem('backendUrl') || '').trim().replace(/\/$/, '');
-  if (saved && !isLocalhostUrl(saved)) return saved;
-
   if (remote) {
     try {
       const remoteOrigin = new URL(remote).origin;
-      if (window.location.origin && window.location.origin !== 'null' && window.location.origin === remoteOrigin) {
-        return '';
-      }
+      if (origin && origin !== 'null' && origin === remoteOrigin) return '';
     } catch { /* ignore */ }
     return remote;
   }
@@ -41,7 +76,77 @@ function getApiBase() {
   return resolveApiBase();
 }
 
+function isLanClientMode() {
+  if (window.edariDesktop?.isLanClient || window.edariDesktop?.lanClient) return true;
+  const remote = resolveDataBackend();
+  if (!remote) return false;
+  const origin = (window.location.origin && window.location.origin !== 'null')
+    ? window.location.origin
+    : '';
+  if (!/^https?:/i.test(origin) || isLocalhostUrl(origin)) return false;
+  try {
+    return new URL(remote).origin !== new URL(origin).origin;
+  } catch {
+    return false;
+  }
+}
+
+function shouldUseLanApiForPath(path) {
+  if (!isLanOwnedAdminPath(path)) return false;
+  if (isLanClientMode()) return true;
+  return resolveLanApiBase() !== resolveApiBase();
+}
+
+function resolveApiBaseForPath(path) {
+  if (shouldUseLanApiForPath(path)) return resolveLanApiBase();
+  return resolveApiBase();
+}
+
+/** Machine that owns Edari (LAN server) — empty string = page origin. */
+function resolveLanApiBase() {
+  const override = String(
+    window.edariDesktop?.edariHostUrl || localStorage.getItem('edariHostUrl') || ''
+  ).trim().replace(/\/$/, '');
+  const origin = (window.location.origin && window.location.origin !== 'null')
+    ? window.location.origin
+    : '';
+  if (override) {
+    try {
+      if (origin && new URL(override).origin === origin) return '';
+    } catch { /* ignore */ }
+    return override;
+  }
+  if (/^https?:/i.test(origin) && !isLocalhostUrl(origin)) return '';
+  if (window.edariDesktop?.apiSameOrigin) return '';
+  return '';
+}
+
+function getLanApiBase() {
+  return resolveLanApiBase();
+}
+
+function isLanOwnedAdminPath(path) {
+  const rest = String(path || '').split('?')[0].slice('/api/admin/'.length);
+  if (!String(path || '').startsWith('/api/admin/')) return false;
+  const lanPrefixes = [
+    'trees',
+    'accounts/',
+    'receipts/accounts/',
+    'search',
+    'edari/',
+    'reports/',
+    'server-settings',
+    'trigger-sync',
+    'sync/',
+    'dashboard',
+    'lan-info'
+  ];
+  return lanPrefixes.some((prefix) => rest === prefix.replace(/\/$/, '') || rest.startsWith(prefix));
+}
+
 window.getApiBase = getApiBase;
+window.getLanApiBase = getLanApiBase;
+window.isLanClientMode = isLanClientMode;
 
 function getBackendDisplayUrl() {
   return resolveApiBase() || window.location.origin || window.ADMIN_CONFIG?.BACKEND_URL || '—';
@@ -94,6 +199,33 @@ function setServerStatus(state, text) {
 }
 
 async function checkBackendHealth() {
+  if (window.adminLanConnection?.refreshConnectionState) {
+    const result = await window.adminLanConnection.refreshConnectionState();
+    return Boolean(result.lanOk || (!isLanClientMode() && result.remoteOk));
+  }
+  if (isLanClientMode()) {
+    const lanBase = resolveLanApiBase();
+    try {
+      const res = await fetch(`${lanBase}/api/health`, { cache: 'no-store' });
+      if (!res.ok) throw new Error('offline');
+      const remote = resolveApiBase();
+      let remoteOk = true;
+      if (remote) {
+        try {
+          const remoteRes = await fetch(`${remote}/api/health`, { cache: 'no-store' });
+          remoteOk = remoteRes.ok;
+        } catch {
+          remoteOk = false;
+        }
+      }
+      setServerStatus('on', remoteOk ? 'متصل بالرئيسي والسيرفر' : 'متصل بالرئيسي');
+      return true;
+    } catch {
+      setServerStatus('err', 'غير متصل بالرئيسي');
+      return false;
+    }
+  }
+
   const base = resolveApiBase();
   const url = `${base}/api/health`;
   try {
@@ -109,20 +241,38 @@ async function checkBackendHealth() {
 let treesCache = [];
 let agentAssignableTrees = [];
 let primaryAgentsCache = [];
+let agentModalSelectedTrees = [];
+let agentTreeSearchQuery = '';
+let agentModalEditingMeta = null;
 
 function syncAgentRoleUi() {
-  const role = document.getElementById('agentRole')?.value || 'primary';
+  const roleRadio = document.querySelector('input[name="agentRoleRadio"]:checked');
+  const role = roleRadio?.value || document.getElementById('agentRole')?.value || 'primary';
   const wrap = document.getElementById('agentParentWrap');
   const parentSel = document.getElementById('agentParentId');
+  const demoteHint = document.getElementById('agentRoleDemoteHint');
   if (wrap) wrap.classList.toggle('hidden', role !== 'secondary');
   if (parentSel) {
     parentSel.required = role === 'secondary';
     if (role !== 'secondary') parentSel.value = '';
   }
   document.querySelectorAll('input[name="agentRoleRadio"]').forEach((r) => {
-    r.checked = r.value === role;
     r.closest('.ag-role-pill')?.classList.toggle('is-selected', r.checked);
   });
+  const secRadio = document.querySelector('input[name="agentRoleRadio"][value="secondary"]');
+  const blockDemote = !!(agentModalEditingMeta?.secondaryCount > 0);
+  if (secRadio) {
+    secRadio.disabled = blockDemote;
+    secRadio.closest('.ag-role-pill')?.classList.toggle('is-disabled', blockDemote);
+  }
+  if (demoteHint) {
+    demoteHint.classList.toggle('hidden', !blockDemote);
+    if (blockDemote) {
+      demoteHint.textContent = `لا يمكن تحويل هذا المندوب إلى ثانوي — لديه ${agentModalEditingMeta.secondaryCount} مندوباً ثانوياً. انقلهم أو احذفهم أولاً.`;
+    }
+  }
+  const sel = document.getElementById('agentRole');
+  if (sel) sel.value = role;
   if (typeof syncAgentPermMatrix === 'function') syncAgentPermMatrix();
 }
 
@@ -130,8 +280,9 @@ async function loadPrimaryAgentsForSelect(selectedId = '', excludeAgentId = '') 
   const sel = document.getElementById('agentParentId');
   if (!sel) return;
   if (!primaryAgentsCache.length) {
-    const data = await api('/api/admin/agents/primary');
-    primaryAgentsCache = data.agents || [];
+    // نشتقّ الرؤساء من قائمة /agents (متاحة على الرئيسي والثانوي) بدل /agents/primary.
+    const data = await api('/api/admin/agents');
+    primaryAgentsCache = (data.agents || []).filter((a) => (a.delegateRole || 'primary') === 'primary');
   }
   const exclude = String(excludeAgentId || '').trim();
   const agents = primaryAgentsCache.filter((a) => String(a.id) !== exclude);
@@ -224,16 +375,28 @@ function fmtDate(v) {
   return String(v).replace('T', ' ').slice(0, 19);
 }
 
-async function api(path, opts = {}) {
+async function api(path, opts = {}, attempt = 0) {
   const auth = window.adminAuth?.authHeaders?.() || {};
   const headers = { 'Content-Type': 'application/json', ...auth, ...(opts.headers || {}) };
-  const res = await fetch(`${getApiBase()}${path}`, { ...opts, headers });
-  const data = await res.json().catch(() => ({}));
-  if (res.status === 401 && window.adminAuth) {
-    window.adminAuth.logout();
+  const base = resolveApiBaseForPath(path);
+  try {
+    const res = await fetch(`${base}${path}`, { ...opts, headers });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401 && window.adminAuth) {
+      window.adminAuth.logout();
+    }
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    return data;
+  } catch (err) {
+    const retryLan = shouldUseLanApiForPath(path)
+      && attempt < 2
+      && window.adminLanConnection?.isNetworkFailure?.(err);
+    if (retryLan) {
+      await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
+      return api(path, opts, attempt + 1);
+    }
+    throw err;
   }
-  if (!res.ok) throw new Error(data.error || res.statusText);
-  return data;
 }
 
 const PAGE_META = {
@@ -398,36 +561,40 @@ function treeDisplayLabel(tree) {
 }
 
 async function loadAgentAssignableTrees() {
-  // Prefer server DB trees (Arabic names already synced). Edari live is only for filling gaps.
-  const dbData = await api('/api/admin/trees');
-  let trees = (dbData?.trees || []).map(normalizeAssignableTree).filter((t) => t.seq);
-
-  let edariTrees = [];
   try {
-    if (window.edariDesktop?.listEdariTrees) {
-      const data = await window.edariDesktop.listEdariTrees();
-      edariTrees = (data?.trees || []).map(normalizeAssignableTree).filter((t) => t.seq);
-    } else {
-      const data = await api('/api/admin/edari/trees').catch(() => null);
-      edariTrees = (data?.trees || []).map(normalizeAssignableTree).filter((t) => t.seq);
+    const data = await api('/api/admin/trees/assignable');
+    agentAssignableTrees = (data?.trees || []).map((t) => normalizeAssignableTree({
+      seq: t.seq,
+      num: t.num,
+      name1: t.name1,
+      sub_count: t.sub_count,
+      bal: t.bal,
+      missingOnServer: t.onServer === false
+    })).filter((t) => t.seq);
+    if (agentAssignableTrees.length) {
+      agentAssignableTrees.sort((a, b) =>
+        String(a.num || a.seq).localeCompare(String(b.num || b.seq), 'ar', { numeric: true })
+      );
+      return agentAssignableTrees;
     }
-  } catch (_) { /* Edari optional for labels */ }
+  } catch { /* fallback below */ }
 
-  if (edariTrees.length) {
-    const byNorm = new Map(edariTrees.map((t) => [normTreeSeq(t.seq), t]));
-    trees = trees.map((t) => {
-      const ed = byNorm.get(normTreeSeq(t.seq));
-      if (!ed) return t;
-      return {
-        ...t,
-        num: asText(t.num) || asText(ed.num),
-        name1: asText(t.name1) || asText(ed.name1),
-        sub_count: Number(t.sub_count || ed.sub_count || 0)
-      };
-    });
+  let trees = [];
+  if (window.edariDesktop?.listEdariTrees) {
+    const data = await window.edariDesktop.listEdariTrees();
+    trees = (data?.trees || []).map(normalizeAssignableTree).filter((t) => t.seq);
+  } else {
+    const data = await api('/api/admin/edari/trees').catch(() => api('/api/admin/trees'));
+    trees = (data?.trees || []).map(normalizeAssignableTree).filter((t) => t.seq);
   }
-
-  // Sort: numbered trees first, readable labels
+  const dbData = await api('/api/admin/trees').catch(() => ({ trees: [] }));
+  const dbSeqSet = new Set((dbData?.trees || []).map((t) => String(t.seq)));
+  trees = trees.map((t) => ({ ...t, missingOnServer: !dbSeqSet.has(String(t.seq)) }));
+  for (const db of (dbData?.trees || [])) {
+    if (!trees.some((t) => String(t.seq) === String(db.seq))) {
+      trees.push(normalizeAssignableTree({ ...db, missingOnServer: false }));
+    }
+  }
   trees.sort((a, b) => String(a.num || a.seq).localeCompare(String(b.num || b.seq), 'ar', { numeric: true }));
   agentAssignableTrees = trees;
   return trees;
@@ -854,6 +1021,7 @@ function saveSyncTreeSelection() {
   const seqs = getSelectedSyncTreeSeqs();
   localStorage.setItem('syncTreeSeqs', JSON.stringify(seqs));
   void persistBackgroundSyncSettings({ treeSeqs: seqs });
+  window.adminSharedState?.patchUiPrefs?.({ syncTreeSeqs: seqs, updatedAt: new Date().toISOString() });
 }
 
 async function persistBackgroundSyncSettings(override = {}) {
@@ -925,15 +1093,25 @@ async function loadEdariConnectionSettings() {
         const remote = await api('/api/admin/server-settings');
         edari = { ...edari, ...(remote.edari || {}) };
       } catch {
+        if (!window.edariDesktop?.isLanClient) {
+          const saved = localStorage.getItem(EDARI_LS_KEY);
+          if (saved) edari = { ...edari, ...JSON.parse(saved) };
+        }
+      }
+    }
+    if (!window.edariDesktop?.isLanClient) {
+      try {
         const saved = localStorage.getItem(EDARI_LS_KEY);
         if (saved) edari = { ...edari, ...JSON.parse(saved) };
-      }
+      } catch { /* ignore */ }
     }
   } catch {
     /* ignore */
   }
   fillEdariForm(edari);
-  localStorage.setItem(EDARI_LS_KEY, JSON.stringify(edari));
+  if (!window.edariDesktop?.isLanClient) {
+    localStorage.setItem(EDARI_LS_KEY, JSON.stringify(edari));
+  }
 }
 
 async function saveEdariConnectionSettings() {
@@ -1032,7 +1210,17 @@ function renderSyncTreeChecks(trees, selected = []) {
 }
 
 async function loadSyncTrees() {
-  const saved = JSON.parse(localStorage.getItem('syncTreeSeqs') || '[]');
+  let saved = [];
+  try {
+    saved = JSON.parse(localStorage.getItem('syncTreeSeqs') || '[]');
+  } catch { saved = []; }
+  if (!saved.length && window.adminSharedState) {
+    try {
+      const remote = await window.adminSharedState.fetchSettings();
+      saved = remote?.uiPrefs?.syncTreeSeqs || remote?.backgroundSync?.treeSeqs || [];
+      if (saved.length) localStorage.setItem('syncTreeSeqs', JSON.stringify(saved.map(String)));
+    } catch { /* ignore */ }
+  }
   const el = document.getElementById('syncTreeChecks');
   if (el) el.innerHTML = '<p class="muted">جاري تحميل الشجرات من EdariNX...</p>';
 
@@ -1054,15 +1242,48 @@ async function loadSyncTrees() {
   }
 }
 
+function getSelectedAgentTreeSeqs() {
+  return [...document.querySelectorAll('#agentTreeChecks input[name=treeSeq]:checked:not(:disabled)')]
+    .map((c) => String(c.value || '').trim())
+    .filter(Boolean);
+}
+
+function updateAgentTreesCountMeta(shown, total, selected) {
+  const el = document.getElementById('agentTreesCount');
+  if (!el) return;
+  const ready = agentAssignableTrees.filter((t) => !t.missingOnServer).length;
+  el.textContent = `معروض ${shown} من ${total} · ${selected} محددة · ${ready} جاهزة للتفعيل`;
+}
+
 function renderTreeChecks(selected = []) {
   const el = document.getElementById('agentTreeChecks');
   if (!el) return;
-  const trees = mergeAgentTreeOptions(selected);
-  if (!trees.length) {
-    el.innerHTML = '<p class="muted">لا توجد شجرات على السيرفر — ارفع البيانات من صفحة «رفع البيانات» أولاً</p>';
+  if (selected.length) agentModalSelectedTrees = selected.map(String);
+  else if (!agentModalSelectedTrees.length) agentModalSelectedTrees = getSelectedAgentTreeSeqs();
+
+  const allTrees = mergeAgentTreeOptions(agentModalSelectedTrees);
+  const q = agentTreeSearchQuery.trim().toLowerCase();
+  let trees = allTrees;
+  if (q) {
+    trees = allTrees.filter((t) => {
+      const hay = `${t.num || ''} ${t.name1 || ''} ${t.seq || ''}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }
+
+  if (!allTrees.length) {
+    el.innerHTML = '<p class="muted">لا توجد شجرات — تحقق من اتصال Edari أو ارفع البيانات من «رفع البيانات»</p>';
+    updateAgentTreesCountMeta(0, 0, 0);
     return;
   }
-  const selectedSet = new Set((selected || []).map(String));
+
+  const selectedSet = new Set(agentModalSelectedTrees.map(String));
+  if (!trees.length) {
+    el.innerHTML = '<p class="muted">لا توجد شجرات مطابقة للبحث</p>';
+    updateAgentTreesCountMeta(0, allTrees.length, selectedSet.size);
+    return;
+  }
+
   el.innerHTML = trees.map((t) => {
     const label = treeDisplayLabel(t);
     const num = asText(t.num) || asText(t.seq) || '—';
@@ -1070,8 +1291,8 @@ function renderTreeChecks(selected = []) {
     const missing = !!t.missingOnServer;
     const checked = !missing && selectedSet.has(String(t.seq));
     const meta = missing
-      ? 'ارفع هذه الشجرة للسيرفر لتفعيلها'
-      : `رقم ${num} · ${subCount} فرع`;
+      ? 'غير مرفوعة — ارفعها من «رفع البيانات» لتفعيلها'
+      : `رقم ${num} · ${subCount} فرع · جاهزة`;
     const safeLabel = (label && label !== '[object Object]') ? label : (num !== '—' ? `شجرة ${num}` : 'شجرة بدون اسم');
     return `
     <label class="tree-pick${missing ? ' tree-pick-muted' : ''}${checked ? ' is-checked' : ''}" title="${esc(safeLabel)}">
@@ -1086,8 +1307,16 @@ function renderTreeChecks(selected = []) {
   el.querySelectorAll('input[name=treeSeq]').forEach((input) => {
     input.addEventListener('change', () => {
       input.closest('.tree-pick')?.classList.toggle('is-checked', input.checked);
+      // عدّل المجموعة بالمفتاح لا بمسح DOM — كي لا تُفقد الشجرات المحددة المخفية بالبحث.
+      const seq = String(input.value || '').trim();
+      const set = new Set(agentModalSelectedTrees.map(String));
+      if (input.checked) set.add(seq);
+      else set.delete(seq);
+      agentModalSelectedTrees = [...set];
+      updateAgentTreesCountMeta(trees.length, allTrees.length, agentModalSelectedTrees.length);
     });
   });
+  updateAgentTreesCountMeta(trees.length, allTrees.length, selectedSet.size);
 }
 
 async function openAgentModal(id = null) {
@@ -1096,57 +1325,81 @@ async function openAgentModal(id = null) {
   const form = document.getElementById('agentForm');
   if (!modal || !form) return;
 
+  agentModalEditingMeta = null;
+  agentModalSelectedTrees = [];
+  agentAssignableTrees = [];
+  agentTreeSearchQuery = '';
+  primaryAgentsCache = [];
+  const searchEl = document.getElementById('agentTreeSearch');
+  if (searchEl) searchEl.value = '';
+
+  // نظّف الحقول قبل أي انتظار حتى لا تظهر بيانات مندوب سابق أثناء التحميل.
+  form.reset();
   modal.classList.remove('hidden');
   document.getElementById('agentModalTitle').textContent = id ? 'تعديل مندوب' : 'إضافة مندوب';
   document.getElementById('agentId').value = id ? String(id) : '';
   document.getElementById('agentPassword').required = !id;
-  syncAgentRoleUi();
-
-  if (treeEl) treeEl.innerHTML = '<p class="muted loading">جاري تحميل الشجرات...</p>';
-  try {
-    await Promise.all([loadAgentAssignableTrees(), loadPrimaryAgentsForSelect()]);
-  } catch (e) {
-    if (treeEl) treeEl.innerHTML = `<p class="muted">تعذّر تحميل الشجرات: ${esc(e.message)}</p>`;
-    return;
-  }
+  document.getElementById('agentPassword').value = '';
+  document.getElementById('agentActive').checked = true;
+  document.getElementById('agentRole').value = 'primary';
+  document.querySelectorAll('input[name="agentRoleRadio"]').forEach((r) => {
+    r.checked = r.value === 'primary';
+  });
 
   let selectedTreeSeqs = [];
+
+  // 1) بيانات المندوب أولاً — من قائمة /agents (متاحة على الرئيسي والثانوي).
   if (id) {
     try {
       const data = await api('/api/admin/agents');
-      const a = data.agents.find((x) => String(x.id) === String(id));
+      const a = (data.agents || []).find((x) => String(x.id) === String(id));
       if (!a) {
-        if (treeEl) treeEl.innerHTML = '<p class="muted">تعذّر العثور على المندوب</p>';
+        notifyAdmin('تعذّر العثور على المندوب', 'err');
+        modal.classList.add('hidden');
         return;
       }
+      agentModalEditingMeta = a;
       document.getElementById('agentName').value = a.name || '';
       document.getElementById('agentPhone').value = a.phone || '';
       document.getElementById('agentUsername').value = a.username || '';
       document.getElementById('agentPassword').value = '';
       document.getElementById('agentActive').checked = !!a.active;
-      document.getElementById('agentRole').value = a.delegateRole || 'primary';
-      await loadPrimaryAgentsForSelect(a.parentAgentId || '', id);
-      syncAgentRoleUi();
-      selectedTreeSeqs = a.treeSeqs || [];
+      const role = a.delegateRole || 'primary';
+      document.getElementById('agentRole').value = role;
+      document.querySelectorAll('input[name="agentRoleRadio"]').forEach((r) => {
+        r.checked = r.value === role;
+      });
+      selectedTreeSeqs = (a.treeSeqs || []).map(String);
+      agentModalSelectedTrees = [...selectedTreeSeqs];
     } catch (e) {
-      if (treeEl) treeEl.innerHTML = `<p class="muted">تعذّر تحميل بيانات المندوب: ${esc(e.message)}</p>`;
+      notifyAdmin(`تعذّر تحميل بيانات المندوب: ${e.message}`, 'err');
+      modal.classList.add('hidden');
       return;
     }
-  } else {
-    form.reset();
-    document.getElementById('agentId').value = '';
-    document.getElementById('agentActive').checked = true;
-    document.getElementById('agentPassword').required = true;
-    document.getElementById('agentRole').value = 'primary';
-    await loadPrimaryAgentsForSelect('');
-    syncAgentRoleUi();
   }
 
-  if (!agentAssignableTrees.length && !selectedTreeSeqs.length) {
-    if (treeEl) treeEl.innerHTML = '<p class="muted">لا توجد شجرات على السيرفر — ارفع البيانات من صفحة «رفع البيانات» أولاً</p>';
-    return;
+  // 2) قائمة الرؤساء (سريعة) — لا تُعطّل ظهور بقية الحقول إن فشلت.
+  try {
+    await loadPrimaryAgentsForSelect(
+      id ? (agentModalEditingMeta?.parentAgentId || '') : '',
+      id || ''
+    );
+  } catch { /* اختياري */ }
+  syncAgentRoleUi();
+
+  // 3) الشجرات (قد تكون بطيئة عبر Edari) — حمّلها أخيراً مع مؤشر داخل صندوقها فقط.
+  if (treeEl) treeEl.innerHTML = '<p class="muted loading">جاري تحميل الشجرات من Edari...</p>';
+  try {
+    await loadAgentAssignableTrees();
+    renderTreeChecks(selectedTreeSeqs);
+  } catch (e) {
+    // أبقِ الشجرات المحفوظة قابلة للعرض حتى لو تعذّر جلب القائمة الكاملة.
+    if (selectedTreeSeqs.length) {
+      renderTreeChecks(selectedTreeSeqs);
+    } else if (treeEl) {
+      treeEl.innerHTML = `<p class="muted">تعذّر تحميل الشجرات: ${esc(e.message)} — تحقق من اتصال Edari أو ارفع البيانات</p>`;
+    }
   }
-  renderTreeChecks(selectedTreeSeqs);
 }
 
 function applySyncProgressLine(line) {
@@ -1202,7 +1455,7 @@ const autoSync = {
 };
 
 function canAutoSync() {
-  return Boolean(window.edariDesktop?.runLocalSync);
+  return Boolean(window.edariDesktop?.isDesktop && !window.edariDesktop?.isLanClient && window.edariDesktop?.runLocalSync);
 }
 
 function formatAutoSyncCountdown(totalSec) {
@@ -1415,13 +1668,55 @@ async function runSync(opts = {}) {
   return true;
 }
 
-document.getElementById('btnAddAgent').addEventListener('click', () => openAgentModal());
+document.getElementById('btnAddAgent')?.addEventListener('click', () => openAgentModal());
 const agentModal = document.getElementById('agentModal');
-document.getElementById('agentCancel').addEventListener('click', () => agentModal.classList.add('hidden'));
+document.getElementById('agentCancel')?.addEventListener('click', () => agentModal?.classList.add('hidden'));
 agentModal?.addEventListener('click', (e) => {
   if (e.target === agentModal) agentModal.classList.add('hidden');
 });
-document.getElementById('btnSyncNow').addEventListener('click', async () => {
+document.getElementById('agentCancelFoot')?.addEventListener('click', () => agentModal?.classList.add('hidden'));
+
+document.getElementById('agentTreeSearch')?.addEventListener('input', (e) => {
+  agentTreeSearchQuery = e.target.value || '';
+  renderTreeChecks(agentModalSelectedTrees);
+});
+document.getElementById('btnAgentTreesAll')?.addEventListener('click', () => {
+  // يضيف الشجرات الظاهرة الجاهزة فقط، محافظاً على المحدد المخفي بالبحث.
+  const set = new Set(agentModalSelectedTrees.map(String));
+  document.querySelectorAll('#agentTreeChecks input[name=treeSeq]:not(:disabled)').forEach((c) => {
+    set.add(String(c.value || '').trim());
+  });
+  agentModalSelectedTrees = [...set];
+  renderTreeChecks(agentModalSelectedTrees);
+});
+document.getElementById('btnAgentTreesNone')?.addEventListener('click', () => {
+  // يلغي الظاهر فقط عند وجود بحث؛ ويمسح الكل عند غيابه.
+  const visible = new Set(
+    [...document.querySelectorAll('#agentTreeChecks input[name=treeSeq]')].map((c) => String(c.value || '').trim())
+  );
+  agentModalSelectedTrees = agentTreeSearchQuery.trim()
+    ? agentModalSelectedTrees.filter((s) => !visible.has(String(s)))
+    : [];
+  renderTreeChecks(agentModalSelectedTrees);
+});
+document.getElementById('btnAgentTreesReload')?.addEventListener('click', async () => {
+  const treeEl = document.getElementById('agentTreeChecks');
+  if (treeEl) treeEl.innerHTML = '<p class="muted loading">جاري تحديث الشجرات...</p>';
+  try {
+    await loadAgentAssignableTrees();
+    renderTreeChecks(agentModalSelectedTrees);
+  } catch (e) {
+    if (treeEl) treeEl.innerHTML = `<p class="muted">${esc(e.message)}</p>`;
+  }
+});
+
+document.getElementById('agentForm')?.addEventListener('submit', saveAgentForm);
+document.getElementById('agentSaveBtn')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  void saveAgentForm(e);
+});
+
+document.getElementById('btnSyncNow')?.addEventListener('click', async () => {
   await persistBackgroundSyncSettings();
   void runSync({ auto: false });
 });
@@ -1462,9 +1757,8 @@ async function saveAgentForm(e) {
   if (!form) return;
 
   const id = String(document.getElementById('agentId')?.value || '').trim();
-  const treeSeqs = [...document.querySelectorAll('#agentTreeChecks input[name=treeSeq]:checked:not(:disabled)')]
-    .map((c) => String(c.value || '').trim())
-    .filter(Boolean);
+  // المصدر الموثوق هو المجموعة المحفوظة في الذاكرة، لا صناديق DOM (قد تكون مخفية بالبحث).
+  const treeSeqs = [...new Set(agentModalSelectedTrees.map((s) => String(s || '').trim()).filter(Boolean))];
   const roleRadio = document.querySelector('input[name="agentRoleRadio"]:checked');
   if (roleRadio) {
     const sel = document.getElementById('agentRole');
@@ -1545,11 +1839,6 @@ async function saveAgentForm(e) {
   }
 }
 
-document.getElementById('agentForm')?.addEventListener('submit', saveAgentForm);
-document.getElementById('agentSaveBtn')?.addEventListener('click', (e) => {
-  e.preventDefault();
-  void saveAgentForm(e);
-});
 
 document.querySelectorAll('.quick-card[data-goto], .shortcut[data-goto]').forEach((btn) => {
   btn.addEventListener('click', () => showPage(btn.dataset.goto));
@@ -1587,6 +1876,9 @@ async function refreshAll() {
   if (window.adminAuth?.initAdminAuth) {
     try { await window.adminAuth.initAdminAuth(); } catch { /* ignore */ }
   }
+  if (window.adminSharedState?.init) {
+    try { await window.adminSharedState.init(); } catch (e) { console.warn(e); }
+  }
   await checkBackendHealth();
   const tasks = [
     loadConfig,
@@ -1606,6 +1898,40 @@ async function refreshAll() {
     }
   }
   initSyncLiveFeed();
+  startHealthWatch();
+}
+
+let healthWatchTimer = null;
+let lastHealthOk = true;
+
+/** Poll LAN/remote links and reload data after reconnect. */
+function startHealthWatch() {
+  if (healthWatchTimer) return;
+  const onReconnect = async () => {
+    try {
+      await window.adminSharedState?.refreshIfChanged?.();
+      await loadTrees();
+      await loadSyncTrees();
+      await loadDashboard();
+      await loadAgents();
+      window.dispatchEvent(new CustomEvent('admin-lan-reconnected'));
+    } catch (e) {
+      console.warn(e);
+    }
+  };
+  if (window.adminLanConnection?.startMonitor) {
+    window.adminLanConnection.startMonitor({ onReconnect });
+    return;
+  }
+  healthWatchTimer = setInterval(async () => {
+    const ok = await checkBackendHealth();
+    if (ok && !lastHealthOk) {
+      lastHealthOk = true;
+      await onReconnect();
+    } else if (!ok) {
+      lastHealthOk = false;
+    }
+  }, 10000);
 }
 
 const savedKey = localStorage.getItem('syncApiKey');

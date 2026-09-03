@@ -24,7 +24,65 @@ const salesReport = {
 };
 
 let salesPreviewToken = 0;
+let treeSearchLiveResults = [];
+let treeSearchTimer = null;
+let treeSearchBusy = false;
 
+function normalizePinnedTreeEntry(raw) {
+  if (typeof raw === 'string' || typeof raw === 'number') {
+    const key = String(raw);
+    return { key, num: key, name1: '' };
+  }
+  if (raw && typeof raw === 'object') {
+    const key = String(raw.key || raw.num || raw.seq || '');
+    return {
+      key,
+      num: String(raw.num || key),
+      name1: String(raw.name1 || raw.name || '')
+    };
+  }
+  return null;
+}
+
+function loadPinnedTrees() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PINNED_TREES_KEY) || '[]');
+    if (!Array.isArray(raw)) return [];
+    return raw.map(normalizePinnedTreeEntry).filter((t) => t && t.key);
+  } catch {
+    return [];
+  }
+}
+
+function pinnedTreeKeys() {
+  return salesReport.pinned.map((p) => String(p.key));
+}
+
+function enrichPinnedTreeNames() {
+  let changed = false;
+  salesReport.pinned = salesReport.pinned.map((p) => {
+    if (p.name1) return p;
+    const t = findTreeByKey(p.key);
+    if (!t?.name1) return p;
+    changed = true;
+    return { ...p, num: t.num || p.num, name1: t.name1 };
+  });
+  if (changed) savePinnedTrees({ skipServer: true });
+}
+
+function savePinnedTrees(opts = {}) {
+  try {
+    localStorage.setItem(PINNED_TREES_KEY, JSON.stringify(salesReport.pinned));
+    if (!opts.skipServer) {
+      window.adminSharedState?.patchUiPrefs?.({
+        pinnedTrees: salesReport.pinned,
+        updatedAt: new Date().toISOString()
+      });
+    }
+  } catch {
+    /* ignore quota/availability errors */
+  }
+}
 function loadPinnedBranches() {
   try {
     const raw = JSON.parse(localStorage.getItem(PINNED_BRANCHES_KEY) || '[]');
@@ -42,41 +100,51 @@ function loadPinnedBranches() {
 function savePinnedBranches() {
   try {
     localStorage.setItem(PINNED_BRANCHES_KEY, JSON.stringify(salesReport.pinnedBranches));
+    window.adminSharedState?.patchUiPrefs?.({
+      pinnedBranches: salesReport.pinnedBranches,
+      updatedAt: new Date().toISOString()
+    });
   } catch {
     /* ignore */
   }
 }
 
-function loadPinnedTrees() {
+function hydratePinnedFromSharedState() {
   try {
-    const raw = JSON.parse(localStorage.getItem(PINNED_TREES_KEY) || '[]');
-    return Array.isArray(raw) ? raw.map(String) : [];
-  } catch {
-    return [];
-  }
-}
-
-function savePinnedTrees() {
-  try {
-    localStorage.setItem(PINNED_TREES_KEY, JSON.stringify(salesReport.pinned));
-  } catch {
-    /* ignore quota/availability errors */
-  }
+    salesReport.pinned = loadPinnedTrees();
+    salesReport.pinnedBranches = loadPinnedBranches();
+    enrichPinnedTreeNames();
+  } catch { /* ignore */ }
+  renderPinnedTrees();
+  renderPinnedBranches();
+  renderTreeList();
+  renderBranchList();
 }
 
 function treeKeyOf(t) {
-  return String(t.num || t.seq || '');
+  return String(t.num || t.seq || t.key || '');
 }
 
 function findTreeByKey(key) {
   const k = String(key);
-  return salesReport.trees.find((t) => String(t.num) === k || String(t.seq) === k) || null;
+  const fromLoaded = salesReport.trees.find((t) => String(t.num) === k || String(t.seq) === k);
+  if (fromLoaded) return fromLoaded;
+  const fromLive = treeSearchLiveResults.find((t) => String(t.num) === k || String(t.seq) === k);
+  if (fromLive) return fromLive;
+  const pinned = salesReport.pinned.find((p) => String(p.key) === k);
+  if (pinned) return { seq: pinned.key, num: pinned.num || pinned.key, name1: pinned.name1 || '' };
+  return null;
 }
 
 function salesTreeDisplayLabel(key) {
-  const t = findTreeByKey(key);
-  if (!t) return String(key ?? '');
-  return `${t.num || '—'} — ${t.name1 || '—'}`;
+  const k = String(key);
+  const pinned = salesReport.pinned.find((p) => String(p.key) === k);
+  if (pinned?.name1) return `${pinned.num || k} — ${pinned.name1}`;
+  const t = findTreeByKey(k);
+  if (!t) return k;
+  const num = t.num || k;
+  const name = t.name1 || t.name || '';
+  return name ? `${num} — ${name}` : String(num);
 }
 
 function isoToday() {
@@ -183,7 +251,7 @@ function selectPinnedTrees() {
     showToast('لا توجد شجرات مثبّتة — اضغط ★ بجانب الشجرة لتثبيتها', 'err');
     return false;
   }
-  salesReport.pinned.forEach((k) => salesReport.selected.add(String(k)));
+  pinnedTreeKeys().forEach((k) => salesReport.selected.add(String(k)));
   invalidateSalesPreview();
   renderSalesReportTrees();
   return true;
@@ -192,7 +260,7 @@ function selectPinnedTrees() {
 function applyDefaultPinnedSelection() {
   salesReport.selected.clear();
   salesReport.selectedBranches.clear();
-  salesReport.pinned.forEach((k) => salesReport.selected.add(String(k)));
+  pinnedTreeKeys().forEach((k) => salesReport.selected.add(String(k)));
   salesReport.pinnedBranches.forEach((b) => salesReport.selectedBranches.add(String(b.code)));
   renderSalesReportTrees();
   renderBranchUI();
@@ -218,11 +286,17 @@ function selectAllPinned(opts = {}) {
 
 function toggleTreePin(key) {
   const k = String(key);
-  if (salesReport.pinned.includes(k)) {
-    salesReport.pinned = salesReport.pinned.filter((x) => x !== k);
+  const existing = salesReport.pinned.findIndex((p) => String(p.key) === k);
+  if (existing >= 0) {
+    salesReport.pinned = salesReport.pinned.filter((p) => String(p.key) !== k);
     salesReport.selected.delete(k);
   } else {
-    salesReport.pinned = [...salesReport.pinned, k];
+    const meta = treeMetaOf(findTreeByKey(k) || { num: k, name1: '', seq: k, subCount: 0 });
+    salesReport.pinned = [...salesReport.pinned, {
+      key: k,
+      num: meta.num || k,
+      name1: meta.name && meta.name !== '—' ? meta.name : ''
+    }];
     salesReport.selected.add(k);
   }
   savePinnedTrees();
@@ -269,7 +343,7 @@ function renderPinnedTreesSection() {
   const empty = document.getElementById('salesPinnedTreesEmpty');
   const countEl = document.getElementById('salesPinnedTreeCount');
   if (!grid) return;
-  const pinned = salesReport.pinned.map(String);
+  const pinned = pinnedTreeKeys();
   if (countEl) countEl.textContent = pinned.length ? ` (${pinned.length})` : '';
   if (!pinned.length) {
     grid.innerHTML = '';
@@ -282,24 +356,90 @@ function renderPinnedTreesSection() {
   grid.innerHTML = pinned.map((key) => renderTreePinCard(key)).join('');
 }
 
+async function lookupMaterialTreesLive(q) {
+  const query = String(q || '').trim();
+  if (!query) {
+    treeSearchLiveResults = [];
+    return [];
+  }
+  if (window.edariDesktop?.searchEdariMaterialTrees) {
+    const data = await window.edariDesktop.searchEdariMaterialTrees({ q: query });
+    if (!data?.ok && data?.error) throw new Error(data.error);
+    return (data.trees || data.results || []).map((t) => ({
+      seq: String(t.seq || ''),
+      num: String(t.num || t.seq || ''),
+      name1: String(t.name1 || t.name || ''),
+      subCount: Number(t.subCount ?? t.sub_count ?? 0)
+    }));
+  }
+  const data = await api('/api/admin/edari/search-material-trees', {
+    method: 'POST',
+    body: JSON.stringify({ q: query })
+  });
+  return (data.trees || data.results || []).map((t) => ({
+    seq: String(t.seq || ''),
+    num: String(t.num || t.seq || ''),
+    name1: String(t.name1 || t.name || ''),
+    subCount: Number(t.subCount ?? t.sub_count ?? 0)
+  }));
+}
+
+function scheduleTreeSearch() {
+  clearTimeout(treeSearchTimer);
+  treeSearchTimer = setTimeout(async () => {
+    const q = (document.getElementById('salesReportTreeSearch')?.value || '').trim();
+    const metaEl = document.getElementById('salesTreeListMeta');
+    if (!q) {
+      treeSearchLiveResults = [];
+      treeSearchBusy = false;
+      renderTreeList();
+      return;
+    }
+    treeSearchBusy = true;
+    if (metaEl) metaEl.textContent = 'جاري البحث في Edari…';
+    try {
+      treeSearchLiveResults = await lookupMaterialTreesLive(q);
+    } catch (err) {
+      treeSearchLiveResults = [];
+      if (metaEl) metaEl.textContent = err.message;
+    }
+    treeSearchBusy = false;
+    renderTreeList();
+  }, 280);
+}
+
 function renderTreeList() {
   const list = document.getElementById('salesTreeList');
   const metaEl = document.getElementById('salesTreeListMeta');
   if (!list) return;
-  const pinnedSet = new Set(salesReport.pinned.map(String));
+  const pinnedSet = new Set(pinnedTreeKeys());
   const q = (document.getElementById('salesReportTreeSearch')?.value || '').trim().toLowerCase();
-  const base = filteredSalesReportTrees();
-  const present = new Set(base.map(treeKeyOf));
+  const base = q ? [] : salesReport.trees;
+  const localFiltered = q
+    ? salesReport.trees.filter((t) => `${t.num} ${t.name1} ${t.seq}`.toLowerCase().includes(q))
+    : [];
+  const liveFiltered = q ? treeSearchLiveResults : [];
+  const merged = new Map();
+  for (const t of [...localFiltered, ...liveFiltered, ...base]) {
+    merged.set(treeKeyOf(t), t);
+  }
+  const present = new Set([...salesReport.trees.map(treeKeyOf), ...treeSearchLiveResults.map(treeKeyOf)]);
   const pinnedExtra = salesReport.pinned
-    .map(String)
-    .filter((k) => !present.has(k))
-    .map((k) => ({ num: k, name1: '(مثبّتة)', seq: k, subCount: 0 }))
+    .filter((p) => !present.has(String(p.key)))
+    .map((p) => ({
+      seq: p.key,
+      num: p.num || p.key,
+      name1: p.name1 || '(مثبّتة)',
+      subCount: 0
+    }))
     .filter((t) => !q || `${t.num} ${t.name1}`.toLowerCase().includes(q));
-  let trees = [...base, ...pinnedExtra];
+  let trees = [...merged.values(), ...pinnedExtra];
   if (!q) trees = trees.filter((t) => !pinnedSet.has(treeKeyOf(t)));
-  if (metaEl) metaEl.textContent = trees.length ? `${trees.length} شجرة` : '';
+  if (metaEl && !treeSearchBusy) {
+    metaEl.textContent = trees.length ? `${trees.length} شجرة${q ? ' · Edari' : ''}` : (q ? 'لا توجد شجرات مطابقة في Edari' : '');
+  }
   if (!trees.length) {
-    list.innerHTML = `<div class="pick-empty">${q ? 'لا توجد شجرات مطابقة' : 'كل الشجرات المثبّتة أعلاه — أو ابحث لإضافة المزيد'}</div>`;
+    list.innerHTML = `<div class="pick-empty">${q ? (treeSearchBusy ? 'جاري البحث…' : 'لا توجد شجرات مطابقة في Edari') : 'كل الشجرات المثبّتة أعلاه — أو ابحث لإضافة المزيد'}</div>`;
     return;
   }
   const sorted = [...trees].sort((a, b) => String(a.num || '').localeCompare(String(b.num || ''), 'ar'));
@@ -391,6 +531,49 @@ function filteredBranches() {
   return salesReport.branches.filter((b) => `${b.code} ${b.label || ''}`.toLowerCase().includes(q));
 }
 
+async function lookupSalesBranchesLive(q) {
+  const query = String(q || '').trim();
+  if (!query) return [];
+  const dateFrom = document.getElementById('salesReportDateFrom')?.value || '';
+  const dateTo = document.getElementById('salesReportDateTo')?.value || '';
+  const params = { q: query, dateFrom, dateTo };
+  if (window.edariDesktop?.searchEdariSalesBranches) {
+    const data = await window.edariDesktop.searchEdariSalesBranches(params);
+    if (!data?.ok && data?.error) throw new Error(data.error);
+    return data.branches || [];
+  }
+  const data = await api('/api/admin/edari/search-sales-branches', {
+    method: 'POST',
+    body: JSON.stringify(params)
+  });
+  return data.branches || [];
+}
+
+function scheduleBranchSearch() {
+  clearTimeout(branchSearchTimer);
+  branchSearchTimer = setTimeout(async () => {
+    const q = (document.getElementById('salesBranchSearch')?.value || '').trim();
+    const hint = document.getElementById('salesBranchHint');
+    if (!q) {
+      branchSearchLiveResults = [];
+      branchSearchBusy = false;
+      renderBranchList();
+      return;
+    }
+    branchSearchBusy = true;
+    if (hint) hint.textContent = 'جاري البحث في Edari…';
+    try {
+      branchSearchLiveResults = await lookupSalesBranchesLive(q);
+    } catch (err) {
+      branchSearchLiveResults = [];
+      if (hint) hint.textContent = err.message || 'تعذّر البحث في الفروع';
+    }
+    branchSearchBusy = false;
+    renderBranchList();
+    updateBranchHint();
+  }, 280);
+}
+
 function renderPinnedBranchesSection() {
   const grid = document.getElementById('salesPinnedBranchesGrid');
   const zone = document.getElementById('salesBranchesPinZone');
@@ -431,15 +614,23 @@ function renderBranchList() {
   if (!list) return;
   const pinnedSet = new Set(salesReport.pinnedBranches.map((b) => String(b.code)));
   const q = (document.getElementById('salesBranchSearch')?.value || '').trim().toLowerCase();
-  const base = filteredBranches();
-  const present = new Set(base.map((b) => String(b.code)));
+  const base = q ? [] : filteredBranches();
+  const localFiltered = q
+    ? salesReport.branches.filter((b) => `${b.code} ${b.label || ''}`.toLowerCase().includes(q))
+    : [];
+  const liveFiltered = q ? branchSearchLiveResults : [];
+  const merged = new Map();
+  for (const b of [...localFiltered, ...liveFiltered, ...base]) {
+    merged.set(String(b.code), b);
+  }
+  const present = new Set([...salesReport.branches.map((b) => String(b.code)), ...branchSearchLiveResults.map((b) => String(b.code))]);
   const pinnedExtra = salesReport.pinnedBranches
     .filter((b) => !present.has(String(b.code)))
     .map((b) => ({ code: String(b.code), label: b.label, invoiceCount: 0 }))
     .filter((b) => !q || `${b.code} ${b.label || ''}`.toLowerCase().includes(q));
-  let branches = [...base, ...pinnedExtra];
+  let branches = [...merged.values(), ...pinnedExtra];
   if (!q) branches = branches.filter((b) => !pinnedSet.has(String(b.code)));
-  const loadingRow = salesReport.branchesLoading
+  const loadingRow = (salesReport.branchesLoading || branchSearchBusy)
     ? '<div class="pick-empty"><span class="ms-inline-spin"></span> جاري تحميل الفروع…</div>'
     : '';
   if (!branches.length) {
@@ -530,6 +721,15 @@ function clearSelectedBranches() {
 function updateBranchHint() {
   const hint = document.getElementById('salesBranchHint');
   if (!hint) return;
+  const q = (document.getElementById('salesBranchSearch')?.value || '').trim();
+  if (branchSearchBusy) {
+    hint.textContent = 'جاري البحث في Edari…';
+    return;
+  }
+  if (q && branchSearchLiveResults.length) {
+    hint.textContent = `${branchSearchLiveResults.length} فرع مطابق — اختر من القائمة`;
+    return;
+  }
   const total = salesReport.branches.length;
   const sel = salesReport.selectedBranches.size;
   if (salesReport.branchesLoading) {
@@ -545,6 +745,9 @@ function updateBranchHint() {
 
 let branchLoadToken = 0;
 let branchReloadTimer = null;
+let branchSearchLiveResults = [];
+let branchSearchTimer = null;
+let branchSearchBusy = false;
 
 function mergeLocalStandardBranches(branches) {
   const map = new Map((branches || []).map((b) => [String(b.code), b]));
@@ -692,6 +895,8 @@ function renderSalesReportPreview(report) {
     const summary = section.summary || {};
     const title = [tree.num, tree.name1].filter(Boolean).join(' — ') || tree.seq;
     const lines = section.lines || [];
+    // totalLines يأتي من الخادم عندما تُقلَّم البنود للمعاينة.
+    const totalLines = Number(section.totalLines ?? lines.length);
     return `
       <section class="sales-tree-block">
         <header class="sales-tree-head">
@@ -724,7 +929,7 @@ function renderSalesReportPreview(report) {
             </tbody>
           </table>
         </div>
-        ${lines.length > PREVIEW_LINES_PER_TREE ? `<p class="muted sales-lines-more">+ ${lines.length - PREVIEW_LINES_PER_TREE} بند إضافي — راجع PDF للتفاصيل الكاملة</p>` : ''}
+        ${totalLines > PREVIEW_LINES_PER_TREE ? `<p class="muted sales-lines-more">+ ${totalLines - PREVIEW_LINES_PER_TREE} بند إضافي — راجع PDF للتفاصيل الكاملة</p>` : ''}
         ` : '<p class="muted">لا توجد حركات في هذه الفترة</p>'}
       </section>`;
   }).join('')}`;
@@ -769,6 +974,7 @@ async function loadSalesReportTrees() {
       name1: t.name1 || '',
       subCount: Number(t.sub_count ?? t.subCount ?? 0)
     }));
+    enrichPinnedTreeNames();
     renderSalesReportTrees();
   } catch (err) {
     renderSalesReportTrees();
@@ -786,12 +992,17 @@ function base64ToPdfBlob(base64) {
 }
 
 async function querySalesReport(filters) {
+  const previewPayload = { ...filters, previewLines: PREVIEW_LINES_PER_TREE };
   if (window.edariDesktop?.queryEdariSalesReport) {
-    const data = await window.edariDesktop.queryEdariSalesReport(filters);
+    const data = await window.edariDesktop.queryEdariSalesReport(
+      window.edariDesktop?.lanClient ? previewPayload : filters
+    );
     if (!data?.ok) throw new Error(data?.error || 'فشل إنشاء التقرير من Edari');
     return data.report;
   }
-  const res = await api(`/api/admin/reports/sales?${salesReportQueryString(filters)}`);
+  const res = await api(
+    `/api/admin/reports/sales?${salesReportQueryString(filters)}&previewLines=${PREVIEW_LINES_PER_TREE}`
+  );
   return res.report;
 }
 
@@ -865,7 +1076,9 @@ async function exportSalesReportPdf({ summaryOnly = false } = {}) {
   startTopLoading(summaryOnly ? 'جاري تصدير PDF ملخص…' : 'جاري تصدير PDF…');
   const filePrefix = summaryOnly ? 'sales-trees-summary' : 'sales-trees';
   try {
-    if (window.edariDesktop?.exportEdariSalesReportPdf) {
+    // على الجهاز الرئيسي فقط: توليد PDF داخل نفس العملية (بلا نقل شبكي).
+    // الثانوي يستخدم البثّ الثنائي أدناه — أسرع كثيراً من base64 داخل JSON.
+    if (window.edariDesktop?.isDesktop && window.edariDesktop?.exportEdariSalesReportPdf) {
       const payload = sameSalesReportFilters(filters)
         ? { report: salesReport.lastReport, summaryOnly }
         : { ...filters, summaryOnly };
@@ -887,7 +1100,10 @@ async function exportSalesReportPdf({ summaryOnly = false } = {}) {
 
     const qs = salesReportQueryString(filters);
     const summaryQs = summaryOnly ? `${qs}&summary=1` : qs;
-    const res = await fetch(`${getApiBase()}/api/admin/reports/sales.pdf?${summaryQs}`);
+    const pdfBase = typeof getLanApiBase === 'function' ? getLanApiBase() : getApiBase();
+    const res = await fetch(`${pdfBase}/api/admin/reports/sales.pdf?${summaryQs}`, {
+      headers: { Accept: 'application/pdf', ...(window.adminAuth?.authHeaders?.() || {}) }
+    });
     const contentType = String(res.headers.get('content-type') || '').toLowerCase();
     if (!res.ok) {
       let message = `فشل تصدير PDF (${res.status})`;
@@ -968,7 +1184,7 @@ function initSalesReportPage() {
   });
   document.getElementById('btnSalesClearTrees')?.addEventListener('click', clearSelectedTrees);
   document.getElementById('btnSalesSelectAllPinned')?.addEventListener('click', selectAllPinned);
-  document.getElementById('salesReportTreeSearch')?.addEventListener('input', renderTreeList);
+  document.getElementById('salesReportTreeSearch')?.addEventListener('input', scheduleTreeSearch);
 
   // Branches: list interactions (select row / pin star)
   document.getElementById('salesBranchList')?.addEventListener('click', (e) => {
@@ -978,7 +1194,12 @@ function initSalesReportPage() {
     if (row) toggleBranch(row.dataset.branch);
   });
   document.getElementById('btnSalesClearBranches')?.addEventListener('click', clearSelectedBranches);
-  document.getElementById('salesBranchSearch')?.addEventListener('input', renderBranchList);
+  document.getElementById('salesBranchSearch')?.addEventListener('input', scheduleBranchSearch);
+  document.getElementById('salesBranchSearch')?.addEventListener('focus', () => {
+    if (!salesReport.branches.length && !branchSearchBusy) {
+      void loadSalesReportBranches({ silent: true });
+    }
+  });
 
   document.getElementById('btnSalesReportPreview')?.addEventListener('click', () => {
     void runSalesReportPreview();
@@ -1019,6 +1240,7 @@ function initSalesReportPage() {
 }
 
 async function loadSalesReportPage() {
+  hydratePinnedFromSharedState();
   applySalesPreset('today');
   salesReport.branches = mergeLocalStandardBranches([]);
   renderBranchUI();
@@ -1031,6 +1253,12 @@ async function loadSalesReportPage() {
 }
 
 initSalesReportPage();
+
+window.addEventListener('admin-shared-state-changed', () => {
+  hydratePinnedFromSharedState();
+  applyDefaultPinnedSelection();
+  renderPinnedQuickBar();
+});
 
 window.adminPages = window.adminPages || {};
 window.adminPages.salesReport = loadSalesReportPage;

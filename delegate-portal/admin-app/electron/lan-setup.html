@@ -4,39 +4,181 @@
   <meta charset="UTF-8">
   <title>Edari Admin Client — إعداد الاتصال</title>
   <style>
-    body { font-family:Segoe UI,Tahoma,sans-serif; background:#0f172a; color:#f8fafc; display:grid; place-items:center; min-height:100vh; margin:0; }
-    .card { width:min(420px,92vw); background:#fff; color:#0f172a; padding:1.75rem; border-radius:16px; }
-    input { width:100%; padding:.65rem; margin:.5rem 0 1rem; border:1px solid #cbd5e1; border-radius:8px; direction:ltr; }
-    button { width:100%; padding:.75rem; background:#0369a1; color:#fff; border:0; border-radius:8px; font-weight:700; cursor:pointer; }
-    p { color:#64748b; font-size:.9rem; }
+    body { font-family:Segoe UI,Tahoma,sans-serif; background:#0f172a; color:#f8fafc; display:grid; place-items:center; min-height:100vh; margin:0; padding:1rem; }
+    .card { width:min(480px,96vw); background:#fff; color:#0f172a; padding:1.75rem; border-radius:16px; }
+    input { width:100%; padding:.65rem; margin:.5rem 0 .75rem; border:1px solid #cbd5e1; border-radius:8px; direction:ltr; box-sizing:border-box; font-size:.95rem; }
+    button { padding:.75rem 1rem; background:#0369a1; color:#fff; border:0; border-radius:8px; font-weight:700; cursor:pointer; margin-left:.35rem; }
+    button.secondary { background:#e2e8f0; color:#0f172a; }
+    button:disabled { opacity:.6; cursor:wait; }
+    p, li { color:#64748b; font-size:.9rem; }
     .err { color:#dc2626; min-height:1.2em; font-size:.85rem; }
+    .status { font-size:.85rem; color:#0369a1; min-height:1.2em; }
+    .hit { display:flex; justify-content:space-between; align-items:center; gap:.5rem; padding:.55rem .65rem; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:.4rem; font-size:.85rem; }
+    .hit code { direction:ltr; font-size:.78rem; }
+    ul { padding-right:1.2rem; margin:.5rem 0 1rem; }
+    .hint { background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:.65rem .75rem; margin-bottom:.75rem; font-size:.85rem; color:#0369a1; }
   </style>
 </head>
 <body>
   <div class="card">
     <h2>Edari Admin Client</h2>
-    <p>أدخل عنوان الجهاز الرئيسي على الشبكة المحلية</p>
-    <input id="url" placeholder="http://192.168.1.10:5005" autofocus>
+    <p>جهاز <strong>ثانوي</strong> — الاتصال بالجهاز الرئيسي عبر <strong>Ethernet</strong>:</p>
+    <div class="hint">العنوان الافتراضي مُعبّأ تلقائياً — يمكنك تغييره إن لزم</div>
+    <p class="status" id="status">جاري الاتصال التلقائي…</p>
+    <div id="hits"></div>
+    <label>عنوان الجهاز الرئيسي (Ethernet):</label>
+    <input id="url" placeholder="http://192.168.75.1:4100" autofocus>
     <p class="err" id="err"></p>
-    <button id="go">اتصال</button>
+    <div>
+      <button id="go">اتصال</button>
+      <button type="button" class="secondary" id="scan">بحث مجدداً</button>
+    </div>
   </div>
   <script>
-    document.getElementById('go').onclick = async () => {
-      const url = document.getElementById('url').value.trim().replace(/\/$/, '');
-      document.getElementById('err').textContent = '';
-      if (!url) return document.getElementById('err').textContent = 'أدخل العنوان';
+    let cfg = { ports: [4100, 5005], preferSubnets: ['192.168.75', '192.168.1', '192.168.0', '10.0.0'], prefillUrl: 'http://192.168.75.1:4100', autoConnect: true };
+
+    async function probeUrl(base) {
+      const norm = String(base || '').trim().replace(/\/$/, '');
+      if (!norm) return null;
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 900);
       try {
-        const r = await fetch(url + '/api/health');
-        if (!r.ok) throw new Error('السيرفر لا يستجيب');
-        await window.lanSetup.save(url);
-        location.href = 'about:blank';
-      } catch (e) {
-        document.getElementById('err').textContent = e.message || 'تعذّر الاتصال';
+        const r = await fetch(`${norm}/api/admin/lan-info`, { signal: ctrl.signal });
+        const d = await r.json();
+        if (r.ok && d.ok && d.role === 'server') return { url: norm, ...d };
+      } catch (_) {}
+      finally { clearTimeout(t); }
+      return null;
+    }
+
+    async function tryConnectList(urls, silent) {
+      const list = [...new Set(urls.map((u) => String(u || '').trim().replace(/\/$/, '')).filter(Boolean))];
+      const batch = 12;
+      for (let i = 0; i < list.length; i += batch) {
+        if (!silent) document.getElementById('status').textContent = `اتصال تلقائي… ${Math.min(100, Math.round(((i + batch) / list.length) * 100))}%`;
+        const hits = await Promise.all(list.slice(i, i + batch).map((u) => probeUrl(u)));
+        const hit = hits.find(Boolean);
+        if (hit) return hit;
       }
-    };
+      return null;
+    }
+
+    function quickUrls() {
+      const urls = [];
+      const subnets = cfg.preferSubnets || ['192.168.75'];
+      const ports = cfg.ports || [4100, 5005];
+      for (const prefix of subnets) {
+        for (const host of [1, 10, 100]) {
+          for (const port of ports) urls.push(`http://${prefix}.${host}:${port}`);
+        }
+      }
+      return urls;
+    }
+
+    function renderHits(found) {
+      const box = document.getElementById('hits');
+      if (!found.length) {
+        box.innerHTML = '';
+        return;
+      }
+      box.innerHTML = found.map((s) => {
+        const url = s.clientConnectUrl || s.url || `http://${s.ip}:${s.port}`;
+        return `<div class="hit"><div><strong>${s.hostname || s.ethernetAddress || s.ip}</strong><br><code>${url}</code></div><button type="button" data-u="${url.replace(/\/admin\/?$/, '')}">اتصال</button></div>`;
+      }).join('');
+      box.querySelectorAll('[data-u]').forEach((b) => {
+        b.onclick = () => connect(b.dataset.u);
+      });
+    }
+
+    async function scan() {
+      document.getElementById('status').textContent = 'جاري البحث في الشبكة…';
+      document.getElementById('hits').innerHTML = '';
+      const ips = [];
+      for (const prefix of (cfg.preferSubnets || [])) {
+        for (let i = 1; i <= 254; i++) ips.push(`${prefix}.${i}`);
+      }
+      const ports = cfg.ports || [4100, 5005];
+      const found = [];
+      const seen = new Set();
+      const batch = 40;
+      for (let i = 0; i < ips.length; i += batch) {
+        document.getElementById('status').textContent = `بحث… ${Math.min(100, Math.round(((i + batch) / ips.length) * 100))}%`;
+        const slice = ips.slice(i, i + batch);
+        const results = await Promise.all(slice.flatMap((ip) => ports.map(async (port) => {
+          const hit = await probeUrl(`http://${ip}:${port}`);
+          return hit ? { key: `${ip}:${port}`, hit } : null;
+        })));
+        for (const row of results) {
+          if (row && !seen.has(row.key)) {
+            seen.add(row.key);
+            found.push(row.hit);
+          }
+        }
+      }
+      renderHits(found);
+      if (!found.length) {
+        document.getElementById('status').textContent = 'لم يُعثر على سيرفر — عدّل العنوان أو تأكد أن Edari Admin Server يعمل';
+        return [];
+      }
+      document.getElementById('status').textContent = `وُجد ${found.length} جهاز`;
+      const url = (found[0].clientConnectUrl || found[0].url || '').replace(/\/admin\/?$/, '');
+      if (url) document.getElementById('url').value = url;
+      if (found.length === 1 && cfg.autoConnect) await connect(url, true);
+      return found;
+    }
+
+    async function connect(raw, silent) {
+      const url = String(raw || document.getElementById('url').value).trim().replace(/\/$/, '');
+      document.getElementById('err').textContent = '';
+      if (!url) {
+        if (!silent) document.getElementById('err').textContent = 'أدخل العنوان';
+        return false;
+      }
+      const goBtn = document.getElementById('go');
+      if (goBtn) goBtn.disabled = true;
+      if (!silent) document.getElementById('status').textContent = 'جاري الاتصال…';
+      try {
+        const hit = await probeUrl(url);
+        if (!hit) {
+          throw new Error('السيرفر لا يستجيب — تأكد أن Edari Admin Server يعمل على الجهاز الرئيسي وأن Ethernet متصل');
+        }
+        await window.lanSetup.save(hit.clientConnectUrl || url);
+        return true;
+      } catch (e) {
+        if (!silent) document.getElementById('err').textContent = e.message || 'تعذّر الاتصال';
+        if (goBtn) goBtn.disabled = false;
+        return false;
+      }
+    }
+
+    async function boot() {
+      try {
+        cfg = await window.lanSetup.getConfig();
+      } catch (_) {}
+      const prefill = cfg.prefillUrl || 'http://192.168.75.1:4100';
+      document.getElementById('url').value = prefill;
+      document.getElementById('url').placeholder = prefill;
+
+      if (cfg.autoConnect) {
+        let hit = await tryConnectList([prefill], false);
+        if (!hit) hit = await tryConnectList(quickUrls(), false);
+        if (hit) {
+          document.getElementById('url').value = (hit.clientConnectUrl || hit.url).replace(/\/admin\/?$/, '');
+          document.getElementById('status').textContent = 'تم العثور على السيرفر — جاري الاتصال…';
+          await connect(hit.clientConnectUrl || hit.url, true);
+          return;
+        }
+      }
+      document.getElementById('status').textContent = 'لم ينجح الاتصال التلقائي — عدّل العنوان أو انتظر البحث';
+      await scan();
+    }
+
+    document.getElementById('go').onclick = () => connect();
+    document.getElementById('scan').onclick = () => void scan();
     document.getElementById('url').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') document.getElementById('go').click();
+      if (e.key === 'Enter') connect();
     });
+    void boot();
   </script>
 </body>
 </html>

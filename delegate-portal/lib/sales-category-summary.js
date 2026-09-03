@@ -9,7 +9,7 @@ function resolveSalesLineTotal(line) {
   const quant = Number(line.quant ?? line.Quant ?? 0);
   const bonus = Number(line.bonus ?? line.OBonus ?? 0);
   const unit = resolveSalesUnitPrice(line);
-  const stored = Number(line.lineTotal ?? line.line_sum ?? line.Sum ?? line.sum ?? 0);
+  const stored = Number(line.lineTotal ?? line.line_total ?? line.line_sum ?? line.Sum ?? line.sum ?? 0);
   if (stored > 0) return Math.abs(stored);
   const computed = quant > 0 ? Math.round(quant * unit) : Math.round(bonus * unit);
   return Math.abs(computed);

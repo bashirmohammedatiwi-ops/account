@@ -1,12 +1,32 @@
 {
+  "appId": "com.edari.admin.server",
   "productName": "Edari Admin Server",
+  "icon": "icons/app-icon.ico",
   "directories": { "output": "dist" },
+  "afterPack": "scripts/after-pack-icon.cjs",
+  "extraResources": [
+    { "from": "build-resources/portal", "to": "portal" },
+    { "from": "build-resources/edari-reader", "to": "edari-reader" },
+    { "from": "build-resources/node-portable", "to": "node-portable" },
+    { "from": "icons/app-icon-256.png", "to": "icon.png" }
+  ],
   "win": {
+    "icon": "icons/app-icon.ico",
+    "target": [{ "target": "nsis", "arch": ["x64"] }],
     "artifactName": "Edari-Admin-Server-${version}.${ext}",
     "signAndEditExecutable": false
   },
   "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "allowElevation": true,
+    "include": "build/installer-shortcut.nsh",
     "shortcutName": "Edari Admin Server",
-    "artifactName": "Edari-Admin-Server-Setup-${version}.${ext}"
+    "artifactName": "Edari-Admin-Server-Setup-${version}.${ext}",
+    "createDesktopShortcut": false,
+    "createStartMenuShortcut": false,
+    "installerIcon": "icons/app-icon.ico",
+    "uninstallerIcon": "icons/app-icon.ico",
+    "installerHeaderIcon": "icons/app-icon.ico"
   }
 }

@@ -102,6 +102,57 @@ function getAssignableTrees() {
 }
 
 /**
+ * دمج شجرات Edari الحية مع المرفوعة للسيرفر — للعرض في صلاحيات المندوب.
+ * onServer=true يعني يمكن تفعيلها فوراً؛ false = يجب رفعها من «رفع البيانات».
+ */
+function getMergedAssignableTrees(edariTrees = []) {
+  const dbTrees = getAssignableTrees();
+  const dbSeqSet = new Set(dbTrees.map((r) => String(r.seq)));
+  const map = new Map();
+
+  for (const raw of edariTrees || []) {
+    const seq = String(raw.seq ?? '').trim();
+    if (!seq) continue;
+    map.set(seq, {
+      seq,
+      num: String(raw.num || '').trim(),
+      name1: String(raw.name1 || '').trim(),
+      sub_count: Number(raw.sub_count ?? raw.subCount ?? 0),
+      bal: Number(raw.bal ?? 0),
+      onServer: dbSeqSet.has(seq)
+    });
+  }
+
+  for (const db of dbTrees) {
+    const seq = String(db.seq);
+    const hit = map.get(seq);
+    if (hit) {
+      map.set(seq, {
+        ...hit,
+        onServer: true,
+        num: hit.num || String(db.num || '').trim(),
+        name1: hit.name1 || String(db.name1 || '').trim(),
+        sub_count: hit.sub_count || Number(db.sub_count || 0),
+        bal: hit.bal ?? db.bal
+      });
+    } else {
+      map.set(seq, {
+        seq,
+        num: String(db.num || '').trim(),
+        name1: String(db.name1 || '').trim(),
+        sub_count: Number(db.sub_count || 0),
+        bal: Number(db.bal || 0),
+        onServer: true
+      });
+    }
+  }
+
+  return [...map.values()].sort((a, b) =>
+    String(a.num || a.seq).localeCompare(String(b.num || b.seq), undefined, { numeric: true })
+  );
+}
+
+/**
  * حركات الحساب — تشمل حركات كل الأحفاد إذا كان حساباً أباً (sub_count > 0)،
  * تماماً مثل كشف الحساب في Edari الذي يجمّع حركات الفروع تحت الأب.
  * للزبون النهائي (sub_count = 0) تُرجَع حركاته فقط.
@@ -614,6 +665,7 @@ module.exports = {
   agentAllowedSeqs,
   canAgentAccess,
   getAssignableTrees,
+  getMergedAssignableTrees,
   filterAssignableTreeSeqs,
   assignAgentTrees,
   getStatementForAccount,

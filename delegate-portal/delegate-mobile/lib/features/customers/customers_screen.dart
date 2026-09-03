@@ -8,7 +8,7 @@ import '../../core/layout/breakpoints.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/adaptive_shell.dart';
 import '../../core/widgets/ed_form.dart';
-import '../../core/widgets/ed_page_scroll.dart';
+import '../../core/widgets/phone_ui.dart';
 import '../../models/models.dart';
 import '../home/home_screen.dart';
 
@@ -127,9 +127,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                   ],
                 )
               : ListView(
-                  primary: false,
-                  physics: edPageScrollPhysics,
-                  padding: EdgeInsets.fromLTRB(EdSpacing.page, EdSpacing.lg, EdSpacing.page, EdPageInsets.bottom(context)),
+                  padding: const EdgeInsets.fromLTRB(EdSpacing.page, EdSpacing.lg, EdSpacing.page, kPhoneBottomInset),
                   children: [
                     _formCard(treesAsync),
                     const SizedBox(height: EdSpacing.xxl),

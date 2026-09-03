@@ -228,7 +228,7 @@ const TOPBAR_ACTIONS = {
     { label: 'اختبار', cls: 'btn-soft', target: 'btnEdariTest' },
     { label: 'حفظ', cls: 'btn-primary', target: 'btnEdariSave' }
   ],
-  agents: [{ label: '+ مندوب', cls: 'btn-primary', target: 'btnAddAgent' }]
+  agents: [{ label: '+ مندوب', cls: 'btn-primary', target: 'btnAddAgentPage' }]
 };
 
 function runTopbarAction(action) {

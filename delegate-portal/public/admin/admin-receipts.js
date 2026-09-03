@@ -166,12 +166,36 @@ function renderReceiptSettings() {
 }
 
 async function lookupReceiptAccounts(q, kind) {
+  const params = { q: q || '', kind: kind || '' };
   if (window.edariDesktop?.searchEdariAccounts) {
-    const data = await window.edariDesktop.searchEdariAccounts({ q, kind });
-    if (!data?.ok) throw new Error(data?.error || 'فشل البحث في الإداري');
-    return data;
+    try {
+      const data = await window.edariDesktop.searchEdariAccounts(params);
+      if (!data?.ok) throw new Error(data?.error || 'فشل البحث في الإداري');
+      return data;
+    } catch (err) {
+      if (typeof api === 'function') {
+        try {
+          return await api('/api/admin/edari/search-accounts', {
+            method: 'POST',
+            body: JSON.stringify(params)
+          });
+        } catch { /* fall through */ }
+      }
+      throw err;
+    }
   }
-  const qs = new URLSearchParams({ q: q || '', kind: kind || '' });
+  if (typeof api === 'function') {
+    try {
+      return await api('/api/admin/edari/search-accounts', {
+        method: 'POST',
+        body: JSON.stringify(params)
+      });
+    } catch (err) {
+      const qs = new URLSearchParams(params);
+      return commerceApi(`/receipts/accounts/search?${qs}`);
+    }
+  }
+  const qs = new URLSearchParams(params);
   return commerceApi(`/receipts/accounts/search?${qs}`);
 }
 
@@ -222,6 +246,15 @@ async function loadReceiptSettings() {
     renderReceiptSettings();
   }
   try {
+    await window.adminSharedState?.init?.({ startPoll: false });
+    const shared = window.adminSharedState?.getUiPrefs?.()?.receiptPostAccounts;
+    if (shared && receiptSettingsHasAccounts(shared)) {
+      receiptAdmin.settings = mergeReceiptSettings(receiptAdmin.settings, shared);
+      writeReceiptSettingsCache(receiptAdmin.settings);
+      renderReceiptSettings();
+    }
+  } catch { /* ignore */ }
+  try {
     const data = await commerceApi('/receipts/settings');
     const serverAccounts = data.accounts || {};
     if (receiptSettingsHasAccounts(serverAccounts)) {
@@ -244,6 +277,10 @@ async function saveReceiptSettings({ silent = false, skipRender = false } = {}) 
     });
     receiptAdmin.settings = mergeReceiptSettings(receiptAdmin.settings, data.accounts || {});
     writeReceiptSettingsCache(receiptAdmin.settings);
+    window.adminSharedState?.patchUiPrefs?.({
+      receiptPostAccounts: receiptAdmin.settings,
+      updatedAt: new Date().toISOString()
+    });
     if (!skipRender) renderReceiptSettings();
     if (!silent) showToast('تم حفظ حسابات الترحيل');
   } catch (err) {
@@ -1121,6 +1158,15 @@ function initReceiptsAdmin() {
     document.querySelectorAll('.rv-acc-results, .rcv-acc-results').forEach((el) => { el.innerHTML = ''; });
   });
 }
+
+window.addEventListener('admin-shared-state-changed', () => {
+  const shared = window.adminSharedState?.getUiPrefs?.()?.receiptPostAccounts;
+  if (shared && receiptSettingsHasAccounts(shared)) {
+    receiptAdmin.settings = mergeReceiptSettings(receiptAdmin.settings, shared);
+    writeReceiptSettingsCache(receiptAdmin.settings);
+    renderReceiptSettings();
+  }
+});
 
 window.commercePages = window.commercePages || {};
 window.commercePages.receipts = async () => {

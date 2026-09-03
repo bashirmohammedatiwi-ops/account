@@ -19,6 +19,7 @@ const integrationShorjaRoutes = require('./routes/integration-shorja');
 const priceAppRoutes = require('./routes/price-app');
 const { UPLOAD_ROOT } = require('./lib/products');
 const { listLanAddresses, getPrimaryLanAddress } = require('./lib/lan-host');
+const { gzipResponse } = require('./lib/gzip-response');
 
 const app = express();
 const PORT = Number(process.env.PORT || 5005);
@@ -29,6 +30,17 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Sync-Key', 'x-sync-key'],
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS']
 }));
+
+// The admin UI is served from the internet server but sends live Edari calls to
+// this machine over the LAN. Chrome blocks public→private requests unless the
+// private side opts in.
+app.use((req, res, next) => {
+  if (req.headers['access-control-request-private-network']) {
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  }
+  next();
+});
+app.use(gzipResponse());
 app.use(express.json({ limit: '50mb' }));
 
 app.get('/api/health', (_req, res) => {

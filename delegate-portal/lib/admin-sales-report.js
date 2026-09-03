@@ -160,11 +160,14 @@ function queryTreeLines(treeRef, options = {}) {
     where.push('(CAST(i.kind AS INTEGER) = 6 OR COALESCE(l.bonus, 0) > 0)');
   }
 
+  // بلا وصل edari_materials: العمودان sell_pr* لا يُقرآن في أي مخرج —
+  // resolveSalesLineTotal يقرأ lineTotal/line_sum لا line_total، وقيمة السطر
+  // تُحسب من price، و sellPr4 لا يظهر في المعاينة ولا في PDF. وشرط الوصل
+  // القديم (seq = mat OR num = mat_num) كان يمنع أي فهرس فيمسح جدول المواد
+  // لكل بند — وهو سبب تأخّر تقرير الشجرات على الأجهزة الثانوية.
   const sql = `
     SELECT
       l.*,
-      m.sell_pr3,
-      m.sell_pr1,
       i.num AS inv_num,
       i.kind AS inv_kind,
       i.inv_date,
@@ -174,7 +177,6 @@ function queryTreeLines(treeRef, options = {}) {
     FROM invoice_lines l
     JOIN invoices i ON i.seq = l.bill_seq
     LEFT JOIN accounts a ON a.seq = i.acc_seq
-    LEFT JOIN edari_materials m ON m.seq = l.mat OR m.num = l.mat_num
     WHERE ${where.join(' AND ')}
     ORDER BY ${INV_DATE_SQL} ASC, CAST(i.num AS INTEGER) ASC, i.num ASC, l.bill_no ASC
   `;
@@ -210,14 +212,12 @@ function fetchLocalSystemCategorySummary(options = {}) {
   const sql = `
     SELECT
       l.quant, l.bonus, l.price, l.line_total,
-      m.sell_pr3, m.sell_pr1, m.sell_pr4,
       i.kind AS inv_kind,
       i.remarks AS inv_remarks,
       a.num AS account_num
     FROM invoice_lines l
     JOIN invoices i ON i.seq = l.bill_seq
     LEFT JOIN accounts a ON a.seq = i.acc_seq
-    LEFT JOIN edari_materials m ON m.seq = l.mat OR m.num = l.mat_num
     WHERE ${where.join(' AND ')}
   `;
 
@@ -234,13 +234,11 @@ function fetchLocalSystemCategorySummary(options = {}) {
     const quant = Number(r.quant || 0);
     const bonus = Number(r.bonus || 0);
     const unitPrice = Number(r.price || 0);
-    const sellPr4 = Number(r.sell_pr4 || r.sell_pr3 || r.sell_pr1 || 0);
-    const total = resolveSalesLineTotal({ quant, bonus, unitPrice, sellPr4, line_total: r.line_total });
+    const total = resolveSalesLineTotal({ quant, bonus, unitPrice, line_total: r.line_total });
     mapped.push({
       quant,
       bonus,
       unitPrice,
-      sellPr4,
       kind: r.inv_kind,
       lineTotal: isReturn ? -Math.abs(total) : total,
       isReturn,
@@ -280,6 +278,50 @@ function listSalesBranches({ dateFrom = '', dateTo = '' } = {}) {
     branches.get(code).invoiceCount += 1;
   }
   return mergeStandardSalesBranches([...branches.values()]);
+}
+
+/** بحث الفروع/الحسابات من القاعدة المحلية — احتياطي عند تعذّر قراءة Edari. */
+function searchLocalSalesBranches({ q = '', dateFrom = '', dateTo = '' } = {}) {
+  const query = String(q || '').trim();
+  const needle = query.toLowerCase();
+  const matches = (b) => !needle
+    || `${b.code} ${b.label || ''} ${b.remarks || ''}`.toLowerCase().includes(needle);
+
+  const map = new Map();
+  for (const b of mergeStandardSalesBranches([])) {
+    if (matches(b)) map.set(String(b.code), b);
+  }
+
+  if (dateFrom && dateTo) {
+    try {
+      for (const b of listSalesBranches({ dateFrom, dateTo })) {
+        if (matches(b)) map.set(String(b.code), b);
+      }
+    } catch { /* ignore */ }
+  }
+
+  if (query) {
+    const like = `%${query}%`;
+    const rows = db.prepare(`
+      SELECT num, name1 FROM accounts
+      WHERE num LIKE ? OR name1 LIKE ?
+      ORDER BY num
+      LIMIT 120
+    `).all(like, like);
+    for (const r of rows) {
+      const code = String(r.num || '').replace(/[^0-9]/g, '');
+      if (!code || map.has(code)) continue;
+      const name = String(r.name1 || '').trim();
+      map.set(code, {
+        code,
+        label: name ? `${code} — ${name}` : `الفرع ${code}`,
+        remarks: '',
+        invoiceCount: 0
+      });
+    }
+  }
+
+  return sortBranchesForList([...map.values()]).filter(matches);
 }
 
 function queryAdminSalesReport({
@@ -360,10 +402,36 @@ function listReportTrees() {
   return listMaterialTreeRoots();
 }
 
+/**
+ * المعاينة تعرض أول N بند لكل شجرة فقط. الملخصات (summary / grandSummary)
+ * تبقى كاملة — تصدير PDF لا يمرّر previewLines.
+ */
+function trimReportForPreview(report, previewLines) {
+  const max = Number(previewLines);
+  if (!report || !Number.isFinite(max) || max <= 0) return report;
+  return {
+    ...report,
+    sections: (report.sections || []).map((section) => {
+      const lines = Array.isArray(section.lines) ? section.lines : [];
+      const summary = section.summary || computeTreeSummary(lines);
+      if (lines.length <= max) return { ...section, summary, totalLines: lines.length };
+      return {
+        ...section,
+        lines: lines.slice(0, max),
+        summary,
+        totalLines: lines.length,
+        truncated: true
+      };
+    })
+  };
+}
+
 module.exports = {
   parseTreeSeqList,
   listReportTrees,
   listSalesBranches,
+  searchLocalSalesBranches,
   queryAdminSalesReport,
-  queryTreeLines
+  queryTreeLines,
+  trimReportForPreview
 };

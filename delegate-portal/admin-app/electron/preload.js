@@ -13,8 +13,22 @@ const base = {
   isDesktop: !LAN_CLIENT,
   lanClient: LAN_CLIENT,
   backendUrl,
-  useRemote: readLaunchArg('edari-remote', LAN_CLIENT ? '1' : '0') !== '0'
+  useRemote: readLaunchArg('edari-remote', LAN_CLIENT ? '1' : '0') !== '0',
+  apiSameOrigin: readLaunchArg('edari-api-same-origin', '0') === '1',
+  // LAN machine that owns Edari — empty when this machine owns it itself.
+  edariHostUrl: readLaunchArg('edari-host', '').replace(/\/$/, ''),
+  // Server holding delegate data (receipts, agents). Empty = use page origin.
+  dataBackendUrl: readLaunchArg('edari-data-backend', '').replace(/\/$/, '')
 };
+
+if (LAN_CLIENT) {
+  // The client can fall back to the setup page after a dropped LAN link, so it
+  // needs the setup bridge under the same preload.
+  contextBridge.exposeInMainWorld('lanSetup', {
+    getConfig: () => ipcRenderer.invoke('lan-client:get-setup-config'),
+    save: (url) => ipcRenderer.invoke('lan-client:save-url', url)
+  });
+}
 
 if (!LAN_CLIENT) {
   Object.assign(base, {

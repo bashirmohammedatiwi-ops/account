@@ -1,12 +1,29 @@
 {
+  "appId": "com.edari.admin.client",
   "productName": "Edari Admin Client",
+  "icon": "icons/app-icon.ico",
   "directories": { "output": "dist" },
+  "afterPack": "scripts/after-pack-icon.cjs",
+  "extraResources": [
+    { "from": "icons/app-icon-256.png", "to": "icon.png" }
+  ],
   "win": {
+    "icon": "icons/app-icon.ico",
+    "target": [{ "target": "nsis", "arch": ["x64"] }],
     "artifactName": "Edari-Admin-Client-${version}.${ext}",
     "signAndEditExecutable": false
   },
   "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "allowElevation": true,
+    "include": "build/installer-shortcut.nsh",
     "shortcutName": "Edari Admin Client",
-    "artifactName": "Edari-Admin-Client-Setup-${version}.${ext}"
+    "artifactName": "Edari-Admin-Client-Setup-${version}.${ext}",
+    "createDesktopShortcut": false,
+    "createStartMenuShortcut": false,
+    "installerIcon": "icons/app-icon.ico",
+    "uninstallerIcon": "icons/app-icon.ico",
+    "installerHeaderIcon": "icons/app-icon.ico"
   }
 }

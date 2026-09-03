@@ -33,13 +33,20 @@
   </div>
 
   <div id="lanSetupGate" class="lan-setup-gate hidden" aria-hidden="true">
-    <div class="admin-login-card" style="width:min(480px,92vw)">
+    <div class="admin-login-card" style="width:min(520px,92vw)">
       <h2>اتصال بالجهاز الرئيسي</h2>
-      <p class="muted">هذا الجهاز عميل LAN — أدخل IP الجهاز الذي يشغّل قاعدة البيانات وEdari</p>
+      <p class="muted">على الأجهزة الثانوية: حدّد الجهاز الذي يشغّل <strong>Edari Admin Server</strong> وقاعدة البيانات.</p>
+      <ul class="simple-list" style="margin:0 0 1rem;font-size:0.88rem">
+        <li>من الجهاز الرئيسي: <strong>النظام → الشبكة المحلية</strong> وانسخ العنوان</li>
+        <li>أو اضغط <strong>بحث تلقائي</strong> أدناه</li>
+        <li>مثال Ethernet: <code dir="ltr">http://192.168.75.1:4100</code></li>
+      </ul>
+      <p class="field-hint" id="lanSetupScanStatus">—</p>
+      <div class="lan-scan-list" id="lanSetupScanResults" style="max-height:160px;margin-bottom:1rem"></div>
       <div class="form-stack">
         <label class="field">
-          <span>عنوان السيرفر</span>
-          <input type="text" id="lanSetupInput" placeholder="http://192.168.1.10:5005" dir="ltr">
+          <span>عنوان الجهاز الرئيسي</span>
+          <input type="text" id="lanSetupInput" placeholder="http://192.168.75.1:4100" dir="ltr" value="http://192.168.75.1:4100">
         </label>
         <div class="btn-row">
           <button type="button" class="btn btn-primary" id="btnLanSetupConnect">اتصال</button>
@@ -976,9 +983,10 @@
                       <button type="button" class="btn btn-soft btn-sm" id="btnStmtSaveList">★ حفظ</button>
                     </header>
                     <div class="rx-account-row">
-                      <input id="stmtAccountInput" class="rx-input" type="text" inputmode="numeric" autocomplete="off" placeholder="رقم الحساب + Enter (131, 132…)" />
+                      <input id="stmtAccountInput" class="rx-input" type="search" autocomplete="off" placeholder="ابحث برقم أو اسم الحساب في Edari…" />
                       <button type="button" class="btn btn-soft" id="btnStmtAdd">+</button>
                     </div>
+                    <div id="stmtSearchResults" class="rcv-acc-results"></div>
                     <div id="stmtSelectedChips" class="rx-chips rx-chips-stmt"></div>
                     <div class="rx-saved" id="stmtSavedWrap">
                       <div class="rx-saved-head">★ القائمة المحفوظة — نقرة للتحديد</div>
@@ -1179,7 +1187,7 @@
                 <div class="form-stack lan-client-only">
                   <label class="field">
                     <span>عنوان الجهاز الرئيسي</span>
-                    <input type="text" id="lanServerInput" placeholder="http://192.168.1.10:5005">
+                    <input type="text" id="lanServerInput" placeholder="http://192.168.75.1:4100">
                   </label>
                   <div class="btn-row">
                     <button type="button" class="btn btn-primary btn-sm" id="btnLanConnect">اتصال</button>
@@ -1269,7 +1277,7 @@
                 <div class="form-stack">
                   <label class="field">
                     <span>عنوان الجهاز الرئيسي</span>
-                    <input type="text" id="lanServerInput" placeholder="http://192.168.1.10:5005" dir="ltr">
+                    <input type="text" id="lanServerInput" placeholder="http://192.168.75.1:4100" dir="ltr">
                   </label>
                   <label class="field">
                     <span>منفذ البحث</span>
@@ -1696,7 +1704,8 @@
             </section>
             <section class="ag-form-card">
               <h4 class="ag-form-section-title"><span class="ag-form-step">2</span> التسلسل الهرمي</h4>
-              <p class="ag-form-hint">الثانوي يصدر وصل قبض فقط ويُسلّم المبلغ للرئيسي الذي يصدر سند القبض.</p>
+              <p class="ag-form-hint">الثانوي يصدر وصل قبض فقط ويُسلّم المبلغ للرئيسي الذي يصدر سند القبض. إن لم تُحدّد شجرات للثانوي يرث شجرات رئيسه.</p>
+              <p class="ag-form-hint ag-form-warn hidden" id="agentRoleDemoteHint"></p>
               <div class="ag-role-pills" role="radiogroup" aria-label="نوع المندوب">
                 <label class="ag-role-pill"><input type="radio" name="agentRoleRadio" value="primary" checked><span class="ag-role-pill-body"><strong>مندوب رئيسي</strong><small>وصل + سند قبض + فريق</small></span></label>
                 <label class="ag-role-pill"><input type="radio" name="agentRoleRadio" value="secondary"><span class="ag-role-pill-body"><strong>مندوب ثانوي</strong><small>وصل قبض فقط</small></span></label>
@@ -1717,8 +1726,17 @@
             <section class="ag-form-card ag-trees-section">
               <div class="ag-trees-head">
                 <h4 class="ag-form-section-title"><span class="ag-form-step">3</span> صلاحية الشجرات</h4>
-                <p class="ag-form-hint">يظهر للمندوب في التطبيق الزبائن ضمن هذه الشجرات فقط.</p>
+                <p class="ag-form-hint">تُعرض كل شجرات Edari. الشجرات «الجاهزة» مرفوعة للسيرفر ويمكن تفعيلها فوراً.</p>
               </div>
+              <div class="ag-trees-toolbar">
+                <input type="search" id="agentTreeSearch" class="search ag-trees-search" placeholder="بحث بالاسم أو الرقم..." autocomplete="off">
+                <div class="ag-trees-toolbar-actions">
+                  <button type="button" class="btn btn-soft btn-xs" id="btnAgentTreesAll">تحديد الكل</button>
+                  <button type="button" class="btn btn-soft btn-xs" id="btnAgentTreesNone">إلغاء الكل</button>
+                  <button type="button" class="btn btn-soft btn-xs" id="btnAgentTreesReload">تحديث</button>
+                </div>
+              </div>
+              <p class="ag-trees-count muted" id="agentTreesCount"></p>
               <div class="tree-picks tree-picks-sm ag-tree-picks" id="agentTreeChecks"></div>
             </section>
           </div>
@@ -1748,23 +1766,25 @@
   <div id="toastHost" class="toast-host" aria-live="polite"></div>
 
   <script src="config.js"></script>
-  <script src="admin-auth.js?v=20260903lan2"></script>
-  <script src="admin-edari-bridge.js?v=20260903lan2"></script>
+  <script src="admin-auth.js?v=20260903price4"></script>
+  <script src="admin-lan-connection.js?v=20260903price4"></script>
+  <script src="admin-shared-state.js?v=20260903price4"></script>
+  <script src="admin-edari-bridge.js?v=20260903price4"></script>
   <script src="admin-ui.js?v=20260902pro1"></script>
-  <script src="admin.js?v=20260902agents2"></script>
+  <script src="admin.js?v=20260903price4"></script>
   <script src="admin-shell.js?v=20260826col1"></script>
   <script src="admin-commerce.js?v=20260826col1"></script>
   <script src="admin-collection-kit.js?v=20260901post1"></script>
   <script src="admin-agents.js?v=20260902agents6"></script>
-  <script src="admin-receipts.js?v=20260901post1"></script>
+  <script src="admin-receipts.js?v=20260903price4"></script>
   <script src="admin-delivery-receipts.js?v=20260826col1"></script>
   <script src="admin-customers.js?v=20260901post1"></script>
   <script src="admin-promotional-visits.js?v=20260826col1"></script>
   <script src="admin-thermal-template.js?v=20260824thermal8"></script>
-  <script src="admin-sales-report.js?v=20260709treeFix3"></script>
-  <script src="admin-account-statements.js?v=20260826pages1"></script>
-  <script src="admin-price-sync.js?v=20260703"></script>
-  <script src="admin-lan.js?v=20260903lan2"></script>
+  <script src="admin-sales-report.js?v=20260903price4"></script>
+  <script src="admin-account-statements.js?v=20260903price4"></script>
+  <script src="admin-price-sync.js?v=20260903price4"></script>
+  <script src="admin-lan.js?v=20260903price4"></script>
   <script>
     if (typeof initAdminShell === 'function') initAdminShell();
     if (typeof initAdminUi === 'function') initAdminUi();

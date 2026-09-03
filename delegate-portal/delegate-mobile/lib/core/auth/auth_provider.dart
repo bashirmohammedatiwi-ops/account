@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -91,7 +90,6 @@ class AuthNotifier extends Notifier<AuthState> {
 
       state = AuthState(token: token, agent: agent, loading: false);
       ref.read(delegateDataRefreshProvider)();
-      unawaited(_refreshAgent(epoch, token, fallbackAgent: agent));
     } catch (_) {
       if (epoch != _sessionEpoch) return;
       state = const AuthState(loading: false);

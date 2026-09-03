@@ -495,6 +495,14 @@ function initAgentsPageUi() {
 
   document.querySelectorAll('input[name="agentRoleRadio"]').forEach((radio) => {
     radio.addEventListener('change', () => {
+      if (radio.disabled) {
+        radio.checked = false;
+        document.querySelector('input[name="agentRoleRadio"][value="primary"]')?.click();
+        if (typeof showToast === 'function') {
+          showToast('لا يمكن تحويل مندوب رئيسي لديه فريق إلى ثانوي', 'err');
+        }
+        return;
+      }
       const sel = document.getElementById('agentRole');
       if (sel) sel.value = radio.value;
       syncAgentRoleUi();

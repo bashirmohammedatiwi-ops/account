@@ -12,7 +12,6 @@ import '../../core/auth/auth_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
-import '../../core/widgets/ed_page_scroll.dart';
 import '../../core/widgets/adaptive_shell.dart';
 import '../../core/widgets/customer_picker.dart';
 import '../../core/widgets/ed_components.dart';
@@ -390,9 +389,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
               color: AppColors.navy,
               onRefresh: () async => ref.invalidate(ordersProvider),
               child: ListView.separated(
-                primary: false,
-                physics: edPageScrollPhysics,
-                padding: EdgeInsets.fromLTRB(16, 8, 16, EdPageInsets.bottom(context)),
+                padding: const EdgeInsets.all(16),
                 itemCount: filtered.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 10),
                 itemBuilder: (_, i) {

@@ -282,11 +282,6 @@ class ApiClient {
     await _json('POST', '/delivery-receipts/$id/printed');
   }
 
-  Future<DeliveryReceipt> markDeliveryHandoverReceived(int id) async {
-    final data = await _json('POST', '/delivery-receipts/$id/handover');
-    return DeliveryReceipt.fromJson(Map<String, dynamic>.from(data['deliveryReceipt'] as Map));
-  }
-
   Future<Map<String, dynamic>> getDeliveryReceiptPrintTemplate() async {
     final data = await _json('GET', '/delivery-receipts/print-template');
     return Map<String, dynamic>.from(data['template'] as Map);

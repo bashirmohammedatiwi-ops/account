@@ -110,10 +110,54 @@ function setPriceSyncProgress(visible, msg = '', pct = 0) {
 function appendPriceSyncLog(line) {
   const feed = document.getElementById('priceSyncLog');
   if (!feed) return;
+  const raw = String(line || '').trim();
+  if (!raw) return;
+  // لا تعرض سطر JSON التقني — يُعرَض ملخّص مقروء بدلاً منه.
+  if (raw.startsWith('@SYNC_RESULT|')) return;
+  if (raw.startsWith('@PROGRESS|')) return;
   const p = document.createElement('p');
-  p.textContent = line;
+  p.textContent = raw;
   feed.prepend(p);
   while (feed.children.length > 20) feed.removeChild(feed.lastChild);
+}
+
+function parsePriceSyncProgressLine(line) {
+  const raw = String(line || '').trim();
+  if (!raw) return null;
+
+  const progress = raw.match(/^@PROGRESS\|(\d+)\|(\d+)\|(\d+)\|(.*)$/);
+  if (progress) {
+    return { type: 'progress', pct: Number(progress[3]) || 0, msg: progress[4] || 'جاري الرفع...' };
+  }
+
+  if (raw.startsWith('@SYNC_RESULT|')) {
+    try {
+      const result = JSON.parse(raw.slice('@SYNC_RESULT|'.length));
+      return { type: 'result', result, msg: result.message || 'اكتملت المزامنة' };
+    } catch {
+      return { type: 'result', result: null, msg: 'اكتملت المزامنة' };
+    }
+  }
+  return null;
+}
+
+function applyPriceSyncCompletion(result, syncMode) {
+  const msg = formatSyncResult(result, syncMode);
+  setPriceSyncProgress(true, msg, 100);
+  appendPriceSyncLog(msg);
+  const edariOk = result?.edariOk !== false;
+  const posOk = result?.posOk !== false;
+  let statusText = 'آخر مزامنة ناجحة';
+  let statusState = 'ok';
+  if (!edariOk && !posOk) { statusText = 'فشلت المزامنة (Edari و POS)'; statusState = 'err'; }
+  else if (!posOk) { statusText = 'تم Edari — تعذّر رفع أسعار POS'; statusState = 'pending'; }
+  else if (!edariOk) { statusText = 'تم رفع أسعار POS — تعذّر Edari'; statusState = 'pending'; }
+  setPriceSyncStatus(statusText, statusState);
+  const last = document.getElementById('priceSyncLastResult');
+  if (last) last.textContent = msg;
+  if (syncMode === 'full' || (result?.movementsUpserted || 0) > 0 || (result?.posSynced || 0) > 0) {
+    markPriceSyncHistory();
+  }
 }
 
 function formatSyncResult(result, syncMode) {
@@ -181,14 +225,20 @@ async function runPriceAppSync(mode = 'incremental') {
   appendPriceSyncLog(`${modeLabel}: ${serverUrl} · POS: ${posConfig.posSqlServer}/${posConfig.posSqlDatabase}`);
 
   let unsubscribe = null;
+  let sawStreamResult = false;
   if (window.edariDesktop?.onPriceSyncProgress) {
     unsubscribe = window.edariDesktop.onPriceSyncProgress((line) => {
-      appendPriceSyncLog(line);
-      const m = String(line).match(/^@PROGRESS\|(\d+)\|(\d+)\|(\d+)\|(.*)$/);
-      if (m) {
-        const pct = Number(m[3]) || 0;
-        setPriceSyncProgress(true, m[4] || 'جاري الرفع...', pct);
+      const parsed = parsePriceSyncProgressLine(line);
+      if (parsed?.type === 'progress') {
+        setPriceSyncProgress(true, parsed.msg, parsed.pct);
+        return;
       }
+      if (parsed?.type === 'result') {
+        sawStreamResult = true;
+        applyPriceSyncCompletion(parsed.result || { ok: true, message: parsed.msg }, syncMode);
+        return;
+      }
+      appendPriceSyncLog(line);
     });
   }
 
@@ -206,15 +256,9 @@ async function runPriceAppSync(mode = 'incremental') {
 
     if (!result?.ok) throw new Error(result?.error || 'فشلت المزامنة');
 
-    if (syncMode === 'full' || (result.movementsUpserted || 0) > 0 || (result.posSynced || 0) > 0) {
-      markPriceSyncHistory();
+    if (!sawStreamResult) {
+      applyPriceSyncCompletion(result, syncMode);
     }
-
-    const msg = formatSyncResult(result, syncMode);
-    setPriceSyncProgress(true, msg, 100);
-    appendPriceSyncLog(msg);
-    setPriceSyncStatus(result.posOk === false ? 'تم Edari — تحذير POS' : 'آخر مزامنة ناجحة', result.posOk === false ? 'pending' : 'ok');
-    document.getElementById('priceSyncLastResult').textContent = msg;
     void verifyPriceAppServer();
   } catch (err) {
     const msg = err.message || 'فشلت المزامنة';

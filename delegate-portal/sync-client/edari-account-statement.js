@@ -24,7 +24,9 @@ const {
   parseEdariDate,
   journalSortKey,
   resolvePeriodOpeningBalance,
-  rowsInDateRange
+  rowsInDateRange,
+  isValidFixDate,
+  normalizeCarriedBalance
 } = require('../lib/statement-utils');
 
 const JOURNAL_CHUNK = 80;
@@ -114,17 +116,89 @@ async function fetchAccounts(refs) {
   return rows.map(mapAccount);
 }
 
-async function fetchJournalForSeqs(seqs) {
-  const byAcc = new Map();
+function toIsoDay(value) {
+  const d = parseEdariDate(value);
+  if (!d) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function isoAddDays(iso, delta) {
+  const d = new Date(`${iso}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  d.setDate(d.getDate() + delta);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function sqlTimestampStart(iso) {
+  return `TIMESTAMP ${sqlQuote(`${iso} 00:00:00`)}`;
+}
+
+/**
+ * أصغر نافذة تواريخ تكفي لبناء كشف الحساب — تُطبَّق في SQL بدل سحب كل
+ * تاريخ الحساب (الفرق كبير جداً على صناديق فيها مئات آلاف الحركات).
+ *
+ * صناديق الكاشير (FixBal = 0 وتاريخ تثبيت صالح): الرصيد المدور صفر دائماً،
+ * فتكفي حركات الفترة. الحسابات المرتكزة على FixBal تحتاج ما بين تاريخ
+ * التثبيت وحدود الفترة. الحسابات التراكمية تحتاج كل ما قبل نهاية الفترة.
+ */
+function journalWindowFor(account, dateFrom, dateTo) {
+  const fixDateIso = toIsoDay(account?.fix_date);
+  const hasFix = isValidFixDate(account?.fix_date);
+  const fixBal = hasFix && parseAmount(account?.fix_bal) !== 0
+    ? normalizeCarriedBalance(parseAmount(account.fix_bal), account, { fromFixBal: true })
+    : 0;
+
+  if (hasFix && fixBal === 0) {
+    return { from: dateFrom, to: dateTo };
+  }
+  if (hasFix && fixDateIso) {
+    return {
+      from: fixDateIso < dateFrom ? fixDateIso : dateFrom,
+      to: fixDateIso > dateTo ? fixDateIso : dateTo
+    };
+  }
+  return { from: '', to: dateTo };
+}
+
+function journalWhereForWindow(win) {
+  const clauses = [];
+  if (win.from) clauses.push(`"Date" >= ${sqlTimestampStart(win.from)}`);
+  if (win.to) clauses.push(`"Date" < ${sqlTimestampStart(isoAddDays(win.to, 1))}`);
+  return clauses.join(' AND ');
+}
+
+async function fetchJournalForWindow(seqs, win) {
+  const rows = [];
+  const dateWhere = journalWhereForWindow(win);
   for (const part of chunk(seqs, JOURNAL_CHUNK)) {
     const ids = part.map((s) => sqlInt(s)).filter((s) => s > 0).join(',');
     if (!ids) continue;
-    const rows = await query(`
+    const where = [`Acc IN (${ids})`, dateWhere].filter(Boolean).join(' AND ');
+    const chunkRows = await query(`
       SELECT Seq, Acc, "Date", Am, Dept, Exp1, Exp2, Remarks, BillNum, BillSeq, BillKind
       FROM File12n
-      WHERE Acc IN (${ids})
+      WHERE ${where}
       ORDER BY Acc, "Date", Seq
     `, 120000);
+    rows.push(...chunkRows);
+  }
+  return rows;
+}
+
+/** يجمع الحسابات ذات النافذة الزمنية نفسها في استعلام واحد. */
+async function fetchJournalForAccounts(accounts, dateFrom, dateTo) {
+  const groups = new Map();
+  for (const acc of accounts) {
+    if (!acc.seq) continue;
+    const win = journalWindowFor(acc, dateFrom, dateTo);
+    const key = `${win.from}|${win.to}`;
+    if (!groups.has(key)) groups.set(key, { win, seqs: [] });
+    groups.get(key).seqs.push(acc.seq);
+  }
+
+  const byAcc = new Map();
+  for (const { win, seqs } of groups.values()) {
+    const rows = await fetchJournalForWindow(seqs, win);
     for (const raw of rows) {
       const mapped = mapJournalRow(raw);
       if (!byAcc.has(mapped.acc_seq)) byAcc.set(mapped.acc_seq, []);
@@ -250,8 +324,9 @@ async function queryEdariAccountStatements(params = {}) {
   const bySeq = new Map(accounts.map((a) => [a.seq, a]));
   const byNum = new Map(accounts.map((a) => [a.num, a]));
 
-  const seqs = accounts.map((a) => a.seq).filter(Boolean);
-  const journalByAcc = seqs.length ? await fetchJournalForSeqs(seqs) : new Map();
+  const journalByAcc = accounts.length
+    ? await fetchJournalForAccounts(accounts, dateFrom, dateTo)
+    : new Map();
 
   const statements = [];
   const missing = [];

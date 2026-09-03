@@ -17,9 +17,19 @@ const edariRoot = process.env.EDARI_READER_ROOT
 const odbcBridge = require(path.join(edariRoot, 'lib', 'odbc-bridge'));
 const { getEdariConnection } = require('./edari-connection');
 
-const SERVER = process.argv.includes('--server')
+const SERVER_ARG = process.argv.includes('--server')
   ? process.argv[process.argv.indexOf('--server') + 1]
   : (process.env.SYNC_SERVER || 'http://187.124.23.65:5005');
+
+/**
+ * `--server` accepts a comma-separated list so one Edari read can feed both the
+ * LAN server and the internet server. Uploads run sequentially per target.
+ */
+const SYNC_TARGETS = [...new Set(
+  String(SERVER_ARG).split(',').map((s) => s.trim().replace(/\/$/, '')).filter(Boolean)
+)];
+
+let SERVER = SYNC_TARGETS[0] || '';
 
 const SYNC_KEY = process.argv.includes('--key')
   ? process.argv[process.argv.indexOf('--key') + 1]
@@ -598,10 +608,26 @@ async function main() {
   }
 
   const allAccountSeqs = accounts.map((a) => accountSeq(a)).filter(Boolean);
-  const result = await uploadChunked(
-    { accounts: accountsForUpload, journal, invoices, invoiceLines, products },
-    allAccountSeqs
-  );
+  const payload = { accounts: accountsForUpload, journal, invoices, invoiceLines, products };
+
+  let result = null;
+  const failures = [];
+  for (const target of SYNC_TARGETS) {
+    SERVER = target;
+    if (SYNC_TARGETS.length > 1) {
+      reportProgress(6, 7, 0, `الرفع إلى ${target} ...`);
+    }
+    try {
+      const uploaded = await uploadChunked(payload, allAccountSeqs);
+      if (!result) result = uploaded;
+    } catch (err) {
+      failures.push(`${target}: ${err.message}`);
+      console.log(`⚠ فشل الرفع إلى ${target} — ${err.message}`);
+    }
+  }
+  if (!result) {
+    throw new Error(failures.join(' | ') || 'فشل الرفع إلى كل السيرفرات');
+  }
   console.log(`@SYNC_RESULT|${JSON.stringify({
     ok: true,
     accounts: result.accounts,

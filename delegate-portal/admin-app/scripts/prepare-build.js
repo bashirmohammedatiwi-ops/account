@@ -9,7 +9,7 @@ const EDARI_SRC = path.join(PORTAL_SRC, '..', 'edari-reader');
 const OUT = path.join(ROOT, 'build-resources');
 const PORTAL_OUT = path.join(OUT, 'portal');
 const EDARI_OUT = path.join(OUT, 'edari-reader');
-const NODE_OUT = path.join(OUT, 'node');
+const NODE_OUT = path.join(OUT, 'node-portable');
 
 const PORTAL_COPY = [
   'server.js',
@@ -173,6 +173,15 @@ async function main() {
   await ensureNodePortable();
   preparePortal();
   prepareEdariReader();
+  const nodeExe = path.join(NODE_OUT, 'node.exe');
+  if (!fs.existsSync(nodeExe)) {
+    throw new Error('node.exe غير موجود في build-resources/node — فشل إعداد البناء');
+  }
+  const nodeSize = fs.statSync(nodeExe).size;
+  if (nodeSize < 1_000_000) {
+    throw new Error(`node.exe تالف (الحجم ${nodeSize} بايت) — أعد البناء`);
+  }
+  console.log(`Node portable: ${nodeExe} (${Math.round(nodeSize / 1024 / 1024)} MB)`);
   console.log('\n✓ build-resources جاهزة');
 }
 

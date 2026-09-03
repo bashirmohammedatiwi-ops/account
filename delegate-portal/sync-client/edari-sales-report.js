@@ -885,6 +885,66 @@ async function listSalesBranches(params = {}) {
   return result.map((b) => ({ ...b }));
 }
 
+function sqlLike(value) {
+  return String(value || '').replace(/'/g, "''").replace(/[%_]/g, '');
+}
+
+/**
+ * بحث حي عن الفروع/الحسابات لفلتر التقرير.
+ * الفرع في الإداري إما رقم في ملاحظات الفاتورة (136/138) أو حساب دلفري
+ * (1210420…). لذلك البحث يغطي: الفروع المعتمدة + فروع الفترة + أي حساب
+ * في File11n — استعلام واحد سريع على عمود مفهرس بدل مسح الفواتير.
+ */
+async function searchEdariSalesBranches({ q = '', dateFrom = '', dateTo = '' } = {}) {
+  const queryStr = String(q || '').trim();
+  const needle = queryStr.toLowerCase();
+  const matchBranch = (b) => {
+    if (!needle) return true;
+    return `${b.code} ${b.label || ''} ${b.remarks || ''}`.toLowerCase().includes(needle);
+  };
+
+  const map = new Map();
+  for (const b of mergeStandardSalesBranches([])) {
+    if (matchBranch(b)) map.set(String(b.code), { ...b });
+  }
+
+  if (dateFrom && dateTo) {
+    try {
+      for (const b of await listSalesBranches({ dateFrom, dateTo })) {
+        if (matchBranch(b)) map.set(String(b.code), b);
+      }
+    } catch { /* الفروع المعتمدة تكفي إن تعذّرت قراءة الفترة */ }
+  }
+
+  if (!queryStr) {
+    return { ok: true, branches: sortBranchesForList([...map.values()]), source: 'edari' };
+  }
+
+  const like = sqlLike(queryStr);
+  try {
+    const rows = await query(`
+      SELECT TOP 120 Seq, Num, Name1
+      FROM File11n
+      WHERE Num LIKE '%${like}%' OR Name1 LIKE N'%${like}%'
+      ORDER BY Num
+    `, 30000);
+    for (const r of rows) {
+      const code = String(r.Num ?? '').replace(/[^0-9]/g, '');
+      if (!code || map.has(code)) continue;
+      const name = String(r.Name1 || '').trim();
+      map.set(code, {
+        code,
+        label: name ? `${code} — ${name}` : `الفرع ${code}`,
+        remarks: '',
+        invoiceCount: 0
+      });
+    }
+  } catch { /* ignore */ }
+
+  const branches = sortBranchesForList([...map.values()]).filter(matchBranch);
+  return { ok: true, branches, source: 'edari' };
+}
+
 async function queryEdariSalesReport(params = {}) {
   const cacheKey = salesReportParamsKey(params);
   const cached = cacheGet(reportCache, cacheKey, REPORT_CACHE_TTL_MS);
@@ -1000,5 +1060,6 @@ module.exports = {
   listMaterialTreeRoots,
   listSystemSalesTreeRefs,
   listSalesBranches,
+  searchEdariSalesBranches,
   queryEdariSalesReport
 };

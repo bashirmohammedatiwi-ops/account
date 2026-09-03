@@ -67,6 +67,13 @@
   padding: 1.1rem 1.25rem;
 }
 
+.lan-url-row-highlight {
+  background: #f0f9ff;
+  border: 1px solid #7dd3fc;
+  border-radius: 10px;
+  padding: .65rem .75rem;
+}
+
 .lan-url-row {
   display: flex;
   align-items: center;

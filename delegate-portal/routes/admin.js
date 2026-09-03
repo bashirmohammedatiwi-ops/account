@@ -14,6 +14,7 @@ const { runPostingJob } = require('../lib/edari-posting-queue');
 const { readServerSettings, writeServerSettings, applyEdariSettingsToEnv } = require('../lib/server-settings');
 const {
   getAssignableTrees,
+  getMergedAssignableTrees,
   assignAgentTrees,
   getSyncStatus,
   getChildren,
@@ -26,21 +27,36 @@ const {
   validateAgentHierarchyInput,
   listPrimaryAgents,
   getSecondaryAgentIds,
-  normalizeRole
+  normalizeRole,
+  getAgentProfile
 } = require('../lib/agent-hierarchy');
 const { getPublicBaseUrl } = require('../lib/public-url');
-const { runLocalSync, listEdariTrees, listEdariMaterialTrees, queryEdariSalesReport } = require('../lib/sync-runner');
-const { queryAdminSalesReport, listReportTrees, listSalesBranches, parseTreeSeqList } = require('../lib/admin-sales-report');
-const { buildTreeSalesReportPdf, buildTreeSalesReportSummaryPdf } = require('../lib/pdf-export');
-const { listLanAddresses, getPrimaryLanAddress } = require('../lib/lan-host');
+const { runLocalSync, listEdariTrees, listEdariMaterialTrees } = require('../lib/sync-runner');
+const {
+  listReportTrees,
+  listSalesBranches,
+  searchLocalSalesBranches,
+  parseTreeSeqList,
+  trimReportForPreview
+} = require('../lib/admin-sales-report');
+const {
+  buildTreeSalesReportPdf,
+  buildTreeSalesReportSummaryPdf,
+  buildAccountStatementsPdf
+} = require('../lib/pdf-export');
+const { listLanAddresses, getEthernetLanAddress, getPrimaryLanAddress } = require('../lib/lan-host');
 const {
   postReceiptToEdari,
   postCustomerToEdari,
   searchEdariAccounts,
+  searchEdariMaterialTrees,
   queryEdariAccountStatements,
   exportEdariAccountStatementsPdf,
   listEdariMaterialTreesLive,
+  listEdariTreesLive,
   listEdariSalesBranchesLive,
+  searchEdariSalesBranchesLive,
+  queryEdariSalesReportLive,
   exportEdariSalesReportPdf,
   lookupEdariMaterial,
   fetchEdariCatalogMaterials,
@@ -94,7 +110,9 @@ router.get('/config', (req, res) => {
   const base = getPublicBaseUrl(req);
   const port = Number(process.env.PORT || 5005);
   const lanAddresses = listLanAddresses();
+  const ethernetLan = getEthernetLanAddress();
   const primaryLan = getPrimaryLanAddress();
+  const clientHost = ethernetLan || primaryLan;
   const policy = adminAuthPolicy();
   res.json({
     ok: true,
@@ -111,8 +129,10 @@ router.get('/config', (req, res) => {
       host: process.env.HOST || '0.0.0.0',
       port,
       addresses: lanAddresses,
+      ethernetAddress: ethernetLan,
       primaryAddress: primaryLan,
-      adminLanUrl: primaryLan ? `http://${primaryLan}:${port}/admin` : null
+      clientConnectUrl: clientHost ? `http://${clientHost}:${port}` : null,
+      adminLanUrl: clientHost ? `http://${clientHost}:${port}/admin` : null
     }
   });
 });
@@ -120,7 +140,9 @@ router.get('/config', (req, res) => {
 router.get('/lan-info', (req, res) => {
   const port = Number(process.env.PORT || 5005);
   const lanAddresses = listLanAddresses();
+  const ethernetLan = getEthernetLanAddress();
   const primaryLan = getPrimaryLanAddress();
+  const clientHost = ethernetLan || primaryLan;
   const base = getPublicBaseUrl(req);
   let agentCount = 0;
   let accountCount = 0;
@@ -137,13 +159,32 @@ router.get('/lan-info', (req, res) => {
     port,
     baseUrl: base,
     addresses: lanAddresses,
+    ethernetAddress: ethernetLan,
     primaryAddress: primaryLan,
-    adminUrl: primaryLan ? `http://${primaryLan}:${port}/admin` : `${base}/admin`,
-    mobileUrl: primaryLan ? `http://${primaryLan}:${port}/m` : `${base}/m`,
+    clientConnectUrl: clientHost ? `http://${clientHost}:${port}` : null,
+    adminUrl: clientHost ? `http://${clientHost}:${port}/admin` : `${base}/admin`,
+    mobileUrl: clientHost ? `http://${clientHost}:${port}/m` : `${base}/m`,
     uptimeSec: Math.floor(process.uptime()),
     clientIp: clientIp(req),
     stats: { agents: agentCount, accounts: accountCount },
-    lanServer: process.env.LAN_SERVER === '1' || HOST_BIND !== '127.0.0.1'
+    lanServer: process.env.LAN_SERVER === '1' || HOST_BIND !== '127.0.0.1',
+    settingsUpdatedAt: (() => {
+      try {
+        const s = readServerSettings();
+        return s.updatedAt || s.uiPrefs?.updatedAt || '';
+      } catch { return ''; }
+    })(),
+    uiPrefsSummary: (() => {
+      try {
+        const ui = readServerSettings().uiPrefs || {};
+        const trees = Array.isArray(ui.pinnedTrees) ? ui.pinnedTrees : [];
+        return {
+          pinnedTrees: trees.length,
+          pinnedBranches: Array.isArray(ui.pinnedBranches) ? ui.pinnedBranches.length : 0,
+          hasReceiptAccounts: Boolean(ui.receiptPostAccounts && Object.keys(ui.receiptPostAccounts).length)
+        };
+      } catch { return {}; }
+    })()
   });
 });
 
@@ -176,6 +217,15 @@ router.post('/edari/search-accounts', async (req, res) => {
   }
 });
 
+router.post('/edari/search-material-trees', async (req, res) => {
+  try {
+    const result = await searchEdariMaterialTrees(req.body || {});
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'فشل البحث في شجرات المواد' });
+  }
+});
+
 router.post('/edari/account-statements', async (req, res) => {
   try {
     const result = await queryEdariAccountStatements(req.body || {});
@@ -203,6 +253,30 @@ router.post('/edari/sales-report.pdf', async (req, res) => {
   }
 });
 
+/**
+ * PDF كشف الحساب كبثّ ثنائي — أسرع بكثير من base64 داخل JSON،
+ * وهو المسار الذي يستخدمه الجهاز الثانوي.
+ */
+router.get('/reports/account-statements.pdf', async (req, res) => {
+  const accounts = String(req.query.accounts || '')
+    .split(/[,،\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const dateFrom = String(req.query.dateFrom || req.query.from || '').trim();
+  const dateTo = String(req.query.dateTo || req.query.to || '').trim();
+  try {
+    const result = await queryEdariAccountStatements({ accounts, dateFrom, dateTo });
+    const buffer = await buildAccountStatementsPdf(result.statements || []);
+    const stamp = dateFrom && dateTo ? `${dateFrom}_${dateTo}` : new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="account-statements-${stamp}.pdf"`);
+    res.setHeader('X-Statements-Missing', String((result.missing || []).length));
+    res.send(buffer);
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message || 'فشل تصدير كشف الحساب' });
+  }
+});
+
 router.get('/edari/sales-branches', async (req, res) => {
   try {
     const result = await listEdariSalesBranchesLive({
@@ -212,6 +286,20 @@ router.get('/edari/sales-branches', async (req, res) => {
     res.json(result);
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message || 'فشل قراءة الفروع' });
+  }
+});
+
+router.post('/edari/search-sales-branches', async (req, res) => {
+  try {
+    const result = await searchEdariSalesBranchesLive(req.body || {});
+    res.json(result);
+  } catch (err) {
+    try {
+      const branches = searchLocalSalesBranches(req.body || {});
+      return res.json({ ok: true, branches, source: 'db' });
+    } catch {
+      res.status(500).json({ ok: false, error: err.message || 'فشل البحث في الفروع' });
+    }
   }
 });
 
@@ -293,6 +381,28 @@ router.get('/trees', (_req, res) => {
   res.json({ ok: true, trees: getAssignableTrees() });
 });
 
+router.get('/trees/assignable', async (_req, res) => {
+  try {
+    let edariTrees = [];
+    try {
+      const live = await listEdariTreesLive();
+      edariTrees = live.trees || [];
+    } catch { /* Edari اختياري — نعرض المرفوع للسيرفر فقط */ }
+    const trees = getMergedAssignableTrees(edariTrees);
+    res.json({
+      ok: true,
+      trees,
+      source: edariTrees.length ? 'edari+db' : 'db',
+      stats: {
+        total: trees.length,
+        onServer: trees.filter((t) => t.onServer).length
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'فشل تحميل الشجرات' });
+  }
+});
+
 router.get('/agents', (_req, res) => {
   const agents = db.prepare(`
     SELECT id, name, phone, username, active, created_at, parent_agent_id, delegate_role
@@ -315,6 +425,18 @@ router.get('/agents', (_req, res) => {
 
 router.get('/agents/primary', (_req, res) => {
   res.json({ ok: true, agents: listPrimaryAgents() });
+});
+
+router.get('/agents/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    return res.status(400).json({ ok: false, error: 'معرّف غير صالح' });
+  }
+  const agent = getAgentProfile(id);
+  if (!agent) return res.status(404).json({ ok: false, error: 'المندوب غير موجود' });
+  const treeSeqs = db.prepare('SELECT account_seq FROM agent_trees WHERE agent_id = ?').all(id)
+    .map((r) => String(r.account_seq));
+  res.json({ ok: true, agent: { ...agent, treeSeqs } });
 });
 
 router.post('/agents', (req, res) => {
@@ -441,16 +563,21 @@ router.get('/sync/logs', (_req, res) => {
 
 router.get('/edari/trees', async (_req, res) => {
   try {
-    const result = await listEdariTrees();
+    const result = await listEdariTreesLive();
     res.json(result);
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
+    try {
+      const result = await listEdariTrees();
+      res.json(result);
+    } catch (fallbackErr) {
+      res.status(500).json({ ok: false, error: fallbackErr.message || err.message });
+    }
   }
 });
 
 router.get('/edari/material-trees', async (_req, res) => {
   try {
-    const result = await listEdariMaterialTrees();
+    const result = await listEdariMaterialTreesLive();
     res.json(result);
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -470,14 +597,14 @@ router.post('/trigger-sync', async (req, res) => {
 });
 
 router.get('/reports/sales/trees', async (_req, res) => {
-  const dbTrees = listReportTrees();
-  if (dbTrees.length) {
-    return res.json({ ok: true, trees: dbTrees, source: 'db' });
-  }
   try {
-    const result = await listEdariMaterialTrees();
-    res.json({ ...result, source: 'edari' });
+    const result = await listEdariMaterialTreesLive();
+    return res.json({ ...result, source: 'edari' });
   } catch (err) {
+    const dbTrees = listReportTrees();
+    if (dbTrees.length) {
+      return res.json({ ok: true, trees: dbTrees, source: 'db' });
+    }
     res.json({ ok: true, trees: [], source: 'none', error: err.message });
   }
 });
@@ -486,31 +613,27 @@ router.get('/reports/sales/branches', async (req, res) => {
   const dateFrom = String(req.query.dateFrom || req.query.from || '').trim();
   const dateTo = String(req.query.dateTo || req.query.to || '').trim();
   try {
-    const branches = listSalesBranches({ dateFrom, dateTo });
-    res.json({ ok: true, branches });
+    const result = await listEdariSalesBranchesLive({ dateFrom, dateTo });
+    res.json(result);
   } catch (err) {
-    res.status(400).json({ ok: false, error: err.message || 'فشل قراءة الفروع' });
+    try {
+      const branches = searchLocalSalesBranches({ q: '', dateFrom, dateTo });
+      return res.json({ ok: true, branches, source: 'db' });
+    } catch {
+      res.status(400).json({ ok: false, error: err.message || 'فشل قراءة الفروع' });
+    }
   }
 });
 
 router.get('/reports/sales', async (req, res) => {
   const params = readSalesReportQuery(req);
+  const previewLines = req.query.previewLines;
   try {
-    const nodeCount = db.prepare('SELECT COUNT(*) AS c FROM edari_material_nodes').get()?.c || 0;
-    let report;
-    if (nodeCount) {
-      report = queryAdminSalesReport(params);
-    } else {
-      report = await queryEdariSalesReport(params);
-    }
-    res.json({ ok: true, report });
+    // الأجهزة الثانوية تصل هنا عبر LAN — نفس مصدر Edari الحي الذي يستخدمه الرئيسي.
+    const report = await queryEdariSalesReportLive(params);
+    res.json({ ok: true, report: trimReportForPreview(report, previewLines) });
   } catch (err) {
-    try {
-      const report = await queryEdariSalesReport(params);
-      return res.json({ ok: true, report });
-    } catch (edariErr) {
-      res.status(400).json({ ok: false, error: edariErr.message || err.message || 'فشل إنشاء التقرير' });
-    }
+    res.status(400).json({ ok: false, error: err.message || 'فشل إنشاء التقرير' });
   }
 });
 
@@ -520,13 +643,7 @@ router.get('/reports/sales.pdf', async (req, res) => {
   const buildPdf = summaryOnly ? buildTreeSalesReportSummaryPdf : buildTreeSalesReportPdf;
   const prefix = summaryOnly ? 'sales-trees-summary' : 'sales-trees';
   try {
-    const nodeCount = db.prepare('SELECT COUNT(*) AS c FROM edari_material_nodes').get()?.c || 0;
-    let report;
-    if (nodeCount) {
-      report = queryAdminSalesReport(params);
-    } else {
-      report = await queryEdariSalesReport(params);
-    }
+    const report = await queryEdariSalesReportLive(params);
     const buffer = await buildPdf(report);
     const from = report.period?.dateFrom || 'from';
     const to = report.period?.dateTo || 'to';
@@ -534,17 +651,7 @@ router.get('/reports/sales.pdf', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${prefix}-${from}_${to}.pdf"`);
     res.send(buffer);
   } catch (err) {
-    try {
-      const report = await queryEdariSalesReport(params);
-      const buffer = await buildPdf(report);
-      const from = report.period?.dateFrom || 'from';
-      const to = report.period?.dateTo || 'to';
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${prefix}-${from}_${to}.pdf"`);
-      return res.send(buffer);
-    } catch (edariErr) {
-      res.status(400).json({ ok: false, error: edariErr.message || err.message || 'فشل تصدير PDF' });
-    }
+    res.status(400).json({ ok: false, error: err.message || 'فشل تصدير PDF' });
   }
 });
 

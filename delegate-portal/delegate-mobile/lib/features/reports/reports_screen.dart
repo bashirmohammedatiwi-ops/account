@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/delegate_api.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
-import '../../core/widgets/ed_page_scroll.dart';
 import '../../core/widgets/adaptive_shell.dart';
 import '../../core/widgets/ed_components.dart';
 import '../../models/models.dart';
@@ -139,6 +138,50 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     );
   }
 
+  Widget _resultsPanel() {
+    if (_loading && _result == null) return const LoadingView(message: 'جاري تحميل التقرير...');
+    if (_result == null) {
+      return const EmptyState(message: 'حدّد المعايير واضغط «عرض التقرير»', icon: Icons.bar_chart_rounded);
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      children: [
+        EdStatsBar(
+          items: [
+            (label: 'مبيعات', value: fmtMoney(_result!.summary.salesAmount), color: AppColors.success),
+            (label: 'مردود', value: fmtMoney(_result!.summary.returnsAmount), color: AppColors.danger),
+            (label: 'صافي', value: fmtMoney(_result!.summary.netAmount), color: AppColors.navy),
+          ],
+        ),
+        const SizedBox(height: 16),
+        const EdSectionHeader(title: 'الفواتير', subtitle: 'اضغط لعرض التفاصيل'),
+        ..._result!.invoices.map((inv) {
+          final accent = inv.isReturn ? AppColors.danger : AppColors.moduleReports;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: EdNavCard(
+              icon: inv.isReturn ? Icons.undo_rounded : Icons.receipt_long_rounded,
+              title: '${inv.isReturn ? 'مردود' : 'فاتورة'} ${inv.invoiceNum}',
+              subtitle: '${inv.customerName ?? ''} · ${fmtDate(inv.date)}',
+              accent: accent,
+              trailing: fmtMoney(inv.amount),
+              onTap: () => context.push('/invoice/${inv.ref}?by=auto${inv.accSeq != null ? '&acc=${inv.accSeq}' : ''}'),
+            ),
+          );
+        }),
+        if (_result!.invoices.length < _result!.total)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: OutlinedButton(
+              onPressed: _loading ? null : () => _run(loadMore: true),
+              child: _loading ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('تحميل المزيد'),
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppPage(
@@ -147,69 +190,10 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       subtitle: 'ملخص وقائمة الفواتير',
       showBack: true,
       onBack: () => context.go('/home'),
-      child: CustomScrollView(
-        primary: false,
-        physics: edPageScrollPhysics,
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            sliver: SliverToBoxAdapter(child: _filtersPanel()),
-          ),
-          SliverToBoxAdapter(child: _resultsSliverContent(context)),
-        ],
-      ),
-    );
-  }
-
-  Widget _resultsSliverContent(BuildContext context) {
-    if (_loading && _result == null) {
-      return const Padding(padding: EdgeInsets.all(32), child: LoadingView(message: 'جاري تحميل التقرير...'));
-    }
-    if (_result == null) {
-      return const Padding(
-        padding: EdgeInsets.all(32),
-        child: EmptyState(message: 'حدّد المعايير واضغط «عرض التقرير»', icon: Icons.bar_chart_rounded),
-      );
-    }
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, 16, 16, EdPageInsets.bottom(context)),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          EdStatsBar(
-            items: [
-              (label: 'مبيعات', value: fmtMoney(_result!.summary.salesAmount), color: AppColors.success),
-              (label: 'مردود', value: fmtMoney(_result!.summary.returnsAmount), color: AppColors.danger),
-              (label: 'صافي', value: fmtMoney(_result!.summary.netAmount), color: AppColors.navy),
-            ],
-          ),
-          const SizedBox(height: 16),
-          const EdSectionHeader(title: 'الفواتير', subtitle: 'اضغط لعرض التفاصيل'),
-          ..._result!.invoices.map((inv) {
-            final accent = inv.isReturn ? AppColors.danger : AppColors.moduleReports;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: EdNavCard(
-                icon: inv.isReturn ? Icons.undo_rounded : Icons.receipt_long_rounded,
-                title: '${inv.isReturn ? 'مردود' : 'فاتورة'} ${inv.invoiceNum}',
-                subtitle: '${inv.customerName ?? ''} · ${fmtDate(inv.date)}',
-                accent: accent,
-                trailing: fmtMoney(inv.amount),
-                onTap: () => context.push('/invoice/${inv.ref}?by=auto${inv.accSeq != null ? '&acc=${inv.accSeq}' : ''}'),
-              ),
-            );
-          }),
-          if (_result!.invoices.length < _result!.total)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: OutlinedButton(
-                onPressed: _loading ? null : () => _run(loadMore: true),
-                child: _loading
-                    ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('تحميل المزيد'),
-              ),
-            ),
+          Padding(padding: const EdgeInsets.all(16), child: _filtersPanel()),
+          Expanded(child: _resultsPanel()),
         ],
       ),
     );

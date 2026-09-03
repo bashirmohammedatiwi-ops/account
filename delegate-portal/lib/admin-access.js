@@ -20,6 +20,17 @@ function isLocalClient(req) {
   return ip === '127.0.0.1' || ip === '::1' || ip === '';
 }
 
+/** Private LAN subnets — secondary desktops on the same network as the main server. */
+function isPrivateLanClient(req) {
+  const ip = clientIp(req);
+  if (isLocalClient(req)) return true;
+  if (!ip) return false;
+  if (ip.startsWith('192.168.')) return true;
+  if (ip.startsWith('10.')) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(ip)) return true;
+  return false;
+}
+
 function adminAuthPolicy() {
   const global = process.env.ADMIN_REQUIRE_AUTH === '1';
   const lanOnly = process.env.LAN_REQUIRE_AUTH === '1';
@@ -29,7 +40,7 @@ function adminAuthPolicy() {
 function shouldRequireAdminAuth(req) {
   const { global, lanOnly } = adminAuthPolicy();
   if (global) return true;
-  if (lanOnly && !isLocalClient(req)) return true;
+  if (lanOnly && !isPrivateLanClient(req)) return true;
   return false;
 }
 
@@ -56,6 +67,7 @@ module.exports = {
   PUBLIC_ADMIN_PATHS,
   clientIp,
   isLocalClient,
+  isPrivateLanClient,
   adminAuthPolicy,
   shouldRequireAdminAuth,
   optionalAuthAdmin,

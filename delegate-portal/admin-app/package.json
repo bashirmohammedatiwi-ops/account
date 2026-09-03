@@ -1,6 +1,6 @@
 {
   "name": "edari-admin-desktop",
-  "version": "1.0.160",
+  "version": "1.0.185",
   "description": "Edari Admin — لوحة تحكم الحسابات والمندوبين",
   "main": "electron/main.js",
   "author": "Edari",
@@ -16,8 +16,8 @@
     "build:installer": "node scripts/set-app-mode.js default && npm run prepare-build && electron-builder --win nsis"
   },
   "build": {
-    "appId": "com.edari.admin",
-    "productName": "Edari Admin",
+    "appId": "com.edari.admin.server",
+    "productName": "Edari Admin Server",
     "icon": "icons/app-icon.ico",
     "directories": {
       "output": "dist"
@@ -36,8 +36,8 @@
         "to": "edari-reader"
       },
       {
-        "from": "build-resources/node",
-        "to": "node"
+        "from": "build-resources/node-portable",
+        "to": "node-portable"
       },
       {
         "from": "icons/app-icon-256.png",
@@ -54,8 +54,7 @@
         }
       ],
       "icon": "icons/app-icon.ico",
-      "artifactName": "Edari-Admin-${version}.${ext}",
-      "signAndEditExecutable": false
+      "artifactName": "Edari-Admin-${version}.${ext}"
     },
     "portable": {
       "artifactName": "Edari-Admin-Portable-${version}.exe"
@@ -77,6 +76,7 @@
     "electron": "^34.0.0",
     "electron-builder": "^25.1.8",
     "png-to-ico": "^3.0.1",
+    "rcedit": "^5.0.2",
     "sharp": "^0.34.5"
   }
 }

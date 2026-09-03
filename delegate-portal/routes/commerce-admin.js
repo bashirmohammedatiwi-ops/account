@@ -578,15 +578,18 @@ router.get('/receipts/accounts/search', (req, res) => {
   if (isCash && vagueCash) {
     rows = db.prepare(`
       SELECT seq, num, name1, sub_count FROM accounts
-      WHERE name1 LIKE '%صندوق%' OR name1 LIKE '%صناديق%'
+      WHERE name1 LIKE '%صندوق%' OR name1 LIKE '%صناديق%' OR name1 LIKE '%نقد%'
+         OR name1 LIKE '%نقدية%' OR name1 LIKE '%خزينة%' OR name1 LIKE '%تصفية%'
+         OR num LIKE '12104%'
       ORDER BY CASE WHEN CAST(sub_count AS INTEGER) = 0 THEN 0 ELSE 1 END, num
       LIMIT 80
     `).all();
   } else if (isCash) {
     rows = db.prepare(`
       SELECT seq, num, name1, sub_count FROM accounts
-      WHERE name1 LIKE '%صندوق%' OR name1 LIKE '%صناديق%'
-         OR num LIKE ? OR name1 LIKE ?
+      WHERE name1 LIKE '%صندوق%' OR name1 LIKE '%صناديق%' OR name1 LIKE '%نقد%'
+         OR name1 LIKE '%نقدية%' OR name1 LIKE '%خزينة%' OR name1 LIKE '%تصفية%'
+         OR num LIKE '12104%' OR num LIKE ? OR name1 LIKE ?
       ORDER BY CASE WHEN CAST(sub_count AS INTEGER) = 0 THEN 0 ELSE 1 END, num
       LIMIT 80
     `).all(like, like);

@@ -19,59 +19,19 @@ int? _jsonIntOrNull(dynamic value) {
 }
 
 class Agent {
-  const Agent({
-    required this.id,
-    required this.name,
-    required this.username,
-    this.delegateRole = 'primary',
-    this.delegateRoleLabel = 'مندوب رئيسي',
-    this.parentAgentId,
-    this.parentAgentName = '',
-    this.secondaryCount = 0,
-    this.canCreateReceipt = true,
-    this.canCreateDeliveryReceipt = true,
-  });
+  const Agent({required this.id, required this.name, required this.username});
 
   final int id;
   final String name;
   final String username;
-  final String delegateRole;
-  final String delegateRoleLabel;
-  final int? parentAgentId;
-  final String parentAgentName;
-  final int secondaryCount;
-  final bool canCreateReceipt;
-  final bool canCreateDeliveryReceipt;
-
-  bool get isSecondary => delegateRole == 'secondary';
-  bool get isPrimary => !isSecondary;
 
   factory Agent.fromJson(Map<String, dynamic> json) => Agent(
         id: (json['id'] as num).toInt(),
         name: '${json['name'] ?? ''}',
         username: '${json['username'] ?? ''}',
-        delegateRole: '${json['delegateRole'] ?? json['delegate_role'] ?? 'primary'}',
-        delegateRoleLabel: '${json['delegateRoleLabel'] ?? json['delegate_role_label'] ?? 'مندوب رئيسي'}',
-        parentAgentId: _jsonIntOrNull(json['parentAgentId']) ?? _jsonIntOrNull(json['parent_agent_id']),
-        parentAgentName: '${json['parentAgentName'] ?? json['parent_agent_name'] ?? ''}',
-        secondaryCount: _jsonInt(json['secondaryCount'] ?? json['secondary_count']),
-        canCreateReceipt: json['canCreateReceipt'] == true || json['can_create_receipt'] == true
-            || (json['delegateRole'] ?? json['delegate_role'] ?? 'primary') != 'secondary',
-        canCreateDeliveryReceipt: json['canCreateDeliveryReceipt'] != false,
       );
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'username': username,
-        'delegateRole': delegateRole,
-        'delegateRoleLabel': delegateRoleLabel,
-        'parentAgentId': parentAgentId,
-        'parentAgentName': parentAgentName,
-        'secondaryCount': secondaryCount,
-        'canCreateReceipt': canCreateReceipt,
-        'canCreateDeliveryReceipt': canCreateDeliveryReceipt,
-      };
+  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'username': username};
 }
 
 class AccountTree {
@@ -588,14 +548,6 @@ class DeliveryReceipt {
     required this.status,
     required this.statusLabel,
     required this.amount,
-    this.agentId,
-    this.agentName,
-    this.isTeamDelivery = false,
-    this.handoverStatus = 'pending',
-    this.handoverStatusLabel = '',
-    this.handoverAt,
-    this.canMarkHandover = false,
-    this.canCreateReceipt = false,
     this.customerName,
     this.customerNum,
     this.customerAccSeq,
@@ -614,14 +566,6 @@ class DeliveryReceipt {
   final String status;
   final String statusLabel;
   final num amount;
-  final int? agentId;
-  final String? agentName;
-  final bool isTeamDelivery;
-  final String handoverStatus;
-  final String handoverStatusLabel;
-  final String? handoverAt;
-  final bool canMarkHandover;
-  final bool canCreateReceipt;
   final String? customerName;
   final String? customerNum;
   final String? customerAccSeq;
@@ -634,8 +578,8 @@ class DeliveryReceipt {
   final String? linkedReceiptNo;
   final String? createdAt;
 
-  bool get canDelete => false;
-  bool get handoverReceived => handoverStatus == 'received';
+  bool get canDelete => false; // الحذف من لوحة التحكم فقط
+  bool get canCreateReceipt => status == 'issued' && receiptId == null;
 
   factory DeliveryReceipt.fromJson(Map<String, dynamic> json) => DeliveryReceipt(
         id: _jsonInt(json['id']),
@@ -643,14 +587,6 @@ class DeliveryReceipt {
         status: '${json['status'] ?? ''}',
         statusLabel: '${json['statusLabel'] ?? json['status_label'] ?? ''}',
         amount: _jsonNum(json['amount']),
-        agentId: _jsonIntOrNull(json['agentId']) ?? _jsonIntOrNull(json['agent_id']),
-        agentName: json['agentName'] as String? ?? json['agent_name'] as String?,
-        isTeamDelivery: json['isTeamDelivery'] == true || json['is_team_delivery'] == true,
-        handoverStatus: '${json['handoverStatus'] ?? json['handover_status'] ?? 'pending'}',
-        handoverStatusLabel: '${json['handoverStatusLabel'] ?? json['handover_status_label'] ?? ''}',
-        handoverAt: json['handoverAt'] as String? ?? json['handover_at'] as String?,
-        canMarkHandover: json['canMarkHandover'] == true || json['can_mark_handover'] == true,
-        canCreateReceipt: json['canCreateReceipt'] == true || json['can_create_receipt'] == true,
         customerName: json['customerName'] as String? ?? json['customer_name'] as String?,
         customerNum: json['customerNum'] as String? ?? json['customer_num'] as String?,
         customerAccSeq: json['customerAccSeq'] as String? ?? json['customer_acc_seq'] as String?,

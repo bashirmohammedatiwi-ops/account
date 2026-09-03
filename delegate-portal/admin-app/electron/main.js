@@ -1,5 +1,6 @@
 const { app, BrowserWindow, Menu, ipcMain, Tray, nativeImage, dialog } = require('electron');
-const { spawn } = require('child_process');
+const { spawn, execFile } = require('child_process');
+const { promisify } = require('util');
 const path = require('path');
 const http = require('http');
 const https = require('https');
@@ -24,36 +25,110 @@ function readLanClientBackendUrl() {
   }
 }
 
-function defaultBackendUrl() {
-  if (ADMIN_LAN_CLIENT) return readLanClientBackendUrl();
-  return 'http://187.124.23.65:5005';
+function saveLanClientBackendUrl(url) {
+  try {
+    fs.mkdirSync(path.dirname(getLanClientConfigPath()), { recursive: true });
+    fs.writeFileSync(getLanClientConfigPath(), JSON.stringify({ backendUrl: url }, null, 2), 'utf8');
+  } catch { /* non-fatal */ }
 }
 
-let BACKEND_URL = (process.env.BACKEND_URL || defaultBackendUrl()).replace(/\/$/, '');
+const REMOTE_BACKEND_URL = 'http://187.124.23.65:5005';
+const LAN_PROBE_PORTS = [4100, 5005];
+const LAN_PROBE_SUBNETS = ['192.168.75', '192.168.1', '192.168.0', '10.0.0'];
+
+function normalizeBackendUrl(url) {
+  return String(url || '').trim().replace(/\/$/, '');
+}
+
+function isPrivateBackendUrl(url) {
+  try {
+    return /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * LAN addresses worth probing when looking for the machine that owns Edari.
+ * A saved address is tried first, then a short sweep of the shop subnets.
+ */
+function lanProbeCandidates() {
+  const saved = normalizeBackendUrl(readLanClientBackendUrl());
+  const env = normalizeBackendUrl(process.env.EDARI_HOST_URL);
+  const lan = [];
+  for (const subnet of LAN_PROBE_SUBNETS) {
+    for (const host of [1, 10, 100, 254]) {
+      for (const port of LAN_PROBE_PORTS) {
+        lan.push(`http://${subnet}.${host}:${port}`);
+      }
+    }
+  }
+  return [...new Set([
+    ...(isPrivateBackendUrl(env) ? [env] : []),
+    ...(isPrivateBackendUrl(saved) ? [saved] : []),
+    ...lan
+  ].filter(Boolean))];
+}
+
+/**
+ * Find the LAN machine running Edari Admin Server. Live Edari work (posting
+ * receipts, reading trees over ODBC) can only run there, so the client routes
+ * those calls to it even though it reads its data from the internet server.
+ */
+async function pickEdariHost() {
+  for (const url of lanProbeCandidates()) {
+    if (!(await checkHealthOnce(`${url}/api/health`, 1200))) continue;
+    if (await checkLanInfoOnce(url, 2000)) return url;
+  }
+  return '';
+}
+
+/**
+ * Delegates submit receipts from their phones over the internet, so the online
+ * server is the only place that holds the full picture. Both machines read
+ * their data from it to stay identical.
+ *
+ * The page itself is served by the machine that owns Edari, so live Edari calls
+ * stay same-origin and the secondary machine reaches Edari across the LAN.
+ */
+const REMOTE_DATA_URL = normalizeBackendUrl(
+  process.env.DATA_BACKEND_URL || process.env.BACKEND_URL || REMOTE_BACKEND_URL
+);
+
+let BACKEND_URL = '';
+let DATA_BACKEND_URL = '';
+let EDARI_HOST_URL = '';
 const USE_LOCAL_SERVER = process.env.USE_LOCAL_SERVER === '1' || appMode.mode === 'lan-server';
 const LAN_SERVER = process.env.LAN_SERVER === '1' || appMode.mode === 'lan-server';
 const USE_BUNDLED_UI = app.isPackaged && process.env.USE_REMOTE !== '1' && !USE_LOCAL_SERVER && !ADMIN_LAN_CLIENT;
 const USE_REMOTE_UI = !USE_LOCAL_SERVER && !USE_BUNDLED_UI;
 const BUNDLED_ADMIN_PORT = PORT;
 
+/**
+ * Empty means "read from whichever server delivered the page" — the offline
+ * fallback, where the LAN database still holds accounts, journal and trees.
+ */
+async function pickDataBackend() {
+  return (await checkHealthOnce(`${REMOTE_DATA_URL}/api/health`, 5000)) ? REMOTE_DATA_URL : '';
+}
+
 function getAdminLoadTarget() {
-  if (USE_LOCAL_SERVER) {
-    return { type: 'url', url: `http://127.0.0.1:${PORT}/admin` };
-  }
   if (USE_BUNDLED_UI) {
     return { type: 'url', url: `http://127.0.0.1:${BUNDLED_ADMIN_PORT}/admin/` };
   }
-  if (ADMIN_LAN_CLIENT && !BACKEND_URL) {
-    return { type: 'setup' };
+  if (USE_LOCAL_SERVER) {
+    return { type: 'url', url: `http://127.0.0.1:${PORT}/admin` };
   }
   if (ADMIN_LAN_CLIENT) {
-    return { type: 'url', url: `${BACKEND_URL}/admin` };
+    return EDARI_HOST_URL
+      ? { type: 'url', url: `${EDARI_HOST_URL}/admin` }
+      : { type: 'setup' };
   }
-  return { type: 'url', url: `${BACKEND_URL}/admin` };
+  return { type: 'url', url: `${BACKEND_URL || REMOTE_DATA_URL}/admin` };
 }
 const START_HIDDEN = process.argv.includes('--background') || process.argv.includes('--hidden');
 
-const edariPostingJobs = new Map();
+const execFileAsync = promisify(execFile);
 
 function edariPostingKey(kind, payload = {}) {
   const id = payload.id ?? payload.receiptId ?? payload.requestId;
@@ -115,12 +190,50 @@ function getEdariReaderRoot() {
   return path.join(__dirname, '..', '..', '..', 'edari-reader');
 }
 
-function getNodeBin() {
+let cachedNodeRunner = null;
+
+function resolveNodeRunner() {
+  if (cachedNodeRunner) return cachedNodeRunner;
+  const candidates = [];
   if (app.isPackaged) {
-    const bundled = path.join(process.resourcesPath, 'node', 'node.exe');
-    if (fs.existsSync(bundled)) return bundled;
+    candidates.push(path.join(process.resourcesPath, 'node-portable', 'node.exe'));
+    candidates.push(path.join(process.resourcesPath, 'node', 'node.exe'));
+    candidates.push(path.join(path.dirname(process.execPath), 'resources', 'node-portable', 'node.exe'));
+    candidates.push(path.join(path.dirname(process.execPath), 'resources', 'node', 'node.exe'));
   }
-  return process.platform === 'win32' ? 'node.exe' : 'node';
+  candidates.push(path.join(__dirname, '..', 'build-resources', 'node-portable', 'node.exe'));
+  candidates.push(path.join(__dirname, '..', 'build-resources', 'node', 'node.exe'));
+  for (const candidate of candidates) {
+    try {
+      if (candidate && fs.existsSync(candidate)) {
+        cachedNodeRunner = { executable: candidate, envExtra: {}, bundled: true };
+        return cachedNodeRunner;
+      }
+    } catch { /* ignore */ }
+  }
+  cachedNodeRunner = {
+    executable: process.execPath,
+    envExtra: { ELECTRON_RUN_AS_NODE: '1' },
+    bundled: false
+  };
+  return cachedNodeRunner;
+}
+
+function getNodeBin() {
+  return resolveNodeRunner().executable;
+}
+
+function applyNodeRunnerEnv(extra = {}) {
+  const { envExtra } = resolveNodeRunner();
+  return { ...process.env, ...envExtra, ...extra };
+}
+
+function warnIfNodeBundleMissing() {
+  const runner = resolveNodeRunner();
+  if (!runner.bundled && (LAN_SERVER || USE_LOCAL_SERVER)) {
+    console.warn('node.exe المضمّن غير موجود — استخدام وضع احتياطي');
+  }
+  return runner;
 }
 
 function getSettingsPath() {
@@ -151,28 +264,128 @@ function getDatabasePath() {
 }
 
 function portalChildEnv(extra = {}) {
-  return {
-    ...process.env,
+  return applyNodeRunnerEnv({
     EDARI_READER_ROOT: getEdariReaderRoot(),
     NODE_BIN: getNodeBin(),
     DATABASE_PATH: getDatabasePath(),
     ...edariEnvExtra(),
     ...extra
-  };
+  });
 }
 
 function serverEnv() {
-  const portalDir = getPortalDir();
-  const bindHost = LAN_SERVER ? (process.env.HOST || '0.0.0.0') : '127.0.0.1';
-  return {
-    ...process.env,
+  const bindHost = LAN_SERVER ? '0.0.0.0' : (process.env.HOST || '127.0.0.1');
+  return applyNodeRunnerEnv({
     PORT: String(PORT),
     HOST: bindHost,
     LAN_SERVER: LAN_SERVER ? '1' : '',
     DATABASE_PATH: getDatabasePath(),
     EDARI_READER_ROOT: getEdariReaderRoot(),
     NODE_BIN: getNodeBin()
-  };
+  });
+}
+
+function getLanHostModule() {
+  return require(path.join(getPortalDir(), 'lib', 'lan-host'));
+}
+
+function getLanAdvertiseIp() {
+  try {
+    const lanHost = getLanHostModule();
+    return lanHost.getEthernetLanAddress() || lanHost.getPrimaryLanAddress();
+  } catch {
+    return null;
+  }
+}
+
+function checkHealthOnce(url, timeoutMs = 3500) {
+  return new Promise((resolve) => {
+    const req = http.get(url, { timeout: timeoutMs }, (res) => {
+      res.resume();
+      resolve(res.statusCode === 200);
+    });
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(false);
+    });
+  });
+}
+
+function checkLanInfoOnce(baseUrl, timeoutMs = 3500) {
+  return new Promise((resolve) => {
+    const target = `${String(baseUrl || '').replace(/\/$/, '')}/api/admin/lan-info`;
+    const req = http.get(target, { timeout: timeoutMs }, (res) => {
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        try {
+          const data = body ? JSON.parse(body) : {};
+          resolve(res.statusCode === 200 && data.ok && data.role === 'server');
+        } catch {
+          resolve(false);
+        }
+      });
+    });
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(false);
+    });
+  });
+}
+
+async function getListeningPids(port) {
+  if (process.platform !== 'win32') return [];
+  try {
+    const { stdout } = await execFileAsync('netstat', ['-ano'], { windowsHide: true });
+    const pids = new Set();
+    const portNeedle = `:${port}`;
+    for (const line of stdout.split('\n')) {
+      if (!line.includes('LISTENING') || !line.includes(portNeedle)) continue;
+      const parts = line.trim().split(/\s+/);
+      const pid = Number(parts[parts.length - 1]);
+      if (pid > 0) pids.add(pid);
+    }
+    return [...pids];
+  } catch {
+    return [];
+  }
+}
+
+async function releasePort(port) {
+  if (serverProcess) {
+    try { serverProcess.kill(); } catch { /* ignore */ }
+    serverProcess = null;
+    startedServer = false;
+    await new Promise((r) => setTimeout(r, 600));
+  }
+  const pids = await getListeningPids(port);
+  for (const pid of pids) {
+    if (pid === process.pid) continue;
+    try { process.kill(pid); } catch { /* ignore */ }
+  }
+  if (pids.length) await new Promise((r) => setTimeout(r, 900));
+}
+
+async function ensureLanFirewall(port) {
+  if (process.platform !== 'win32' || !LAN_SERVER) return;
+  const ruleName = `Edari Admin LAN ${port}`;
+  try {
+    await execFileAsync('netsh', [
+      'advfirewall', 'firewall', 'add', 'rule',
+      `name=${ruleName}`, 'dir=in', 'action=allow', 'protocol=TCP',
+      `localport=${port}`, 'profile=private'
+    ], { windowsHide: true });
+  } catch { /* rule may already exist */ }
+}
+
+async function isLanServerReachable(port) {
+  const ip = getLanAdvertiseIp();
+  if (!ip) return false;
+  const base = `http://${ip}:${port}`;
+  if (!(await checkHealthOnce(`${base}/api/health`))) return false;
+  return checkLanInfoOnce(base);
 }
 
 function checkHealth(url, maxMs = 45000) {
@@ -192,20 +405,40 @@ function checkHealth(url, maxMs = 45000) {
   });
 }
 
-function startBackend() {
+async function startBackend() {
   const localPort = USE_BUNDLED_UI ? BUNDLED_ADMIN_PORT : PORT;
-  return new Promise((resolve, reject) => {
-    http.get(`http://127.0.0.1:${localPort}/api/health`, (res) => {
-      if (res.statusCode === 200) {
-        startedServer = false;
-        resolve();
-      } else {
-        spawnServer().then(resolve).catch(reject);
-      }
-    }).on('error', () => {
-      spawnServer().then(resolve).catch(reject);
-    });
-  });
+
+  if (LAN_SERVER) {
+    await ensureLanFirewall(localPort);
+    if (await isLanServerReachable(localPort)) {
+      startedServer = false;
+      return;
+    }
+    const localHealth = await checkHealthOnce(`http://127.0.0.1:${localPort}/api/health`);
+    const realLanBackend = await checkLanInfoOnce(`http://127.0.0.1:${localPort}`);
+    if (localHealth && !realLanBackend) {
+      await releasePort(localPort);
+    } else if (localHealth && realLanBackend && !(await isLanServerReachable(localPort))) {
+      await releasePort(localPort);
+    }
+    await spawnServer();
+    await ensureLanFirewall(localPort);
+    const ip = getLanAdvertiseIp();
+    if (ip && !(await isLanServerReachable(localPort))) {
+      throw new Error(
+        `السيرفر يعمل محلياً لكن غير متاح عبر Ethernet (${ip}:${localPort}). `
+        + 'أعد تشغيل Edari Admin Server كمسؤول أو اسمح للمنفذ في جدار الحماية.'
+      );
+    }
+    return;
+  }
+
+  const localOk = await checkHealthOnce(`http://127.0.0.1:${localPort}/api/health`);
+  if (localOk) {
+    startedServer = false;
+    return;
+  }
+  await spawnServer();
 }
 
 function spawnServer() {
@@ -224,14 +457,21 @@ function spawnServer() {
     }
 
     const serverScript = path.join(portalDir, 'server.js');
-    serverProcess = spawn(getNodeBin(), [serverScript], {
+    const nodeBin = getNodeBin();
+    serverProcess = spawn(nodeBin, [serverScript], {
       cwd: portalDir,
       env: serverEnv(),
       stdio: 'ignore',
       windowsHide: true
     });
     startedServer = true;
-    serverProcess.on('error', reject);
+    serverProcess.on('error', (err) => {
+      if (err?.code === 'ENOENT') {
+        reject(new Error('تعذّر تشغيل السيرفر — أعد تثبيت Edari Admin Server (Setup) وليس Edari Admin العادي'));
+        return;
+      }
+      reject(err);
+    });
     checkHealth(`http://127.0.0.1:${PORT}`).then(resolve).catch(reject);
   });
 }
@@ -314,6 +554,22 @@ function parseSyncResult(stdout) {
 
 let activeSyncPromise = null;
 
+/**
+ * On the LAN server the sync must fill both databases: the local one the
+ * secondary machine reads over Ethernet, and the internet one used by mobile.
+ * sync.js takes a comma-separated list and reads Edari only once.
+ */
+function buildSyncTargets(serverUrl) {
+  const targets = [];
+  const primary = normalizeBackendUrl(serverUrl || BACKEND_URL);
+  if (primary) targets.push(primary);
+  if (LAN_SERVER) {
+    targets.push(`http://127.0.0.1:${PORT}`);
+    targets.push(REMOTE_BACKEND_URL);
+  }
+  return [...new Set(targets)].join(',');
+}
+
 function runLocalSyncScript(serverUrl, syncKey, treeSeqs = [], options = {}) {
   if (activeSyncPromise) return activeSyncPromise;
 
@@ -336,7 +592,7 @@ function runLocalSyncScript(serverUrl, syncKey, treeSeqs = [], options = {}) {
     const nodeBin = getNodeBin();
     let stdout = '';
 
-    const syncTarget = (serverUrl || BACKEND_URL).replace(/\/$/, '');
+    const syncTarget = buildSyncTargets(serverUrl);
 
     const child = spawn(nodeBin, [
       script,
@@ -472,6 +728,56 @@ function showMainWindow() {
   mainWindow.focus();
 }
 
+let lanRecoveryTimer = null;
+
+/**
+ * The Edari host is handed to the page through preload launch arguments, which
+ * are fixed per window — so a changed host needs a fresh window, not a reload.
+ */
+function recreateAdminWindow() {
+  const wasVisible = Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible());
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    const old = mainWindow;
+    mainWindow = null;
+    old.destroy();
+  }
+  createWindow({ show: wasVisible || !START_HIDDEN });
+}
+
+/**
+ * The LAN link can drop while the client is open. Re-probe every backend and
+ * reload as soon as one answers, instead of leaving a dead error page.
+ */
+async function recoverLanClientConnection(failedUrl) {
+  if (lanRecoveryTimer) return;
+  const attempt = async () => {
+    if (ADMIN_LAN_CLIENT) {
+      EDARI_HOST_URL = await pickEdariHost();
+      if (!EDARI_HOST_URL) return false;
+      saveLanClientBackendUrl(EDARI_HOST_URL);
+    }
+    DATA_BACKEND_URL = await pickDataBackend();
+    BACKEND_URL = DATA_BACKEND_URL || REMOTE_DATA_URL;
+    const target = getAdminLoadTarget();
+    if (target.type !== 'url') return false;
+    recreateAdminWindow();
+    return true;
+  };
+
+  if (await attempt()) return;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.loadFile(path.join(__dirname, 'lan-setup.html'), {
+      query: { failed: String(failedUrl || '') }
+    }).catch(() => { /* ignore */ });
+  }
+  lanRecoveryTimer = setInterval(async () => {
+    if (await attempt()) {
+      clearInterval(lanRecoveryTimer);
+      lanRecoveryTimer = null;
+    }
+  }, 5000);
+}
+
 function createWindow({ show = !START_HIDDEN } = {}) {
   const titles = {
     'lan-server': 'Edari Admin Server — الجهاز الرئيسي',
@@ -495,7 +801,10 @@ function createWindow({ show = !START_HIDDEN } = {}) {
       additionalArguments: isSetup ? [] : [
         `--edari-backend=${BACKEND_URL}`,
         `--edari-remote=${USE_REMOTE_UI ? '1' : '0'}`,
-        `--edari-lan-client=${ADMIN_LAN_CLIENT ? '1' : '0'}`
+        `--edari-lan-client=${ADMIN_LAN_CLIENT ? '1' : '0'}`,
+        `--edari-api-same-origin=${USE_LOCAL_SERVER || ADMIN_LAN_CLIENT ? '1' : '0'}`,
+        `--edari-host=${EDARI_HOST_URL}`,
+        `--edari-data-backend=${DATA_BACKEND_URL}`
       ]
     }
   });
@@ -510,6 +819,13 @@ function createWindow({ show = !START_HIDDEN } = {}) {
     mainWindow.loadFile(path.join(__dirname, 'lan-setup.html'));
   } else {
     mainWindow.loadURL(target.url);
+  }
+
+  if (!USE_BUNDLED_UI) {
+    mainWindow.webContents.on('did-fail-load', (_e, code, _desc, url, isMainFrame) => {
+      if (!isMainFrame || code === -3) return;
+      void recoverLanClientConnection(url);
+    });
   }
 
   mainWindow.on('close', (e) => {
@@ -553,7 +869,42 @@ function createWindow({ show = !START_HIDDEN } = {}) {
         }
       ]
     },
-    { label: 'عرض', submenu: [{ role: 'reload' }, { role: 'toggleDevTools' }] }
+    { label: 'عرض', submenu: [{ role: 'reload' }, { role: 'toggleDevTools' }] },
+    ...(ADMIN_LAN_CLIENT ? [{
+      label: 'الاتصال',
+      submenu: [
+        {
+          label: 'إعادة البحث عن السيرفر',
+          accelerator: 'CmdOrCtrl+Shift+R',
+          click: async () => {
+            EDARI_HOST_URL = await pickEdariHost();
+            if (EDARI_HOST_URL) saveLanClientBackendUrl(EDARI_HOST_URL);
+            DATA_BACKEND_URL = await pickDataBackend();
+            BACKEND_URL = DATA_BACKEND_URL || REMOTE_DATA_URL;
+            recreateAdminWindow();
+            dialog.showMessageBox({
+              type: EDARI_HOST_URL ? 'info' : 'warning',
+              title: 'حالة الاتصال',
+              message: [
+                EDARI_HOST_URL
+                  ? `الجهاز الرئيسي (Edari): ${EDARI_HOST_URL}`
+                  : 'لم يُعثر على الجهاز الرئيسي.\nتأكد من تشغيل «Edari Admin Server» وتوصيل كابل الشبكة.',
+                DATA_BACKEND_URL
+                  ? `مصدر البيانات: ${DATA_BACKEND_URL}`
+                  : 'سيرفر الإنترنت غير متاح — سيتم عرض بيانات الجهاز الرئيسي فقط.'
+              ].join('\n')
+            });
+          }
+        },
+        {
+          label: 'تغيير عنوان الجهاز الرئيسي',
+          accelerator: 'CmdOrCtrl+Shift+L',
+          click: () => {
+            mainWindow?.loadFile(path.join(__dirname, 'lan-setup.html'));
+          }
+        }
+      ]
+    }] : [])
   ]));
 }
 
@@ -728,8 +1079,21 @@ function loadEdariStatementModule(forceReload = false) {
 }
 
 async function queryEdariAccountStatementsInProcess(params = {}) {
-  const { queryEdariAccountStatements } = loadEdariStatementModule(true);
+  const { queryEdariAccountStatements } = loadEdariStatementModule();
   return queryEdariAccountStatements(params);
+}
+
+/**
+ * pdf-export يبني خطوط Cairo/Roboto عند التحميل، لذلك نحمّله مرة واحدة —
+ * إعادة تحميله لكل تصدير كانت أبطأ خطوة في توليد التقارير.
+ */
+let pdfExportModule = null;
+
+function loadPdfExportModule() {
+  if (!pdfExportModule) {
+    pdfExportModule = require(path.join(getPortalDir(), 'lib', 'pdf-export.js'));
+  }
+  return pdfExportModule;
 }
 
 async function pullSyncSettingsFromRenderer() {
@@ -785,15 +1149,55 @@ function initBackgroundSync() {
   backgroundSync.init();
 }
 
-ipcMain.handle('lan-client:save-url', (_e, url) => {
-  const norm = String(url || '').trim().replace(/\/$/, '');
-  if (!norm) return { ok: false, error: 'عنوان فارغ' };
-  fs.mkdirSync(path.dirname(getLanClientConfigPath()), { recursive: true });
-  fs.writeFileSync(getLanClientConfigPath(), JSON.stringify({ backendUrl: norm }, null, 2), 'utf8');
-  BACKEND_URL = norm;
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.loadURL(`${BACKEND_URL}/admin`);
+function loadLanDefaults() {
+  try {
+    const p = path.join(getPortalDir(), 'lib', 'lan-defaults.js');
+    delete require.cache[require.resolve(p)];
+    return require(p);
+  } catch {
+    return {
+      LAN_PORTS: LAN_PROBE_PORTS,
+      LAN_PREFER_SUBNETS: LAN_PROBE_SUBNETS,
+      defaultPrefillUrl: () => 'http://192.168.75.1:4100',
+      quickProbeIps: () => LAN_PROBE_SUBNETS.flatMap((s) => [1, 10, 100, 254].map((h) => `${s}.${h}`))
+    };
   }
+}
+
+function notifyLanServerReady() {
+  if (!LAN_SERVER || !tray) return;
+  try {
+    const lanHost = require(path.join(getPortalDir(), 'lib', 'lan-host'));
+    const ip = lanHost.getEthernetLanAddress() || lanHost.getPrimaryLanAddress();
+    if (!ip) return;
+    const url = `http://${ip}:${PORT}`;
+    tray.displayBalloon?.({
+      title: 'Edari Admin Server',
+      content: `للأجهزة الثانوية (Ethernet):\n${url}`,
+      iconType: 'info'
+    });
+  } catch { /* ignore */ }
+}
+
+ipcMain.handle('lan-client:get-setup-config', () => {
+  const d = loadLanDefaults();
+  return {
+    ports: d.LAN_PORTS,
+    preferSubnets: d.LAN_PREFER_SUBNETS,
+    prefillUrl: d.defaultPrefillUrl(),
+    quickProbeIps: d.quickProbeIps(),
+    autoConnect: true
+  };
+});
+
+ipcMain.handle('lan-client:save-url', async (_e, url) => {
+  const norm = normalizeBackendUrl(url);
+  if (!norm) return { ok: false, error: 'عنوان فارغ' };
+  saveLanClientBackendUrl(norm);
+  EDARI_HOST_URL = norm;
+  DATA_BACKEND_URL = await pickDataBackend();
+  BACKEND_URL = DATA_BACKEND_URL || REMOTE_DATA_URL;
+  recreateAdminWindow();
   return { ok: true, backendUrl: norm };
 });
 
@@ -850,9 +1254,7 @@ ipcMain.handle('export-edari-sales-report-pdf', async (_e, params = {}) => {
   try {
     process.env.DATABASE_PATH = getDatabasePath();
     const report = params.report || await queryEdariSalesReportSerialized(params);
-    const pdfPath = path.join(getPortalDir(), 'lib', 'pdf-export.js');
-    delete require.cache[require.resolve(pdfPath)];
-    const { buildTreeSalesReportPdf, buildTreeSalesReportSummaryPdf } = require(pdfPath);
+    const { buildTreeSalesReportPdf, buildTreeSalesReportSummaryPdf } = loadPdfExportModule();
     const summaryOnly = Boolean(params.summaryOnly);
     const buildPdf = summaryOnly ? buildTreeSalesReportSummaryPdf : buildTreeSalesReportPdf;
     const buffer = await buildPdf(report);
@@ -885,9 +1287,7 @@ ipcMain.handle('export-edari-account-statements-pdf', async (_e, params = {}) =>
     const result = params.statements
       ? { statements: params.statements }
       : await queryEdariAccountStatementsInProcess(params);
-    const pdfPath = path.join(getPortalDir(), 'lib', 'pdf-export.js');
-    delete require.cache[require.resolve(pdfPath)];
-    const { buildAccountStatementsPdf } = require(pdfPath);
+    const { buildAccountStatementsPdf } = loadPdfExportModule();
     const buffer = await buildAccountStatementsPdf(result.statements || []);
     const from = params.dateFrom || result.period?.dateFrom || result.meta?.dateFrom;
     const to = params.dateTo || result.period?.dateTo || result.meta?.dateTo;
@@ -988,6 +1388,16 @@ ipcMain.handle('run-background-sync-now', async () => {
 let activePriceSyncPromise = null;
 const PRICE_SYNC_TIMEOUT_MS = 20 * 60 * 1000;
 
+function parseSyncResultLine(stdout) {
+  const jsonLine = String(stdout || '').split(/\r?\n/).reverse().find((line) => line.trim().startsWith('@SYNC_RESULT|'));
+  if (!jsonLine) return null;
+  try {
+    return JSON.parse(jsonLine.trim().slice('@SYNC_RESULT|'.length));
+  } catch {
+    return null;
+  }
+}
+
 function runPriceAppSyncScript({ serverUrl, syncKey, mode, posSqlServer, posSqlDatabase, posSqlUser, posSqlPassword } = {}) {
   if (activePriceSyncPromise) return activePriceSyncPromise;
 
@@ -998,6 +1408,8 @@ function runPriceAppSyncScript({ serverUrl, syncKey, mode, posSqlServer, posSqlD
     let stdout = '';
     let stderr = '';
     let settled = false;
+    let parsedResult = null;
+    let postResultKillTimer = null;
     const syncTarget = String(serverUrl || 'https://demaalhayaadelivery.online/price-api').replace(/\/$/, '');
     const syncMode = mode === 'full' ? 'full' : 'incremental';
     const syncStateFile = path.join(app.getPath('userData'), 'price-sync-state.json');
@@ -1024,6 +1436,7 @@ function runPriceAppSyncScript({ serverUrl, syncKey, mode, posSqlServer, posSqlD
       if (settled) return;
       settled = true;
       activePriceSyncPromise = null;
+      if (postResultKillTimer) clearTimeout(postResultKillTimer);
       try { child.kill('SIGTERM'); } catch { /* ignore */ }
       reject(new Error('انتهت مهلة مزامنة الأسعار (20 دقيقة) — جرّب «مزامنة كاملة» أو تحقق أن EdariNX يعمل'));
     }, PRICE_SYNC_TIMEOUT_MS);
@@ -1032,7 +1445,28 @@ function runPriceAppSyncScript({ serverUrl, syncKey, mode, posSqlServer, posSqlD
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      if (postResultKillTimer) clearTimeout(postResultKillTimer);
       fn();
+    };
+
+    const noteSyncResultLine = (line) => {
+      const trimmed = String(line || '').trim();
+      if (!trimmed.startsWith('@SYNC_RESULT|')) return;
+      try {
+        parsedResult = JSON.parse(trimmed.slice('@SYNC_RESULT|'.length));
+      } catch {
+        parsedResult = null;
+      }
+      // بعض عمليات ODBC/POS على Windows لا تُغلق العملية فوراً — أنهِ IPC عند ظهور النتيجة.
+      if (postResultKillTimer) clearTimeout(postResultKillTimer);
+      postResultKillTimer = setTimeout(() => {
+        if (settled) return;
+        finish(() => {
+          activePriceSyncPromise = null;
+          try { child.kill('SIGTERM'); } catch { /* ignore */ }
+          resolve(parsedResult || { ok: true });
+        });
+      }, 1500);
     };
 
     child.stdout.on('data', (d) => {
@@ -1040,7 +1474,9 @@ function runPriceAppSyncScript({ serverUrl, syncKey, mode, posSqlServer, posSqlD
       stdout += text;
       text.split(/\r?\n/).forEach((line) => {
         const trimmed = line.trim();
-        if (trimmed) pushSyncProgress(trimmed);
+        if (!trimmed) return;
+        noteSyncResultLine(trimmed);
+        pushSyncProgress(trimmed);
       });
     });
 
@@ -1063,6 +1499,10 @@ function runPriceAppSyncScript({ serverUrl, syncKey, mode, posSqlServer, posSqlD
     child.on('close', (code) => {
       finish(() => {
         activePriceSyncPromise = null;
+        if (parsedResult) {
+          resolve(parsedResult);
+          return;
+        }
         if (code !== 0) {
           const errFromStderr = stderr
             .trim()
@@ -1074,17 +1514,15 @@ function runPriceAppSyncScript({ serverUrl, syncKey, mode, posSqlServer, posSqlD
             .trim()
             .split(/\r?\n/)
             .map((line) => line.trim())
-            .filter((line) => line && !line.startsWith('@PROGRESS|'))
+            .filter((line) => line && !line.startsWith('@PROGRESS|') && !line.startsWith('@SYNC_RESULT|'))
             .pop();
           reject(new Error(errFromStderr || errFromStdout || 'فشلت مزامنة الأسعار'));
           return;
         }
-        const jsonLine = stdout.split(/\r?\n/).reverse().find((line) => line.startsWith('@SYNC_RESULT|'));
-        if (jsonLine) {
-          try {
-            resolve(JSON.parse(jsonLine.slice('@SYNC_RESULT|'.length)));
-            return;
-          } catch { /* fall through */ }
+        const parsed = parseSyncResultLine(stdout);
+        if (parsed) {
+          resolve(parsed);
+          return;
         }
         resolve({ ok: true });
       });
@@ -1171,11 +1609,36 @@ ipcMain.handle('post-edari-customer', async (_e, payload) => {
 function showStartupError(err) {
   const message = String(err?.message || err || 'خطأ غير معروف');
   console.error(message);
+  let title = 'Edari Admin — تعذّر التشغيل';
+  let hints;
+  if (LAN_SERVER || USE_LOCAL_SERVER) {
+    title = 'Edari Admin Server — تعذّر التشغيل';
+    const ip = getLanAdvertiseIp() || '192.168.75.1';
+    hints = [
+      'تأكد من:',
+      '• تثبيت Edari-Admin-Server-Setup (وليس Edari Admin العادي)',
+      `• تشغيل التطبيق كمسؤول (Run as administrator)`,
+      `• السماح للمنفذ ${PORT} في جدار الحماية`,
+      `• عنوان الأجهزة الثانوية: http://${ip}:${PORT}`
+    ].join('\n');
+  } else if (ADMIN_LAN_CLIENT) {
+    title = 'Edari Admin Client — تعذّر التشغيل';
+    hints = [
+      'تأكد من:',
+      '• Edari Admin Server يعمل على الجهاز الرئيسي',
+      '• العنوان: http://192.168.75.1:4100',
+      '• Ethernet متصل على نفس الشبكة'
+    ].join('\n');
+  } else {
+    hints = [
+      'تأكد من:',
+      '• اتصال الإنترنت',
+      `• أن السيرفر يعمل: ${BACKEND_URL}`,
+      '• إعادة تثبيت التطبيق إن استمرت المشكلة'
+    ].join('\n');
+  }
   if (!START_HIDDEN) {
-    dialog.showErrorBox(
-      'Edari Admin — تعذّر التشغيل',
-      `${message}\n\nتأكد من:\n• اتصال الإنترنت\n• أن السيرفر يعمل: ${BACKEND_URL}\n• إعادة تثبيت التطبيق إن استمرت المشكلة`
-    );
+    dialog.showErrorBox(title, `${message}\n\n${hints}`);
   }
 }
 
@@ -1183,17 +1646,23 @@ app.whenReady().then(async () => {
   try {
     process.env.DATABASE_PATH = getDatabasePath();
     if (USE_LOCAL_SERVER || USE_BUNDLED_UI) {
+      if (USE_LOCAL_SERVER) warnIfNodeBundleMissing();
       await startBackend();
-    } else if (ADMIN_LAN_CLIENT) {
-      if (BACKEND_URL) {
-        try { await checkHealth(BACKEND_URL); } catch { /* setup wizard in UI */ }
-      }
-    } else {
+    }
+
+    if (ADMIN_LAN_CLIENT) {
+      EDARI_HOST_URL = await pickEdariHost();
+      if (EDARI_HOST_URL) saveLanClientBackendUrl(EDARI_HOST_URL);
+    }
+    DATA_BACKEND_URL = await pickDataBackend();
+    BACKEND_URL = DATA_BACKEND_URL || REMOTE_DATA_URL;
+    if (!USE_LOCAL_SERVER && !USE_BUNDLED_UI && !ADMIN_LAN_CLIENT) {
       await checkHealth(BACKEND_URL);
     }
     initBackgroundSync();
     createTray();
     createWindow({ show: !START_HIDDEN });
+    notifyLanServerReady();
 
     if (START_HIDDEN) {
       setTimeout(async () => {

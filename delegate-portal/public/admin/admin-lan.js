@@ -14,6 +14,9 @@
   }
 
   function apiBase() {
+    if (typeof window.getLanApiBase === 'function' && (window.isLanClientMode?.() || window.edariDesktop?.lanClient)) {
+      return window.getLanApiBase();
+    }
     return typeof window.getApiBase === 'function' ? window.getApiBase() : '';
   }
 
@@ -25,8 +28,17 @@
     return /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host);
   }
 
+  const LAN_DEFAULT_SUBNETS = ['192.168.75', '192.168.1', '192.168.0', '10.0.0'];
+  const LAN_DEFAULT_PREFILL = `http://${LAN_DEFAULT_SUBNETS[0]}.1:4100`;
+
+  function defaultPrefillUrl() {
+    const saved = savedBackend();
+    if (saved && !/^https?:\/\/(127\.0\.0\.1|localhost)/i.test(saved)) return saved;
+    return LAN_DEFAULT_PREFILL;
+  }
+
   function guessSubnets() {
-    const out = new Set(['192.168.1', '192.168.0', '10.0.0']);
+    const out = new Set(LAN_DEFAULT_SUBNETS);
     try {
       const host = window.location.hostname;
       if (isPrivateIp(host)) {
@@ -45,6 +57,47 @@
       } catch { /* ignore */ }
     }
     return [...out];
+  }
+
+  async function probeServerBase(url, timeoutMs = 900) {
+    const norm = String(url || '').trim().replace(/\/$/, '');
+    if (!norm) return null;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(`${norm}/api/admin/lan-info`, { signal: ctrl.signal, cache: 'no-store' });
+      const data = await res.json();
+      if (res.ok && data.ok && data.role === 'server') return norm;
+    } catch { /* ignore */ }
+    finally {
+      clearTimeout(timer);
+    }
+    return null;
+  }
+
+  async function tryAutoConnectUrls(urls = []) {
+    const list = [...new Set(urls.map((u) => String(u || '').trim().replace(/\/$/, '')).filter(Boolean))];
+    const batch = 12;
+    for (let i = 0; i < list.length; i += batch) {
+      const slice = list.slice(i, i + batch);
+      const hits = await Promise.all(slice.map((u) => probeServerBase(u)));
+      const ok = hits.find(Boolean);
+      if (ok) {
+        connectToServer(ok);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function quickProbeUrls() {
+    const urls = [];
+    for (const prefix of LAN_DEFAULT_SUBNETS) {
+      for (const host of [1, 10, 100]) {
+        for (const port of LAN_PORTS) urls.push(`http://${prefix}.${host}:${port}`);
+      }
+    }
+    return urls;
   }
 
   async function probeLanHost(ip, port = 5005, timeoutMs = 700) {
@@ -66,21 +119,36 @@
     return null;
   }
 
-  async function scanLanNetwork(port = 5005, onProgress) {
+  const LAN_PORTS = [4100, 5005];
+
+  async function probeLanHostAnyPort(ip, ports = LAN_PORTS, timeoutMs = 700) {
+    for (const port of ports) {
+      const hit = await probeLanHost(ip, port, timeoutMs);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  async function scanLanNetwork(ports = LAN_PORTS, onProgress) {
     if (state.scanning) return [];
     state.scanning = true;
+    const portList = Array.isArray(ports) ? ports : [ports];
     const subnets = guessSubnets();
     const ips = [];
     for (const prefix of subnets) {
       for (let i = 1; i <= 254; i++) ips.push(`${prefix}.${i}`);
     }
     const found = [];
+    const seen = new Set();
     const batchSize = 48;
     for (let i = 0; i < ips.length; i += batchSize) {
       const batch = ips.slice(i, i + batchSize);
-      const results = await Promise.all(batch.map((ip) => probeLanHost(ip, port)));
+      const results = await Promise.all(batch.map((ip) => probeLanHostAnyPort(ip, portList)));
       for (const hit of results) {
-        if (hit) found.push(hit);
+        if (hit && !seen.has(`${hit.ip}:${hit.port}`)) {
+          seen.add(`${hit.ip}:${hit.port}`);
+          found.push(hit);
+        }
       }
       if (onProgress) onProgress(Math.min(100, Math.round(((i + batch.length) / ips.length) * 100)), found);
     }
@@ -100,6 +168,7 @@
     if (backendEl) backendEl.value = norm;
     if (clientInput) clientInput.value = norm;
     if (typeof window.applySyncServerUrl === 'function') window.applySyncServerUrl(norm);
+    if (window.edariDesktop) window.edariDesktop.backendUrl = norm;
     window.location.reload();
   }
 
@@ -147,6 +216,15 @@
     }
 
     const cards = [];
+    const connectUrl = info.clientConnectUrl
+      || (info.ethernetAddress ? `http://${info.ethernetAddress}:${port}` : null);
+    if (connectUrl) {
+      cards.push({
+        label: '⭐ للأجهزة الثانوية (Ethernet)',
+        url: connectUrl,
+        highlight: true
+      });
+    }
     if (info.adminUrl) {
       cards.push({ label: 'لوحة التحكم', url: info.adminUrl });
     }
@@ -154,16 +232,17 @@
       cards.push({ label: 'تطبيق المندوب (PWA)', url: info.mobileUrl });
     }
     for (const row of info.addresses || []) {
+      if (row.address === info.ethernetAddress) continue;
       cards.push({ label: `شبكة ${row.name}`, url: `http://${row.address}:${port}/admin` });
     }
 
     if (urlsEl) {
       urlsEl.innerHTML = cards.map((c) => `
-        <div class="lan-url-row">
-          <div style="min-width:120px"><strong>${esc(c.label)}</strong></div>
+        <div class="lan-url-row${c.highlight ? ' lan-url-row-highlight' : ''}">
+          <div style="min-width:140px"><strong>${esc(c.label)}</strong></div>
           <code>${esc(c.url)}</code>
           <button type="button" class="btn btn-soft btn-sm" data-copy="${esc(c.url)}">نسخ</button>
-          <a class="btn btn-soft btn-sm" href="${esc(c.url)}" target="_blank" rel="noopener">فتح</a>
+          ${c.highlight ? '' : `<a class="btn btn-soft btn-sm" href="${esc(c.url)}" target="_blank" rel="noopener">فتح</a>`}
         </div>
       `).join('') || '<p class="muted">لم يُعثر على عنوان LAN</p>';
 
@@ -199,7 +278,10 @@
     const backend = savedBackend() || apiBase() || window.location.origin;
     if (statusEl) statusEl.textContent = backend ? `متصل بـ ${backend}` : 'حدّد عنوان الجهاز الرئيسي';
     const input = document.getElementById('lanServerInput');
-    if (input && savedBackend()) input.value = savedBackend();
+    if (input) {
+      input.value = savedBackend() || defaultPrefillUrl();
+      input.placeholder = defaultPrefillUrl();
+    }
   }
 
   function renderScanResults(servers) {
@@ -241,12 +323,14 @@
     const urlsEl = document.getElementById('lanAdminUrls');
     if (panel) panel.dataset.role = 'server';
     if (statusEl) {
-      statusEl.textContent = info.primaryAddress
-        ? `السيرفر على الشبكة — ${info.primaryAddress}:${info.port || 5005}`
+      const host = info.ethernetAddress || info.primaryAddress;
+      statusEl.textContent = host
+        ? `Ethernet — ${host}:${info.port || 5005} (للأجهزة الثانوية)`
         : 'السيرفر يعمل';
     }
-    if (urlsEl && info.adminUrl) {
-      urlsEl.innerHTML = `<ul class="simple-list"><li><a href="${esc(info.adminUrl)}">${esc(info.adminUrl)}</a></li></ul>`;
+    if (urlsEl && (info.clientConnectUrl || info.adminUrl)) {
+      const u = info.clientConnectUrl || info.adminUrl;
+      urlsEl.innerHTML = `<ul class="simple-list"><li><strong>Ethernet:</strong> <a href="${esc(u)}">${esc(u)}</a></li></ul>`;
     }
   }
 
@@ -265,30 +349,80 @@
     const btn = document.getElementById('btnLanScan');
     const bar = document.getElementById('lanScanBar');
     const fill = document.getElementById('lanScanBarFill');
-    const port = Number(document.getElementById('lanScanPort')?.value || 5005);
     if (btn) btn.disabled = true;
     if (bar) bar.hidden = false;
     if (fill) fill.style.width = '0%';
-    const found = await scanLanNetwork(port, (pct, hits) => {
+    const found = await scanLanNetwork(LAN_PORTS, (pct, hits) => {
       if (fill) fill.style.width = `${pct}%`;
       renderScanResults(hits);
     });
     renderScanResults(found);
     if (btn) btn.disabled = false;
     if (bar) setTimeout(() => { if (bar) bar.hidden = true; }, 800);
+    return found;
   }
 
   function needsSetupWizard() {
     if (window.edariDesktop?.isDesktop && !window.edariDesktop?.lanClient) return false;
-    const base = apiBase();
     const saved = savedBackend();
     if (saved && !/^https?:\/\/(127\.0\.0\.1|localhost)/i.test(saved)) return false;
-    if (base && !/^https?:\/\/(127\.0\.0\.1|localhost)/i.test(base)) return false;
     try {
-      const host = window.location.hostname;
-      if (isPrivateIp(host) && host !== '127.0.0.1' && host !== 'localhost') return false;
+      const origin = window.location.origin;
+      if (origin && origin !== 'null' && !/^https?:\/\/(127\.0\.0\.1|localhost)/i.test(origin)) {
+        return false;
+      }
     } catch { /* ignore */ }
     return !saved;
+  }
+
+  function renderSetupScanResults(servers, targetId = 'lanSetupScanResults') {
+    const list = document.getElementById(targetId);
+    if (!list) return;
+    if (!servers.length) {
+      list.innerHTML = '<p class="muted">لم يُعثر على سيرفر — تأكد أن Edari Admin Server يعمل على الجهاز الرئيسي</p>';
+      return;
+    }
+    list.innerHTML = servers.map((s) => `
+      <div class="lan-scan-item">
+        <div class="lan-scan-meta">
+          <strong>${esc(s.hostname || s.primaryAddress || s.ip)}</strong>
+          <span>${esc(s.clientConnectUrl || s.adminUrl || `http://${s.ip}:${s.port}/admin`)}</span>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" data-connect="${esc(s.adminUrl || `http://${s.ip}:${s.port}`)}">اتصال</button>
+      </div>
+    `).join('');
+    list.querySelectorAll('[data-connect]').forEach((btn) => {
+      btn.addEventListener('click', () => connectToServer(btn.dataset.connect));
+    });
+  }
+
+  async function autoDiscoverForSetup() {
+    const status = document.getElementById('lanSetupScanStatus');
+    const input = document.getElementById('lanSetupInput');
+    if (input && !input.value.trim()) input.value = defaultPrefillUrl();
+    if (status) status.textContent = 'جاري الاتصال التلقائي…';
+    if (await tryAutoConnectUrls([input?.value, defaultPrefillUrl()])) return true;
+    if (status) status.textContent = 'بحث سريع في Ethernet…';
+    if (await tryAutoConnectUrls(quickProbeUrls())) return true;
+    if (status) status.textContent = 'جاري البحث في الشبكة عن الجهاز الرئيسي…';
+    const found = await scanLanNetwork(LAN_PORTS, (pct, hits) => {
+      if (status) status.textContent = `بحث… ${pct}%`;
+      if (hits.length) renderSetupScanResults(hits);
+    });
+    renderSetupScanResults(found);
+    if (status) {
+      status.textContent = found.length
+        ? `وُجد ${found.length} جهاز — اضغط «اتصال» أو انتظر الاتصال التلقائي`
+        : 'لم يُعثر على جهاز — عدّل العنوان الافتراضي أعلاه';
+    }
+    if (found.length >= 1) {
+      const url = (found[0].clientConnectUrl
+        || found[0].adminUrl
+        || `http://${found[0].ip}:${found[0].port}`).replace(/\/admin\/?$/, '');
+      if (input) input.value = url;
+      if (found.length === 1) await tryAutoConnectUrls([url]);
+    }
+    return found;
   }
 
   function showSetupWizard(show) {
@@ -334,14 +468,15 @@
   document.getElementById('btnLanSetupConnect')?.addEventListener('click', () => {
     connectToServer(document.getElementById('lanSetupInput')?.value);
   });
-  document.getElementById('btnLanSetupScan')?.addEventListener('click', async () => {
-    const port = Number(document.getElementById('lanScanPort')?.value || 5005);
-    const found = await scanLanNetwork(port);
-    renderScanResults(found);
-    if (found.length) {
-      connectToServer(found[0].adminUrl || `http://${found[0].ip}:${found[0].port}`);
-    }
-  });
+  document.getElementById('btnLanSetupScan')?.addEventListener('click', () => void autoDiscoverForSetup());
+
+  function openSetupIfNeeded() {
+    if (!needsSetupWizard()) return;
+    const input = document.getElementById('lanSetupInput');
+    if (input && !input.value.trim()) input.value = defaultPrefillUrl();
+    showSetupWizard(true);
+    void autoDiscoverForSetup();
+  }
 
   document.getElementById('lanServerInput')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') connectToServer(e.target.value);
@@ -352,12 +487,12 @@
 
   window.addEventListener('DOMContentLoaded', () => {
     startHealthMonitor();
-    if (needsSetupWizard()) showSetupWizard(true);
+    openSetupIfNeeded();
     void refreshLanPage();
   });
   if (document.readyState !== 'loading') {
     startHealthMonitor();
-    if (needsSetupWizard()) showSetupWizard(true);
+    openSetupIfNeeded();
     void refreshLanPage();
   }
 

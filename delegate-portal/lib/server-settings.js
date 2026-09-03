@@ -19,16 +19,17 @@ function settingsPath() {
 function readServerSettings() {
   const file = settingsPath();
   if (!fs.existsSync(file)) {
-    return { edari: { ...DEFAULT_EDARI }, backgroundSync: {} };
+    return { edari: { ...DEFAULT_EDARI }, backgroundSync: {}, uiPrefs: {} };
   }
   try {
     const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
     return {
       edari: { ...DEFAULT_EDARI, ...(raw.edari || {}) },
-      backgroundSync: { ...(raw.backgroundSync || {}) }
+      backgroundSync: { ...(raw.backgroundSync || {}) },
+      uiPrefs: { ...(raw.uiPrefs || {}) }
     };
   } catch {
-    return { edari: { ...DEFAULT_EDARI }, backgroundSync: {} };
+    return { edari: { ...DEFAULT_EDARI }, backgroundSync: {}, uiPrefs: {} };
   }
 }
 
@@ -39,6 +40,9 @@ function writeServerSettings(patch = {}) {
     backgroundSync: patch.backgroundSync != null
       ? { ...current.backgroundSync, ...patch.backgroundSync }
       : current.backgroundSync,
+    uiPrefs: patch.uiPrefs != null
+      ? { ...current.uiPrefs, ...patch.uiPrefs }
+      : current.uiPrefs,
     updatedAt: new Date().toISOString()
   };
   const file = settingsPath();

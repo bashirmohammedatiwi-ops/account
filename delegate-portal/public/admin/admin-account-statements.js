@@ -16,15 +16,44 @@ function stmtLoadPersisted() {
   if (!Array.isArray(saved)) saved = STMT_DEFAULTS.slice();
   accountStatements.saved = saved.map(String);
   try { accountStatements.names = JSON.parse(localStorage.getItem(STMT_NAMES_KEY) || '{}') || {}; } catch { accountStatements.names = {}; }
-  // ابدأ بالقائمة المحفوظة محدّدة جاهزة للاستعلام
   accountStatements.selected = accountStatements.saved.slice();
 }
 
+async function stmtHydrateFromSharedState() {
+  try {
+    await window.adminSharedState?.refreshIfChanged?.();
+    const ui = window.adminSharedState?.getUiPrefs?.() || {};
+    if (Array.isArray(ui.stmtSavedAccounts) && ui.stmtSavedAccounts.length) {
+      accountStatements.saved = ui.stmtSavedAccounts.map(String);
+      accountStatements.selected = accountStatements.saved.slice();
+    }
+    if (ui.stmtAccountNames && typeof ui.stmtAccountNames === 'object') {
+      accountStatements.names = { ...accountStatements.names, ...ui.stmtAccountNames };
+    }
+    renderStmtSelected();
+    renderStmtSaved();
+    void stmtHydrateAccountNames();
+  } catch { /* ignore */ }
+}
+
 function stmtPersistSaved() {
-  try { localStorage.setItem(STMT_SAVED_KEY, JSON.stringify(accountStatements.saved)); } catch { /* ignore */ }
+  try {
+    localStorage.setItem(STMT_SAVED_KEY, JSON.stringify(accountStatements.saved));
+    window.adminSharedState?.patchUiPrefs?.({
+      stmtSavedAccounts: accountStatements.saved,
+      stmtAccountNames: accountStatements.names,
+      updatedAt: new Date().toISOString()
+    });
+  } catch { /* ignore */ }
 }
 function stmtPersistNames() {
-  try { localStorage.setItem(STMT_NAMES_KEY, JSON.stringify(accountStatements.names)); } catch { /* ignore */ }
+  try {
+    localStorage.setItem(STMT_NAMES_KEY, JSON.stringify(accountStatements.names));
+    window.adminSharedState?.patchUiPrefs?.({
+      stmtAccountNames: accountStatements.names,
+      updatedAt: new Date().toISOString()
+    });
+  } catch { /* ignore */ }
 }
 
 function stmtAccountName(num) {
@@ -196,12 +225,66 @@ function readStmtFilters() {
 }
 
 async function queryAccountStatements(filters) {
+  let lastErr = null;
   if (window.edariDesktop?.queryEdariAccountStatements) {
-    const data = await window.edariDesktop.queryEdariAccountStatements(filters);
-    if (!data?.ok) throw new Error(data?.error || 'فشل إنشاء كشف الحساب من Edari');
-    return data;
+    try {
+      const data = await window.edariDesktop.queryEdariAccountStatements(filters);
+      if (data?.ok === false) throw new Error(data?.error || 'فشل إنشاء كشف الحساب من Edari');
+      return data;
+    } catch (err) {
+      lastErr = err;
+    }
   }
-  throw new Error('كشف الحساب المباشر متاح فقط في تطبيق سطح المكتب (Edari Admin)');
+  if (typeof api === 'function') {
+    try {
+      const data = await api('/api/admin/edari/account-statements', {
+        method: 'POST',
+        body: JSON.stringify(filters)
+      });
+      if (data?.ok === false) throw new Error(data?.error || 'فشل إنشاء كشف الحساب من Edari');
+      return data;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw new Error(
+    lastErr?.message
+    || 'تعذّر الاتصال بالجهاز الرئيسي لقراءة كشف الحساب — تحقق من LAN'
+  );
+}
+
+/** يجلب أسماء الحسابات المحفوظة من Edari حتى تظهر بالاسم لا بالرقم فقط. */
+async function stmtHydrateAccountNames() {
+  const wanted = [...new Set([...accountStatements.saved, ...accountStatements.selected])]
+    .map(String)
+    .filter((num) => num && !accountStatements.names[num]);
+  if (!wanted.length) return;
+
+  try {
+    let data = null;
+    if (window.edariDesktop?.searchEdariAccounts) {
+      data = await window.edariDesktop.searchEdariAccounts({ nums: wanted });
+    } else if (typeof api === 'function') {
+      data = await api('/api/admin/edari/search-accounts', {
+        method: 'POST',
+        body: JSON.stringify({ nums: wanted })
+      });
+    }
+    let changed = false;
+    for (const row of data?.results || []) {
+      const num = String(row.num || '');
+      const name = String(row.name || row.name1 || '');
+      if (num && name && accountStatements.names[num] !== name) {
+        accountStatements.names[num] = name;
+        changed = true;
+      }
+    }
+    if (changed) {
+      stmtPersistNames();
+      renderStmtSelected();
+      renderStmtSaved();
+    }
+  } catch { /* الأرقام تبقى ظاهرة بدون أسماء */ }
 }
 
 function renderStmtPreview(result) {
@@ -318,26 +401,42 @@ async function exportStmtPdf() {
   const filters = readStmtFilters();
   if (!filters.accounts.length) return showToast('اختر حساباً واحداً على الأقل', 'err');
   if (!filters.dateFrom || !filters.dateTo) return showToast('حدد تاريخ البداية والنهاية', 'err');
-  if (!window.edariDesktop?.exportEdariAccountStatementsPdf) {
-    return showToast('تصدير كشف الحساب متاح فقط في تطبيق سطح المكتب', 'err');
-  }
   const btn = document.getElementById('btnStmtPdf');
   if (btn) btn.disabled = true;
   startTopLoading('جاري تصدير PDF…');
   try {
-    const data = await window.edariDesktop.exportEdariAccountStatementsPdf(filters);
-    if (!data?.ok) throw new Error(data?.error || 'فشل تصدير PDF');
-    if (!data.data) throw new Error('ملف PDF فارغ');
-    const blob = base64ToPdfBlob(data.data);
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = data.filename || 'account-statements.pdf';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-    const miss = (data.missing || []).length;
+    // الرئيسي: توليد داخل العملية. الثانوي: بثّ ثنائي عبر LAN بدل base64.
+    if (window.edariDesktop?.isDesktop && window.edariDesktop?.exportEdariAccountStatementsPdf) {
+      const data = await window.edariDesktop.exportEdariAccountStatementsPdf(filters);
+      if (!data?.ok) throw new Error(data?.error || 'فشل تصدير PDF');
+      if (!data.data) throw new Error('ملف PDF فارغ');
+      downloadPdfBlob(base64ToPdfBlob(data.data), data.filename || 'account-statements.pdf');
+      const miss = (data.missing || []).length;
+      showToast(miss ? `تم تنزيل PDF · ${miss} حساب غير موجود` : 'تم تنزيل PDF');
+      return;
+    }
+
+    const qs = new URLSearchParams({
+      accounts: filters.accounts.join(','),
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo
+    }).toString();
+    const base = typeof getLanApiBase === 'function' ? getLanApiBase() : getApiBase();
+    const res = await fetch(`${base}/api/admin/reports/account-statements.pdf?${qs}`, {
+      headers: { Accept: 'application/pdf', ...(window.adminAuth?.authHeaders?.() || {}) }
+    });
+    if (!res.ok) {
+      let message = `فشل تصدير PDF (${res.status})`;
+      if (String(res.headers.get('content-type') || '').includes('application/json')) {
+        const data = await res.json().catch(() => ({}));
+        message = data.error || message;
+      }
+      throw new Error(message);
+    }
+    const blob = await res.blob();
+    if (!blob.size) throw new Error('ملف PDF فارغ');
+    downloadPdfBlob(blob, `account-statements-${filters.dateFrom}_${filters.dateTo}.pdf`);
+    const miss = Number(res.headers.get('X-Statements-Missing') || 0);
     showToast(miss ? `تم تنزيل PDF · ${miss} حساب غير موجود` : 'تم تنزيل PDF');
   } catch (err) {
     showToast(err.message, 'err');
@@ -345,6 +444,17 @@ async function exportStmtPdf() {
     stopTopLoading();
     if (btn) btn.disabled = false;
   }
+}
+
+function downloadPdfBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function stmtAddFromInput() {
@@ -358,8 +468,63 @@ function stmtAddFromInput() {
   if (!added) showToast('الحساب مُحدَّد مسبقاً', 'err');
 }
 
+let stmtSearchTimer = null;
+
+async function searchStmtAccountsLive(q) {
+  const box = document.getElementById('stmtSearchResults');
+  if (!box) return;
+  const query = String(q || '').trim();
+  if (query.length < 1) {
+    box.innerHTML = '';
+    return;
+  }
+  box.innerHTML = '<p class="muted">جاري البحث في Edari…</p>';
+  try {
+    let data = null;
+    if (window.edariDesktop?.searchEdariAccounts) {
+      data = await window.edariDesktop.searchEdariAccounts({ q: query, kind: 'gl' });
+    } else {
+      data = await api('/api/admin/edari/search-accounts', {
+        method: 'POST',
+        body: JSON.stringify({ q: query, kind: 'gl' })
+      });
+    }
+    const rows = data?.results || [];
+    box.innerHTML = rows.map((r) => `
+      <button type="button" class="rv-acc-hit" data-num="${esc(r.num)}" data-name="${esc(r.name)}">
+        <span class="rv-acc-hit-num" dir="ltr">${esc(r.num)}</span>
+        <span class="rv-acc-hit-name">${esc(r.name)}</span>
+      </button>`).join('') || '<p class="muted">لا توجد حسابات مطابقة في Edari</p>';
+    box.querySelectorAll('.rv-acc-hit').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const num = btn.dataset.num;
+        if (num) {
+          if (btn.dataset.name) accountStatements.names[num] = btn.dataset.name;
+          stmtAddAccounts([num]);
+          stmtPersistNames();
+        }
+        box.innerHTML = '';
+        const input = document.getElementById('stmtAccountInput');
+        if (input) input.value = '';
+      });
+    });
+  } catch (err) {
+    box.innerHTML = `<p class="muted">${esc(err.message)}</p>`;
+  }
+}
+
+function scheduleStmtSearch() {
+  clearTimeout(stmtSearchTimer);
+  stmtSearchTimer = setTimeout(() => {
+    const q = document.getElementById('stmtAccountInput')?.value || '';
+    void searchStmtAccountsLive(q);
+  }, 260);
+}
+
 function initAccountStatements() {
   stmtLoadPersisted();
+  void stmtHydrateFromSharedState();
+  void stmtHydrateAccountNames();
   applyStmtPreset('today');
   renderStmtSelected();
   renderStmtSaved();
@@ -369,6 +534,7 @@ function initAccountStatements() {
   });
 
   document.getElementById('btnStmtAdd')?.addEventListener('click', stmtAddFromInput);
+  document.getElementById('stmtAccountInput')?.addEventListener('input', scheduleStmtSearch);
   document.getElementById('stmtAccountInput')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -401,7 +567,13 @@ initAccountStatements();
 window.adminPages = window.adminPages || {};
 window.adminPages.accountStatements = () => {
   stmtLoadPersisted();
+  void stmtHydrateFromSharedState();
+  void stmtHydrateAccountNames();
   applyStmtPreset('today');
   renderStmtSelected();
   renderStmtSaved();
 };
+
+window.addEventListener('admin-shared-state-changed', () => {
+  void stmtHydrateFromSharedState();
+});

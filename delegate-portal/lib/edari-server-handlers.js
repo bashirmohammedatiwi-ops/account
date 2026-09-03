@@ -16,6 +16,16 @@ function requireFresh(modPath) {
   return require(abs);
 }
 
+/**
+ * pdf-export يحمّل خطوط Cairo/Roboto عند التحميل — إعادة تحميله في كل تصدير
+ * كانت تكلّف ثواني لكل ملف. الوحدة ثابتة فلا داعي لتحديثها.
+ */
+let pdfExportModule = null;
+function loadPdfExport() {
+  if (!pdfExportModule) pdfExportModule = require('./pdf-export');
+  return pdfExportModule;
+}
+
 async function postReceiptToEdari(payload = {}) {
   return withEdariEnv(async () => {
     const { postReceiptToEdari: post } = requireFresh('sync-client/post-receipt.js');
@@ -39,6 +49,13 @@ async function searchEdariAccounts(params = {}) {
   });
 }
 
+async function searchEdariMaterialTrees(params = {}) {
+  return withEdariEnv(async () => {
+    const { searchEdariMaterialTrees: search } = requireFresh('sync-client/search-edari-material-trees.js');
+    return search(params);
+  });
+}
+
 async function queryEdariAccountStatements(params = {}) {
   return withEdariEnv(async () => {
     const { queryEdariAccountStatements: query } = requireFresh('sync-client/edari-account-statement.js');
@@ -50,7 +67,7 @@ async function exportEdariAccountStatementsPdf(params = {}) {
   const result = params.statements
     ? { statements: params.statements }
     : await queryEdariAccountStatements(params);
-  const { buildAccountStatementsPdf } = requireFresh('lib/pdf-export.js');
+  const { buildAccountStatementsPdf } = loadPdfExport();
   const buffer = await buildAccountStatementsPdf(result.statements || []);
   const from = params.dateFrom || result.period?.dateFrom || result.meta?.dateFrom;
   const to = params.dateTo || result.period?.dateTo || result.meta?.dateTo;
@@ -79,10 +96,40 @@ async function listEdariSalesBranchesLive(params = {}) {
   });
 }
 
+async function searchEdariSalesBranchesLive(params = {}) {
+  return withEdariEnv(async () => {
+    const { searchEdariSalesBranches } = requireFresh('sync-client/edari-sales-report.js');
+    return searchEdariSalesBranches(params);
+  });
+}
+
+/** نفس مسار الرئيسي (ODBC داخل العملية) — أسرع من subprocess ودقيق للأجهزة الثانوية. */
+let edariSalesReportModule = null;
+function loadEdariSalesReportModule() {
+  if (!edariSalesReportModule) {
+    edariSalesReportModule = require(path.join(portalDir, 'sync-client', 'edari-sales-report.js'));
+  }
+  return edariSalesReportModule;
+}
+
+async function listEdariTreesLive() {
+  return withEdariEnv(async () => {
+    const { listEdariTrees } = require(path.join(portalDir, 'sync-client', 'list-edari-trees.js'));
+    const trees = await listEdariTrees();
+    return { ok: true, trees, count: trees.length };
+  });
+}
+
+async function queryEdariSalesReportLive(params = {}) {
+  return withEdariEnv(async () => {
+    const { queryEdariSalesReport } = loadEdariSalesReportModule();
+    return queryEdariSalesReport(params);
+  });
+}
+
 async function exportEdariSalesReportPdf(params = {}) {
-  const { queryEdariSalesReport } = requireFresh('lib/sync-runner.js');
-  const report = params.report || await queryEdariSalesReport(params);
-  const { buildTreeSalesReportPdf, buildTreeSalesReportSummaryPdf } = requireFresh('lib/pdf-export.js');
+  const report = params.report || await queryEdariSalesReportLive(params);
+  const { buildTreeSalesReportPdf, buildTreeSalesReportSummaryPdf } = loadPdfExport();
   const summaryOnly = Boolean(params.summaryOnly);
   const buildPdf = summaryOnly ? buildTreeSalesReportSummaryPdf : buildTreeSalesReportPdf;
   const buffer = await buildPdf(report);
@@ -205,10 +252,12 @@ async function runPriceAppSync(params = {}) {
         resolve(out);
       });
     });
-    const summaryLine = stdout.split(/\r?\n/).reverse().find((row) => row.startsWith('@PRICE_SYNC|'));
-    if (summaryLine) {
-      const payload = JSON.parse(summaryLine.slice('@PRICE_SYNC|'.length));
-      return { ok: true, ...payload, log: stdout };
+    const parsed = stdout.split(/\r?\n/).reverse().find((row) => row.trim().startsWith('@SYNC_RESULT|'));
+    if (parsed) {
+      try {
+        const payload = JSON.parse(parsed.trim().slice('@SYNC_RESULT|'.length));
+        return { ok: true, ...payload, log: stdout };
+      } catch { /* fall through */ }
     }
     return { ok: true, log: stdout };
   });
@@ -218,10 +267,14 @@ module.exports = {
   postReceiptToEdari,
   postCustomerToEdari,
   searchEdariAccounts,
+  searchEdariMaterialTrees,
   queryEdariAccountStatements,
   exportEdariAccountStatementsPdf,
   listEdariMaterialTreesLive,
+  listEdariTreesLive,
   listEdariSalesBranchesLive,
+  searchEdariSalesBranchesLive,
+  queryEdariSalesReportLive,
   exportEdariSalesReportPdf,
   lookupEdariMaterial,
   fetchEdariCatalogMaterials,

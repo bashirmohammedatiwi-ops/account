@@ -4,6 +4,7 @@
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { computePricing } = require('../lib/pos-pricing');
 const { resolveProductBarcode } = require('./pos-barcode');
@@ -48,7 +49,7 @@ SELECT
   ${POS_TEXT('a.Name1')} AS name,
   ${TRIM('a.Barcode')} AS barcode,
   CAST(COALESCE(NULLIF(a.SellPr4, 0), NULLIF(a.SellPr5, 0), 0) AS bigint) AS originalPrice,
-  CAST(COALESCE(NULLIF(a.SellPr5, 0), NULLIF(a.SellPr4, 0), 0) AS bigint) AS storedFinalPrice,
+  CAST(COALESCE(NULLIF(a.SellPr4, 0), NULLIF(a.SellPr5, 0), 0) AS bigint) AS storedFinalPrice,
   CAST(COALESCE(a.CurTot1, 0) AS bigint) AS quantity,
   CAST(COALESCE(ao.discount, 0) AS float) AS discountValue,
   CAST(COALESCE(ao.discount_type, 0) AS int) AS discountType,
@@ -56,6 +57,30 @@ SELECT
 FROM dbo.articles a
 LEFT JOIN ActiveOffers ao ON a.Seq = ao.item_id AND ao.rn = 1
 WHERE COALESCE(NULLIF(a.SellPr4, 0), NULLIF(a.SellPr5, 0), 0) > 0
+ORDER BY a.Seq`;
+
+/**
+ * الباركودات الثانوية (article_barcodes) — كل باركود بديل لنفس المنتج/السعر.
+ * يُرفع كعنصر مستقل حتى يمكن إيجاد المنتج بأي باركود على الويب.
+ */
+const SECONDARY_BARCODES_QUERY = `;WITH ${ACTIVE_OFFERS_CTE}
+SELECT
+  a.Seq AS productCode,
+  ${TRIM('a.Num')} AS productNum,
+  ${POS_TEXT('a.Name1')} AS name,
+  ${TRIM('b.barcode')} AS barcode,
+  CAST(COALESCE(NULLIF(a.SellPr4, 0), NULLIF(a.SellPr5, 0), 0) AS bigint) AS originalPrice,
+  CAST(COALESCE(NULLIF(a.SellPr4, 0), NULLIF(a.SellPr5, 0), 0) AS bigint) AS storedFinalPrice,
+  CAST(COALESCE(a.CurTot1, 0) AS bigint) AS quantity,
+  CAST(COALESCE(ao.discount, 0) AS float) AS discountValue,
+  CAST(COALESCE(ao.discount_type, 0) AS int) AS discountType,
+  ${POS_TEXT('ao.offer_name')} AS offerName
+FROM dbo.article_barcodes b
+INNER JOIN dbo.articles a ON a.Seq = b.article_id
+LEFT JOIN ActiveOffers ao ON a.Seq = ao.item_id AND ao.rn = 1
+WHERE COALESCE(NULLIF(a.SellPr4, 0), NULLIF(a.SellPr5, 0), 0) > 0
+  AND ${TRIM('b.barcode')} <> ''
+  AND ${TRIM('b.barcode')} <> ${TRIM('a.Barcode')}
 ORDER BY a.Seq`;
 
 function getPosConfig(options = {}) {
@@ -166,15 +191,39 @@ function parseTabOutput(stdout) {
   return rows;
 }
 
+async function runPosQuery(sqlcmd, config, query) {
+  // sqlcmd عبر الأنبوب (pipe) يُفسد الأحرف العربية. الحل الموثوق: الكتابة لملف Unicode (UTF-16LE)
+  // عبر -u -o ثم قراءته بترميز utf16le — يضمن نصاً عربياً سليماً على الويب.
+  const outFile = path.join(
+    os.tmpdir(),
+    `pos-sync-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.dat`
+  );
+  const args = buildSqlCmdArgs(config, query).concat(['-u', '-o', outFile]);
+  try {
+    await execFileAsync(sqlcmd, args, {
+      maxBuffer: 1024 * 1024 * 512,
+      windowsHide: true,
+    });
+    const raw = fs.readFileSync(outFile, 'utf16le');
+    return parseTabOutput(raw.replace(/^\uFEFF/, ''));
+  } finally {
+    try { fs.unlinkSync(outFile); } catch { /* ignore */ }
+  }
+}
+
 async function fetchPosArticles(config) {
   const sqlcmd = findSqlCmd();
-  const args = buildSqlCmdArgs(config, ARTICLES_QUERY);
-  const { stdout } = await execFileAsync(sqlcmd, args, {
-    maxBuffer: 1024 * 1024 * 512,
-    windowsHide: true,
-    encoding: 'utf8',
-  });
-  return parseTabOutput(stdout);
+  const primary = await runPosQuery(sqlcmd, config, ARTICLES_QUERY);
+
+  // الباركودات الثانوية — لا تُفشل المزامنة إن تعذّرت (الجدول قد لا يوجد في بعض التركيبات).
+  let secondary = [];
+  try {
+    secondary = await runPosQuery(sqlcmd, config, SECONDARY_BARCODES_QUERY);
+  } catch (err) {
+    console.error(`تحذير: تعذّر جلب الباركودات الثانوية: ${err.message || err}`);
+  }
+
+  return primary.concat(secondary);
 }
 
 function rowToSyncItem(row) {
@@ -255,10 +304,14 @@ async function syncPosPricing({
   }
 
   const items = [];
+  const seenBarcodes = new Set();
   let posOffers = 0;
   for (const row of rows) {
     const item = rowToSyncItem(row);
     if (!item) continue;
+    // إزالة التكرار بالباركود (أساسي + ثانوي قد يتقاطعان) — الأول يفوز.
+    if (seenBarcodes.has(item.barcode)) continue;
+    seenBarcodes.add(item.barcode);
     if (item.discountPercent != null && item.discountPercent > 0) posOffers += 1;
     items.push(item);
   }
