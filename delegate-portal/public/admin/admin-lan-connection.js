@@ -66,13 +66,31 @@
     }
   }
 
+  async function probeRemoteHealth(remote) {
+    const root = String(remote || '').replace(/\/$/, '');
+    if (!root) return { ok: true, status: 200 };
+    if (window.edariDesktop?.probeBackendHealth) {
+      try {
+        const r = await window.edariDesktop.probeBackendHealth(root);
+        return { ok: Boolean(r?.ok), status: r?.ok ? 200 : 0, data: r };
+      } catch (err) {
+        return { ok: false, status: 0, error: err.message || 'probe failed' };
+      }
+    }
+    return probe(root, '/api/health', 5000);
+  }
+
   function statusLabel() {
     if (isLanClient()) {
-      if (state.lanOk && state.remoteOk) return 'متصل بالرئيسي والسيرفر';
+      if (state.lanOk && state.remoteOk) return 'متصل بالرئيسي والسيرفر البعيد';
+      if (state.lanOk && state.remoteOk === false) return 'متصل بالرئيسي — السيرفر البعيد غير متاح';
       if (state.lanOk) return 'متصل بالرئيسي';
       return 'غير متصل بالرئيسي';
     }
-    if (state.lanOk || state.remoteOk) return 'متصل بالسيرفر';
+    if (state.lanOk && state.remoteOk) return 'متصل محليًا والسيرفر البعيد';
+    if (state.remoteOk) return 'متصل بالسيرفر البعيد';
+    if (state.lanOk && state.remoteUrl) return 'متصل محليًا — السيرفر البعيد غير متاح';
+    if (state.lanOk) return 'متصل محليًا';
     return 'غير متصل';
   }
 
@@ -87,7 +105,12 @@
 
   function publishStatus() {
     if (typeof window.setServerStatus === 'function') {
-      const dot = state.lanOk || (!isLanClient() && state.remoteOk) ? 'on' : 'err';
+      let dot = 'err';
+      if (isLanClient()) {
+        dot = state.lanOk && state.remoteOk !== false ? 'on' : (state.lanOk ? 'on' : 'err');
+      } else {
+        dot = (state.lanOk && state.remoteOk !== false) || state.remoteOk ? 'on' : (state.lanOk ? 'on' : 'err');
+      }
       window.setServerStatus(dot, statusLabel());
     }
     window.dispatchEvent(new CustomEvent('lan-connection-changed', { detail: { ...state } }));
@@ -115,7 +138,7 @@
 
     const remote = state.remoteUrl;
     if (remote) {
-      const remoteProbe = await probe(remote, '/api/health', 5000);
+      const remoteProbe = await probeRemoteHealth(remote);
       state.remoteOk = remoteProbe.ok;
     } else {
       state.remoteOk = true;

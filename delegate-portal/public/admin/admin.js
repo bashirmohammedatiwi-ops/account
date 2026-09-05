@@ -21,12 +21,27 @@ function stopTopLoading() {
  * owns Edari. An empty value means "use the server that served this page".
  */
 function resolveDataBackend() {
-  const explicit = (
-    window.edariDesktop?.dataBackendUrl
-    || localStorage.getItem('dataBackendUrl')
-    || ''
-  ).trim().replace(/\/$/, '');
-  return isLocalhostUrl(explicit) ? '' : explicit;
+  const pageOrigin = (window.location.origin && window.location.origin !== 'null')
+    ? window.location.origin
+    : '';
+  const pick = (...urls) => {
+    for (const u of urls) {
+      const url = String(u || '').trim().replace(/\/$/, '');
+      if (!url || isLocalhostUrl(url)) continue;
+      try {
+        if (pageOrigin && new URL(url).origin === pageOrigin) continue;
+      } catch { continue; }
+      return url;
+    }
+    return '';
+  };
+  return pick(
+    window.edariDesktop?.dataBackendUrl,
+    localStorage.getItem('dataBackendUrl'),
+    !window.edariDesktop?.lanClient && window.edariDesktop?.backendUrl,
+    localStorage.getItem('backendUrl'),
+    window.ADMIN_CONFIG?.BACKEND_URL
+  );
 }
 
 function resolveApiBase() {
@@ -201,7 +216,11 @@ function setServerStatus(state, text) {
 async function checkBackendHealth() {
   if (window.adminLanConnection?.refreshConnectionState) {
     const result = await window.adminLanConnection.refreshConnectionState();
-    return Boolean(result.lanOk || (!isLanClientMode() && result.remoteOk));
+    const remote = resolveApiBase();
+    if (isLanClientMode()) {
+      return Boolean(result.lanOk && (!remote || result.remoteOk));
+    }
+    return Boolean(result.lanOk || result.remoteOk);
   }
   if (isLanClientMode()) {
     const lanBase = resolveLanApiBase();
@@ -1873,6 +1892,8 @@ function saveBackendUrl() {
 }
 
 async function refreshAll() {
+  const dataBackend = resolveDataBackend();
+  if (dataBackend) localStorage.setItem('dataBackendUrl', dataBackend);
   if (window.adminAuth?.initAdminAuth) {
     try { await window.adminAuth.initAdminAuth(); } catch { /* ignore */ }
   }

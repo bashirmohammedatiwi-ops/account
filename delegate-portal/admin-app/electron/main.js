@@ -109,7 +109,11 @@ const BUNDLED_ADMIN_PORT = PORT;
  * fallback, where the LAN database still holds accounts, journal and trees.
  */
 async function pickDataBackend() {
-  return (await checkHealthOnce(`${REMOTE_DATA_URL}/api/health`, 5000)) ? REMOTE_DATA_URL : '';
+  const ok = await checkHealthOnce(`${REMOTE_DATA_URL}/api/health`, 5000);
+  if (!ok) {
+    console.warn(`Remote data backend health check failed — still using ${REMOTE_DATA_URL}`);
+  }
+  return REMOTE_DATA_URL;
 }
 
 function getAdminLoadTarget() {
@@ -129,6 +133,9 @@ function getAdminLoadTarget() {
 const START_HIDDEN = process.argv.includes('--background') || process.argv.includes('--hidden');
 
 const execFileAsync = promisify(execFile);
+
+/** In-flight Edari posting jobs — prevents duplicate receipt/customer posts. */
+const edariPostingJobs = new Map();
 
 function edariPostingKey(kind, payload = {}) {
   const id = payload.id ?? payload.receiptId ?? payload.requestId;
@@ -804,7 +811,7 @@ function createWindow({ show = !START_HIDDEN } = {}) {
         `--edari-lan-client=${ADMIN_LAN_CLIENT ? '1' : '0'}`,
         `--edari-api-same-origin=${USE_LOCAL_SERVER || ADMIN_LAN_CLIENT ? '1' : '0'}`,
         `--edari-host=${EDARI_HOST_URL}`,
-        `--edari-data-backend=${DATA_BACKEND_URL}`
+        `--edari-data-backend=${DATA_BACKEND_URL || BACKEND_URL || REMOTE_DATA_URL}`
       ]
     }
   });
@@ -1178,6 +1185,13 @@ function notifyLanServerReady() {
     });
   } catch { /* ignore */ }
 }
+
+ipcMain.handle('probe-backend-health', async (_e, url) => {
+  const target = normalizeBackendUrl(url || DATA_BACKEND_URL || BACKEND_URL || REMOTE_DATA_URL);
+  if (!target) return { ok: false, url: '' };
+  const ok = await checkHealthOnce(`${target}/api/health`, 5000);
+  return { ok, url: target };
+});
 
 ipcMain.handle('lan-client:get-setup-config', () => {
   const d = loadLanDefaults();

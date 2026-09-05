@@ -18,7 +18,8 @@ const base = {
   // LAN machine that owns Edari — empty when this machine owns it itself.
   edariHostUrl: readLaunchArg('edari-host', '').replace(/\/$/, ''),
   // Server holding delegate data (receipts, agents). Empty = use page origin.
-  dataBackendUrl: readLaunchArg('edari-data-backend', '').replace(/\/$/, '')
+  dataBackendUrl: readLaunchArg('edari-data-backend', '').replace(/\/$/, ''),
+  probeBackendHealth: (url) => ipcRenderer.invoke('probe-backend-health', url || '')
 };
 
 if (LAN_CLIENT) {
