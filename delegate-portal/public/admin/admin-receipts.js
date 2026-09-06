@@ -29,6 +29,63 @@ function todayLocalIso() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function addDaysLocalIso(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function receiptDatePresetRange(preset) {
+  const today = todayLocalIso();
+  if (preset === 'today') return { from: today, to: today };
+  if (preset === 'week') return { from: addDaysLocalIso(-6), to: today };
+  if (preset === 'month') return { from: addDaysLocalIso(-29), to: today };
+  return { from: '', to: '' };
+}
+
+function getReceiptDateFilters() {
+  return {
+    from: document.getElementById('receiptFromFilter')?.value || '',
+    to: document.getElementById('receiptToFilter')?.value || ''
+  };
+}
+
+function detectReceiptDatePreset(from, to) {
+  const today = todayLocalIso();
+  if (!from && !to) return 'all';
+  if (from === today && to === today) return 'today';
+  if (from === addDaysLocalIso(-6) && to === today) return 'week';
+  if (from === addDaysLocalIso(-29) && to === today) return 'month';
+  return '';
+}
+
+function formatReceiptDateLabel(from, to) {
+  if (!from && !to) return 'كل الفترات';
+  if (from && to && from === to) return `يوم ${from}`;
+  if (from && to) return `من ${from} إلى ${to}`;
+  if (from) return `من ${from}`;
+  return `حتى ${to}`;
+}
+
+function syncReceiptDateStripUi() {
+  const { from, to } = getReceiptDateFilters();
+  const preset = detectReceiptDatePreset(from, to);
+  document.querySelectorAll('[data-rcv-preset]').forEach((btn) => {
+    btn.classList.toggle('is-active', btn.dataset.rcvPreset === preset);
+  });
+  const label = document.getElementById('receiptDateRangeLabel');
+  if (label) label.textContent = formatReceiptDateLabel(from, to);
+}
+
+function applyReceiptDatePreset(preset) {
+  const range = receiptDatePresetRange(preset);
+  const fromEl = document.getElementById('receiptFromFilter');
+  const toEl = document.getElementById('receiptToFilter');
+  if (fromEl) fromEl.value = range.from;
+  if (toEl) toEl.value = range.to;
+  void loadReceiptsPage();
+}
+
 function parseMoneyInput(raw) {
   const cleaned = String(raw ?? '').replace(/[^\d.-]/g, '');
   const n = Number(cleaned);
@@ -86,7 +143,7 @@ function receiptSettingsHasAccounts(settings) {
 }
 
 const RECEIPT_SETTING_FIELDS = [
-  { key: 'cash', label: 'صندوق المبلغ', hint: 'صناديق الإداري', kind: 'cash', browse: 'عرض الصناديق', tone: 'cash', icon: 'M4 7h16v10H4zM8 11h8' },
+  { key: 'cash', label: 'صندوق المبلغ', hint: 'صناديق الإداري', kind: 'cash', browse: 'عرض الصناديق', refresh: 'تحديث', tone: 'cash', icon: 'M4 7h16v10H4zM8 11h8' },
   { key: 'commissionDebit', label: 'حـ/ العمولات', hint: 'مدين — حساب العمولة', kind: 'gl', tone: 'comm', icon: 'M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6' },
   { key: 'commissionCredit', label: 'مقابل العمولات', hint: 'دائن — حساب المقابل', kind: 'gl', tone: 'comm2', icon: 'M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8M12 18V6' },
   { key: 'discount', label: 'حـ/ الحسم', hint: 'حساب الحسم في الإداري', kind: 'gl', tone: 'disc', icon: 'M20 12H4M16 6l4 6-4 6' }
@@ -128,6 +185,7 @@ function renderReceiptSettings() {
             <span class="rcv-acc-hint">${esc(f.hint)}</span>
           </div>
           ${f.browse ? `<button type="button" class="btn btn-soft btn-sm" data-rv-browse="${f.key}">${esc(f.browse)}</button>` : ''}
+          ${f.refresh ? `<button type="button" class="btn btn-soft btn-sm" data-rv-refresh="${f.key}" title="جلب أحدث الصناديق من Edari">↻ ${esc(f.refresh)}</button>` : ''}
         </div>
         <div class="rcv-acc-picked${acc.seq ? '' : ' is-empty'}" data-rv-acc-picked="${f.key}">
           ${acc.seq ? `<span class="num-en" dir="ltr">${esc(acc.num)}</span> ${esc(acc.name)}` : 'غير محدد'}
@@ -163,10 +221,19 @@ function renderReceiptSettings() {
       void searchReceiptAccount(key, '', 'cash');
     });
   });
+  grid.querySelectorAll('[data-rv-refresh]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.rvRefresh;
+      const input = grid.querySelector(`[data-rv-acc="${key}"]`);
+      if (input) input.value = '';
+      void searchReceiptAccount(key, '', 'cash', { refresh: true });
+    });
+  });
 }
 
-async function lookupReceiptAccounts(q, kind) {
+async function lookupReceiptAccounts(q, kind, opts = {}) {
   const params = { q: q || '', kind: kind || '' };
+  if (opts.refresh) params.refresh = '1';
   if (window.edariDesktop?.searchEdariAccounts) {
     try {
       const data = await window.edariDesktop.searchEdariAccounts(params);
@@ -199,7 +266,7 @@ async function lookupReceiptAccounts(q, kind) {
   return commerceApi(`/receipts/accounts/search?${qs}`);
 }
 
-async function searchReceiptAccount(key, q, kind = 'gl') {
+async function searchReceiptAccount(key, q, kind = 'gl', opts = {}) {
   const box = document.querySelector(`[data-rv-acc-results="${key}"]`);
   if (!box) return;
   const query = String(q || '').trim();
@@ -207,16 +274,32 @@ async function searchReceiptAccount(key, q, kind = 'gl') {
     box.innerHTML = '';
     return;
   }
-  box.innerHTML = '<p class="muted">جاري البحث في الإداري...</p>';
+  box.innerHTML = `<p class="muted">${opts.refresh ? 'جاري تحديث الصناديق من Edari...' : 'جاري البحث في الإداري...'}</p>`;
   try {
-    const data = await lookupReceiptAccounts(query, kind);
-    const rows = data.results || [];
-    const source = data.source === 'edari' ? 'الإداري' : '';
+    const data = await lookupReceiptAccounts(query, kind, opts);
+    let rows = data.results || [];
+    if (query && /^\d{3,15}$/.test(query)) {
+      rows = rows.slice().sort((a, b) => {
+        const numA = String(a.num || '');
+        const numB = String(b.num || '');
+        const rank = (num) => {
+          if (num === query) return 0;
+          if (num.startsWith(query)) return 1;
+          if (num.includes(query)) return 2;
+          return 3;
+        };
+        return rank(numA) - rank(numB);
+      });
+    }
+    const source = data.source === 'edari' ? 'الإداري' : (data.source === 'local' ? 'السيرفر المحلي' : '');
+    const emptyHint = kind === 'cash' && query
+      ? `لا يوجد حساب مطابق — جرّب «تحديث» أو تأكد أن Edari متصل${source ? ` (مصدر: ${source})` : ''}`
+      : `لا توجد صناديق/حسابات مطابقة${source ? ` في ${source}` : ''}`;
     box.innerHTML = rows.map((r) => `
       <button type="button" class="rv-acc-hit" data-seq="${esc(r.seq)}" data-num="${esc(r.num)}" data-name="${esc(r.name)}">
         <span class="rv-acc-hit-num" dir="ltr">${esc(r.num)}</span>
         <span class="rv-acc-hit-name">${esc(r.name)}</span>
-      </button>`).join('') || `<p class="muted">لا توجد صناديق/حسابات مطابقة${source ? ` في ${source}` : ''}</p>`;
+      </button>`).join('') || `<p class="muted">${emptyHint}</p>`;
     box.querySelectorAll('.rv-acc-hit').forEach((btn) => {
       btn.addEventListener('click', () => {
         receiptAdmin.settings[key] = {
@@ -289,7 +372,8 @@ async function saveReceiptSettings({ silent = false, skipRender = false } = {}) 
 }
 
 function canPostReceiptsFromDesktop() {
-  return !!window.edariDesktop?.postEdariReceipt;
+  return typeof window.edariDesktop?.postEdariReceipt === 'function'
+    || typeof window.edariDesktop?.lanRequest === 'function';
 }
 
 function updateReceiptPostAlert() {
@@ -332,8 +416,7 @@ function sortReceipts(rows) {
 
 function getReceiptActiveFilter() {
   const status = document.getElementById('receiptStatusFilter')?.value || '';
-  const from = document.getElementById('receiptFromFilter')?.value || '';
-  const to = document.getElementById('receiptToFilter')?.value || '';
+  const { from, to } = getReceiptDateFilters();
   const agentId = document.getElementById('receiptAgentFilter')?.value || '';
   const q = document.getElementById('receiptSearchFilter')?.value?.trim() || '';
   if (agentId || q) return '';
@@ -342,7 +425,7 @@ function getReceiptActiveFilter() {
   if (status === 'pending' || status === 'reviewed' || status === 'posted' || status === 'unposted') {
     return status;
   }
-  if (!status && !from && !to) return 'all';
+  if (!status) return 'all';
   return '';
 }
 
@@ -361,21 +444,15 @@ function syncReceiptFilterUi() {
 
 function applyReceiptQuickChip(chip) {
   const statusEl = document.getElementById('receiptStatusFilter');
-  const fromEl = document.getElementById('receiptFromFilter');
-  const toEl = document.getElementById('receiptToFilter');
-  const today = todayLocalIso();
   if (chip === 'today') {
     if (statusEl) statusEl.value = '';
-    if (fromEl) fromEl.value = today;
-    if (toEl) toEl.value = today;
-  } else if (chip === 'all') {
+    applyReceiptDatePreset('today');
+    return;
+  }
+  if (chip === 'all') {
     if (statusEl) statusEl.value = '';
-    if (fromEl) fromEl.value = '';
-    if (toEl) toEl.value = '';
-  } else {
-    if (statusEl) statusEl.value = chip;
-    if (fromEl) fromEl.value = '';
-    if (toEl) toEl.value = '';
+  } else if (statusEl) {
+    statusEl.value = chip;
   }
   receiptAdmin.quickChip = chip;
   void loadReceiptsPage();
@@ -401,13 +478,16 @@ function setReceiptViewMode(mode) {
 function renderReceiptStatsCards(s) {
   const el = document.getElementById('receiptStats');
   if (!el) return;
+  const { from, to } = getReceiptDateFilters();
+  const dateFiltered = Boolean(from || to || s.filtered);
+  const todayLabel = dateFiltered ? 'اليوم (تقويم)' : 'اليوم';
   const cards = [
     { key: 'pending', filterKey: 'pending', cls: 'pending', label: 'بانتظار المراجعة', count: s.pending, amt: s.pendingAmount },
     { key: 'reviewed', filterKey: 'reviewed', cls: 'ready', label: 'جاهز للترحيل', count: s.reviewed, amt: s.reviewedAmount },
     { key: 'posted', filterKey: 'posted', cls: 'posted', label: 'مُرحَّل', count: s.posted, amt: s.postedAmount },
     { key: 'unposted', filterKey: 'unposted', cls: 'warn', label: 'غير مُرحَّل', count: s.unpostedCount, amt: s.unpostedAmount },
-    { key: 'today', filterKey: 'today', cls: 'neutral', label: 'اليوم', count: s.today, amt: null, suffix: 'سند' },
-    { key: 'total', filterKey: 'all', cls: 'total', label: 'إجمالي المبالغ', count: s.totalAmount, amt: s.total, countIsMoney: true, suffix: 'سند' }
+    { key: 'today', filterKey: 'today', cls: 'neutral', label: todayLabel, count: s.today, amt: null, suffix: 'سند' },
+    { key: 'total', filterKey: 'all', cls: 'total', label: dateFiltered ? 'إجمالي الفترة' : 'إجمالي المبالغ', count: s.totalAmount, amt: s.total, countIsMoney: true, suffix: 'سند' }
   ];
   el.innerHTML = cards.map((c) => {
     const filterKey = c.filterKey || c.key;
@@ -481,8 +561,7 @@ function receiptRowActions(r) {
 function receiptFilterQuery() {
   const status = document.getElementById('receiptStatusFilter')?.value || '';
   const agentId = document.getElementById('receiptAgentFilter')?.value || '';
-  const from = document.getElementById('receiptFromFilter')?.value || '';
-  const to = document.getElementById('receiptToFilter')?.value || '';
+  const { from, to } = getReceiptDateFilters();
   const q = document.getElementById('receiptSearchFilter')?.value?.trim() || '';
   const params = new URLSearchParams();
   if (status) params.set('status', status);
@@ -492,6 +571,90 @@ function receiptFilterQuery() {
   if (q) params.set('q', q);
   const qs = params.toString();
   return qs ? `?${qs}` : '';
+}
+
+function receiptStatsQuery() {
+  const agentId = document.getElementById('receiptAgentFilter')?.value || '';
+  const { from, to } = getReceiptDateFilters();
+  const q = document.getElementById('receiptSearchFilter')?.value?.trim() || '';
+  const params = new URLSearchParams();
+  if (agentId) params.set('agentId', agentId);
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  if (q) params.set('q', q);
+  params.set('limit', '500');
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
+/** Aggregate stats from receipt rows — always matches date/agent/search filters. */
+function computeReceiptStatsFromList(receipts) {
+  const today = todayLocalIso();
+  const rows = Array.isArray(receipts) ? receipts : [];
+  let pending = 0;
+  let reviewed = 0;
+  let posted = 0;
+  let rejected = 0;
+  let todayCount = 0;
+  let totalAmount = 0;
+  let postedAmount = 0;
+  let pendingAmount = 0;
+  let reviewedAmount = 0;
+  let unpostedAmount = 0;
+  let unpostedCount = 0;
+  let totalCommission = 0;
+  let totalDiscount = 0;
+
+  for (const r of rows) {
+    const amount = Number(r.amount || 0);
+    const commission = Number(r.commission || 0);
+    const discount = Number(r.discount || 0);
+    const status = String(r.status || 'pending');
+    totalAmount += amount;
+    totalCommission += commission;
+    totalDiscount += discount;
+
+    const receiptDay = String(r.receiptDate || '').slice(0, 10);
+    const submittedDay = String(r.submittedAt || r.createdAt || '').slice(0, 10);
+    if (receiptDay === today || submittedDay === today) todayCount += 1;
+
+    if (status === 'pending') {
+      pending += 1;
+      pendingAmount += amount;
+    } else if (status === 'reviewed') {
+      reviewed += 1;
+      reviewedAmount += amount;
+    } else if (status === 'posted') {
+      posted += 1;
+      postedAmount += amount;
+    } else if (status === 'rejected') {
+      rejected += 1;
+    }
+
+    if (status !== 'posted' && status !== 'rejected') {
+      unpostedCount += 1;
+      unpostedAmount += amount;
+    }
+  }
+
+  const { from, to } = getReceiptDateFilters();
+  return {
+    total: rows.length,
+    pending,
+    reviewed,
+    posted,
+    rejected,
+    today: todayCount,
+    totalAmount,
+    postedAmount,
+    pendingAmount,
+    reviewedAmount,
+    unpostedAmount,
+    unpostedCount,
+    totalCommission,
+    totalDiscount,
+    filtered: Boolean(from || to)
+  };
 }
 
 async function loadReceiptAgents() {
@@ -529,15 +692,17 @@ function resetReceiptFilters() {
 
 async function loadReceiptsPage() {
   const qs = receiptFilterQuery();
-  const [list, stats] = await Promise.all([
+  const statsQs = receiptStatsQuery();
+  const [list, statsList] = await Promise.all([
     commerceApi(`/receipts${qs}`),
-    commerceApi('/receipts/stats')
+    commerceApi(`/receipts${statsQs}`)
   ]);
   const receipts = sortReceipts(list.receipts || []);
   receiptAdmin.receipts = receipts;
   receiptAdmin.listIds = receipts.map((r) => r.id);
-  receiptAdmin.stats = stats.stats || {};
+  receiptAdmin.stats = computeReceiptStatsFromList(statsList.receipts || []);
 
+  syncReceiptDateStripUi();
   renderReceiptStatsCards(receiptAdmin.stats);
   renderReceiptQuickMeta(receiptAdmin.stats);
   syncReceiptFilterUi();
@@ -1078,12 +1243,19 @@ async function postReceiptToEdariUi(id) {
     }
     const postingDate = todayLocalIso();
     if (!confirm(`ترحيل سند ${data.receipt.receiptNo} إلى الإداري بتاريخ ${postingDate}؟`)) return;
-    const result = await window.edariDesktop.postEdariReceipt({
+    const payload = {
       id,
       receiptNo: data.receipt.receiptNo,
       postingDate,
       lines: posting.lines
-    });
+    };
+    const result = typeof window.edariDesktop.postEdariReceipt === 'function'
+      ? await window.edariDesktop.postEdariReceipt(payload)
+      : await window.edariDesktop.lanRequest({
+        path: '/api/admin/edari/post-receipt',
+        method: 'POST',
+        body: payload
+      });
     if (!result?.ok) {
       await commerceApi(`/receipts/${id}/posted`, {
         method: 'POST',
@@ -1124,6 +1296,10 @@ function initReceiptsAdmin() {
   document.getElementById('receiptAgentFilter')?.addEventListener('change', () => loadReceiptsPage());
   document.getElementById('receiptFromFilter')?.addEventListener('change', () => loadReceiptsPage());
   document.getElementById('receiptToFilter')?.addEventListener('change', () => loadReceiptsPage());
+  document.getElementById('btnReceiptDateClear')?.addEventListener('click', () => applyReceiptDatePreset('all'));
+  document.querySelectorAll('[data-rcv-preset]').forEach((btn) => {
+    btn.addEventListener('click', () => applyReceiptDatePreset(btn.dataset.rcvPreset));
+  });
   document.getElementById('receiptSortFilter')?.addEventListener('change', () => {
     renderReceiptTableRows(sortReceipts(receiptAdmin.receipts));
     renderReceiptCards(sortReceipts(receiptAdmin.receipts));

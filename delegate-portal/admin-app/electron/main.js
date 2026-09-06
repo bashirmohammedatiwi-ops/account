@@ -16,25 +16,43 @@ function getLanClientConfigPath() {
   return path.join(app.getPath('userData'), 'lan-client.json');
 }
 
-function readLanClientBackendUrl() {
+function readLanClientConfig() {
   try {
-    const raw = JSON.parse(fs.readFileSync(getLanClientConfigPath(), 'utf8'));
-    return String(raw.backendUrl || '').trim().replace(/\/$/, '');
+    return JSON.parse(fs.readFileSync(getLanClientConfigPath(), 'utf8')) || {};
   } catch {
-    return '';
+    return {};
   }
+}
+
+function readLanClientBackendUrl() {
+  const raw = readLanClientConfig();
+  return String(raw.edariHostUrl || raw.backendUrl || '').trim().replace(/\/$/, '');
 }
 
 function saveLanClientBackendUrl(url) {
   try {
+    const prev = readLanClientConfig();
     fs.mkdirSync(path.dirname(getLanClientConfigPath()), { recursive: true });
-    fs.writeFileSync(getLanClientConfigPath(), JSON.stringify({ backendUrl: url }, null, 2), 'utf8');
+    fs.writeFileSync(getLanClientConfigPath(), JSON.stringify({
+      ...prev,
+      backendUrl: url,
+      edariHostUrl: url
+    }, null, 2), 'utf8');
   } catch { /* non-fatal */ }
+}
+
+function resolveConfiguredEdariHost() {
+  const saved = normalizeBackendUrl(readLanClientBackendUrl());
+  if (saved && isPrivateBackendUrl(saved)) return saved;
+  const env = normalizeBackendUrl(process.env.EDARI_HOST_URL);
+  if (env && isPrivateBackendUrl(env)) return env;
+  return DEFAULT_EDARI_HOST_URL;
 }
 
 const REMOTE_BACKEND_URL = 'http://187.124.23.65:5005';
 const LAN_PROBE_PORTS = [4100, 5005];
 const LAN_PROBE_SUBNETS = ['192.168.75', '192.168.1', '192.168.0', '10.0.0'];
+const DEFAULT_EDARI_HOST_URL = 'http://192.168.75.1:4100';
 
 function normalizeBackendUrl(url) {
   return String(url || '').trim().replace(/\/$/, '');
@@ -53,6 +71,7 @@ function isPrivateBackendUrl(url) {
  * A saved address is tried first, then a short sweep of the shop subnets.
  */
 function lanProbeCandidates() {
+  const configured = resolveConfiguredEdariHost();
   const saved = normalizeBackendUrl(readLanClientBackendUrl());
   const env = normalizeBackendUrl(process.env.EDARI_HOST_URL);
   const lan = [];
@@ -64,6 +83,8 @@ function lanProbeCandidates() {
     }
   }
   return [...new Set([
+    configured,
+    DEFAULT_EDARI_HOST_URL,
     ...(isPrivateBackendUrl(env) ? [env] : []),
     ...(isPrivateBackendUrl(saved) ? [saved] : []),
     ...lan
@@ -71,16 +92,16 @@ function lanProbeCandidates() {
 }
 
 /**
- * Find the LAN machine running Edari Admin Server. Live Edari work (posting
- * receipts, reading trees over ODBC) can only run there, so the client routes
- * those calls to it even though it reads its data from the internet server.
+ * Find the LAN machine running Edari Admin Server. Always keep a default
+ * address so posting and Edari calls have a target even if the probe fails.
  */
 async function pickEdariHost() {
+  const configured = resolveConfiguredEdariHost();
   for (const url of lanProbeCandidates()) {
-    if (!(await checkHealthOnce(`${url}/api/health`, 1200))) continue;
-    if (await checkLanInfoOnce(url, 2000)) return url;
+    if (!(await checkHealthOnce(`${url}/api/health`, 2000))) continue;
+    if (await checkLanInfoOnce(url, 2500)) return url;
   }
-  return '';
+  return configured || DEFAULT_EDARI_HOST_URL;
 }
 
 /**
@@ -98,11 +119,14 @@ const REMOTE_DATA_URL = normalizeBackendUrl(
 let BACKEND_URL = '';
 let DATA_BACKEND_URL = '';
 let EDARI_HOST_URL = '';
+let LAN_CLIENT_UI_URL = '';
 const USE_LOCAL_SERVER = process.env.USE_LOCAL_SERVER === '1' || appMode.mode === 'lan-server';
 const LAN_SERVER = process.env.LAN_SERVER === '1' || appMode.mode === 'lan-server';
 const USE_BUNDLED_UI = app.isPackaged && process.env.USE_REMOTE !== '1' && !USE_LOCAL_SERVER && !ADMIN_LAN_CLIENT;
 const USE_REMOTE_UI = !USE_LOCAL_SERVER && !USE_BUNDLED_UI;
 const BUNDLED_ADMIN_PORT = PORT;
+const CLIENT_UI_PORT_DEFAULT = 4101;
+let CLIENT_UI_PORT = CLIENT_UI_PORT_DEFAULT;
 
 /**
  * Empty means "read from whichever server delivered the page" — the offline
@@ -116,19 +140,48 @@ async function pickDataBackend() {
   return REMOTE_DATA_URL;
 }
 
+function getAdminUiIndexPath() {
+  const candidates = [
+    path.join(__dirname, '..', 'admin-ui', 'index.html'),
+    path.join(getPortalDir(), 'public', 'admin', 'index.html')
+  ];
+  if (app.isPackaged && process.resourcesPath) {
+    candidates.push(path.join(process.resourcesPath, 'portal', 'public', 'admin', 'index.html'));
+  }
+  for (const file of candidates) {
+    try {
+      if (file && fs.existsSync(file)) return file;
+    } catch { /* ignore */ }
+  }
+  return '';
+}
+
 function getAdminLoadTarget() {
+  if (ADMIN_LAN_CLIENT) {
+    const file = getAdminUiIndexPath();
+    if (file) return { type: 'file', file };
+    return { type: 'url', url: `http://127.0.0.1:${CLIENT_UI_PORT}/admin/` };
+  }
   if (USE_BUNDLED_UI) {
     return { type: 'url', url: `http://127.0.0.1:${BUNDLED_ADMIN_PORT}/admin/` };
   }
   if (USE_LOCAL_SERVER) {
     return { type: 'url', url: `http://127.0.0.1:${PORT}/admin` };
   }
-  if (ADMIN_LAN_CLIENT) {
-    return EDARI_HOST_URL
-      ? { type: 'url', url: `${EDARI_HOST_URL}/admin` }
-      : { type: 'setup' };
-  }
   return { type: 'url', url: `${BACKEND_URL || REMOTE_DATA_URL}/admin` };
+}
+
+function loadAdminUi(win) {
+  if (!win || win.isDestroyed()) return Promise.resolve();
+  const target = getAdminLoadTarget();
+  if (target.type === 'file') return win.loadFile(target.file);
+  if (target.type === 'url' && target.url) return win.loadURL(target.url);
+  const html = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>Edari Admin Client</title>
+<style>body{font-family:Tahoma,sans-serif;background:#f0f4f8;color:#16324f;padding:48px;max-width:640px;margin:auto}code{direction:ltr;display:inline-block}</style></head>
+<body><h2>تعذّر فتح واجهة الجهاز الثانوي</h2>
+<p>أعد تثبيت <strong>Edari-Admin-Client-Setup</strong> ثم شغّل التطبيق من اختصار سطح المكتب.</p>
+<p>لا تحتاج اتصال الشبكة لفتح اللوحة — الترحيل فقط يحتاج الجهاز الرئيسي.</p></body></html>`;
+  return win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 }
 const START_HIDDEN = process.argv.includes('--background') || process.argv.includes('--hidden');
 
@@ -524,6 +577,56 @@ function httpRequestJson(targetUrl, options = {}) {
   });
 }
 
+function lanHostHttpRequest({ path, method = 'GET', body = null, headers = {}, timeoutMs = 60000 } = {}) {
+  const base = normalizeBackendUrl(EDARI_HOST_URL || DEFAULT_EDARI_HOST_URL);
+  const target = `${base}${path.startsWith('/') ? path : `/${path}`}`;
+  return new Promise((resolve, reject) => {
+    let urlObj;
+    try {
+      urlObj = new URL(target);
+    } catch {
+      reject(new Error('عنوان الجهاز الرئيسي غير صالح'));
+      return;
+    }
+    const payload = body == null
+      ? ''
+      : (typeof body === 'string' ? body : JSON.stringify(body));
+    const reqHeaders = {
+      Accept: 'application/json',
+      ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {}),
+      ...headers
+    };
+    const lib = urlObj.protocol === 'https:' ? https : http;
+    const req = lib.request({
+      hostname: urlObj.hostname,
+      port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
+      path: `${urlObj.pathname}${urlObj.search}`,
+      method: method || 'GET',
+      headers: reqHeaders,
+      timeout: timeoutMs
+    }, (res) => {
+      let text = '';
+      res.on('data', (chunk) => { text += chunk; });
+      res.on('end', () => {
+        let data = {};
+        try {
+          data = text ? JSON.parse(text) : {};
+        } catch {
+          data = { raw: text };
+        }
+        resolve({ status: res.statusCode || 0, data });
+      });
+    });
+    req.on('error', (err) => reject(new Error(err.message || 'تعذّر الاتصال بالجهاز الرئيسي')));
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('انتهت مهلة الاتصال بالجهاز الرئيسي — تأكد من IP والمنفذ'));
+    });
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
+
 function pushSyncProgress(text) {
   const line = String(text || '').trim();
   if (!line || !mainWindow || mainWindow.isDestroyed()) return;
@@ -755,14 +858,37 @@ function recreateAdminWindow() {
  * The LAN link can drop while the client is open. Re-probe every backend and
  * reload as soon as one answers, instead of leaving a dead error page.
  */
+async function startClientStaticUi() {
+  if (staticAdminServer) return CLIENT_UI_PORT;
+  const portalDir = getPortalDir();
+  let lastErr;
+  for (const port of [CLIENT_UI_PORT_DEFAULT, 4102, 4103, 4110]) {
+    try {
+      staticAdminServer = await startStaticAdmin(portalDir, port);
+      CLIENT_UI_PORT = port;
+      LAN_CLIENT_UI_URL = `http://127.0.0.1:${port}/admin/`;
+      return port;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr || new Error('تعذّر تشغيل واجهة الجهاز الثانوي');
+}
+
+async function prepareLanClientUiUrl() {
+  LAN_CLIENT_UI_URL = `http://127.0.0.1:${CLIENT_UI_PORT}/admin/`;
+  return LAN_CLIENT_UI_URL;
+}
+
 async function recoverLanClientConnection(failedUrl) {
+  if (ADMIN_LAN_CLIENT) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      await loadAdminUi(mainWindow).catch(() => { /* ignore */ });
+    }
+    return;
+  }
   if (lanRecoveryTimer) return;
   const attempt = async () => {
-    if (ADMIN_LAN_CLIENT) {
-      EDARI_HOST_URL = await pickEdariHost();
-      if (!EDARI_HOST_URL) return false;
-      saveLanClientBackendUrl(EDARI_HOST_URL);
-    }
     DATA_BACKEND_URL = await pickDataBackend();
     BACKEND_URL = DATA_BACKEND_URL || REMOTE_DATA_URL;
     const target = getAdminLoadTarget();
@@ -791,26 +917,26 @@ function createWindow({ show = !START_HIDDEN } = {}) {
     'lan-client': 'Edari Admin Client — عميل LAN',
     default: 'Edari Admin — لوحة التحكم'
   };
-  const isSetup = ADMIN_LAN_CLIENT && !BACKEND_URL;
+  const isSetup = false;
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 920,
     minWidth: 1100,
     minHeight: 700,
     show: false,
-    title: isSetup ? 'Edari Admin Client — إعداد' : (titles[appMode.mode] || titles.default),
+    title: titles[appMode.mode] || titles.default,
     icon: getAppIcon(),
     backgroundColor: '#f0f4f8',
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      preload: path.join(__dirname, isSetup ? 'lan-setup-preload.js' : 'preload.js'),
-      additionalArguments: isSetup ? [] : [
+      preload: path.join(__dirname, 'preload.js'),
+      additionalArguments: [
         `--edari-backend=${BACKEND_URL}`,
         `--edari-remote=${USE_REMOTE_UI ? '1' : '0'}`,
         `--edari-lan-client=${ADMIN_LAN_CLIENT ? '1' : '0'}`,
-        `--edari-api-same-origin=${USE_LOCAL_SERVER || ADMIN_LAN_CLIENT ? '1' : '0'}`,
-        `--edari-host=${EDARI_HOST_URL}`,
+        `--edari-api-same-origin=${USE_LOCAL_SERVER ? '1' : '0'}`,
+        `--edari-host=${EDARI_HOST_URL || DEFAULT_EDARI_HOST_URL}`,
         `--edari-data-backend=${DATA_BACKEND_URL || BACKEND_URL || REMOTE_DATA_URL}`
       ]
     }
@@ -821,14 +947,20 @@ function createWindow({ show = !START_HIDDEN } = {}) {
     pushAutoSyncState(backgroundSync?.getState() || {});
   });
 
-  const target = getAdminLoadTarget();
-  if (target.type === 'setup') {
-    mainWindow.loadFile(path.join(__dirname, 'lan-setup.html'));
+  if (ADMIN_LAN_CLIENT) {
+    void loadAdminUi(mainWindow);
   } else {
-    mainWindow.loadURL(target.url);
+    const target = getAdminLoadTarget();
+    if (target.type === 'setup') {
+      mainWindow.loadFile(path.join(__dirname, 'lan-setup.html'));
+    } else if (target.type === 'file') {
+      mainWindow.loadFile(target.file);
+    } else {
+      mainWindow.loadURL(target.url);
+    }
   }
 
-  if (!USE_BUNDLED_UI) {
+  if (!USE_BUNDLED_UI && !ADMIN_LAN_CLIENT) {
     mainWindow.webContents.on('did-fail-load', (_e, code, _desc, url, isMainFrame) => {
       if (!isMainFrame || code === -3) return;
       void recoverLanClientConnection(url);
@@ -885,9 +1017,10 @@ function createWindow({ show = !START_HIDDEN } = {}) {
           accelerator: 'CmdOrCtrl+Shift+R',
           click: async () => {
             EDARI_HOST_URL = await pickEdariHost();
-            if (EDARI_HOST_URL) saveLanClientBackendUrl(EDARI_HOST_URL);
+            saveLanClientBackendUrl(EDARI_HOST_URL);
             DATA_BACKEND_URL = await pickDataBackend();
             BACKEND_URL = DATA_BACKEND_URL || REMOTE_DATA_URL;
+            await prepareLanClientUiUrl();
             recreateAdminWindow();
             dialog.showMessageBox({
               type: EDARI_HOST_URL ? 'info' : 'warning',
@@ -1165,7 +1298,8 @@ function loadLanDefaults() {
     return {
       LAN_PORTS: LAN_PROBE_PORTS,
       LAN_PREFER_SUBNETS: LAN_PROBE_SUBNETS,
-      defaultPrefillUrl: () => 'http://192.168.75.1:4100',
+      DEFAULT_EDARI_HOST_URL,
+      defaultPrefillUrl: () => DEFAULT_EDARI_HOST_URL,
       quickProbeIps: () => LAN_PROBE_SUBNETS.flatMap((s) => [1, 10, 100, 254].map((h) => `${s}.${h}`))
     };
   }
@@ -1195,13 +1329,45 @@ ipcMain.handle('probe-backend-health', async (_e, url) => {
 
 ipcMain.handle('lan-client:get-setup-config', () => {
   const d = loadLanDefaults();
+  const saved = resolveConfiguredEdariHost();
   return {
     ports: d.LAN_PORTS,
     preferSubnets: d.LAN_PREFER_SUBNETS,
-    prefillUrl: d.defaultPrefillUrl(),
+    prefillUrl: saved || d.defaultPrefillUrl() || DEFAULT_EDARI_HOST_URL,
+    defaultUrl: DEFAULT_EDARI_HOST_URL,
+    savedUrl: saved,
     quickProbeIps: d.quickProbeIps(),
     autoConnect: true
   };
+});
+
+ipcMain.handle('lan-client:get-host', () => ({
+  ok: true,
+  url: normalizeBackendUrl(EDARI_HOST_URL || DEFAULT_EDARI_HOST_URL),
+  defaultUrl: DEFAULT_EDARI_HOST_URL
+}));
+
+ipcMain.handle('lan-client:request', async (_e, payload = {}) => {
+  const reqPath = String(payload.path || '');
+  if (!reqPath.startsWith('/api/admin/')) {
+    return { ok: false, error: 'مسار غير مسموح' };
+  }
+  try {
+    const isPosting = reqPath.includes('/edari/post-');
+    const { status, data } = await lanHostHttpRequest({
+      path: reqPath,
+      method: payload.method || (payload.body != null ? 'POST' : 'GET'),
+      body: payload.body,
+      headers: payload.headers || {},
+      timeoutMs: isPosting ? 120000 : 30000
+    });
+    if (status >= 400) {
+      return { ok: false, error: data.error || data.message || `HTTP ${status}`, status, ...data };
+    }
+    return data && typeof data === 'object' ? data : { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err.message || 'تعذّر الاتصال بالجهاز الرئيسي' };
+  }
 });
 
 ipcMain.handle('lan-client:save-url', async (_e, url) => {
@@ -1211,8 +1377,9 @@ ipcMain.handle('lan-client:save-url', async (_e, url) => {
   EDARI_HOST_URL = norm;
   DATA_BACKEND_URL = await pickDataBackend();
   BACKEND_URL = DATA_BACKEND_URL || REMOTE_DATA_URL;
+  await prepareLanClientUiUrl();
   recreateAdminWindow();
-  return { ok: true, backendUrl: norm };
+  return { ok: true, backendUrl: norm, edariHostUrl: norm };
 });
 
 ipcMain.handle('run-local-sync', (_e, { serverUrl, syncKey, treeSeqs }) => {
@@ -1665,18 +1832,34 @@ app.whenReady().then(async () => {
     }
 
     if (ADMIN_LAN_CLIENT) {
-      EDARI_HOST_URL = await pickEdariHost();
-      if (EDARI_HOST_URL) saveLanClientBackendUrl(EDARI_HOST_URL);
+      try { app.setLoginItemSettings({ openAtLogin: false }); } catch { /* ignore */ }
+      EDARI_HOST_URL = resolveConfiguredEdariHost();
+      DATA_BACKEND_URL = REMOTE_DATA_URL;
+      BACKEND_URL = REMOTE_DATA_URL;
+      if (!getAdminUiIndexPath()) {
+        try { await startClientStaticUi(); } catch (err) {
+          console.warn('Client static UI fallback failed:', err?.message || err);
+        }
+      }
+    } else {
+      DATA_BACKEND_URL = await pickDataBackend();
+      BACKEND_URL = DATA_BACKEND_URL || REMOTE_DATA_URL;
     }
-    DATA_BACKEND_URL = await pickDataBackend();
-    BACKEND_URL = DATA_BACKEND_URL || REMOTE_DATA_URL;
     if (!USE_LOCAL_SERVER && !USE_BUNDLED_UI && !ADMIN_LAN_CLIENT) {
       await checkHealth(BACKEND_URL);
     }
-    initBackgroundSync();
+    if (!ADMIN_LAN_CLIENT) initBackgroundSync();
     createTray();
-    createWindow({ show: !START_HIDDEN });
+    createWindow({ show: ADMIN_LAN_CLIENT ? true : !START_HIDDEN });
     notifyLanServerReady();
+    if (ADMIN_LAN_CLIENT) {
+      void pickEdariHost().then((url) => {
+        if (url) {
+          EDARI_HOST_URL = url;
+          saveLanClientBackendUrl(url);
+        }
+      }).catch(() => { /* ignore */ });
+    }
 
     if (START_HIDDEN) {
       setTimeout(async () => {
@@ -1685,6 +1868,19 @@ app.whenReady().then(async () => {
       }, 15000);
     }
   } catch (err) {
+    if (ADMIN_LAN_CLIENT) {
+      console.error(err);
+      try {
+        EDARI_HOST_URL = EDARI_HOST_URL || resolveConfiguredEdariHost();
+        DATA_BACKEND_URL = DATA_BACKEND_URL || REMOTE_DATA_URL;
+        BACKEND_URL = REMOTE_DATA_URL;
+        if (!mainWindow || mainWindow.isDestroyed()) {
+          createTray();
+          createWindow({ show: true });
+        }
+        return;
+      } catch { /* fall through */ }
+    }
     showStartupError(err);
     if (!START_HIDDEN) app.quit();
   }

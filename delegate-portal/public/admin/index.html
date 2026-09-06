@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="admin.css?v=20260826col1">
   <link rel="stylesheet" href="admin-agents.css?v=20260902agents6">
   <link rel="stylesheet" href="admin-pro.css?v=20260902pro2">
-  <link rel="stylesheet" href="admin-lan.css?v=20260903lan2">
+  <link rel="stylesheet" href="admin-lan.css?v=20260906lan3">
 </head>
 <body>
   <div id="adminLoginGate" class="admin-login-gate hidden" aria-hidden="true">
@@ -117,6 +117,10 @@
           <p class="topbar-sub" id="pageSubtitle">نظرة عامة على النظام</p>
         </div>
         <div class="topbar-trailing">
+          <button type="button" class="lan-host-chip hidden" id="lanHostChip" title="تعديل عنوان الجهاز الرئيسي">
+            <span class="lan-host-chip-label">الرئيسي</span>
+            <span class="lan-host-chip-url" id="lanHostChipUrl" dir="ltr">192.168.75.1:4100</span>
+          </button>
           <span class="lan-topbar-badge hidden" id="lanTopbarBadge" title="وضع الشبكة">LAN</span>
           <span class="admin-auth-badge hidden" id="adminAuthBadge"></span>
           <button type="button" class="btn btn-soft btn-sm hidden" id="btnAdminLogout">خروج</button>
@@ -391,6 +395,32 @@
             <p id="receiptPostAlertText">الترحيل إلى الإداري يتم من تطبيق الإدارة المكتبي المتصل بـ Edari</p>
           </div>
 
+          <div class="rcv-date-strip" id="receiptDateStrip">
+            <div class="rcv-date-strip-head">
+              <span class="rcv-date-strip-title">فترة الإحصائيات والقائمة</span>
+              <span class="rcv-date-strip-hint muted" id="receiptDateRangeLabel">كل الفترات</span>
+            </div>
+            <div class="rcv-date-strip-body">
+              <div class="rcv-date-presets" role="group" aria-label="فترات سريعة">
+                <button type="button" class="rcv-date-preset" data-rcv-preset="today">اليوم</button>
+                <button type="button" class="rcv-date-preset" data-rcv-preset="week">7 أيام</button>
+                <button type="button" class="rcv-date-preset" data-rcv-preset="month">30 يوم</button>
+                <button type="button" class="rcv-date-preset" data-rcv-preset="all">الكل</button>
+              </div>
+              <div class="rcv-date-range">
+                <label class="rcv-date-field">
+                  <span>من</span>
+                  <input type="date" id="receiptFromFilter" class="search rcv-date" title="من تاريخ">
+                </label>
+                <label class="rcv-date-field">
+                  <span>إلى</span>
+                  <input type="date" id="receiptToFilter" class="search rcv-date" title="حتى تاريخ">
+                </label>
+                <button type="button" class="btn btn-soft btn-sm" id="btnReceiptDateClear" title="مسح التاريخ">مسح</button>
+              </div>
+            </div>
+          </div>
+
           <div class="rcv-stats-grid" id="receiptStats"></div>
 
           <div class="rcv-quick-bar">
@@ -465,9 +495,7 @@
                   <select id="receiptAgentFilter" class="search rcv-filter">
                     <option value="">كل المندوبين</option>
                   </select>
-                  <input type="date" id="receiptFromFilter" class="search rcv-filter rcv-date" title="من تاريخ">
-                  <input type="date" id="receiptToFilter" class="search rcv-filter rcv-date" title="حتى تاريخ">
-                  <button type="button" class="btn btn-soft btn-sm" id="btnReceiptFilterReset">مسح</button>
+                  <button type="button" class="btn btn-soft btn-sm" id="btnReceiptFilterReset">مسح الفلاتر</button>
                 </div>
                 <div class="rcv-table-wrap" id="receiptTableWrap">
                   <table class="rcv-table">
@@ -1187,7 +1215,7 @@
                 <div class="form-stack lan-client-only">
                   <label class="field">
                     <span>عنوان الجهاز الرئيسي</span>
-                    <input type="text" id="lanServerInput" placeholder="http://192.168.75.1:4100">
+                    <input type="text" id="lanServerInputSettings" placeholder="http://192.168.75.1:4100" dir="ltr" value="http://192.168.75.1:4100">
                   </label>
                   <div class="btn-row">
                     <button type="button" class="btn btn-primary btn-sm" id="btnLanConnect">اتصال</button>
@@ -1277,11 +1305,11 @@
                 <div class="form-stack">
                   <label class="field">
                     <span>عنوان الجهاز الرئيسي</span>
-                    <input type="text" id="lanServerInput" placeholder="http://192.168.75.1:4100" dir="ltr">
+                    <input type="text" id="lanServerInput" placeholder="http://192.168.75.1:4100" dir="ltr" value="http://192.168.75.1:4100">
                   </label>
                   <label class="field">
                     <span>منفذ البحث</span>
-                    <input type="number" id="lanScanPort" value="5005" min="1" max="65535" dir="ltr">
+                    <input type="number" id="lanScanPort" value="4100" min="1" max="65535" dir="ltr">
                   </label>
                   <div class="btn-row">
                     <button type="button" class="btn btn-primary" id="btnLanPageConnect">اتصال</button>
@@ -1767,24 +1795,24 @@
 
   <script src="config.js"></script>
   <script src="admin-auth.js?v=20260903price4"></script>
-  <script src="admin-lan-connection.js?v=20260903price4"></script>
+  <script src="admin-lan-connection.js?v=20260906lan3"></script>
   <script src="admin-shared-state.js?v=20260903price4"></script>
-  <script src="admin-edari-bridge.js?v=20260903price4"></script>
+  <script src="admin-edari-bridge.js?v=20260906lan3"></script>
   <script src="admin-ui.js?v=20260902pro1"></script>
-  <script src="admin.js?v=20260903price4"></script>
+  <script src="admin.js?v=20260906lan3"></script>
   <script src="admin-shell.js?v=20260826col1"></script>
   <script src="admin-commerce.js?v=20260826col1"></script>
   <script src="admin-collection-kit.js?v=20260901post1"></script>
   <script src="admin-agents.js?v=20260902agents6"></script>
-  <script src="admin-receipts.js?v=20260903price4"></script>
+  <script src="admin-receipts.js?v=20260906lan4"></script>
   <script src="admin-delivery-receipts.js?v=20260826col1"></script>
-  <script src="admin-customers.js?v=20260901post1"></script>
+  <script src="admin-customers.js?v=20260906lan4"></script>
   <script src="admin-promotional-visits.js?v=20260826col1"></script>
   <script src="admin-thermal-template.js?v=20260824thermal8"></script>
   <script src="admin-sales-report.js?v=20260903price4"></script>
   <script src="admin-account-statements.js?v=20260903price4"></script>
   <script src="admin-price-sync.js?v=20260903price4"></script>
-  <script src="admin-lan.js?v=20260903price4"></script>
+  <script src="admin-lan.js?v=20260906lan3"></script>
   <script>
     if (typeof initAdminShell === 'function') initAdminShell();
     if (typeof initAdminUi === 'function') initAdminUi();

@@ -13,6 +13,49 @@ function sqlLike(value) {
   return String(value || '').replace(/'/g, "''").replace(/[%_]/g, '');
 }
 
+function isAccountNumberQuery(query) {
+  return /^\d{3,15}$/.test(String(query || '').trim());
+}
+
+function cashNameClause() {
+  return `(Name1 LIKE N'%صندوق%' OR Name1 LIKE N'%صناديق%' OR Name1 LIKE N'%نقد%'
+      OR Name1 LIKE N'%نقدية%' OR Name1 LIKE N'%خزينة%' OR Name1 LIKE N'%cash%' OR Name1 LIKE N'%Cash%'
+      OR Name1 LIKE N'%تصفية%')`;
+}
+
+function cashBrowseWhere() {
+  const prefixes = [
+    "Num LIKE '12104%'",
+    "Num LIKE '12110%'",
+    "Num LIKE '12111%'",
+    "Num LIKE '12112%'",
+    "Num LIKE '121%04%'"
+  ];
+  return `(${prefixes.join(' OR ')} OR ${cashNameClause()})`;
+}
+
+function sortAccountResults(results, query = '') {
+  const q = String(query || '').trim();
+  return results.slice().sort((a, b) => {
+    if (q) {
+      const numA = String(a.num || '');
+      const numB = String(b.num || '');
+      const rank = (num) => {
+        if (num === q) return 0;
+        if (num.startsWith(q)) return 1;
+        if (num.includes(q)) return 2;
+        return 3;
+      };
+      const diff = rank(numA) - rank(numB);
+      if (diff !== 0) return diff;
+    }
+    const leafA = a.subCount === 0 ? 0 : 1;
+    const leafB = b.subCount === 0 ? 0 : 1;
+    if (leafA !== leafB) return leafA - leafB;
+    return String(a.num).localeCompare(String(b.num), 'ar', { numeric: true });
+  });
+}
+
 function mapRow(row) {
   return {
     seq: String(row.Seq ?? row.seq ?? ''),
@@ -47,22 +90,29 @@ async function resolveEdariAccountNames(nums = []) {
   };
 }
 
-async function searchEdariAccounts({ q = '', kind = '', nums = null } = {}) {
+async function searchEdariAccounts({ q = '', kind = '', nums = null, refresh = false, all = false } = {}) {
   if (Array.isArray(nums) && nums.length) return resolveEdariAccountNames(nums);
 
   const query = String(q || '').trim();
   const like = sqlLike(query);
   const isCash = kind === 'cash' || kind === 'box';
+  const liveRefresh = refresh === true || refresh === '1' || all === true || all === '1';
+  const numericQuery = isAccountNumberQuery(query);
+  let rowLimit = isCash && liveRefresh ? 200 : 80;
   let where;
 
-  if (isCash) {
-    const cashName = `(Name1 LIKE N'%صندوق%' OR Name1 LIKE N'%صناديق%' OR Name1 LIKE N'%نقد%'
-      OR Name1 LIKE N'%نقدية%' OR Name1 LIKE N'%خزينة%' OR Name1 LIKE N'%cash%' OR Name1 LIKE N'%Cash%'
-      OR Name1 LIKE N'%تصفية%' OR Num LIKE '12104%')`;
+  if (isCash && numericQuery) {
+    const exact = await resolveEdariAccountNames([query]);
+    if (exact.results?.length) return exact;
+    where = `(Num LIKE '${like}%' OR Num LIKE '%${like}%')`;
+    rowLimit = 60;
+  } else if (isCash) {
     const vague = !query || query === 'صندوق' || query === 'الصندوق' || query === 'صناديق';
-    where = vague
-      ? cashName
-      : `(${cashName} OR Num LIKE '%${like}%' OR Name1 LIKE N'%${like}%')`;
+    if (liveRefresh || vague) {
+      where = cashBrowseWhere();
+    } else {
+      where = `(${cashBrowseWhere()} OR Num LIKE '%${like}%' OR Name1 LIKE N'%${like}%')`;
+    }
   } else if (kind === 'tree' || kind === 'account-tree') {
     where = query
       ? `(SubCount > 0) AND (Num LIKE '%${like}%' OR Name1 LIKE N'%${like}%')`
@@ -73,7 +123,7 @@ async function searchEdariAccounts({ q = '', kind = '', nums = null } = {}) {
   }
 
   const sql = `
-    SELECT TOP 80 Seq, Num, Name1, SubCount
+    SELECT TOP ${rowLimit} Seq, Num, Name1, SubCount
     FROM File11n
     WHERE ${where}
     ORDER BY Num
@@ -81,13 +131,10 @@ async function searchEdariAccounts({ q = '', kind = '', nums = null } = {}) {
 
   const r = await odbcBridge.runQuery({ ...getEdariConnection(), sql });
   if (!r.ok) throw new Error(r.error || 'فشل قراءة حسابات الإداري');
-  const results = (r.rows || []).map(mapRow).filter((a) => a.seq);
-  results.sort((a, b) => {
-    const leafA = a.subCount === 0 ? 0 : 1;
-    const leafB = b.subCount === 0 ? 0 : 1;
-    if (leafA !== leafB) return leafA - leafB;
-    return String(a.num).localeCompare(String(b.num), 'ar', { numeric: true });
-  });
+  const results = sortAccountResults(
+    (r.rows || []).map(mapRow).filter((a) => a.seq),
+    query
+  );
   return {
     ok: true,
     source: 'edari',

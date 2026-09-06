@@ -8025,6 +8025,112 @@ input[type="date"].num-en,
   margin-inline-end: 4px;
 }
 
+.rcv-date-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+  box-shadow: var(--rcv-shadow, var(--shadow-sm));
+}
+
+.rcv-date-strip-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rcv-date-strip-title {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.rcv-date-strip-hint {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.rcv-date-strip-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.rcv-date-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rcv-date-preset {
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.rcv-date-preset:hover {
+  border-color: #93c5fd;
+  background: #f8fafc;
+}
+
+.rcv-date-preset.is-active {
+  border-color: #0d9488;
+  background: #f0fdfa;
+  color: #0f766e;
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.12);
+}
+
+.rcv-date-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+
+.rcv-date-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.rcv-date-field .rcv-date,
+.rcv-date-field .search {
+  min-width: 148px;
+}
+
+@media (max-width: 720px) {
+  .rcv-date-range {
+    margin-inline-start: 0;
+    width: 100%;
+  }
+  .rcv-date-field {
+    flex: 1 1 140px;
+  }
+  .rcv-date-field .rcv-date,
+  .rcv-date-field .search {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
 .rcv-quick-bar {
   display: flex;
   flex-wrap: wrap;

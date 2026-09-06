@@ -4,8 +4,17 @@
   "icon": "icons/app-icon.ico",
   "directories": { "output": "dist" },
   "afterPack": "scripts/after-pack-icon.cjs",
+  "files": [
+    "electron/**/*",
+    "package.json",
+    {
+      "from": "../public/admin",
+      "to": "admin-ui"
+    }
+  ],
   "extraResources": [
-    { "from": "icons/app-icon-256.png", "to": "icon.png" }
+    { "from": "icons/app-icon-256.png", "to": "icon.png" },
+    { "from": "../public/admin", "to": "portal/public/admin" }
   ],
   "win": {
     "icon": "icons/app-icon.ico",

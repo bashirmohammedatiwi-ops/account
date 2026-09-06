@@ -279,6 +279,36 @@ body.login-locked .app {
   word-break: break-all;
 }
 
+.lan-host-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid #bae6fd;
+  background: #f0f9ff;
+  color: #0369a1;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.lan-host-chip:hover {
+  background: #e0f2fe;
+  border-color: #7dd3fc;
+}
+
+.lan-host-chip-label {
+  color: #0f766e;
+}
+
+.lan-host-chip-url {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
 @media (max-width: 720px) {
   .lan-hero {
     grid-template-columns: 1fr;

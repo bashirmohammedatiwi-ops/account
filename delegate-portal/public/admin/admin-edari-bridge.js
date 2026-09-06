@@ -3,6 +3,7 @@
  */
 (function () {
   const desktop = window.edariDesktop || {};
+  const lanClient = Boolean(desktop.lanClient || desktop.isLanClient);
 
   function isLocalhostHost(hostname) {
     return hostname === '127.0.0.1' || hostname === 'localhost';
@@ -20,15 +21,21 @@
    */
   function resolveEdariBase() {
     if (lanClient && typeof window.getLanApiBase === 'function') {
-      return window.getLanApiBase();
+      return window.getLanApiBase() || desktop.defaultEdariHostUrl || 'http://192.168.75.1:4100';
     }
     const override = String(
-      desktop.edariHostUrl || localStorage.getItem('edariHostUrl') || ''
+      desktop.edariHostUrl
+      || localStorage.getItem('edariHostUrl')
+      || (lanClient ? (desktop.defaultEdariHostUrl || 'http://192.168.75.1:4100') : '')
+      || ''
     ).trim().replace(/\/$/, '');
     const origin = (window.location.origin && window.location.origin !== 'null')
       ? window.location.origin
       : '';
-    if (!override) return /^https?:/i.test(origin) ? '' : resolveBridgeBase();
+    if (!override) {
+      if (lanClient) return desktop.defaultEdariHostUrl || 'http://192.168.75.1:4100';
+      return /^https?:/i.test(origin) ? '' : resolveBridgeBase();
+    }
     try {
       if (origin && new URL(override).origin === origin) return '';
     } catch { /* ignore */ }
@@ -60,6 +67,20 @@
 
   async function apiJson(path, opts = {}, attempt = 0) {
     const { __base, ...fetchOpts } = opts;
+    if (lanClient && isEdariPath(path) && typeof desktop.lanRequest === 'function') {
+      let body = fetchOpts.body;
+      if (typeof body === 'string') {
+        try { body = JSON.parse(body); } catch { /* keep */ }
+      }
+      const data = await desktop.lanRequest({
+        path,
+        method: fetchOpts.method || opts.method || (body != null ? 'POST' : 'GET'),
+        body,
+        headers: fetchOpts.headers
+      });
+      if (data?.ok === false) throw new Error(data.error || 'تعذّر الاتصال بالجهاز الرئيسي');
+      return data;
+    }
     const base = __base ?? (isEdariPath(path) ? resolveEdariBase() : resolveBridgeBase());
     const url = `${base}${path}`;
     try {
@@ -100,8 +121,6 @@
       return apiJson(path, { method, body: JSON.stringify(params || {}) });
     };
   }
-
-  const lanClient = Boolean(desktop.lanClient || desktop.isLanClient);
 
   window.edariDesktop = {
     ...desktop,

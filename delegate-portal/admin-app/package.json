@@ -1,6 +1,6 @@
 {
   "name": "edari-admin-desktop",
-  "version": "1.0.187",
+  "version": "1.0.195",
   "description": "Edari Admin — لوحة تحكم الحسابات والمندوبين",
   "main": "electron/main.js",
   "author": "Edari",
@@ -11,7 +11,7 @@
     "prepare-build": "node scripts/generate-icons.mjs && node scripts/prepare-build.js",
     "build": "node scripts/set-app-mode.js default && npm run prepare-build && electron-builder --win nsis",
     "build:server": "node scripts/set-app-mode.js lan-server && npm run prepare-build && electron-builder --win nsis --config electron-builder.lan-server.json",
-    "build:lan-client": "node scripts/set-app-mode.js lan-client && npm run prepare-build && electron-builder --win nsis --config electron-builder.lan-client.json",
+    "build:lan-client": "node scripts/set-app-mode.js lan-client && node scripts/generate-icons.mjs && electron-builder --win nsis --config electron-builder.lan-client.json",
     "build:portable": "node scripts/set-app-mode.js default && npm run prepare-build && electron-builder --win portable",
     "build:installer": "node scripts/set-app-mode.js default && npm run prepare-build && electron-builder --win nsis"
   },

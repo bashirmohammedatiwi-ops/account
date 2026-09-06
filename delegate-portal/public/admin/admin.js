@@ -20,6 +20,21 @@ function stopTopLoading() {
  * data API at it explicitly while the page itself is served by the machine that
  * owns Edari. An empty value means "use the server that served this page".
  */
+function isPrivateLanUrl(url) {
+  try {
+    return /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
+function defaultEdariHostUrl() {
+  return (
+    window.edariDesktop?.defaultEdariHostUrl
+    || 'http://192.168.75.1:4100'
+  ).replace(/\/$/, '');
+}
+
 function resolveDataBackend() {
   const pageOrigin = (window.location.origin && window.location.origin !== 'null')
     ? window.location.origin
@@ -28,6 +43,7 @@ function resolveDataBackend() {
     for (const u of urls) {
       const url = String(u || '').trim().replace(/\/$/, '');
       if (!url || isLocalhostUrl(url)) continue;
+      if (isPrivateLanUrl(url)) continue;
       try {
         if (pageOrigin && new URL(url).origin === pageOrigin) continue;
       } catch { continue; }
@@ -39,7 +55,6 @@ function resolveDataBackend() {
     window.edariDesktop?.dataBackendUrl,
     localStorage.getItem('dataBackendUrl'),
     !window.edariDesktop?.lanClient && window.edariDesktop?.backendUrl,
-    localStorage.getItem('backendUrl'),
     window.ADMIN_CONFIG?.BACKEND_URL
   );
 }
@@ -120,7 +135,10 @@ function resolveApiBaseForPath(path) {
 /** Machine that owns Edari (LAN server) — empty string = page origin. */
 function resolveLanApiBase() {
   const override = String(
-    window.edariDesktop?.edariHostUrl || localStorage.getItem('edariHostUrl') || ''
+    window.edariDesktop?.edariHostUrl
+    || localStorage.getItem('edariHostUrl')
+    || (isLanClientMode() ? defaultEdariHostUrl() : '')
+    || ''
   ).trim().replace(/\/$/, '');
   const origin = (window.location.origin && window.location.origin !== 'null')
     ? window.location.origin
@@ -131,6 +149,7 @@ function resolveLanApiBase() {
     } catch { /* ignore */ }
     return override;
   }
+  if (isLanClientMode()) return defaultEdariHostUrl();
   if (/^https?:/i.test(origin) && !isLocalhostUrl(origin)) return '';
   if (window.edariDesktop?.apiSameOrigin) return '';
   return '';
@@ -397,6 +416,20 @@ function fmtDate(v) {
 async function api(path, opts = {}, attempt = 0) {
   const auth = window.adminAuth?.authHeaders?.() || {};
   const headers = { 'Content-Type': 'application/json', ...auth, ...(opts.headers || {}) };
+  if (isLanClientMode() && shouldUseLanApiForPath(path) && typeof window.edariDesktop?.lanRequest === 'function') {
+    let body = opts.body;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch { /* keep string */ }
+    }
+    const data = await window.edariDesktop.lanRequest({
+      path,
+      method: opts.method || (body != null ? 'POST' : 'GET'),
+      body,
+      headers
+    });
+    if (data?.ok === false) throw new Error(data.error || 'تعذّر الاتصال بالجهاز الرئيسي');
+    return data;
+  }
   const base = resolveApiBaseForPath(path);
   try {
     const res = await fetch(`${base}${path}`, { ...opts, headers });
@@ -579,37 +612,88 @@ function treeDisplayLabel(tree) {
   return 'شجرة بدون اسم';
 }
 
-async function loadAgentAssignableTrees() {
+async function loadAgentAssignableTrees({ forceLive = false } = {}) {
+  const mergeEdariAndDb = (edariTrees, dbTrees) => {
+    const dbSeqSet = new Set(dbTrees.map((t) => String(t.seq)));
+    const map = new Map();
+    for (const raw of edariTrees) {
+      const t = normalizeAssignableTree(raw);
+      if (!t.seq || Number(t.sub_count) <= 0) continue;
+      map.set(String(t.seq), { ...t, missingOnServer: !dbSeqSet.has(String(t.seq)) });
+    }
+    for (const raw of dbTrees) {
+      const t = normalizeAssignableTree(raw);
+      if (!t.seq || Number(t.sub_count) <= 0) continue;
+      const seq = String(t.seq);
+      const hit = map.get(seq);
+      map.set(seq, hit
+        ? {
+          ...hit,
+          num: hit.num || t.num,
+          name1: hit.name1 || t.name1,
+          sub_count: hit.sub_count || t.sub_count,
+          bal: hit.bal ?? t.bal,
+          missingOnServer: false
+        }
+        : { ...t, missingOnServer: false });
+    }
+    return [...map.values()].sort((a, b) =>
+      String(a.num || a.seq).localeCompare(String(b.num || b.seq), 'ar', { numeric: true })
+    );
+  };
+
+  const loadFromEdari = async () => {
+    let edariTrees = [];
+    if (window.edariDesktop?.listEdariTrees) {
+      const data = await window.edariDesktop.listEdariTrees();
+      edariTrees = data?.trees || [];
+    } else {
+      const data = await api('/api/admin/edari/trees');
+      edariTrees = data?.trees || [];
+    }
+    if (!edariTrees.length) return [];
+    const dbData = await api('/api/admin/trees').catch(() => ({ trees: [] }));
+    return mergeEdariAndDb(edariTrees, dbData?.trees || []);
+  };
+
   try {
-    const data = await api('/api/admin/trees/assignable');
-    agentAssignableTrees = (data?.trees || []).map((t) => normalizeAssignableTree({
-      seq: t.seq,
-      num: t.num,
-      name1: t.name1,
-      sub_count: t.sub_count,
-      bal: t.bal,
-      missingOnServer: t.onServer === false
-    })).filter((t) => t.seq);
-    if (agentAssignableTrees.length) {
-      agentAssignableTrees.sort((a, b) =>
-        String(a.num || a.seq).localeCompare(String(b.num || b.seq), 'ar', { numeric: true })
-      );
+    const fromEdari = await loadFromEdari();
+    if (fromEdari.length) {
+      agentAssignableTrees = fromEdari;
       return agentAssignableTrees;
     }
-  } catch { /* fallback below */ }
+  } catch (err) {
+    if (forceLive) throw err;
+  }
+
+  if (!forceLive) {
+    try {
+      const data = await api('/api/admin/trees/assignable');
+      agentAssignableTrees = (data?.trees || []).map((t) => normalizeAssignableTree({
+        seq: t.seq,
+        num: t.num,
+        name1: t.name1,
+        sub_count: t.sub_count,
+        bal: t.bal,
+        missingOnServer: t.onServer === false
+      })).filter((t) => t.seq && Number(t.sub_count) > 0);
+      if (agentAssignableTrees.length) return agentAssignableTrees;
+    } catch { /* fallback below */ }
+  }
 
   let trees = [];
   if (window.edariDesktop?.listEdariTrees) {
     const data = await window.edariDesktop.listEdariTrees();
-    trees = (data?.trees || []).map(normalizeAssignableTree).filter((t) => t.seq);
+    trees = (data?.trees || []).map(normalizeAssignableTree).filter((t) => t.seq && Number(t.sub_count) > 0);
   } else {
     const data = await api('/api/admin/edari/trees').catch(() => api('/api/admin/trees'));
-    trees = (data?.trees || []).map(normalizeAssignableTree).filter((t) => t.seq);
+    trees = (data?.trees || []).map(normalizeAssignableTree).filter((t) => t.seq && Number(t.sub_count) > 0);
   }
   const dbData = await api('/api/admin/trees').catch(() => ({ trees: [] }));
   const dbSeqSet = new Set((dbData?.trees || []).map((t) => String(t.seq)));
   trees = trees.map((t) => ({ ...t, missingOnServer: !dbSeqSet.has(String(t.seq)) }));
   for (const db of (dbData?.trees || [])) {
+    if (Number(db.sub_count) <= 0) continue;
     if (!trees.some((t) => String(t.seq) === String(db.seq))) {
       trees.push(normalizeAssignableTree({ ...db, missingOnServer: false }));
     }
@@ -1720,9 +1804,9 @@ document.getElementById('btnAgentTreesNone')?.addEventListener('click', () => {
 });
 document.getElementById('btnAgentTreesReload')?.addEventListener('click', async () => {
   const treeEl = document.getElementById('agentTreeChecks');
-  if (treeEl) treeEl.innerHTML = '<p class="muted loading">جاري تحديث الشجرات...</p>';
+  if (treeEl) treeEl.innerHTML = '<p class="muted loading">جاري تحديث الشجرات من Edari...</p>';
   try {
-    await loadAgentAssignableTrees();
+    await loadAgentAssignableTrees({ forceLive: true });
     renderTreeChecks(agentModalSelectedTrees);
   } catch (e) {
     if (treeEl) treeEl.innerHTML = `<p class="muted">${esc(e.message)}</p>`;
@@ -1894,6 +1978,11 @@ function saveBackendUrl() {
 async function refreshAll() {
   const dataBackend = resolveDataBackend();
   if (dataBackend) localStorage.setItem('dataBackendUrl', dataBackend);
+  const lanHost = resolveLanApiBase() || window.edariDesktop?.edariHostUrl || defaultEdariHostUrl();
+  if (isLanClientMode() && lanHost) {
+    localStorage.setItem('edariHostUrl', lanHost);
+    if (window.edariDesktop) window.edariDesktop.edariHostUrl = lanHost;
+  }
   if (window.adminAuth?.initAdminAuth) {
     try { await window.adminAuth.initAdminAuth(); } catch { /* ignore */ }
   }

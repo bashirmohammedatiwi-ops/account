@@ -199,15 +199,22 @@ function formatEdariDate(isoOrRaw) {
   return `${d}-${mo}-${y}`;
 }
 
-function formatEdariJournalDate(isoOrRaw) {
+function journalDateParts(isoOrRaw) {
   const iso = toIsoDate(isoOrRaw);
   const [y, mo, d] = iso.split('-');
-  return `'${d}/${mo}/${y}'`;
+  return { year: Number(y), month: Number(mo), day: Number(d) };
 }
 
-/** @deprecated use formatEdariJournalDate — journal Date must be date-only, not TIMESTAMP */
+/**
+ * File12n."Date" is TIMESTAMP. A quoted string like '06/09/2026' is CHARACTER
+ * and NexusDB rejects the INSERT (type mismatch). Use a typed literal.
+ */
 function formatEdariTimestamp(isoOrRaw) {
-  return formatEdariJournalDate(isoOrRaw);
+  return `TIMESTAMP '${toIsoDate(isoOrRaw)} 00:00:00'`;
+}
+
+function formatEdariJournalDate(isoOrRaw) {
+  return formatEdariTimestamp(isoOrRaw);
 }
 
 /** Same INSERT shape as shorja_app insertJournalEntry — Seq is AUTOINC, never set. */
@@ -250,6 +257,7 @@ module.exports = {
   formatEdariDate,
   formatEdariJournalDate,
   formatEdariTimestamp,
+  journalDateParts,
   buildFile12nInsertSql,
   splitEdariNarrative,
   journalLineDescription,

@@ -1,6 +1,6 @@
 /**
  * Post a receipt voucher to Edari using the same File12n method as shorja_app:
- * AUTOINC Seq, date-only journal Date, Equal=1, paired debit/credit with Two, then repair AUTOINC.
+ * AUTOINC Seq, TIMESTAMP Date then EncodeDate repair, Equal=1, paired debit/credit with Two.
  */
 const path = require('path');
 
@@ -18,6 +18,7 @@ const {
   EDARI_FILE12N_REMARKS_MAX,
   EDARI_REF_MAX,
   toIsoDate,
+  journalDateParts,
   sqlQuote
 } = require('../lib/receipt-posting');
 
@@ -112,6 +113,27 @@ async function lookupJournalSeq({ acc, amount, isDebit, bondNum }) {
   return 0;
 }
 
+async function repairJournalDateOnly(seq, dateStr) {
+  const parts = journalDateParts(dateStr);
+  if (!parts.year || !parts.month || !parts.day) return;
+  const r = await nxscriptBridge.runFile12nRepairViaNxscript({
+    ...conn(),
+    seq: Number(seq),
+    day: parts.day,
+    month: parts.month,
+    year: parts.year,
+    equal: 1
+  });
+  if (!r.ok) {
+    console.warn(`File12n date repair skipped for Seq ${seq}: ${r.error || 'unknown'}`);
+  }
+}
+
+async function finishInsertedLine(seq, ln, accSeq, bondNum, dateStr) {
+  await repairJournalDateOnly(seq, dateStr);
+  return { seq, ...ln, accSeq, num: bondNum };
+}
+
 async function insertJournalLine(ln, bondNum, dateStr, receiptRef) {
   const args = {
     acc: Number(ln.accSeq),
@@ -128,7 +150,7 @@ async function insertJournalLine(ln, bondNum, dateStr, receiptRef) {
     if (attempt > 0) {
       const existing = await lookupJournalSeq({ ...args, bondNum });
       if (existing > 0) {
-        return { seq: existing, ...ln, accSeq: args.acc, num: bondNum };
+        return finishInsertedLine(existing, ln, args.acc, bondNum, dateStr);
       }
     }
     const before = await maxJournalSeq();
@@ -143,17 +165,17 @@ async function insertJournalLine(ln, bondNum, dateStr, receiptRef) {
     if (after > before) {
       const row = await readJournalRow(after);
       if (journalRowMatches(row, args)) {
-        return { seq: after, ...ln, accSeq: args.acc, num: bondNum };
+        return finishInsertedLine(after, ln, args.acc, bondNum, dateStr);
       }
       const existing = await lookupJournalSeq({ ...args, bondNum });
       if (existing > 0) {
-        return { seq: existing, ...ln, accSeq: args.acc, num: bondNum };
+        return finishInsertedLine(existing, ln, args.acc, bondNum, dateStr);
       }
     }
     if (attempt < 3) await sleep(120);
   }
   const seq = await lookupJournalSeq({ ...args, bondNum });
-  if (seq > 0) return { seq, ...ln, accSeq: args.acc, num: bondNum };
+  if (seq > 0) return finishInsertedLine(seq, ln, args.acc, bondNum, dateStr);
   throw new Error(`لم يُعثر على قيد اليومية بعد الإدراج (${ln.accNum || ln.accSeq})`);
 }
 

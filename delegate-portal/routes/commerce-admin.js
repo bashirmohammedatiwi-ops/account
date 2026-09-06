@@ -553,8 +553,17 @@ const {
   postingPayload
 } = require('../lib/receipts');
 
-router.get('/receipts/stats', (_req, res) => {
-  res.json({ ok: true, stats: receiptStats() });
+router.get('/receipts/stats', (req, res) => {
+  const agentId = req.query.agentId ? Number(req.query.agentId) : undefined;
+  res.json({
+    ok: true,
+    stats: receiptStats({
+      agentId: agentId && !Number.isNaN(agentId) ? agentId : undefined,
+      fromDate: String(req.query.from || '').trim() || undefined,
+      toDate: String(req.query.to || '').trim() || undefined,
+      q: String(req.query.q || '').trim() || undefined
+    })
+  });
 });
 
 router.get('/receipts/settings', (_req, res) => {
@@ -569,29 +578,40 @@ router.put('/receipts/settings', (req, res) => {
 router.get('/receipts/accounts/search', (req, res) => {
   const q = String(req.query.q || '').trim();
   const kind = String(req.query.kind || '').trim();
+  const refresh = req.query.refresh === '1' || req.query.refresh === 'true';
   const db = require('../lib/db');
   const isCash = kind === 'cash' || kind === 'box';
   const vagueCash = !q || q === 'صندوق' || q === 'الصندوق' || q === 'صناديق';
+  const numericQuery = /^\d{3,15}$/.test(q);
   if (!isCash && !q) return res.json({ ok: true, results: [], source: 'local' });
   const like = `%${q}%`;
+  const prefixLike = `${q}%`;
+  const limit = isCash && refresh ? 200 : 80;
   let rows;
-  if (isCash && vagueCash) {
+  const cashPrefix = `(num LIKE '12104%' OR num LIKE '12110%' OR num LIKE '12111%' OR num LIKE '12112%' OR num LIKE '121%04%')`;
+  const cashName = `(name1 LIKE '%صندوق%' OR name1 LIKE '%صناديق%' OR name1 LIKE '%نقد%'
+         OR name1 LIKE '%نقدية%' OR name1 LIKE '%خزينة%' OR name1 LIKE '%تصفية%')`;
+  if (isCash && numericQuery) {
     rows = db.prepare(`
       SELECT seq, num, name1, sub_count FROM accounts
-      WHERE name1 LIKE '%صندوق%' OR name1 LIKE '%صناديق%' OR name1 LIKE '%نقد%'
-         OR name1 LIKE '%نقدية%' OR name1 LIKE '%خزينة%' OR name1 LIKE '%تصفية%'
-         OR num LIKE '12104%'
+      WHERE num = ? OR num LIKE ? OR num LIKE ?
+      ORDER BY CASE WHEN num = ? THEN 0 WHEN num LIKE ? THEN 1 ELSE 2 END,
+               CASE WHEN CAST(sub_count AS INTEGER) = 0 THEN 0 ELSE 1 END, num
+      LIMIT 60
+    `).all(q, prefixLike, like, q, prefixLike);
+  } else if (isCash && (vagueCash || refresh)) {
+    rows = db.prepare(`
+      SELECT seq, num, name1, sub_count FROM accounts
+      WHERE ${cashPrefix} OR ${cashName}
       ORDER BY CASE WHEN CAST(sub_count AS INTEGER) = 0 THEN 0 ELSE 1 END, num
-      LIMIT 80
+      LIMIT ${limit}
     `).all();
   } else if (isCash) {
     rows = db.prepare(`
       SELECT seq, num, name1, sub_count FROM accounts
-      WHERE name1 LIKE '%صندوق%' OR name1 LIKE '%صناديق%' OR name1 LIKE '%نقد%'
-         OR name1 LIKE '%نقدية%' OR name1 LIKE '%خزينة%' OR name1 LIKE '%تصفية%'
-         OR num LIKE '12104%' OR num LIKE ? OR name1 LIKE ?
+      WHERE ${cashPrefix} OR ${cashName} OR num LIKE ? OR name1 LIKE ?
       ORDER BY CASE WHEN CAST(sub_count AS INTEGER) = 0 THEN 0 ELSE 1 END, num
-      LIMIT 80
+      LIMIT ${limit}
     `).all(like, like);
   } else {
     rows = db.prepare(`
@@ -614,6 +634,7 @@ router.get('/receipts', (req, res) => {
   const fromDate = String(req.query.from || '').trim();
   const toDate = String(req.query.to || '').trim();
   const q = String(req.query.q || '').trim();
+  const limit = Number(req.query.limit);
   res.json({
     ok: true,
     receipts: listReceipts({
@@ -622,7 +643,7 @@ router.get('/receipts', (req, res) => {
       fromDate: fromDate || undefined,
       toDate: toDate || undefined,
       q: q || undefined,
-      limit: 300
+      limit: Number.isFinite(limit) && limit > 0 ? limit : 300
     })
   });
 });

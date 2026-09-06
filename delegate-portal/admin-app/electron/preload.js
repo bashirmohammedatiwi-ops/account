@@ -16,18 +16,33 @@ const base = {
   useRemote: readLaunchArg('edari-remote', LAN_CLIENT ? '1' : '0') !== '0',
   apiSameOrigin: readLaunchArg('edari-api-same-origin', '0') === '1',
   // LAN machine that owns Edari — empty when this machine owns it itself.
-  edariHostUrl: readLaunchArg('edari-host', '').replace(/\/$/, ''),
+  edariHostUrl: readLaunchArg('edari-host', LAN_CLIENT ? 'http://192.168.75.1:4100' : '').replace(/\/$/, ''),
+  defaultEdariHostUrl: 'http://192.168.75.1:4100',
   // Server holding delegate data (receipts, agents). Empty = use page origin.
   dataBackendUrl: readLaunchArg('edari-data-backend', '').replace(/\/$/, ''),
   probeBackendHealth: (url) => ipcRenderer.invoke('probe-backend-health', url || '')
 };
 
 if (LAN_CLIENT) {
-  // The client can fall back to the setup page after a dropped LAN link, so it
-  // needs the setup bridge under the same preload.
+  const lanInvoke = (path, method, body) => ipcRenderer.invoke('lan-client:request', {
+    path,
+    method,
+    body
+  });
+  Object.assign(base, {
+    lanRequest: (payload) => ipcRenderer.invoke('lan-client:request', payload || {}),
+    getEdariHost: () => ipcRenderer.invoke('lan-client:get-host'),
+    saveEdariHost: (url) => ipcRenderer.invoke('lan-client:save-url', url),
+    postEdariReceipt: (payload) => lanInvoke('/api/admin/edari/post-receipt', 'POST', payload || {}),
+    postEdariCustomer: (payload) => lanInvoke('/api/admin/edari/post-customer', 'POST', payload || {}),
+    searchEdariAccounts: (params) => lanInvoke('/api/admin/edari/search-accounts', 'POST', params || {}),
+    listEdariTrees: () => lanInvoke('/api/admin/edari/trees', 'GET'),
+    listEdariMaterialTrees: () => lanInvoke('/api/admin/edari/material-trees', 'GET')
+  });
   contextBridge.exposeInMainWorld('lanSetup', {
     getConfig: () => ipcRenderer.invoke('lan-client:get-setup-config'),
-    save: (url) => ipcRenderer.invoke('lan-client:save-url', url)
+    save: (url) => ipcRenderer.invoke('lan-client:save-url', url),
+    getHost: () => ipcRenderer.invoke('lan-client:get-host')
   });
 }
 

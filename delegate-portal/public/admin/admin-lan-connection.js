@@ -47,6 +47,14 @@
   }
 
   async function probe(base, path, timeoutMs = PROBE_TIMEOUT_MS) {
+    if (isLanClient() && path.startsWith('/api/admin/') && window.edariDesktop?.lanRequest) {
+      try {
+        const data = await window.edariDesktop.lanRequest({ path, method: 'GET' });
+        return { ok: data?.ok !== false, status: data?.ok === false ? 0 : 200, data };
+      } catch (err) {
+        return { ok: false, status: 0, error: err.message || 'network' };
+      }
+    }
     const root = String(base || '').replace(/\/$/, '');
     if (!root && path.startsWith('/api')) {
       // same-origin
@@ -161,6 +169,19 @@
   }
 
   async function lanFetch(path, opts = {}, retries = 2) {
+    if (window.edariDesktop?.lanRequest && String(path || '').startsWith('/api/admin/')) {
+      let body = opts.body;
+      if (typeof body === 'string') {
+        try { body = JSON.parse(body); } catch { /* keep */ }
+      }
+      const data = await window.edariDesktop.lanRequest({
+        path,
+        method: opts.method || (body != null ? 'POST' : 'GET'),
+        body
+      });
+      if (data?.ok === false) throw new Error(data.error || 'تعذّر الاتصال بالجهاز الرئيسي');
+      return data;
+    }
     const base = lanBase();
     const auth = window.adminAuth?.authHeaders?.() || {};
     const headers = { 'Content-Type': 'application/json', Accept: 'application/json', ...auth, ...(opts.headers || {}) };

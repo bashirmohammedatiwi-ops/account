@@ -1,6 +1,7 @@
 /** Defaults for LAN client discovery — Ethernet-first shop network. */
 const LAN_PORTS = [4100, 5005];
 const LAN_PREFER_SUBNETS = ['192.168.75', '192.168.1', '192.168.0', '10.0.0'];
+const DEFAULT_EDARI_HOST_URL = `http://${LAN_PREFER_SUBNETS[0]}.1:${LAN_PORTS[0]}`;
 
 function quickProbeIps(subnets = LAN_PREFER_SUBNETS) {
   const ips = [];
@@ -13,6 +14,9 @@ function quickProbeIps(subnets = LAN_PREFER_SUBNETS) {
 }
 
 function defaultPrefillUrl(subnets = LAN_PREFER_SUBNETS, port = LAN_PORTS[0]) {
+  if (subnets[0] === LAN_PREFER_SUBNETS[0] && port === LAN_PORTS[0]) {
+    return DEFAULT_EDARI_HOST_URL;
+  }
   return `http://${subnets[0]}.1:${port}`;
 }
 
@@ -29,6 +33,7 @@ function buildProbeUrls(ips, ports = LAN_PORTS) {
 module.exports = {
   LAN_PORTS,
   LAN_PREFER_SUBNETS,
+  DEFAULT_EDARI_HOST_URL,
   quickProbeIps,
   defaultPrefillUrl,
   buildProbeUrls

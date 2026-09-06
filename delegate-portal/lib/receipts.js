@@ -246,26 +246,52 @@ function listReceipts({ agentId, status, fromDate, toDate, q, limit = 200 } = {}
   return db.prepare(sql).all(...params).map((row) => mapReceipt(row));
 }
 
-function receiptStats() {
+function receiptStats({ agentId, fromDate, toDate, q } = {}) {
   const today = todayIso();
+  const where = [];
+  const params = [];
+  if (agentId) {
+    where.push('r.agent_id = ?');
+    params.push(agentId);
+  }
+  if (fromDate) {
+    where.push('date(r.receipt_date) >= date(?)');
+    params.push(fromDate);
+  }
+  if (toDate) {
+    where.push('date(r.receipt_date) <= date(?)');
+    params.push(toDate);
+  }
+  const query = String(q || '').trim();
+  const join = query
+    ? 'LEFT JOIN agents a ON a.id = r.agent_id LEFT JOIN accounts ac ON ac.seq = r.customer_acc_seq'
+    : '';
+  if (query) {
+    const like = `%${query}%`;
+    where.push('(r.receipt_no LIKE ? OR ac.name1 LIKE ? OR ac.num LIKE ? OR a.name LIKE ?)');
+    params.push(like, like, like, like);
+  }
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const row = db.prepare(`
     SELECT
       COUNT(*) AS total,
-      SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
-      SUM(CASE WHEN status = 'reviewed' THEN 1 ELSE 0 END) AS reviewed,
-      SUM(CASE WHEN status = 'posted' THEN 1 ELSE 0 END) AS posted,
-      SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected,
-      SUM(CASE WHEN date(submitted_at) = date(?) OR date(created_at) = date(?) THEN 1 ELSE 0 END) AS today,
-      SUM(amount) AS totalAmount,
-      SUM(CASE WHEN status = 'posted' THEN amount ELSE 0 END) AS postedAmount,
-      SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END) AS pendingAmount,
-      SUM(CASE WHEN status = 'reviewed' THEN amount ELSE 0 END) AS reviewedAmount,
-      SUM(CASE WHEN status NOT IN ('posted', 'rejected') THEN amount ELSE 0 END) AS unpostedAmount,
-      SUM(CASE WHEN status NOT IN ('posted', 'rejected') THEN 1 ELSE 0 END) AS unpostedCount,
-      SUM(commission) AS totalCommission,
-      SUM(discount) AS totalDiscount
-    FROM receipts
-  `).get(today, today);
+      SUM(CASE WHEN r.status = 'pending' THEN 1 ELSE 0 END) AS pending,
+      SUM(CASE WHEN r.status = 'reviewed' THEN 1 ELSE 0 END) AS reviewed,
+      SUM(CASE WHEN r.status = 'posted' THEN 1 ELSE 0 END) AS posted,
+      SUM(CASE WHEN r.status = 'rejected' THEN 1 ELSE 0 END) AS rejected,
+      SUM(CASE WHEN date(r.receipt_date) = date(?) OR date(r.submitted_at) = date(?) THEN 1 ELSE 0 END) AS today,
+      SUM(r.amount) AS totalAmount,
+      SUM(CASE WHEN r.status = 'posted' THEN r.amount ELSE 0 END) AS postedAmount,
+      SUM(CASE WHEN r.status = 'pending' THEN r.amount ELSE 0 END) AS pendingAmount,
+      SUM(CASE WHEN r.status = 'reviewed' THEN r.amount ELSE 0 END) AS reviewedAmount,
+      SUM(CASE WHEN r.status NOT IN ('posted', 'rejected') THEN r.amount ELSE 0 END) AS unpostedAmount,
+      SUM(CASE WHEN r.status NOT IN ('posted', 'rejected') THEN 1 ELSE 0 END) AS unpostedCount,
+      SUM(r.commission) AS totalCommission,
+      SUM(r.discount) AS totalDiscount
+    FROM receipts r
+    ${join}
+    ${whereSql}
+  `).get(...params, today, today);
   return {
     total: row?.total || 0,
     pending: row?.pending || 0,
@@ -280,7 +306,8 @@ function receiptStats() {
     unpostedAmount: Number(row?.unpostedAmount || 0),
     unpostedCount: row?.unpostedCount || 0,
     totalCommission: Number(row?.totalCommission || 0),
-    totalDiscount: Number(row?.totalDiscount || 0)
+    totalDiscount: Number(row?.totalDiscount || 0),
+    filtered: Boolean(fromDate || toDate || agentId || query)
   };
 }
 

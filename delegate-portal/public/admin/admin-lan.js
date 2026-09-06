@@ -21,7 +21,12 @@
   }
 
   function savedBackend() {
-    return (localStorage.getItem('backendUrl') || '').trim().replace(/\/$/, '');
+    return (
+      localStorage.getItem('edariHostUrl')
+      || window.edariDesktop?.edariHostUrl
+      || localStorage.getItem('backendUrl')
+      || ''
+    ).trim().replace(/\/$/, '');
   }
 
   function isPrivateIp(host) {
@@ -156,19 +161,31 @@
     return found;
   }
 
-  function connectToServer(url) {
+  async function connectToServer(url) {
     const norm = String(url || '').trim().replace(/\/$/, '');
     if (!norm) return;
-    localStorage.setItem('backendUrl', norm);
-    localStorage.setItem('syncServerUrl', norm);
-    const syncEl = document.getElementById('syncServerUrl');
-    const backendEl = document.getElementById('backendUrl');
+    localStorage.setItem('edariHostUrl', norm);
     const clientInput = document.getElementById('lanServerInput');
-    if (syncEl) syncEl.value = norm;
-    if (backendEl) backendEl.value = norm;
+    const settingsInput = document.getElementById('lanServerInputSettings');
     if (clientInput) clientInput.value = norm;
-    if (typeof window.applySyncServerUrl === 'function') window.applySyncServerUrl(norm);
-    if (window.edariDesktop) window.edariDesktop.backendUrl = norm;
+    if (settingsInput) settingsInput.value = norm;
+    if (window.edariDesktop) window.edariDesktop.edariHostUrl = norm;
+    if (typeof window.lanSetup?.save === 'function') {
+      try {
+        await window.lanSetup.save(norm);
+        return;
+      } catch (err) {
+        console.warn('lanSetup.save', err);
+      }
+    }
+    if (typeof window.edariDesktop?.saveEdariHost === 'function') {
+      try {
+        await window.edariDesktop.saveEdariHost(norm);
+        return;
+      } catch (err) {
+        console.warn('saveEdariHost', err);
+      }
+    }
     window.location.reload();
   }
 
@@ -278,9 +295,15 @@
     const backend = savedBackend() || apiBase() || window.location.origin;
     if (statusEl) statusEl.textContent = backend ? `متصل بـ ${backend}` : 'حدّد عنوان الجهاز الرئيسي';
     const input = document.getElementById('lanServerInput');
+    const settingsInput = document.getElementById('lanServerInputSettings');
+    const prefill = savedBackend() || defaultPrefillUrl();
     if (input) {
-      input.value = savedBackend() || defaultPrefillUrl();
+      input.value = prefill;
       input.placeholder = defaultPrefillUrl();
+    }
+    if (settingsInput) {
+      settingsInput.value = prefill;
+      settingsInput.placeholder = defaultPrefillUrl();
     }
   }
 
@@ -363,14 +386,7 @@
   }
 
   function needsSetupWizard() {
-    // نافذة «اتصال بالجهاز الرئيسي» مخصّصة حصراً لتطبيق سطح المكتب في وضع عميل LAN.
-    // على الويب (المتصفح) تُخدَم اللوحة من السيرفر الرئيسي على السحابة مباشرةً،
-    // فلا داعي لها إطلاقاً — window.edariDesktop غير معرّف إلا داخل Electron.
-    if (!window.edariDesktop) return false;
-    if (window.edariDesktop.isDesktop && !window.edariDesktop.lanClient) return false;
-    const saved = savedBackend();
-    if (saved && !/^https?:\/\/(127\.0\.0\.1|localhost)/i.test(saved)) return false;
-    return !saved;
+    return false;
   }
 
   function renderSetupScanResults(servers, targetId = 'lanSetupScanResults') {
@@ -453,7 +469,10 @@
   }
 
   document.getElementById('btnLanConnect')?.addEventListener('click', () => {
-    connectToServer(document.getElementById('lanServerInput')?.value);
+    connectToServer(
+      document.getElementById('lanServerInputSettings')?.value
+      || document.getElementById('lanServerInput')?.value
+    );
   });
 
   document.getElementById('btnLanPageConnect')?.addEventListener('click', () => {
@@ -479,6 +498,32 @@
   document.getElementById('lanServerInput')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') connectToServer(e.target.value);
   });
+  document.getElementById('lanServerInputSettings')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') connectToServer(e.target.value);
+  });
+
+  function syncLanHostChip() {
+    const chip = document.getElementById('lanHostChip');
+    const urlEl = document.getElementById('lanHostChipUrl');
+    if (!chip) return;
+    const isClient = Boolean(window.edariDesktop?.lanClient || window.edariDesktop?.isLanClient);
+    chip.classList.toggle('hidden', !isClient);
+    if (!isClient) return;
+    const host = savedBackend() || defaultPrefillUrl();
+    if (urlEl) {
+      try { urlEl.textContent = new URL(host).host; }
+      catch { urlEl.textContent = host.replace(/^https?:\/\//, ''); }
+    }
+  }
+
+  document.getElementById('lanHostChip')?.addEventListener('click', async () => {
+    const current = savedBackend() || defaultPrefillUrl();
+    const next = window.prompt('عنوان الجهاز الرئيسي (مثال http://192.168.75.1:4100)', current);
+    if (next == null) return;
+    const norm = String(next).trim().replace(/\/$/, '');
+    if (!norm) return;
+    await connectToServer(norm);
+  });
 
   window.adminPages = window.adminPages || {};
   window.adminPages.lan = refreshLanPage;
@@ -486,11 +531,13 @@
   window.addEventListener('DOMContentLoaded', () => {
     startHealthMonitor();
     openSetupIfNeeded();
+    syncLanHostChip();
     void refreshLanPage();
   });
   if (document.readyState !== 'loading') {
     startHealthMonitor();
     openSetupIfNeeded();
+    syncLanHostChip();
     void refreshLanPage();
   }
 

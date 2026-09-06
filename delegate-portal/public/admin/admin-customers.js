@@ -11,7 +11,8 @@ const customerReqAdmin = {
 };
 
 function canPostCustomersFromDesktop() {
-  return !!window.edariDesktop?.postEdariCustomer;
+  return typeof window.edariDesktop?.postEdariCustomer === 'function'
+    || typeof window.edariDesktop?.lanRequest === 'function';
 }
 
 function canEditCustomerReq(status) {
@@ -316,7 +317,7 @@ async function postCustomerReqToEdariUi(id) {
       return;
     }
     if (!confirm(`ترحيل ${data.request.name} كفرع جديد تحت ${data.request.treeName || data.request.treeNum}؟`)) return;
-    const result = await window.edariDesktop.postEdariCustomer({
+    const payload = {
       id,
       name: posting.name,
       phone: posting.phone,
@@ -325,7 +326,14 @@ async function postCustomerReqToEdariUi(id) {
       treeAccSeq: posting.treeAccSeq,
       treeNum: posting.treeNum,
       treeName: posting.treeName
-    });
+    };
+    const result = typeof window.edariDesktop.postEdariCustomer === 'function'
+      ? await window.edariDesktop.postEdariCustomer(payload)
+      : await window.edariDesktop.lanRequest({
+        path: '/api/admin/edari/post-customer',
+        method: 'POST',
+        body: payload
+      });
     if (!result?.ok) {
       await commerceApi(`/customer-requests/${id}/posted`, {
         method: 'POST',
