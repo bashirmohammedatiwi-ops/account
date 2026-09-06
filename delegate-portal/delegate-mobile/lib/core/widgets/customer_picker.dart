@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/delegate_api.dart';
 import '../theme/app_colors.dart';
 import '../utils/debounce.dart';
+import '../utils/branch_search.dart';
 import '../../models/models.dart';
 import 'adaptive_shell.dart';
 
@@ -50,6 +51,7 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
   String? _error;
   String _search = '';
   bool _remoteSearchActive = false;
+  bool _pickableSearchActive = false;
   final _debounce = Debouncer();
   final _searchCtrl = TextEditingController();
 
@@ -104,6 +106,7 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
         _branches = branches;
         _loading = false;
         _remoteSearchActive = false;
+        _pickableSearchActive = false;
       });
     } catch (e) {
       if (!mounted) return;
@@ -120,8 +123,37 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
       _search = '';
       _searchCtrl.clear();
       _remoteSearchActive = false;
+      _pickableSearchActive = false;
     });
     await _loadTreeBranches();
+  }
+
+  Future<void> _searchPickable(String q) async {
+    final tree = _tree;
+    if (tree == null) return;
+    final trimmed = q.trim();
+    if (trimmed.length < 2) {
+      if (_pickableSearchActive) {
+        await _loadTreeBranches();
+      }
+      return;
+    }
+    setState(() => _loading = true);
+    try {
+      final results = await ref.read(apiClientProvider).getPickableCustomers(tree.seq, q: trimmed);
+      if (!mounted) return;
+      setState(() {
+        _branches = results;
+        _loading = false;
+        _pickableSearchActive = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _searchRemote(String q) async {
@@ -153,13 +185,8 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
 
   List<BranchAccount> get _filteredBranches {
     final list = _branches ?? [];
-    if (_search.isEmpty) return list;
-    final q = _search.toLowerCase();
-    return list.where((b) {
-      return b.name1.toLowerCase().contains(q) ||
-          (b.accountNum).contains(q) ||
-          (b.address ?? '').toLowerCase().contains(q);
-    }).toList();
+    if (_search.isEmpty || _pickableSearchActive || _remoteSearchActive) return list;
+    return filterBranchesForSearch(list, _search);
   }
 
   @override
@@ -195,6 +222,7 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
                         _search = '';
                         _searchCtrl.clear();
                         _remoteSearchActive = false;
+                        _pickableSearchActive = false;
                       }),
                       icon: const Icon(Icons.arrow_forward_rounded, color: AppColors.navy),
                     ),
@@ -232,7 +260,11 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
                   ),
                   onChanged: (v) {
                     setState(() => _search = v);
-                    _debounce.run(() => _searchRemote(v));
+                    if (widget.includePending) {
+                      _debounce.run(() => _searchPickable(v));
+                    } else {
+                      _debounce.run(() => _searchRemote(v));
+                    }
                   },
                 ),
               ),
@@ -308,7 +340,10 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
   Widget _branchList() {
     final branches = _filteredBranches;
     if (branches.isEmpty) {
-      return const EmptyState(message: 'لا يوجد زبائن في هذه الشجرة', icon: Icons.person_off_outlined);
+      final message = _search.trim().isNotEmpty
+          ? 'لا نتائج مطابقة لـ «${_search.trim()}»'
+          : 'لا يوجد زبائن في هذه الشجرة';
+      return EmptyState(message: message, icon: Icons.person_off_outlined);
     }
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),

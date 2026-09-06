@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../layout/breakpoints.dart';
@@ -12,6 +13,7 @@ const _tabRoots = {
   '/shop',
   '/orders',
   '/receipts',
+  '/team',
   '/customers',
   '/promotional-visits',
   '/reports',
@@ -53,10 +55,13 @@ class EdPhoneHeader extends StatelessWidget {
     final back = shouldShowPhoneBack(context, showBack: showBack);
 
     return ClipRect(
-      child: Container(
+      child: DecoratedBox(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppColors.surface.withValues(alpha: 0.92),
           border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+          boxShadow: [
+            BoxShadow(color: AppColors.navy.withValues(alpha: 0.04), blurRadius: 12, offset: const Offset(0, 2)),
+          ],
         ),
         child: SafeArea(
           bottom: false,
@@ -628,53 +633,75 @@ class EdPhoneDock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+  return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: AppColors.borderLight)),
-        boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, -2))],
+        color: Colors.transparent,
       ),
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-          child: Row(
-            children: List.generate(_items.length, (i) {
-              final item = _items[i];
-              final active = i == selected;
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () => onSelect(i),
-                  behavior: HitTestBehavior.opaque,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeOutCubic,
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: active ? AppColors.surfaceAlt : Colors.transparent,
-                            borderRadius: BorderRadius.circular(10),
-                            border: active ? Border.all(color: AppColors.borderLight) : null,
-                          ),
-                          child: Icon(active ? item.activeIcon : item.icon, size: 22, color: active ? AppColors.navy : AppColors.mutedLight),
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: AppColors.surface.withValues(alpha: 0.96),
+              borderRadius: BorderRadius.circular(26),
+              border: Border.all(color: AppColors.borderLight),
+              boxShadow: AppColors.dockShadow,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+              child: Row(
+                children: List.generate(_items.length, (i) {
+                  final item = _items[i];
+                  final active = i == selected;
+                  return Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        onSelect(i);
+                      },
+                      behavior: HitTestBehavior.opaque,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 240),
+                        curve: Curves.easeOutCubic,
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 240),
+                              curve: Curves.easeOutCubic,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: active ? AppColors.accentTeal.withValues(alpha: 0.12) : Colors.transparent,
+                                borderRadius: BorderRadius.circular(16),
+                                border: active ? Border.all(color: AppColors.accentTeal.withValues(alpha: 0.2)) : null,
+                              ),
+                              child: Icon(
+                                active ? item.activeIcon : item.icon,
+                                size: 22,
+                                color: active ? AppColors.accentTeal : AppColors.mutedLight,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              item.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: active ? AppColors.navy : AppColors.mutedLight,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          item.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: active ? AppColors.navy : AppColors.mutedLight),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                ),
-              );
-            }),
+                  );
+                }),
+              ),
+            ),
           ),
         ),
       ),

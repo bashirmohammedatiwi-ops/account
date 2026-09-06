@@ -10,6 +10,7 @@ import '../api/api_exception.dart';
 import '../api/login_api.dart';
 import '../auth/auth_provider.dart';
 import '../utils/formatters.dart';
+import '../utils/branch_search.dart';
 import 'cache_store.dart';
 import 'connectivity_service.dart';
 import 'offline_keys.dart';
@@ -68,10 +69,15 @@ Map<String, dynamic> _normalizeDeliveryRow(Map<String, dynamic> json) {
     'statusLabel': json['statusLabel'] ?? json['status_label'] ?? (status == 'linked' ? 'مرتبط بسند قبض' : 'مُصدَّر'),
     'agentId': json['agentId'] ?? json['agent_id'],
     'agentName': json['agentName'] ?? json['agent_name'],
+    'agentRole': json['agentRole'] ?? json['agent_role'] ?? '',
     'isTeamDelivery': json['isTeamDelivery'] == true || json['is_team_delivery'] == true,
     'handoverStatus': json['handoverStatus'] ?? json['handover_status'] ?? 'pending',
     'handoverStatusLabel': json['handoverStatusLabel'] ?? json['handover_status_label'] ?? '',
     'handoverAt': json['handoverAt'] ?? json['handover_at'],
+    'handoverByAgentId': json['handoverByAgentId'] ?? json['handover_by_agent_id'],
+    'handoverNote': json['handoverNote'] ?? json['handover_note'],
+    'adminNote': json['adminNote'] ?? json['admin_note'],
+    'updatedAt': json['updatedAt'] ?? json['updated_at'],
     'canMarkHandover': json['canMarkHandover'] == true || json['can_mark_handover'] == true,
     'canCreateReceipt': json['canCreateReceipt'] == true || json['can_create_receipt'] == true,
     'amount': json['amount'] ?? 0,
@@ -187,13 +193,18 @@ class OfflineApiClient {
       if (seq.isNotEmpty) bySeq[seq] = e;
     }
     for (final a in accounts) {
-      bySeq[a.seq] = {
+      final key = a.isPending && a.requestId != null ? 'request:${a.requestId}' : a.seq;
+      if (key.isEmpty) continue;
+      bySeq[key] = {
         'seq': a.seq,
         'num': a.accountNum,
         'name1': a.name1,
         'name2': a.name2,
         'address': a.address,
         'bal': a.bal,
+        if (a.requestId != null) 'requestId': a.requestId,
+        if (a.isPending) 'isPending': true,
+        if (a.pendingLabel != null) 'pendingLabel': a.pendingLabel,
       };
     }
     await _cache.setJson(OfflineKeys.searchIndex, bySeq.values.toList());
@@ -250,6 +261,94 @@ class OfflineApiClient {
     throw ApiException('لا توجد بيانات محلية للمندوب');
   }
 
+  Future<List<Map<String, dynamic>>> _readCachedCustomerRequestMaps() async {
+    final raw = await _cache.getJson(OfflineKeys.customerRequests);
+    if (raw is! List) return [];
+    return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> _mergeLocalPendingPickable(
+    String treeSeq,
+    List<Map<String, dynamic>> raw, {
+    String? query,
+  }) async {
+    final cached = await _readCachedCustomerRequestMaps();
+    final localPending = pendingBranchesForTree(
+      cached.map(CustomerRequest.fromJson).toList(),
+      treeSeq,
+    );
+
+    List<BranchAccount> merged;
+    if (localPending.isEmpty) {
+      merged = raw.map(BranchAccount.fromJson).toList();
+    } else {
+      final localMaps = localPending.map((branch) => {
+            'seq': branch.seq,
+            'num': branch.accountNum,
+            'name1': branch.name1,
+            'name2': branch.name2,
+            'address': branch.address,
+            'bal': branch.bal,
+            'isPending': true,
+            'requestId': branch.requestId,
+            'pendingLabel': branch.pendingLabel,
+          }).toList();
+
+      merged = mergePickableBranches(
+        raw.map(BranchAccount.fromJson).toList(),
+        localMaps.map(BranchAccount.fromJson).toList(),
+      );
+    }
+
+    final filtered = query == null ? merged : filterBranchesForSearch(merged, query);
+    return filtered
+        .map((branch) => {
+              'seq': branch.seq,
+              'num': branch.accountNum,
+              'name1': branch.name1,
+              'name2': branch.name2,
+              'address': branch.address,
+              'bal': branch.bal,
+              if (branch.requestId != null) 'requestId': branch.requestId,
+              if (branch.isPending) 'isPending': true,
+              if (branch.pendingLabel != null) 'pendingLabel': branch.pendingLabel,
+            })
+        .toList();
+  }
+
+  Future<List<BranchAccount>?> _readPickableWithLocalPending(String treeSeq) async {
+    final raw = await _cache.getJson(OfflineKeys.pickable(treeSeq));
+    final list = raw is List
+        ? raw.map((e) => Map<String, dynamic>.from(e as Map)).toList()
+        : <Map<String, dynamic>>[];
+    final merged = await _mergeLocalPendingPickable(treeSeq, list);
+    if (merged.isEmpty) return null;
+    return merged.map(BranchAccount.fromJson).toList();
+  }
+
+  Future<void> _appendPendingToPickableCache(String treeSeq, BranchAccount branch) async {
+    final raw = await _cache.getJson(OfflineKeys.pickable(treeSeq));
+    final list = raw is List
+        ? raw.map((e) => Map<String, dynamic>.from(e as Map)).toList()
+        : <Map<String, dynamic>>[];
+    final merged = await _mergeLocalPendingPickable(treeSeq, [
+      ...list,
+      {
+        'seq': branch.seq,
+        'num': branch.accountNum,
+        'name1': branch.name1,
+        'name2': branch.name2,
+        'address': branch.address,
+        'bal': branch.bal,
+        'isPending': true,
+        'requestId': branch.requestId,
+        'pendingLabel': branch.pendingLabel,
+      },
+    ]);
+    await _cache.setJson(OfflineKeys.pickable(treeSeq), merged);
+    await _indexAccounts([branch]);
+  }
+
   Future<List<AccountTree>> getTrees() => _withCache(
         cacheKey: OfflineKeys.trees,
         onlineFetch: () async {
@@ -282,22 +381,43 @@ class OfflineApiClient {
         },
       );
 
-  Future<List<BranchAccount>> getPickableCustomers(String treeSeq) => _withCache(
+  Future<List<BranchAccount>> getPickableCustomers(String treeSeq, {String? q}) async {
+    final trimmedQ = q?.trim();
+    final useQuery = trimmedQ != null && trimmedQ.length >= 2;
+
+    if (useQuery) {
+      if (_online) {
+        try {
+          final data = await _api.requestJson('GET', '/accounts/$treeSeq/pickable-customers', query: {'q': trimmedQ});
+          final raw = (data['customers'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          final merged = await _mergeLocalPendingPickable(treeSeq, raw, query: trimmedQ);
+          final accounts = merged.map(BranchAccount.fromJson).toList();
+          await _indexAccounts(accounts);
+          return accounts;
+        } on ApiException catch (e) {
+          if (e.statusCode == 401) throw e;
+        } on DioException catch (e) {
+          if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
+        }
+      }
+      final cached = await _readPickableWithLocalPending(treeSeq);
+      return cached == null ? [] : filterBranchesForSearch(cached, trimmedQ);
+    }
+
+    return _withCache(
         cacheKey: OfflineKeys.pickable(treeSeq),
         onlineFetch: () async {
           final data = await _api.requestJson('GET', '/accounts/$treeSeq/pickable-customers');
           final raw = (data['customers'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
-          await _cache.setJson(OfflineKeys.pickable(treeSeq), raw);
-          final accounts = raw.map(BranchAccount.fromJson).toList();
+          final merged = await _mergeLocalPendingPickable(treeSeq, raw);
+          await _cache.setJson(OfflineKeys.pickable(treeSeq), merged);
+          final accounts = merged.map(BranchAccount.fromJson).toList();
           await _indexAccounts(accounts);
           return accounts;
         },
-        offlineRead: () async {
-          final raw = await _cache.getJson(OfflineKeys.pickable(treeSeq));
-          if (raw is! List) return null;
-          return raw.map((e) => BranchAccount.fromJson(Map<String, dynamic>.from(e as Map))).toList();
-        },
+        offlineRead: () => _readPickableWithLocalPending(treeSeq),
       );
+  }
 
   Future<AccountStatement> getStatement(String seq) => _withCache(
         cacheKey: OfflineKeys.statement(seq),
@@ -524,14 +644,12 @@ class OfflineApiClient {
     }
     final raw = await _cache.getJson(OfflineKeys.searchIndex);
     if (raw is! List) return [];
-    final qn = trimmed.toLowerCase();
     final results = <BranchAccount>[];
     for (final e in raw) {
       final m = Map<String, dynamic>.from(e as Map);
-      final name = '${m['name1'] ?? ''}'.toLowerCase();
-      final num = '${m['num'] ?? m['accountNum'] ?? ''}'.toLowerCase();
-      if (name.contains(qn) || num.contains(qn)) {
-        results.add(BranchAccount.fromJson(m));
+      final branch = BranchAccount.fromJson(m);
+      if (branchMatchesSearch(branch, trimmed)) {
+        results.add(branch);
       }
     }
     return results;
@@ -730,6 +848,10 @@ class OfflineApiClient {
         onlineFetch: () async {
           await _cache.deleteLegacyReceiptCaches();
           final data = await fetch();
+          final summary = data['teamSummary'];
+          if (summary is Map) {
+            await _ref.read(authProvider.notifier).applyAgentProfile(Map<String, dynamic>.from(summary));
+          }
           final onlineRaw = _rawDeliveryRows(data);
           final cachedJson = await _cache.getJson(cacheKey);
           final cachedRaw = cachedJson is List
@@ -879,11 +1001,84 @@ class OfflineApiClient {
     }
   }
 
-  Future<DeliveryReceipt> markDeliveryHandoverReceived(int id) async {
-    if (!_online) {
-      throw ApiException('يتطلب تأكيد الاستلام اتصالاً بالإنترنت');
+  Future<DeliveryReceipt?> _patchCachedDeliveryRow(String cacheKey, int id, Map<String, dynamic> patch) async {
+    final raw = await _cache.getJson(cacheKey);
+    if (raw is! List) return null;
+    final rows = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    DeliveryReceipt? updated;
+    for (var i = 0; i < rows.length; i++) {
+      if (_rowId(rows[i]['id']) != id) continue;
+      rows[i] = _normalizeDeliveryRow({...rows[i], ...patch});
+      updated = DeliveryReceipt.fromJson(rows[i]);
+      break;
     }
-    return _api.markDeliveryHandoverReceived(id);
+    if (updated != null) await _cache.setJson(cacheKey, rows);
+    return updated;
+  }
+
+  Future<DeliveryReceipt> markDeliveryHandoverReceived(int id, {String? note}) async {
+    Future<DeliveryReceipt> queueLocal() async {
+      await _outbox.enqueue(
+        method: 'POST',
+        path: '/delivery-receipts/$id/handover',
+        entityType: 'delivery_handover',
+        body: {'note': note?.trim() ?? ''},
+      );
+      final patched = await _patchCachedDeliveryRow(_deliveryCacheKey(), id, {
+        'handoverStatus': 'received',
+        'handoverStatusLabel': 'تم التسليم',
+        'handoverAt': DateTime.now().toIso8601String(),
+        'canMarkHandover': false,
+        'handoverNote': note?.trim() ?? '',
+      });
+      if (patched == null) {
+        throw ApiException('تعذّر حفظ تأكيد الاستلام محلياً');
+      }
+      return patched;
+    }
+
+    if (!_online) return queueLocal();
+    try {
+      final receipt = await _api.markDeliveryHandoverReceived(id, note: note);
+      await _patchCachedDeliveryRow(_deliveryCacheKey(), id, _normalizeDeliveryRow({
+        'id': receipt.id,
+        'deliveryNo': receipt.deliveryNo,
+        'status': receipt.status,
+        'statusLabel': receipt.statusLabel,
+        'amount': receipt.amount,
+        'agentId': receipt.agentId,
+        'agentName': receipt.agentName,
+        'agentRole': receipt.agentRole,
+        'isTeamDelivery': receipt.isTeamDelivery,
+        'handoverStatus': receipt.handoverStatus,
+        'handoverStatusLabel': receipt.handoverStatusLabel,
+        'handoverAt': receipt.handoverAt,
+        'handoverByAgentId': receipt.handoverByAgentId,
+        'handoverNote': receipt.handoverNote,
+        'adminNote': receipt.adminNote,
+        'updatedAt': receipt.updatedAt,
+        'canMarkHandover': receipt.canMarkHandover,
+        'canCreateReceipt': receipt.canCreateReceipt,
+        'customerName': receipt.customerName,
+        'customerNum': receipt.customerNum,
+        'customerAccSeq': receipt.customerAccSeq,
+        'treeAccSeq': receipt.treeAccSeq,
+        'treeName': receipt.treeName,
+        'notes': receipt.notes,
+        'receiptDate': receipt.receiptDate,
+        'printedAt': receipt.printedAt,
+        'receiptId': receipt.receiptId,
+        'linkedReceiptNo': receipt.linkedReceiptNo,
+        'createdAt': receipt.createdAt,
+      }));
+      return receipt;
+    } on ApiException catch (e) {
+      if (e.statusCode == 401) throw e;
+      return queueLocal();
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
+      return queueLocal();
+    }
   }
 
   Future<void> deleteDeliveryReceipt(int id) async {
@@ -983,9 +1178,18 @@ class OfflineApiClient {
       'address': address,
       'notes': notes,
       'treeName': treeName,
+      'treeAccSeq': treeAccSeq,
       'createdAt': DateTime.now().toIso8601String(),
       'localPending': true,
     };
+
+    Future<CustomerRequest> finalize(CustomerRequest request) async {
+      await _appendPendingToPickableCache(
+        treeAccSeq,
+        branchFromCustomerRequest(request),
+      );
+      return request;
+    }
 
     Future<CustomerRequest> queueLocal() async {
       await _outbox.enqueue(
@@ -997,7 +1201,7 @@ class OfflineApiClient {
         listCacheKey: OfflineKeys.customerRequests,
       );
       await _cache.mergeListItem(OfflineKeys.customerRequests, optimistic);
-      return CustomerRequest.fromJson(optimistic);
+      return finalize(CustomerRequest.fromJson(optimistic));
     }
 
     if (!_online) return queueLocal();
@@ -1020,9 +1224,10 @@ class OfflineApiClient {
         'address': request.address,
         'notes': request.notes,
         'treeName': request.treeName,
+        'treeAccSeq': request.treeAccSeq ?? treeAccSeq,
         'createdAt': request.createdAt,
       }));
-      return request;
+      return finalize(request);
     } on ApiException catch (e) {
       if (e.statusCode == 401) throw e;
       return queueLocal();

@@ -128,7 +128,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               Text(
                                 agent!.isSecondary && agent.parentAgentName.isNotEmpty
                                     ? '${agent.delegateRoleLabel} · يتبع ${agent.parentAgentName}'
-                                    : agent.delegateRoleLabel,
+                                    : agent.isPrimary && agent.secondaryCount > 0
+                                        ? '${agent.delegateRoleLabel} · ${agent.secondaryCount} مندوب ثانوي'
+                                        : agent.delegateRoleLabel,
                                 style: TextStyle(
                                   color: agent.isSecondary ? AppColors.warning : AppColors.accentTeal,
                                   fontWeight: FontWeight.w700,

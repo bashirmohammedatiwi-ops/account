@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/delegate_api.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/auth/auth_session.dart';
+import '../../core/utils/delivery_viewer.dart';
 import '../../models/models.dart';
 
 class ReceiptsHubData {
@@ -64,21 +65,34 @@ class ReceiptAmountTotals {
 
 /// قائمة وصول القبض — تُحدَّث مباشرة بعد الإصدار ولا تعتمد على IndexedStack.
 class DeliveriesListNotifier extends AsyncNotifier<List<DeliveryReceipt>> {
+  Future<List<DeliveryReceipt>> _load() async {
+    final list = await withAuth(ref, () => ref.read(apiClientProvider).getDeliveryReceipts());
+    return enrichDeliveriesForViewer(list, ref.read(authProvider).agent);
+  }
+
   @override
   Future<List<DeliveryReceipt>> build() async {
     ref.watch(authProvider.select((s) => '${s.token ?? ''}:${s.agent?.id ?? ''}'));
-    return withAuth(ref, () => ref.read(apiClientProvider).getDeliveryReceipts());
+    return _load();
   }
 
   Future<void> refresh() async {
     state = const AsyncLoading<List<DeliveryReceipt>>().copyWithPrevious(state);
-    state = await AsyncValue.guard(() => ref.read(apiClientProvider).getDeliveryReceipts());
+    state = await AsyncValue.guard(_load);
   }
 
   void upsert(DeliveryReceipt receipt) {
+    final viewer = ref.read(authProvider).agent;
+    final item = viewer == null ? receipt : enrichDeliveryForViewer(receipt, viewer);
     final current = state.value ?? [];
-    final next = [receipt, ...current.where((e) => e.id != receipt.id)];
-    state = AsyncData(next);
+    final idx = current.indexWhere((e) => e.id == item.id);
+    if (idx >= 0) {
+      final next = [...current];
+      next[idx] = item;
+      state = AsyncData(next);
+    } else {
+      state = AsyncData([item, ...current]);
+    }
   }
 }
 
@@ -111,6 +125,10 @@ class ReceiptsListNotifier extends AsyncNotifier<List<Receipt>> {
 
 final receiptsListProvider =
     AsyncNotifierProvider<ReceiptsListNotifier, List<Receipt>>(ReceiptsListNotifier.new);
+
+/// طلب ربط وصل قبض بسند — يُضبط من شاشة متابعة الفريق ثم تلتقطه شاشة سند القبض
+/// لتفتح النموذج مربوطاً بالوصل مباشرةً. يُصفّر بعد الاستهلاك.
+final pendingReceiptLinkProvider = StateProvider<DeliveryReceipt?>((ref) => null);
 
 final receiptsHubProvider = FutureProvider<ReceiptsHubData>((ref) async {
   final deliveries = await ref.watch(deliveriesListNotifierProvider.future);

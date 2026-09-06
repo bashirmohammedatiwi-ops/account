@@ -120,8 +120,11 @@ router.get('/accounts/:seq/children', authAgent, (req, res) => {
 
 router.get('/accounts/:seq/pickable-customers', authAgent, (req, res) => {
   try {
-    const { listPickableCustomers } = require('../lib/customer-requests');
-    const customers = listPickableCustomers(req.agent.id, req.params.seq);
+    const { listPickableCustomers, searchPickableCustomers } = require('../lib/customer-requests');
+    const q = String(req.query.q || '').trim();
+    const customers = q.length >= 2
+      ? searchPickableCustomers(req.agent.id, req.params.seq, q)
+      : listPickableCustomers(req.agent.id, req.params.seq);
     res.json({ ok: true, customers });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
@@ -223,6 +226,7 @@ router.get('/search', authAgent, (req, res) => {
   const q = String(req.query.q || '').trim();
   if (!q) return res.json({ ok: true, results: [] });
 
+  const { searchPendingPickableForAgent } = require('../lib/customer-requests');
   const allowed = agentAllowedSeqs(req.agent.id);
   const qDigits = q.replace(/\D/g, '');
   const like = `%${q}%`;
@@ -240,12 +244,22 @@ router.get('/search', authAgent, (req, res) => {
     return hayText.includes(q.toLowerCase());
   });
 
+  const posted = rows.slice(0, 50).map((r) => ({
+    ...r,
+    debtStatus: debtStatusFromBalance(r.bal)
+  }));
+  const pending = searchPendingPickableForAgent(req.agent.id, q).slice(0, 20);
+  const seenRequestIds = new Set();
+  const merged = [...posted];
+  for (const item of pending) {
+    if (!item.requestId || seenRequestIds.has(item.requestId)) continue;
+    seenRequestIds.add(item.requestId);
+    merged.push(item);
+  }
+
   res.json({
     ok: true,
-    results: rows.slice(0, 50).map((r) => ({
-      ...r,
-      debtStatus: debtStatusFromBalance(r.bal)
-    }))
+    results: merged.slice(0, 60)
   });
 });
 

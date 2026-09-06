@@ -111,7 +111,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
       showBack: true,
       onBack: () => context.go('/home'),
       child: ColoredBox(
-        color: Colors.white,
+        color: Colors.transparent,
         child: RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(treesProvider);

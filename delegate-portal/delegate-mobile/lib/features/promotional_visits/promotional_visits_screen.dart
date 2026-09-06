@@ -124,7 +124,7 @@ class _PromotionalVisitsScreenState extends ConsumerState<PromotionalVisitsScree
       showBack: true,
       onBack: () => context.go('/home'),
       child: ColoredBox(
-        color: Colors.white,
+        color: Colors.transparent,
         child: RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(promotionalVisitsMetaProvider);

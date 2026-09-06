@@ -74,9 +74,7 @@ function mapDeliveryReceipt(row, { viewerAgentId } = {}) {
   const canMarkHandover = viewerId != null
     && isPrimary(viewerId)
     && isTeamDelivery
-    && handoverStatus !== 'received'
-    && row.status === 'issued'
-    && !row.receipt_id;
+    && handoverStatus !== 'received';
   const canCreateReceipt = row.status === 'issued'
     && !row.receipt_id
     && viewerId != null
@@ -219,7 +217,6 @@ function markDeliveryHandoverReceived(id, primaryAgentId, { note = '' } = {}) {
   const row = db.prepare('SELECT * FROM delivery_receipts WHERE id = ?').get(id);
   if (!row) throw new Error('وصل الاستلام غير موجود');
   assertCanMarkHandover(primaryAgentId, row.agent_id);
-  if (row.receipt_id) throw new Error('تم إنشاء سند قبض لهذا الوصل');
   if (String(row.handover_status) === 'received') {
     return loadDeliveryReceipt(id, { viewerAgentId: primaryAgentId });
   }

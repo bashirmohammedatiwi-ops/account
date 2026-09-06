@@ -195,7 +195,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                 title: '${inv.isReturn ? 'مردود' : 'فاتورة'} ${inv.invoiceNum}',
                 subtitle: '${inv.customerName ?? ''} · ${fmtDate(inv.date)}',
                 accent: accent,
-                trailing: fmtMoney(inv.amount),
+                trailing: fmtNumAlways(inv.amount),
                 onTap: () => context.push('/invoice/${inv.ref}?by=auto${inv.accSeq != null ? '&acc=${inv.accSeq}' : ''}'),
               ),
             );

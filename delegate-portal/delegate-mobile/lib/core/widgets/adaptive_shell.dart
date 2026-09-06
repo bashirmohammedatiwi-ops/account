@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../auth/auth_provider.dart';
 import '../layout/breakpoints.dart';
+import '../navigation/ed_page_transition.dart';
 import '../offline/offline_banner.dart';
 import '../theme/app_colors.dart';
+import '../../features/team/team_hub.dart';
 import 'ed_components.dart';
 import 'ed_page_background.dart';
 import 'ed_page_scroll.dart';
@@ -32,13 +35,21 @@ const _tabletNavItemsBase = [
 ];
 
 List<_NavItem> _tabletNavItems(WidgetRef ref) {
-  final secondary = ref.watch(authProvider.select((s) => s.agent?.isSecondary ?? false));
-  return _tabletNavItemsBase.map((item) {
+  final agent = ref.watch(authProvider.select((s) => s.agent));
+  final secondary = agent?.isSecondary ?? false;
+  final hasTeam = ref.watch(hasTeamProvider);
+  final items = <_NavItem>[];
+  for (final item in _tabletNavItemsBase) {
     if (item.isReceipt) {
-      return _NavItem(icon: item.icon, label: secondary ? 'وصل قبض' : 'سند قبض', path: item.path);
+      items.add(_NavItem(icon: item.icon, label: secondary ? 'وصل قبض' : 'سند قبض', path: item.path, isReceipt: true));
+      if (hasTeam) {
+        items.add(const _NavItem(icon: Icons.groups_rounded, label: 'الفريق', path: '/team'));
+      }
+    } else {
+      items.add(item);
     }
-    return item;
-  }).toList();
+  }
+  return items;
 }
 
 String _receiptNavLabel(WidgetRef ref) {
@@ -53,7 +64,7 @@ const _phoneNavItems = [
   _NavItem(icon: Icons.shopping_bag_outlined, label: 'الطلبات', path: '/orders'),
 ];
 
-const _moreRoutes = ['/receipts', '/customers', '/promotional-visits', '/reports', '/settings'];
+const _moreRoutes = ['/receipts', '/team', '/customers', '/promotional-visits', '/reports', '/settings'];
 
 int _tabletSelectedIndex(String location, List<_NavItem> items) {
   for (var i = items.length - 1; i >= 0; i--) {
@@ -77,67 +88,98 @@ int _phoneSelectedIndex(String location) {
 
 void showMoreNavSheet(BuildContext context, WidgetRef ref) {
   final receiptLabel = _receiptNavLabel(ref);
+  final agent = ref.read(authProvider.select((s) => s.agent));
+  final showTeam = ref.watch(hasTeamProvider);
+  HapticFeedback.selectionClick();
   showModalBottomSheet<void>(
     context: context,
     useSafeArea: true,
+    isScrollControlled: true,
     backgroundColor: Colors.transparent,
     builder: (ctx) => Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(AppColors.radius2xl)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         boxShadow: AppColors.elevatedShadow,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 10),
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(99)),
-          ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(24, 20, 24, 16),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: Text('المزيد', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.navy)),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(99)),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 1.35,
-              children: [
-                _MoreNavCard(icon: Icons.receipt_long_rounded, label: receiptLabel, color: AppColors.moduleReceipts, onTap: () {
-                  Navigator.pop(ctx);
-                  context.go('/receipts');
-                }),
-                _MoreNavCard(icon: Icons.person_add_alt_1_rounded, label: 'زبون جديد', color: AppColors.moduleCustomers, onTap: () {
-                  Navigator.pop(ctx);
-                  context.go('/customers');
-                }),
-                _MoreNavCard(icon: Icons.campaign_rounded, label: 'الزيادات الترويجية', color: AppColors.modulePromo, onTap: () {
-                  Navigator.pop(ctx);
-                  context.go('/promotional-visits');
-                }),
-                _MoreNavCard(icon: Icons.bar_chart_rounded, label: 'التقارير', color: AppColors.moduleReports, onTap: () {
-                  Navigator.pop(ctx);
-                  context.go('/reports');
-                }),
-                _MoreNavCard(icon: Icons.settings_outlined, label: 'الإعدادات', color: AppColors.navy, onTap: () {
-                  Navigator.pop(ctx);
-                  context.go('/settings');
-                }),
-              ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 18, 24, 8),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text('المزيد', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                  ),
+                  if ((agent?.delegateRoleLabel ?? '').isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: (agent!.isSecondary ? AppColors.warning : AppColors.accentTeal).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        agent.delegateRoleLabel,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: agent.isSecondary ? AppColors.warning : AppColors.accentTeal,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
-        ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 2,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 1.42,
+                children: [
+                  _MoreNavCard(icon: Icons.receipt_long_rounded, label: receiptLabel, color: AppColors.moduleReceipts, onTap: () {
+                    Navigator.pop(ctx);
+                    context.go('/receipts');
+                  }),
+                  if (showTeam)
+                    _MoreNavCard(icon: Icons.groups_rounded, label: 'متابعة الفريق', color: AppColors.accentBlue, onTap: () {
+                      Navigator.pop(ctx);
+                      context.go('/team');
+                    }),
+                  _MoreNavCard(icon: Icons.person_add_alt_1_rounded, label: 'زبون جديد', color: AppColors.moduleCustomers, onTap: () {
+                    Navigator.pop(ctx);
+                    context.go('/customers');
+                  }),
+                  _MoreNavCard(icon: Icons.campaign_rounded, label: 'الزيادات الترويجية', color: AppColors.modulePromo, onTap: () {
+                    Navigator.pop(ctx);
+                    context.go('/promotional-visits');
+                  }),
+                  _MoreNavCard(icon: Icons.bar_chart_rounded, label: 'التقارير', color: AppColors.moduleReports, onTap: () {
+                    Navigator.pop(ctx);
+                    context.go('/reports');
+                  }),
+                  _MoreNavCard(icon: Icons.settings_outlined, label: 'الإعدادات', color: AppColors.navy, onTap: () {
+                    Navigator.pop(ctx);
+                    context.go('/settings');
+                  }),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
       ),
     ),
   );
@@ -157,7 +199,10 @@ class _MoreNavCard extends StatelessWidget {
       color: AppColors.surfaceAlt,
       borderRadius: BorderRadius.circular(AppColors.radiusLg),
       child: InkWell(
-        onTap: onTap,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
         borderRadius: BorderRadius.circular(AppColors.radiusLg),
         child: Ink(
           decoration: BoxDecoration(
@@ -203,7 +248,7 @@ class AdaptiveShell extends ConsumerWidget {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         body: EdPageBackground(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -213,11 +258,45 @@ class AdaptiveShell extends ConsumerWidget {
                 child: layout.isWide
                     ? Row(
                         children: [
-                          Expanded(child: child),
+                          Expanded(
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 260),
+                              switchInCurve: Curves.easeOutCubic,
+                              switchOutCurve: Curves.easeIn,
+                              layoutBuilder: (current, previous) => Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  ...previous,
+                                  if (current != null) current,
+                                ],
+                              ),
+                              transitionBuilder: edTabTransition,
+                              child: KeyedSubtree(
+                                key: ValueKey<String>(location),
+                                child: child,
+                              ),
+                            ),
+                          ),
                           _TabletNavRail(selected: _tabletSelectedIndex(location, tabletItems), items: tabletItems),
                         ],
                       )
-                    : SizedBox.expand(child: child),
+                    : AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 260),
+                        switchInCurve: Curves.easeOutCubic,
+                        switchOutCurve: Curves.easeIn,
+                        layoutBuilder: (current, previous) => Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            ...previous,
+                            if (current != null) current,
+                          ],
+                        ),
+                        transitionBuilder: edTabTransition,
+                        child: KeyedSubtree(
+                          key: ValueKey<String>(location),
+                          child: SizedBox.expand(child: child),
+                        ),
+                      ),
               ),
             ],
           ),
@@ -247,29 +326,35 @@ class _TabletNavRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final layout = EdLayout.of(context);
+    final railWidth = layout.isDesktop ? 108.0 : 96.0;
     return Container(
-      width: 92,
+      width: railWidth,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface.withValues(alpha: 0.98),
         border: Border(left: BorderSide(color: AppColors.borderLight)),
-        boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.04), blurRadius: 12, offset: const Offset(-2, 0))],
+        boxShadow: [
+          BoxShadow(color: AppColors.navy.withValues(alpha: 0.06), blurRadius: 20, offset: const Offset(-4, 0)),
+        ],
       ),
       child: SafeArea(
         child: Column(
           children: [
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Container(
-              width: 44,
-              height: 44,
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
-                color: AppColors.navy,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.borderLight),
+                gradient: AppColors.brandGradient,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(color: AppColors.accentTeal.withValues(alpha: 0.25), blurRadius: 12, offset: const Offset(0, 4)),
+                ],
               ),
               alignment: Alignment.center,
-              child: const Text('E', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
+              child: const Text('E', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 20)),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.symmetric(vertical: 4),
@@ -284,20 +369,23 @@ class _TabletNavRail extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(12),
-                        onTap: () => context.go(item.path),
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          context.go(item.path);
+                        },
                         child: Container(
                           decoration: BoxDecoration(
-                            color: active ? AppColors.surfaceAlt : Colors.transparent,
-                            borderRadius: BorderRadius.circular(12),
-                            border: active ? Border.all(color: AppColors.borderLight) : null,
+                            color: active ? AppColors.accentTeal.withValues(alpha: 0.1) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(14),
+                            border: active ? Border.all(color: AppColors.accentTeal.withValues(alpha: 0.25)) : null,
                           ),
                           child: Stack(
                             children: [
                               if (active)
                                 Positioned(
                                   right: 0,
-                                  top: 8,
-                                  bottom: 8,
+                                  top: 10,
+                                  bottom: 10,
                                   child: Container(
                                     width: 3,
                                     decoration: BoxDecoration(
@@ -307,21 +395,21 @@ class _TabletNavRail extends StatelessWidget {
                                   ),
                                 ),
                               Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                                padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 4),
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(item.icon, size: 22, color: active ? AppColors.navy : AppColors.muted),
-                                    const SizedBox(height: 4),
+                                    Icon(item.icon, size: 23, color: active ? AppColors.accentTeal : AppColors.muted),
+                                    const SizedBox(height: 5),
                                     Text(
                                       item.label,
                                       textAlign: TextAlign.center,
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                        fontSize: 9,
+                                        fontSize: 9.5,
                                         fontWeight: FontWeight.w800,
-                                        height: 1.25,
+                                        height: 1.2,
                                         color: active ? AppColors.navy : AppColors.muted,
                                       ),
                                     ),
@@ -400,7 +488,7 @@ class AppPage extends StatelessWidget {
               snap: true,
               pinned: false,
               automaticallyImplyLeading: false,
-              backgroundColor: Colors.white,
+              backgroundColor: AppColors.surface.withValues(alpha: 0.92),
               surfaceTintColor: Colors.transparent,
               shadowColor: AppColors.borderLight,
               scrolledUnderElevation: 0.6,
@@ -422,7 +510,10 @@ class AppPage extends StatelessWidget {
               bottom: toolbar != null
                   ? PreferredSize(
                       preferredSize: const Size.fromHeight(52),
-                      child: Material(color: Colors.white, child: toolbar!),
+                      child: Material(
+                        color: AppColors.surface.withValues(alpha: 0.92),
+                        child: toolbar!,
+                      ),
                     )
                   : null,
             ),
@@ -462,7 +553,7 @@ class AppPage extends StatelessWidget {
       return Directionality(
         textDirection: TextDirection.rtl,
         child: Scaffold(
-          backgroundColor: Colors.white,
+          backgroundColor: Colors.transparent,
           floatingActionButton: floatingActionButton,
           body: EdPageBackground(child: body),
         ),
@@ -472,7 +563,7 @@ class AppPage extends StatelessWidget {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         appBar: useHeader
             ? EdAppHeader(
                 title: title,
@@ -488,13 +579,101 @@ class AppPage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (!useHeader && showNavBar && !hideBackOnTablet)
-                EdPageNavBar(showBack: canPop, onBack: canPop ? back : null, actions: actions),
+              if (!useHeader && showNavBar)
+                EdTabletPageChrome(
+                  title: title,
+                  subtitle: subtitle,
+                  kicker: kicker,
+                  showBack: canPop && !hideBackOnTablet,
+                  onBack: canPop ? back : null,
+                  actions: actions,
+                  large: layout.isDesktop,
+                ),
               if (toolbar != null) toolbar!,
               Expanded(child: child),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// رأس موحّد للآيباد والتابلت — عنوان واضح مع إجراءات.
+class EdTabletPageChrome extends StatelessWidget {
+  const EdTabletPageChrome({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.kicker,
+    this.showBack = false,
+    this.onBack,
+    this.actions,
+    this.large = false,
+  });
+
+  final String title;
+  final String? subtitle;
+  final String? kicker;
+  final bool showBack;
+  final VoidCallback? onBack;
+  final List<Widget>? actions;
+  final bool large;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(large ? 28 : 20, 14, large ? 28 : 20, 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: 0.85),
+        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          if (showBack && onBack != null) ...[
+            EdHeaderIconButton(
+              icon: Icons.arrow_forward_rounded,
+              tooltip: 'رجوع',
+              onPressed: onBack!,
+            ),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if ((kicker ?? '').trim().isNotEmpty)
+                  Text(
+                    kicker!.trim(),
+                    style: TextStyle(fontSize: large ? 12 : 11, fontWeight: FontWeight.w700, color: AppColors.accentTeal),
+                  ),
+                Text(
+                  title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: large ? 26 : 22,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.navy,
+                    letterSpacing: -0.4,
+                    height: 1.1,
+                  ),
+                ),
+                if ((subtitle ?? '').trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle!.trim(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: large ? 13 : 12, fontWeight: FontWeight.w600, color: AppColors.muted),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (actions != null) ...actions!,
+        ],
       ),
     );
   }

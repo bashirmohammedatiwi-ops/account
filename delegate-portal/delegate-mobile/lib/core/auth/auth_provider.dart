@@ -124,6 +124,20 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
+  /// يحدّث الدور وعدد المندوبين الثانويين من `teamSummary` دون طلب `/me`.
+  Future<void> applyAgentProfile(Map<String, dynamic> json) async {
+    final current = state;
+    if (current.token == null || current.agent == null) return;
+    try {
+      final merged = <String, dynamic>{...current.agent!.toJson(), ...json};
+      final agent = Agent.fromJson(merged);
+      if (agent.id != current.agent!.id) return;
+      if (jsonEncode(agent.toJson()) == jsonEncode(current.agent!.toJson())) return;
+      await _write(_agentKey, jsonEncode(agent.toJson()));
+      state = current.copyWith(agent: agent);
+    } catch (_) {}
+  }
+
   Future<void> login(String username, String password) async {
     _sessionEpoch++;
     try {

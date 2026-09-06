@@ -13,9 +13,11 @@ import '../../features/orders/orders_hub_screen.dart';
 import '../../features/promotional_visits/promotional_visits_screen.dart';
 import '../../features/receipts/receipts_screen.dart';
 import '../../features/reports/reports_screen.dart';
+import '../../features/team/team_screen.dart';
 import '../../features/settings/printer_settings_screen.dart';
 import '../../features/settings/settings_screen.dart';
 import '../auth/auth_provider.dart';
+import '../navigation/ed_page_transition.dart';
 import '../widgets/adaptive_shell.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -42,11 +44,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(
         path: '/boot',
-        builder: (_, _) => const AuthBootScreen(),
+        pageBuilder: (context, state) => edFadeSlidePage(
+          key: state.pageKey,
+          child: const AuthBootScreen(),
+        ),
       ),
       GoRoute(
         path: '/login',
-        builder: (_, _) => const LoginScreen(),
+        pageBuilder: (context, state) => edFadeSlidePage(
+          key: state.pageKey,
+          child: const LoginScreen(),
+        ),
       ),
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
@@ -116,6 +124,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(path: '/reports', builder: (_, _) => const ReportsScreen()),
           GoRoute(path: '/receipts', builder: (_, _) => const ReceiptsScreen()),
+          GoRoute(path: '/team', builder: (_, _) => const TeamScreen()),
           GoRoute(path: '/customers', builder: (_, _) => const CustomersScreen()),
           GoRoute(path: '/promotional-visits', builder: (_, _) => const PromotionalVisitsScreen()),
           GoRoute(

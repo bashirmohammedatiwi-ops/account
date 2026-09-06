@@ -103,8 +103,10 @@ class ApiClient {
         .toList();
   }
 
-  Future<List<BranchAccount>> getPickableCustomers(String treeSeq) async {
-    final data = await _json('GET', '/accounts/$treeSeq/pickable-customers');
+  Future<List<BranchAccount>> getPickableCustomers(String treeSeq, {String? q}) async {
+    final data = await _json('GET', '/accounts/$treeSeq/pickable-customers', query: {
+      if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
+    });
     return (data['customers'] as List)
         .map((e) => BranchAccount.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
@@ -282,8 +284,8 @@ class ApiClient {
     await _json('POST', '/delivery-receipts/$id/printed');
   }
 
-  Future<DeliveryReceipt> markDeliveryHandoverReceived(int id) async {
-    final data = await _json('POST', '/delivery-receipts/$id/handover');
+  Future<DeliveryReceipt> markDeliveryHandoverReceived(int id, {String? note}) async {
+    final data = await _json('POST', '/delivery-receipts/$id/handover', body: {'note': note?.trim() ?? ''});
     return DeliveryReceipt.fromJson(Map<String, dynamic>.from(data['deliveryReceipt'] as Map));
   }
 

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 
-/// خلفية بيضاء رسمية — تُستخدم خلف كل الصفحات
+/// خلفية الصفحات — تدرّج فاتح رسمي يعمل على الهاتف والآيباد.
 class EdPageBackground extends StatelessWidget {
   const EdPageBackground({super.key, this.child});
 
@@ -10,8 +10,8 @@ class EdPageBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: Colors.white,
+    return DecoratedBox(
+      decoration: const BoxDecoration(gradient: AppColors.pageGradient),
       child: child,
     );
   }

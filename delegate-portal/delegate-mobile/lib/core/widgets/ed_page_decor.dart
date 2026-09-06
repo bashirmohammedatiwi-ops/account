@@ -11,7 +11,18 @@ class EdModernBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ColoredBox(color: Colors.white);
+    final gradient = switch (variant) {
+      EdBackdropVariant.home => AppColors.homeSkyGradient,
+      EdBackdropVariant.accounts => const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFF8FBFF), Color(0xFFF0F4FA), Color(0xFFEEF2F9)],
+        ),
+    };
+    return DecoratedBox(
+      decoration: BoxDecoration(gradient: gradient),
+      child: const SizedBox.expand(),
+    );
   }
 }
 

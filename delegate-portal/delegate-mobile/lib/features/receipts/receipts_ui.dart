@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/layout/breakpoints.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/models.dart';
@@ -54,6 +55,28 @@ extension ReceiptsPeriodLabel on ReceiptsPeriod {
       ReceiptsPeriod.month => DateTime(now.year, now.month),
     };
   }
+}
+
+/// فلترة وصولات القبض حسب حالة التسليم/السند — للمندوب الرئيسي خصوصاً.
+enum DeliveryHandoverFilter { all, pendingHandover, received, awaitingReceipt, linked }
+
+extension DeliveryHandoverFilterLabel on DeliveryHandoverFilter {
+  String get label => switch (this) {
+        DeliveryHandoverFilter.all => 'الكل',
+        DeliveryHandoverFilter.pendingHandover => 'بانتظار التسليم',
+        DeliveryHandoverFilter.received => 'مُستلم',
+        DeliveryHandoverFilter.awaitingReceipt => 'بانتظار سند',
+        DeliveryHandoverFilter.linked => 'مرتبط بسند',
+      };
+
+  bool matches(DeliveryReceipt d) => switch (this) {
+        DeliveryHandoverFilter.all => true,
+        // يشمل الوصولات المرتبطة بسند قبض ما دام التسليم للرئيسي لم يُؤكَّد بعد.
+        DeliveryHandoverFilter.pendingHandover => !d.handoverReceived,
+        DeliveryHandoverFilter.received => d.handoverReceived,
+        DeliveryHandoverFilter.awaitingReceipt => d.canCreateReceipt,
+        DeliveryHandoverFilter.linked => d.receiptId != null || d.status == 'linked',
+      };
 }
 
 /// نطاق زمني (من — إلى) لسجل سندات القبض.
@@ -893,9 +916,11 @@ class _StatBox extends StatelessWidget {
 }
 
 class AgentRoleBanner extends StatelessWidget {
-  const AgentRoleBanner({super.key, required this.agent});
+  const AgentRoleBanner({super.key, required this.agent, this.hasTeam = false, this.onOpenTeam});
 
   final Agent agent;
+  final bool hasTeam;
+  final VoidCallback? onOpenTeam;
 
   @override
   Widget build(BuildContext context) {
@@ -910,7 +935,7 @@ class AgentRoleBanner extends StatelessWidget {
       pillBg = AppColors.warning.withValues(alpha: 0.12);
       final parent = agent.parentAgentName.trim();
       message = parent.isNotEmpty ? 'وصل قبض فقط — يتبع $parent' : 'وصل قبض فقط — يُسلّم المبلغ للرئيسي';
-    } else if (agent.secondaryCount > 0) {
+    } else if (hasTeam || agent.secondaryCount > 0) {
       pillColor = AppColors.success;
       pillBg = AppColors.success.withValues(alpha: 0.12);
       message = '${fmtNumAlways(agent.secondaryCount)} مندوب ثانوي · تستلم وصولاتهم وتُصدر سند قبض';
@@ -925,17 +950,34 @@ class AgentRoleBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.borderLight),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(color: pillBg, borderRadius: BorderRadius.circular(999)),
-            child: Text(roleLabel, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: pillColor)),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: pillBg, borderRadius: BorderRadius.circular(999)),
+                child: Text(roleLabel, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: pillColor)),
+              ),
+              if (onOpenTeam != null)
+                TextButton.icon(
+                  onPressed: onOpenTeam,
+                  icon: const Icon(Icons.groups_rounded, size: 16),
+                  label: const Text('الفريق'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.accentBlue,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+            ],
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(message, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted, height: 1.35)),
-          ),
+          const SizedBox(height: 6),
+          Text(message, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted, height: 1.35)),
         ],
       ),
     );
@@ -1077,19 +1119,17 @@ class DeliveryReceiptCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border(
-          top: const BorderSide(color: AppColors.borderLight),
-          bottom: const BorderSide(color: AppColors.borderLight),
-          left: const BorderSide(color: AppColors.borderLight),
-          right: BorderSide(color: accent.withValues(alpha: 0.9), width: 3.5),
-        ),
+        border: Border.all(color: AppColors.borderLight),
         boxShadow: AppColors.softShadow,
       ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 18, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1146,9 +1186,13 @@ class DeliveryReceiptCard extends StatelessWidget {
                       if (item.handoverStatusLabel.isNotEmpty)
                         _MetaChip(
                           icon: item.handoverReceived ? Icons.verified_rounded : Icons.hourglass_top_rounded,
-                          label: item.handoverStatusLabel,
+                          label: item.handoverReceived && (item.handoverAt ?? '').isNotEmpty
+                              ? '${item.handoverStatusLabel} · ${fmtDate(item.handoverAt)}'
+                              : item.handoverStatusLabel,
                           color: item.handoverReceived ? AppColors.success : AppColors.warning,
                         ),
+                      if ((item.handoverNote ?? '').trim().isNotEmpty)
+                        _MetaChip(icon: Icons.notes_rounded, label: item.handoverNote!.trim()),
                       if (item.printedAt != null && item.printedAt!.isNotEmpty)
                         const _MetaChip(icon: Icons.print_rounded, label: 'طُبع'),
                     ],
@@ -1169,49 +1213,171 @@ class DeliveryReceiptCard extends StatelessWidget {
                       ),
                     ),
                   ],
+                  if (item.canMarkHandover && onMarkHandover != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.warning.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.warning.withValues(alpha: 0.35)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.payments_outlined, size: 20, color: AppColors.warning),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'مبلغ بانتظار استلامك من ${item.agentName ?? 'المندوب الثانوي'}',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.navy),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   if ((showPrint && onReprint != null)
                       || (item.canCreateReceipt && onCreateReceipt != null)
                       || (item.canMarkHandover && onMarkHandover != null)) ...[
                     const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        if (showPrint && onReprint != null)
-                          OutlinedButton.icon(
-                            onPressed: isReprinting ? null : onReprint,
-                            icon: isReprinting
-                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                                : const Icon(Icons.print_rounded, size: 16),
-                            label: Text(isReprinting ? 'جاري الطباعة...' : 'إعادة طباعة'),
-                          ),
-                        if (item.canMarkHandover && onMarkHandover != null) ...[
-                          if (showPrint && onReprint != null) const SizedBox(width: 8),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: isMarkingHandover ? null : onMarkHandover,
-                              icon: isMarkingHandover
-                                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                                  : const Icon(Icons.payments_outlined, size: 18),
-                              label: Text(isMarkingHandover ? 'جاري التأكيد...' : 'استلمت المبلغ'),
-                            ),
-                          ),
-                        ],
-                        if (item.canCreateReceipt && onCreateReceipt != null) ...[
-                          if ((showPrint && onReprint != null) || (item.canMarkHandover && onMarkHandover != null)) const SizedBox(width: 8),
-                          Expanded(
-                            child: FilledButton.icon(
-                              onPressed: onCreateReceipt,
-                              style: FilledButton.styleFrom(backgroundColor: AppColors.navy, foregroundColor: Colors.white),
-                              icon: const Icon(Icons.receipt_long_rounded, size: 18),
-                              label: const Text('إنشاء سند قبض'),
-                            ),
-                          ),
-                        ],
-                      ],
+                    _DeliveryCardActions(
+                      showPrint: showPrint,
+                      onReprint: onReprint,
+                      onCreateReceipt: onCreateReceipt,
+                      onMarkHandover: onMarkHandover,
+                      canCreateReceipt: item.canCreateReceipt,
+                      canMarkHandover: item.canMarkHandover,
+                      isReprinting: isReprinting,
+                      isMarkingHandover: isMarkingHandover,
                     ),
                   ],
                 ],
               ),
             ),
+          Positioned(
+            top: 0,
+            bottom: 0,
+            right: 0,
+            width: 4,
+            child: ColoredBox(color: accent.withValues(alpha: 0.92)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// أزرار إجراءات وصل القبض — عمودية بعرض كامل على الهاتف، صفاً على الشاشات الأوسع.
+class _DeliveryCardActions extends StatelessWidget {
+  const _DeliveryCardActions({
+    required this.showPrint,
+    required this.onReprint,
+    required this.onCreateReceipt,
+    required this.onMarkHandover,
+    required this.canCreateReceipt,
+    required this.canMarkHandover,
+    this.isReprinting = false,
+    this.isMarkingHandover = false,
+  });
+
+  final bool showPrint;
+  final VoidCallback? onReprint;
+  final VoidCallback? onCreateReceipt;
+  final VoidCallback? onMarkHandover;
+  final bool canCreateReceipt;
+  final bool canMarkHandover;
+  final bool isReprinting;
+  final bool isMarkingHandover;
+
+  static const _btnHeight = 44.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final layout = EdLayout.of(context);
+    final stackVertically = layout.isPhone || layout.width < 560;
+
+    final buttons = <Widget>[];
+
+    if (canMarkHandover && onMarkHandover != null) {
+      buttons.add(
+        FilledButton.icon(
+          onPressed: isMarkingHandover ? null : onMarkHandover,
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.warning,
+            foregroundColor: Colors.white,
+            minimumSize: const Size(0, _btnHeight),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+          ),
+          icon: isMarkingHandover
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.payments_outlined, size: 18),
+          label: Text(
+            isMarkingHandover ? 'جاري التأكيد...' : 'استلمت المبلغ',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      );
+    }
+
+    if (canCreateReceipt && onCreateReceipt != null) {
+      buttons.add(
+        FilledButton.icon(
+          onPressed: onCreateReceipt,
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.navy,
+            foregroundColor: Colors.white,
+            minimumSize: const Size(0, _btnHeight),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+          ),
+          icon: const Icon(Icons.receipt_long_rounded, size: 18),
+          label: const Text('إنشاء سند قبض', maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
+      );
+    }
+
+    if (showPrint && onReprint != null) {
+      buttons.add(
+        OutlinedButton.icon(
+          onPressed: isReprinting ? null : onReprint,
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(0, _btnHeight),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+          ),
+          icon: isReprinting
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.print_rounded, size: 16),
+          label: Text(
+            isReprinting ? 'جاري الطباعة...' : 'إعادة طباعة',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      );
+    }
+
+    if (buttons.isEmpty) return const SizedBox.shrink();
+
+    if (stackVertically) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < buttons.length; i++) ...[
+            if (i > 0) const SizedBox(height: 8),
+            SizedBox(width: double.infinity, child: buttons[i]),
+          ],
+        ],
+      );
+    }
+
+    return Row(
+      children: [
+        for (var i = 0; i < buttons.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(child: buttons[i]),
+        ],
+      ],
     );
   }
 }
@@ -1237,7 +1403,14 @@ class _MetaChip extends StatelessWidget {
         children: [
           Icon(icon, size: 12, color: c),
           const SizedBox(width: 4),
-          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: c)),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: c),
+            ),
+          ),
         ],
       ),
     );
@@ -1407,6 +1580,134 @@ class PrinterStatusBanner extends StatelessWidget {
             ),
           TextButton(onPressed: onConfigure, child: const Text('إعدادات الطابعة')),
         ],
+      ),
+    );
+  }
+}
+
+/// شريط فلاتر وصولات القبض للمندوب الرئيسي: حالة التسليم + المندوب.
+/// يظهر فقط عند وجود وصولات فريق (مندوبين ثانويين).
+class DeliveryFilterBar extends StatelessWidget {
+  const DeliveryFilterBar({
+    super.key,
+    required this.statusFilter,
+    required this.onStatusChanged,
+    required this.agents,
+    required this.selectedAgentId,
+    required this.onAgentChanged,
+  });
+
+  final DeliveryHandoverFilter statusFilter;
+  final ValueChanged<DeliveryHandoverFilter> onStatusChanged;
+
+  /// قائمة (المعرّف، الاسم) لمندوبي الفريق الظاهرين في الوصولات.
+  final List<({int id, String name})> agents;
+  final int? selectedAgentId;
+  final ValueChanged<int?> onAgentChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: 34,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              for (final f in DeliveryHandoverFilter.values) ...[
+                _Chip(
+                  label: f.label,
+                  selected: statusFilter == f,
+                  color: AppColors.accentTeal,
+                  onTap: () => onStatusChanged(f),
+                ),
+                const SizedBox(width: 6),
+              ],
+            ],
+          ),
+        ),
+        if (agents.length > 1) ...[
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 34,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                _Chip(
+                  label: 'كل المندوبين',
+                  icon: Icons.groups_rounded,
+                  selected: selectedAgentId == null,
+                  color: AppColors.accentBlue,
+                  onTap: () => onAgentChanged(null),
+                ),
+                const SizedBox(width: 6),
+                for (final a in agents) ...[
+                  _Chip(
+                    label: a.name,
+                    icon: Icons.person_rounded,
+                    selected: selectedAgentId == a.id,
+                    color: AppColors.accentBlue,
+                    onTap: () => onAgentChanged(a.id),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _Chip extends StatelessWidget {
+  const _Chip({
+    required this.label,
+    required this.selected,
+    required this.color,
+    required this.onTap,
+    this.icon,
+  });
+
+  final String label;
+  final bool selected;
+  final Color color;
+  final VoidCallback onTap;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? color : AppColors.surface,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: selected ? color : AppColors.borderLight),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 13, color: selected ? Colors.white : AppColors.muted),
+                const SizedBox(width: 5),
+              ],
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? Colors.white : AppColors.muted,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

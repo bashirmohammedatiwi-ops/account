@@ -186,6 +186,12 @@ class SyncEngine {
       case 'delivery_printed':
         await api.markDeliveryReceiptPrinted(_idFromPath(entry.path));
         return;
+      case 'delivery_handover':
+        await api.markDeliveryHandoverReceived(
+          _idFromPath(entry.path),
+          note: entry.body?['note'] as String?,
+        );
+        return;
       case 'customer_request':
         final body = entry.body!;
         await api.createCustomerRequest(

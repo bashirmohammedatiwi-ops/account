@@ -69,15 +69,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: Colors.white,
-        body: wide
-            ? Row(
-                children: [
-                  const Expanded(flex: 5, child: EdLoginAside()),
-                  Expanded(flex: 4, child: _tabletForm()),
-                ],
-              )
-            : _phoneLayout(),
+        backgroundColor: Colors.transparent,
+        body: DecoratedBox(
+          decoration: const BoxDecoration(gradient: AppColors.pageGradient),
+          child: wide
+              ? Row(
+                  children: [
+                    const Expanded(flex: 5, child: EdLoginAside()),
+                    Expanded(flex: 4, child: _tabletForm()),
+                  ],
+                )
+              : _phoneLayout(),
+        ),
       ),
     );
   }
@@ -92,7 +95,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           Container(
             padding: EdgeInsets.fromLTRB(EdSpacing.page, top + 40, EdSpacing.page, 48),
             decoration: const BoxDecoration(
-              color: AppColors.navy,
+              gradient: LinearGradient(
+                begin: Alignment.topRight,
+                end: Alignment.bottomLeft,
+                colors: [Color(0xFF0A1020), Color(0xFF123044), Color(0xFF0F766E)],
+              ),
               borderRadius: BorderRadius.vertical(bottom: Radius.circular(AppColors.radius2xl)),
             ),
             child: Column(

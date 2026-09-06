@@ -6,6 +6,7 @@ import '../../core/auth/auth_provider.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/api/delegate_api.dart';
 import '../receipts/receipts_hub.dart';
+import '../team/team_hub.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
@@ -62,6 +63,11 @@ class HomeScreen extends ConsumerWidget {
       data: (list) => '${list.where((v) => v.status == 'pending').length}',
       orElse: () => null,
     );
+    final hasTeam = ref.watch(hasTeamProvider);
+    final teamBadge = ref.watch(teamOverviewProvider).maybeWhen(
+      data: (t) => t.totalPendingHandoverCount > 0 ? '${t.totalPendingHandoverCount}' : null,
+      orElse: () => null,
+    );
     final agentName = agent?.name ?? 'مندوب';
 
     Future<void> refresh() async {
@@ -84,6 +90,7 @@ class HomeScreen extends ConsumerWidget {
         iconBg: EdHomeThemes.accountsBg,
         badge: treeCount,
         category: 'الحسابات والتقارير',
+        featured: true,
         onTap: () => context.go('/accounts'),
       ),
       EdHomeApp(
@@ -102,6 +109,7 @@ class HomeScreen extends ConsumerWidget {
         iconColor: AppColors.moduleShop,
         iconBg: EdHomeThemes.shopBg,
         category: 'التجارة والطلبات',
+        featured: true,
         onTap: () => context.go('/shop'),
       ),
       EdHomeApp(
@@ -112,6 +120,7 @@ class HomeScreen extends ConsumerWidget {
         iconBg: EdHomeThemes.ordersBg,
         badge: orderCount,
         category: 'التجارة والطلبات',
+        featured: true,
         onTap: () => context.go('/orders'),
       ),
       EdHomeApp(
@@ -122,8 +131,20 @@ class HomeScreen extends ConsumerWidget {
         iconBg: EdHomeThemes.receiptsBg,
         badge: receiptBadge,
         category: 'الميدان والزبائن',
+        featured: true,
         onTap: () => context.go('/receipts'),
       ),
+      if (hasTeam)
+        EdHomeApp(
+          icon: Icons.groups_rounded,
+          name: 'متابعة الفريق',
+          hint: 'مندوبوك الثانويون وتحصيلهم',
+          iconColor: AppColors.accentBlue,
+          iconBg: const Color(0xFFEFF6FF),
+          badge: teamBadge,
+          category: 'الميدان والزبائن',
+          onTap: () => context.go('/team'),
+        ),
       EdHomeApp(
         icon: Icons.person_add_alt_1_rounded,
         name: 'زبون جديد',
@@ -168,6 +189,9 @@ class HomeScreen extends ConsumerWidget {
                 await ref.read(authProvider.notifier).logout();
                 if (context.mounted) context.go('/login');
               },
+        roleLabel: agent?.delegateRoleLabel,
+        isSecondary: isSecondary,
+        secondaryCount: agent?.secondaryCount ?? 0,
       ),
     );
   }

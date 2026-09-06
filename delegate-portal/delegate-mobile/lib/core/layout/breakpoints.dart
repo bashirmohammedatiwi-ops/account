@@ -21,7 +21,8 @@ class EdLayoutData {
 
   bool get isPhone => width < EdLayout.tabletMin;
   bool get isTablet => width >= EdLayout.tabletMin;
-  bool get isWide => width >= EdLayout.wideMin;
+  /// من iPad (768) فما فوق — شريط جانبي بدل الشريط السفلي.
+  bool get isWide => width >= EdLayout.tabletMin;
   bool get isDesktop => width >= EdLayout.desktopMin;
 
   /// جدول بيانات (كشف / فاتورة) — من iPad فما فوق، أو دائماً مثل الويب على الشاشات الأوسع.

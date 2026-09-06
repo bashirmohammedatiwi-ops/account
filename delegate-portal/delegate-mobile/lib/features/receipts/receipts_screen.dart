@@ -13,8 +13,10 @@ import '../../core/widgets/customer_picker.dart';
 import '../../core/widgets/ed_form.dart';
 import '../../core/widgets/ed_page_scroll.dart';
 import '../../core/widgets/phone_ui.dart';
+import '../../core/utils/delivery_viewer.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/models.dart';
+import '../team/team_hub.dart';
 
 import 'receipts_hub.dart';
 import 'receipts_ui.dart';
@@ -55,13 +57,32 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
   bool _drFormOpen = false;
   bool _rFormOpen = false;
   int? _handoverDeliveryId;
+  var _drStatusFilter = DeliveryHandoverFilter.all;
+  int? _drAgentFilter;
+
+  /// مندوبو الفريق الظاهرون في الوصولات (للمندوب الرئيسي) — لبناء فلتر المندوب.
+  List<({int id, String name})> _teamAgents(List<DeliveryReceipt> items, int? viewerId) {
+    if (viewerId == null) return [];
+    final map = <int, String>{};
+    for (final d in items) {
+      final agentId = d.agentId;
+      if (agentId == null || agentId == viewerId) continue;
+      if (!d.isTeamDelivery && !isTeamDeliveryFor(d, viewerId)) continue;
+      map[agentId] = d.agentName?.trim().isNotEmpty == true ? d.agentName!.trim() : 'مندوب #$agentId';
+    }
+    final list = map.entries.map((e) => (id: e.key, name: e.value)).toList();
+    list.sort((a, b) => a.name.compareTo(b.name));
+    return list;
+  }
 
   List<DeliveryReceipt> _filterDeliveries(List<DeliveryReceipt> items) {
     final q = _drSearchCtrl.text.trim().toLowerCase();
     return items.where((d) {
       if (!receiptsMatchesPeriod(d.receiptDate ?? d.createdAt, _drPeriod)) return false;
+      if (!_drStatusFilter.matches(d)) return false;
+      if (_drAgentFilter != null && d.agentId != _drAgentFilter) return false;
       if (q.isEmpty) return true;
-      return '${d.deliveryNo} ${d.customerName ?? ''} ${d.customerNum ?? ''} ${d.linkedReceiptNo ?? ''}'
+      return '${d.deliveryNo} ${d.customerName ?? ''} ${d.customerNum ?? ''} ${d.linkedReceiptNo ?? ''} ${d.agentName ?? ''}'
           .toLowerCase()
           .contains(q);
     }).toList();
@@ -99,7 +120,18 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
       _refreshPrinterStatus();
       _refreshPrintTemplate();
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrapLists());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _bootstrapLists();
+      _consumePendingLink();
+    });
+  }
+
+  /// إن جاء المستخدم من شاشة متابعة الفريق بطلب ربط وصل بسند، افتح النموذج مربوطاً.
+  void _consumePendingLink() {
+    final pending = ref.read(pendingReceiptLinkProvider);
+    if (pending == null) return;
+    ref.read(pendingReceiptLinkProvider.notifier).state = null;
+    _startReceiptFromDelivery(pending);
   }
 
   Future<void> _refreshPrintTemplate() async {
@@ -331,21 +363,40 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
   }
 
   Future<void> _markHandover(DeliveryReceipt item) async {
+    final noteCtrl = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('تأكيد استلام المبلغ'),
-        content: Text('تأكيد استلام ${fmtMoney(item.amount)} د.ع من ${item.agentName ?? 'المندوب الثانوي'}؟'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('تأكيد استلام ${fmtMoney(item.amount)} د.ع من ${item.agentName ?? 'المندوب الثانوي'}؟'),
+            const SizedBox(height: EdSpacing.md),
+            TextField(
+              controller: noteCtrl,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'ملاحظة الاستلام',
+                hintText: 'اختياري — تُحفظ مع سجل التسليم',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('تم الاستلام')),
         ],
       ),
     );
+    final note = noteCtrl.text.trim();
+    noteCtrl.dispose();
     if (ok != true || !mounted) return;
     setState(() => _handoverDeliveryId = item.id);
     try {
-      final updated = await ref.read(apiClientProvider).markDeliveryHandoverReceived(item.id);
+      final updated = await ref.read(apiClientProvider).markDeliveryHandoverReceived(item.id, note: note);
       ref.read(deliveriesListNotifierProvider.notifier).upsert(updated);
       _snack('تم تأكيد استلام المبلغ', success: true);
     } catch (e) {
@@ -356,20 +407,23 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
   }
 
   Widget _deliveryCard(DeliveryReceipt d) {
+    final agent = ref.read(authProvider).agent;
+    final item = agent != null ? enrichDeliveryForViewer(d, agent) : d;
     return DeliveryReceiptCard(
-      item: d,
+      item: item,
       showPrint: true,
       isReprinting: _reprintingDeliveryId == d.id,
       isMarkingHandover: _handoverDeliveryId == d.id,
       onReprint: () => _reprintDelivery(d),
-      onCreateReceipt: d.canCreateReceipt ? () => _startReceiptFromDelivery(d) : null,
-      onMarkHandover: d.canMarkHandover ? () => _markHandover(d) : null,
+      onCreateReceipt: item.canCreateReceipt ? () => _startReceiptFromDelivery(d) : null,
+      onMarkHandover: item.canMarkHandover ? () => _markHandover(d) : null,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final agent = ref.watch(authProvider.select((s) => s.agent));
+    final hasTeam = ref.watch(hasTeamProvider);
     final isSecondary = agent?.isSecondary ?? false;
     final deliveriesAsync = ref.watch(deliveriesListNotifierProvider);
     final receiptsAsync = isSecondary ? const AsyncData<List<Receipt>>([]) : ref.watch(receiptsListProvider);
@@ -394,7 +448,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
       onBack: () => context.go('/home'),
       unifiedScroll: false,
       child: ColoredBox(
-        color: Colors.white,
+        color: Colors.transparent,
         child: Stack(
           children: [
             const ReceiptsBackdrop(),
@@ -413,6 +467,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
                         isSecondary: isSecondary,
                         pendingDr: pendingDr,
                         pendingR: pendingR,
+                        hasTeam: hasTeam,
                       )
                     : _receiptsPhoneScroll(
                         context: context,
@@ -424,6 +479,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
                         pendingR: pendingR,
                         tabIndex: tabIndex,
                         isWide: isWide,
+                        hasTeam: hasTeam,
                       ),
               ),
           ],
@@ -439,6 +495,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
     required bool isSecondary,
     required int pendingDr,
     required int pendingR,
+    required bool hasTeam,
   }) {
     final onDeliveryTab = isSecondary || _tabs.index == 0;
     return Column(
@@ -457,7 +514,11 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
         if (agent != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(EdSpacing.page, 10, EdSpacing.page, 0),
-            child: AgentRoleBanner(agent: agent),
+            child: AgentRoleBanner(
+              agent: agent,
+              hasTeam: hasTeam,
+              onOpenTeam: hasTeam ? () => context.go('/team') : null,
+            ),
           ),
         if (!isSecondary) ...[
           Padding(
@@ -471,7 +532,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
         ],
         Expanded(
           child: onDeliveryTab
-              ? _deliveryTabBodyWide(deliveries)
+              ? _deliveryTabBodyWide(deliveries, agent?.id)
               : _receiptTabBodyWide(deliveries, receipts),
         ),
       ],
@@ -488,6 +549,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
     required int pendingR,
     required int tabIndex,
     required bool isWide,
+    required bool hasTeam,
   }) {
     final onDeliveryTab = isSecondary || tabIndex == 0;
     return CustomScrollView(
@@ -509,7 +571,13 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
         if (agent != null)
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(EdSpacing.page, 10, EdSpacing.page, 0),
-            sliver: SliverToBoxAdapter(child: AgentRoleBanner(agent: agent)),
+            sliver: SliverToBoxAdapter(
+              child: AgentRoleBanner(
+                agent: agent,
+                hasTeam: hasTeam,
+                onOpenTeam: hasTeam ? () => context.go('/team') : null,
+              ),
+            ),
           ),
         const SliverToBoxAdapter(child: SizedBox(height: 10)),
         if (!isSecondary) ...[
@@ -525,14 +593,14 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
           const SliverToBoxAdapter(child: SizedBox(height: 8)),
         ],
         if (onDeliveryTab)
-          ..._deliveryPhoneSlivers(context, deliveries)
+          ..._deliveryPhoneSlivers(context, deliveries, agent?.id)
         else
           ..._receiptPhoneSlivers(context, deliveries, receipts),
       ],
     );
   }
 
-  List<Widget> _deliveryPhoneSlivers(BuildContext context, List<DeliveryReceipt> deliveries) {
+  List<Widget> _deliveryPhoneSlivers(BuildContext context, List<DeliveryReceipt> deliveries, int? viewerId) {
     final visible = _filterDeliveries(deliveries);
     final filtering = _drSearchCtrl.text.trim().isNotEmpty || _drPeriod != ReceiptsPeriod.all;
     final bottom = EdPageInsets.bottom(context);
@@ -559,6 +627,18 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
             period: _drPeriod,
             onPeriodChanged: (p) => setState(() => _drPeriod = p),
             onQueryChanged: (_) => setState(() {}),
+          ),
+        ),
+      ),
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, EdSpacing.sm),
+        sliver: SliverToBoxAdapter(
+          child: DeliveryFilterBar(
+            statusFilter: _drStatusFilter,
+            onStatusChanged: (f) => setState(() => _drStatusFilter = f),
+            agents: _teamAgents(deliveries, viewerId),
+            selectedAgentId: _drAgentFilter,
+            onAgentChanged: (id) => setState(() => _drAgentFilter = id),
           ),
         ),
       ),
@@ -723,7 +803,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
     );
   }
 
-  Widget _deliveryTabBodyWide(List<DeliveryReceipt> deliveries) {
+  Widget _deliveryTabBodyWide(List<DeliveryReceipt> deliveries, int? viewerId) {
     final visible = _filterDeliveries(deliveries);
     return Padding(
       padding: const EdgeInsets.fromLTRB(EdSpacing.page, EdSpacing.md, EdSpacing.page, 0),
@@ -742,6 +822,14 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
                 period: _drPeriod,
                 onPeriodChanged: (p) => setState(() => _drPeriod = p),
                 onQueryChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: EdSpacing.sm),
+              DeliveryFilterBar(
+                statusFilter: _drStatusFilter,
+                onStatusChanged: (f) => setState(() => _drStatusFilter = f),
+                agents: _teamAgents(deliveries, viewerId),
+                selectedAgentId: _drAgentFilter,
+                onAgentChanged: (id) => setState(() => _drAgentFilter = id),
               ),
               const SizedBox(height: EdSpacing.sm),
               ReceiptsSectionHeader(

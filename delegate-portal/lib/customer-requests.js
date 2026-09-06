@@ -449,6 +449,33 @@ function listPendingPickableForTree(agentId, treeAccSeq) {
   `).all(agentId, String(treeAccSeq));
 }
 
+function pickableSearchHaystack(item) {
+  return [
+    item.name1,
+    item.name2,
+    item.num,
+    item.address,
+    item.remarks,
+    item.groupPath,
+    item.pendingLabel
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+function pickableMatchesSearch(item, q) {
+  const query = String(q || '').trim().toLowerCase();
+  if (!query) return true;
+  const hay = pickableSearchHaystack(item);
+  if (hay.includes(query)) return true;
+  const qDigits = query.replace(/\D/g, '');
+  if (qDigits.length >= 3) {
+    return hay.replace(/\D/g, '').includes(qDigits);
+  }
+  return false;
+}
+
 /** زبائن الشجرة للفواتير: حسابات مُرحّلة + طلبات بانتظار الترحيل */
 function listPickableCustomers(agentId, treeAccSeq) {
   assertAgentAssignedTree(agentId, treeAccSeq);
@@ -456,6 +483,41 @@ function listPickableCustomers(agentId, treeAccSeq) {
   const accounts = getLeafDescendants(rootSeq).map((c) => mapPickableFromAccount(c, rootSeq));
   const pending = listPendingPickableForTree(agentId, rootSeq).map(mapPickableFromRequest);
   return [...accounts, ...pending].sort((a, b) => String(a.name1).localeCompare(String(b.name1), 'ar'));
+}
+
+function searchPickableCustomers(agentId, treeAccSeq, q) {
+  assertAgentAssignedTree(agentId, treeAccSeq);
+  const rootSeq = String(treeAccSeq);
+  const accounts = getLeafDescendants(rootSeq)
+    .map((c) => mapPickableFromAccount(c, rootSeq))
+    .filter((item) => pickableMatchesSearch(item, q));
+  const pending = listPendingPickableForTree(agentId, rootSeq)
+    .map(mapPickableFromRequest)
+    .filter((item) => pickableMatchesSearch(item, q));
+  return [...accounts, ...pending].sort((a, b) => String(a.name1).localeCompare(String(b.name1), 'ar'));
+}
+
+function searchPendingPickableForAgent(agentId, q, treeAccSeq = null) {
+  const query = String(q || '').trim();
+  if (!query) return [];
+  const like = `%${query}%`;
+  const params = [agentId];
+  let sql = `
+    SELECT * FROM customer_requests
+    WHERE agent_id = ?
+      AND status IN ('pending', 'reviewed')
+      AND (edari_seq IS NULL OR trim(edari_seq) = '')
+      AND (name LIKE ? OR request_no LIKE ? OR address LIKE ? OR phone LIKE ? OR notes LIKE ?)
+  `;
+  params.push(like, like, like, like, like);
+  if (treeAccSeq) {
+    sql += ' AND tree_acc_seq = ?';
+    params.push(String(treeAccSeq));
+  }
+  sql += ' ORDER BY name COLLATE NOCASE LIMIT 80';
+  return db.prepare(sql).all(...params)
+    .map(mapPickableFromRequest)
+    .filter((item) => pickableMatchesSearch(item, query));
 }
 
 function loadAgentCustomerRequest(id, agentId) {
@@ -539,6 +601,9 @@ module.exports = {
   postingPayload,
   listPostableTrees,
   listPickableCustomers,
+  searchPickableCustomers,
+  searchPendingPickableForAgent,
+  pickableMatchesSearch,
   resolveOrderCustomer,
   loadAgentCustomerRequest
 };

@@ -463,12 +463,12 @@ class SalesReportSummary {
   factory SalesReportSummary.fromJson(Map<String, dynamic>? json) {
     final s = json ?? {};
     return SalesReportSummary(
-      salesAmount: s['salesAmount'] as num? ?? s['sales_amount'] as num? ?? 0,
-      salesCount: s['salesCount'] as int? ?? s['sales_count'] as int? ?? 0,
-      returnsAmount: s['returnsAmount'] as num? ?? s['returns_amount'] as num? ?? 0,
-      returnsCount: s['returnsCount'] as int? ?? s['returns_count'] as int? ?? 0,
-      netAmount: s['netAmount'] as num? ?? s['net_amount'] as num? ?? 0,
-      netCount: s['netCount'] as int? ?? s['net_count'] as int? ?? 0,
+      salesAmount: _jsonNum(s['salesAmount'] ?? s['sales_amount']),
+      salesCount: _jsonInt(s['salesCount'] ?? s['sales_count']),
+      returnsAmount: _jsonNum(s['returnsAmount'] ?? s['returns_amount']),
+      returnsCount: _jsonInt(s['returnsCount'] ?? s['returnCount'] ?? s['returns_count'] ?? s['return_count']),
+      netAmount: _jsonNum(s['netAmount'] ?? s['net_amount'] ?? s['netSales'] ?? s['net_sales']),
+      netCount: _jsonInt(s['netCount'] ?? s['net_count'] ?? s['invoiceCount'] ?? s['invoice_count']),
     );
   }
 }
@@ -492,15 +492,29 @@ class SalesReportInvoice {
   final String? customerName;
   final String? accSeq;
 
-  factory SalesReportInvoice.fromJson(Map<String, dynamic> json) => SalesReportInvoice(
-        ref: '${json['ref'] ?? json['billSeq'] ?? json['seq'] ?? ''}',
-        invoiceNum: '${json['num'] ?? json['billNum'] ?? ''}',
-        date: '${json['date'] ?? ''}',
-        amount: _jsonNum(json['amount']),
-        isReturn: json['isReturn'] == true || json['is_return'] == true,
-        customerName: json['customerName'] as String? ?? json['customer_name'] as String?,
-        accSeq: json['accSeq']?.toString() ?? json['acc_seq']?.toString(),
-      );
+  factory SalesReportInvoice.fromJson(Map<String, dynamic> json) {
+    final total = _jsonNum(json['total']);
+    final discount = _jsonNum(json['discount']);
+    final netPay = json['netPay'] ?? json['net_pay'];
+    final amount = netPay != null
+        ? _jsonNum(netPay)
+        : json['amount'] != null
+            ? _jsonNum(json['amount'])
+            : total - discount;
+
+    return SalesReportInvoice(
+      ref: '${json['ref'] ?? json['seq'] ?? json['billSeq'] ?? json['bill_seq'] ?? ''}',
+      invoiceNum: '${json['num'] ?? json['billNum'] ?? json['bill_num'] ?? ''}',
+      date: '${json['date'] ?? json['inv_date'] ?? ''}',
+      amount: amount,
+      isReturn: json['isReturn'] == true || json['is_return'] == true || _jsonInt(json['kind']) == 2,
+      customerName: json['customerName'] as String? ??
+          json['customer_name'] as String? ??
+          json['accountName'] as String? ??
+          json['account_name'] as String?,
+      accSeq: json['accSeq']?.toString() ?? json['acc_seq']?.toString(),
+    );
+  }
 }
 
 class SalesReportResult {
@@ -590,10 +604,15 @@ class DeliveryReceipt {
     required this.amount,
     this.agentId,
     this.agentName,
+    this.agentRole,
     this.isTeamDelivery = false,
     this.handoverStatus = 'pending',
     this.handoverStatusLabel = '',
     this.handoverAt,
+    this.handoverByAgentId,
+    this.handoverNote,
+    this.adminNote,
+    this.updatedAt,
     this.canMarkHandover = false,
     this.canCreateReceipt = false,
     this.customerName,
@@ -616,10 +635,15 @@ class DeliveryReceipt {
   final num amount;
   final int? agentId;
   final String? agentName;
+  final String? agentRole;
   final bool isTeamDelivery;
   final String handoverStatus;
   final String handoverStatusLabel;
   final String? handoverAt;
+  final int? handoverByAgentId;
+  final String? handoverNote;
+  final String? adminNote;
+  final String? updatedAt;
   final bool canMarkHandover;
   final bool canCreateReceipt;
   final String? customerName;
@@ -645,10 +669,15 @@ class DeliveryReceipt {
         amount: _jsonNum(json['amount']),
         agentId: _jsonIntOrNull(json['agentId']) ?? _jsonIntOrNull(json['agent_id']),
         agentName: json['agentName'] as String? ?? json['agent_name'] as String?,
+        agentRole: json['agentRole'] as String? ?? json['agent_role'] as String?,
         isTeamDelivery: json['isTeamDelivery'] == true || json['is_team_delivery'] == true,
         handoverStatus: '${json['handoverStatus'] ?? json['handover_status'] ?? 'pending'}',
         handoverStatusLabel: '${json['handoverStatusLabel'] ?? json['handover_status_label'] ?? ''}',
         handoverAt: json['handoverAt'] as String? ?? json['handover_at'] as String?,
+        handoverByAgentId: _jsonIntOrNull(json['handoverByAgentId']) ?? _jsonIntOrNull(json['handover_by_agent_id']),
+        handoverNote: json['handoverNote'] as String? ?? json['handover_note'] as String?,
+        adminNote: json['adminNote'] as String? ?? json['admin_note'] as String?,
+        updatedAt: json['updatedAt'] as String? ?? json['updated_at'] as String?,
         canMarkHandover: json['canMarkHandover'] == true || json['can_mark_handover'] == true,
         canCreateReceipt: json['canCreateReceipt'] == true || json['can_create_receipt'] == true,
         customerName: json['customerName'] as String? ?? json['customer_name'] as String?,
@@ -677,6 +706,7 @@ class CustomerRequest {
     this.notes,
     this.treeName,
     this.treeNum,
+    this.treeAccSeq,
     this.edariNum,
     this.createdAt,
   });
@@ -691,6 +721,7 @@ class CustomerRequest {
   final String? notes;
   final String? treeName;
   final String? treeNum;
+  final String? treeAccSeq;
   final String? edariNum;
   final String? createdAt;
 
@@ -707,6 +738,7 @@ class CustomerRequest {
         notes: json['notes'] as String?,
         treeName: json['treeName'] as String? ?? json['tree_name'] as String?,
         treeNum: json['treeNum'] as String? ?? json['tree_num'] as String?,
+        treeAccSeq: json['treeAccSeq'] as String? ?? json['tree_acc_seq'] as String?,
         edariNum: json['edariNum'] as String? ?? json['edari_num'] as String?,
         createdAt: json['createdAt'] as String? ?? json['created_at'] as String?,
       );
