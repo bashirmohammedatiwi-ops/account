@@ -13,6 +13,8 @@
 	</dict>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>يُستخدم لإشعارك عند وصول طلبات تجهيز جديدة</string>
 	<key>CFBundleDisplayName</key>
 	<string>تجهيز الطلبات</string>
 	<key>CFBundleExecutable</key>

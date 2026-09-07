@@ -1,3 +1,4 @@
+const db = require('./db');
 const { isEmpManager } = require('./emp-accounts');
 const bcrypt = require('bcryptjs');
 const { notifyNewOrder } = require('./push');
