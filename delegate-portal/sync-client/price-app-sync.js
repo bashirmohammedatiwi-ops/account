@@ -18,6 +18,7 @@ const edariRoot = process.env.EDARI_READER_ROOT
 const odbcBridge = require(path.join(edariRoot, 'lib', 'odbc-bridge'));
 const { getEdariConnection } = require('./edari-connection');
 const { normalizeEdariDateIso } = require('../lib/date-utils');
+const { normalizeProductName } = require('../lib/product-name-text');
 const { syncPosPricing } = require('./pos-pricing-sync');
 
 const SERVER = process.argv.includes('--server')
@@ -323,7 +324,7 @@ function mapRowsToMovements(rows, accMap) {
 
     const supplier = accMap.get(String(sqlInt(row.AccSeq))) || '';
     const date = normalizeEdariDateIso(row.InvDate);
-    const name = String(row.Name1 || row.MatName || '').trim();
+    const name = normalizeProductName(String(row.Name1 || row.MatName || '').trim());
 
     billSeqs.add(String(row.BillSeq));
 
@@ -422,7 +423,7 @@ async function fetchAggregatePurchaseMovements() {
 
     products.push({
       barcode,
-      name: String(row.Name1 || '').trim(),
+      name: normalizeProductName(String(row.Name1 || '').trim()),
     });
   }
 
@@ -462,7 +463,7 @@ function mapCatalogRows(rows) {
     if (!barcode) continue;
     map.set(barcode, {
       barcode,
-      name: String(row.Name1 || '').trim(),
+      name: normalizeProductName(String(row.Name1 || '').trim()),
       stock_balance: edariStockQty(row.InTot, row.OutTot),
     });
   }

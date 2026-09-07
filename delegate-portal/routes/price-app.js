@@ -6,6 +6,7 @@ const {
   getStats,
   listProducts,
   getProductMovements,
+  repairPriceProductNames,
 } = require('../lib/price-catalog');
 
 const router = express.Router();
@@ -60,6 +61,16 @@ router.post('/sync/pos/bulk', authPriceSync, (req, res) => {
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
     const synced = upsertPosItems(items);
     res.json({ ok: true, synced, failed: Math.max(0, items.length - synced) });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/sync/repair-names', authPriceSync, (req, res) => {
+  try {
+    const limit = Number(req.body?.limit) || 10000;
+    const result = repairPriceProductNames({ limit });
+    res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

@@ -8,6 +8,7 @@ const os = require('os');
 const path = require('path');
 const { computePricing } = require('../lib/pos-pricing');
 const { resolveProductBarcode } = require('./pos-barcode');
+const { normalizeProductName } = require('../lib/product-name-text');
 
 const execFileAsync = promisify(execFile);
 const COL_SEP = '|';
@@ -139,7 +140,7 @@ function normalizeRow(raw) {
   return {
     productCode: Number(raw.productCode) || 0,
     productNum: raw.productNum != null ? String(raw.productNum).trim() : null,
-    name: raw.name != null ? String(raw.name).trim() : null,
+    name: raw.name != null ? (normalizeProductName(String(raw.name).trim()) || null) : null,
     barcode: raw.barcode != null ? String(raw.barcode).trim() : null,
     originalPrice: Number(raw.originalPrice) || 0,
     storedFinalPrice: Number(raw.storedFinalPrice) || 0,

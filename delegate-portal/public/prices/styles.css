@@ -132,7 +132,14 @@ tr:last-child td { border-bottom: none; }
 tr:hover td { background: rgba(59, 130, 246, 0.04); }
 tr.clickable { cursor: pointer; }
 
-.product-name { font-weight: 600; max-width: 280px; }
+.product-name {
+  font-weight: 600;
+  max-width: 280px;
+  font-family: 'Tajawal', 'Segoe UI', Tahoma, sans-serif;
+  line-height: 1.45;
+  word-break: break-word;
+  unicode-bidi: plaintext;
+}
 .product-meta { font-size: 0.78rem; color: var(--muted); margin-top: 0.15rem; }
 
 .price { font-weight: 700; font-variant-numeric: tabular-nums; }
