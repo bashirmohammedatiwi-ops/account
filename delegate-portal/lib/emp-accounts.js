@@ -1,9 +1,9 @@
 function empAccounts() {
   return [
     {
-      username: process.env.EMP_USER || 'allemp',
-      password: process.env.EMP_PASS || '000000',
-      name: 'موظف التجهيز',
+      username: process.env.EMP_USER || 'صلاح',
+      password: process.env.EMP_PASS || '5910',
+      name: 'صلاح',
       role: 'employee'
     },
     {

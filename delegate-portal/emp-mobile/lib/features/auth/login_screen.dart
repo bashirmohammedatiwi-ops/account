@@ -18,7 +18,7 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProviderStateMixin {
-  final _userCtrl = TextEditingController(text: 'allemp');
+  final _userCtrl = TextEditingController(text: 'صلاح');
   final _passCtrl = TextEditingController();
   bool _loading = false;
   bool _obscure = true;
