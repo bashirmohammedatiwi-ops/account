@@ -6,27 +6,55 @@ class Employee {
     required this.name,
     this.role = 'employee',
     this.roleLabel = 'موظف تجهيز',
+    this.canPrepConfirm = false,
+    this.isReceiptOnly = false,
+    this.prepConfirmPendingLabel = 'تأكيد اكتمال التجهيز',
+    this.prepConfirmConfirmedLabel = 'تم تأكيد التجهيز',
+    this.prepConfirmSubtitlePending = 'اضغط عند الانتهاء من التجهيز',
+    this.prepConfirmSubtitleConfirmed = 'اضغط لإلغاء التأكيد',
   });
 
   final String username;
   final String name;
   final String role;
   final String roleLabel;
+  final bool canPrepConfirm;
+  final bool isReceiptOnly;
+  final String prepConfirmPendingLabel;
+  final String prepConfirmConfirmedLabel;
+  final String prepConfirmSubtitlePending;
+  final String prepConfirmSubtitleConfirmed;
 
   bool get isManager => role == 'manager';
 
-  factory Employee.fromJson(Map<String, dynamic> json) => Employee(
-        username: '${json['username'] ?? ''}',
-        name: '${json['name'] ?? ''}',
-        role: '${json['role'] ?? json['empRole'] ?? 'employee'}',
-        roleLabel: '${json['roleLabel'] ?? json['role_label'] ?? (json['role'] == 'manager' || json['empRole'] == 'manager' ? 'مدير' : 'موظف تجهيز')}',
-      );
+  factory Employee.fromJson(Map<String, dynamic> json) {
+    final role = '${json['role'] ?? json['empRole'] ?? 'employee'}';
+    final isReceipt = role == 'receipt';
+    return Employee(
+      username: '${json['username'] ?? ''}',
+      name: '${json['name'] ?? ''}',
+      role: role,
+      roleLabel: '${json['roleLabel'] ?? json['role_label'] ?? (role == 'manager' ? 'مدير' : (isReceipt ? 'إنشاء وصل' : 'موظف تجهيز'))}',
+      canPrepConfirm: json['canPrepConfirm'] == true || role == 'manager' || role == 'receipt',
+      isReceiptOnly: json['isReceiptOnly'] == true || isReceipt,
+      prepConfirmPendingLabel: '${json['prepConfirmPendingLabel'] ?? (isReceipt ? 'تم انشاء وصل' : 'تأكيد اكتمال التجهيز')}',
+      prepConfirmConfirmedLabel: '${json['prepConfirmConfirmedLabel'] ?? (isReceipt ? 'تم انشاء وصل' : 'تم تأكيد التجهيز')}',
+      prepConfirmSubtitlePending: '${json['prepConfirmSubtitlePending'] ?? (isReceipt ? 'اضغط بعد إنشاء وصل التجهيز' : 'اضغط عند الانتهاء من التجهيز')}',
+      prepConfirmSubtitleConfirmed: '${json['prepConfirmSubtitleConfirmed'] ?? (isReceipt ? 'اضغط لإلغاء إنشاء الوصل' : 'اضغط لإلغاء التأكيد')}',
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'username': username,
         'name': name,
         'role': role,
         'roleLabel': roleLabel,
+        'canPrepConfirm': canPrepConfirm,
+        'isReceiptOnly': isReceiptOnly,
+        'prepConfirmPendingLabel': prepConfirmPendingLabel,
+        'prepConfirmConfirmedLabel': prepConfirmConfirmedLabel,
+        'prepConfirmSubtitlePending': prepConfirmSubtitlePending,
+        'prepConfirmSubtitleConfirmed': prepConfirmSubtitleConfirmed,
       };
 }
 

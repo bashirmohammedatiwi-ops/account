@@ -1,6 +1,13 @@
 const express = require('express');
 const { signEmployee, authEmployee } = require('../lib/auth');
-const { findEmpAccount, isEmpManager, empRoleLabel } = require('../lib/emp-accounts');
+const {
+  findEmpAccount,
+  isEmpManager,
+  canEmpPrepConfirm,
+  mapEmployeeProfile,
+  assertNotReceiptOnly,
+  assertCanPrepConfirm
+} = require('../lib/emp-accounts');
 const { registerDevice, unregisterDevice } = require('../lib/push');
 const {
   listOrders,
@@ -22,23 +29,13 @@ const router = express.Router();
 
 const ALLOWED_STATUSES = new Set(['pending', 'processing', 'rejected']);
 
-function mapEmployeeProfile(employee) {
-  const role = String(employee?.empRole || employee?.role || 'employee');
-  return {
-    username: employee?.username || '',
-    name: employee?.name || 'موظف التجهيز',
-    role,
-    roleLabel: empRoleLabel(role),
-    isManager: isEmpManager(employee)
-  };
-}
-
 function enrichOrder(order, employee) {
   if (!order) return order;
   return {
     ...order,
     editable: employeeCanEditMappedOrder(order, employee),
-    deletable: isEmpManager(employee)
+    deletable: isEmpManager(employee),
+    canPrepConfirm: canEmpPrepConfirm(employee)
   };
 }
 
@@ -57,13 +54,11 @@ router.post('/login', (req, res) => {
   res.json({
     ok: true,
     token,
-    employee: {
+    employee: mapEmployeeProfile({
       username: account.username,
       name: account.name,
-      role: account.role,
-      roleLabel: empRoleLabel(account.role),
-      isManager: account.role === 'manager'
-    }
+      empRole: account.role
+    })
   });
 });
 
@@ -121,6 +116,7 @@ router.get('/orders/:id', authEmployee, (req, res) => {
 
 router.patch('/orders/:id/status', authEmployee, async (req, res) => {
   try {
+    assertNotReceiptOnly(req.employee);
     const status = String(req.body?.status || '').trim();
     if (!ALLOWED_STATUSES.has(status) && !ALLOWED_STATUSES.has(canonicalStatus(status))) {
       return res.status(400).json({ ok: false, error: 'حالة غير صالحة — استخدم: قيد الانتظار / تم التجهيز / مرفوض' });
@@ -145,6 +141,7 @@ router.patch('/orders/:id/status', authEmployee, async (req, res) => {
 
 router.post('/orders/:id/retry-admin-sync', authEmployee, async (req, res) => {
   try {
+    assertNotReceiptOnly(req.employee);
     const orderId = Number(req.params.id);
     const order = loadOrder(orderId);
     if (!order) return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
@@ -157,6 +154,7 @@ router.post('/orders/:id/retry-admin-sync', authEmployee, async (req, res) => {
 
 router.patch('/orders/:id/prep-confirm', authEmployee, async (req, res) => {
   try {
+    assertCanPrepConfirm(req.employee);
     const confirmed = req.body?.confirmed !== false;
     const orderId = Number(req.params.id);
     const order = setPrepConfirmed(orderId, confirmed, {
@@ -177,6 +175,7 @@ router.patch('/orders/:id/prep-confirm', authEmployee, async (req, res) => {
 
 router.patch('/orders/:orderId/lines/:lineId', authEmployee, (req, res) => {
   try {
+    assertNotReceiptOnly(req.employee);
     const order = updateOrderLineByEmployee(
       Number(req.params.orderId),
       Number(req.params.lineId),
@@ -193,6 +192,7 @@ router.patch('/orders/:orderId/lines/:lineId', authEmployee, (req, res) => {
 
 router.delete('/orders/:orderId/lines/:lineId', authEmployee, (req, res) => {
   try {
+    assertNotReceiptOnly(req.employee);
     const order = deleteOrderLineByEmployee(
       Number(req.params.orderId),
       Number(req.params.lineId),

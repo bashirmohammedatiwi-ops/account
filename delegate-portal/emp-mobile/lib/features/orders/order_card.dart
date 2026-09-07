@@ -24,13 +24,16 @@ class OrderCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isManager = ref.watch(authProvider).employee?.isManager ?? false;
+    final employee = ref.watch(authProvider).employee;
+    final isManager = employee?.isManager ?? false;
+    final canPrepConfirm = employee?.canPrepConfirm ?? false;
+    final isReceiptOnly = employee?.isReceiptOnly ?? false;
     final giftCount = order.lines.fold<num>(0, (s, l) => s + l.bonus);
     final testerCount = order.lines.fold<num>(0, (s, l) => s + l.tester);
     final muted = themed(context, light: AppColors.muted, dark: AppColors.mutedDark);
     final confirmed = order.prepConfirmed && order.status == 'processing';
-    final showPrepCheck = order.status == 'processing';
-    final showMarkProcessed = order.status == 'pending';
+    final showPrepCheck = order.status == 'processing' && canPrepConfirm;
+    final showMarkProcessed = order.status == 'pending' && !isReceiptOnly;
     final borderColor = confirmed
         ? AppColors.confirmed
         : themed(context, light: AppColors.border, dark: AppColors.borderDark);
@@ -127,7 +130,7 @@ class OrderCard extends ConsumerWidget {
             if (showPrepCheck)
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                child: _PrepCheckRow(order: order, onChanged: onChanged),
+                child: _PrepCheckRow(order: order, employee: employee, onChanged: onChanged),
               ),
             if (isManager || order.deletable)
               Padding(
@@ -227,9 +230,10 @@ class _MarkProcessedRowState extends ConsumerState<_MarkProcessedRow> {
 }
 
 class _PrepCheckRow extends ConsumerStatefulWidget {
-  const _PrepCheckRow({required this.order, this.onChanged});
+  const _PrepCheckRow({required this.order, this.employee, this.onChanged});
 
   final PurchaseOrder order;
+  final Employee? employee;
   final VoidCallback? onChanged;
 
   @override
@@ -242,12 +246,14 @@ class _PrepCheckRowState extends ConsumerState<_PrepCheckRow> {
   Future<void> _toggle() async {
     if (_busy) return;
     final next = !widget.order.prepConfirmed;
+    final employee = widget.employee ?? ref.read(authProvider).employee;
+    final cancelLabel = employee?.isReceiptOnly == true ? 'إلغاء إنشاء الوصل؟' : 'إلغاء علامة تأكيد التجهيز؟';
     if (!next) {
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('إلغاء التأكيد'),
-          content: const Text('إلغاء علامة تأكيد التجهيز؟'),
+          content: Text(cancelLabel),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('لا')),
             FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('نعم')),
@@ -267,9 +273,12 @@ class _PrepCheckRowState extends ConsumerState<_PrepCheckRow> {
       if (mounted) {
         final notifyMsg = next ? notifyUserMessage(result.notify) : '';
         final isError = next && result.notify != null && result.notify!['ok'] != true;
+        final successMsg = next
+            ? '${employee?.prepConfirmConfirmedLabel ?? 'تم تأكيد التجهيز'} ✓'
+            : 'تم إلغاء التأكيد';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(notifyMsg.isNotEmpty ? notifyMsg : (next ? 'تم تأكيد التجهيز ✓' : 'تم إلغاء التأكيد')),
+            content: Text(notifyMsg.isNotEmpty ? notifyMsg : successMsg),
             duration: Duration(seconds: isError ? 6 : 3),
             backgroundColor: isError ? AppColors.rejected : null,
           ),
@@ -285,6 +294,11 @@ class _PrepCheckRowState extends ConsumerState<_PrepCheckRow> {
   @override
   Widget build(BuildContext context) {
     final confirmed = widget.order.prepConfirmed;
+    final employee = widget.employee ?? ref.watch(authProvider).employee;
+    final pendingLabel = employee?.prepConfirmPendingLabel ?? 'تأكيد اكتمال التجهيز';
+    final confirmedLabel = employee?.prepConfirmConfirmedLabel ?? 'تم تأكيد التجهيز';
+    final subtitlePending = employee?.prepConfirmSubtitlePending ?? 'اضغط عند الانتهاء من التجهيز';
+    final subtitleConfirmed = employee?.prepConfirmSubtitleConfirmed ?? 'اضغط لإلغاء التأكيد';
     final border = themed(context, light: AppColors.border, dark: AppColors.borderDark);
 
     return Material(
@@ -310,7 +324,7 @@ class _PrepCheckRowState extends ConsumerState<_PrepCheckRow> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      confirmed ? 'تم تأكيد التجهيز' : 'تأكيد اكتمال التجهيز',
+                      confirmed ? confirmedLabel : pendingLabel,
                       style: TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: 13,
@@ -318,7 +332,7 @@ class _PrepCheckRowState extends ConsumerState<_PrepCheckRow> {
                       ),
                     ),
                     Text(
-                      confirmed ? 'اضغط لإلغاء التأكيد' : 'تأكيد وإرسال للأدمن إن لم يُرسل',
+                      confirmed ? subtitleConfirmed : subtitlePending,
                       style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark)),
                     ),
                   ],

@@ -78,13 +78,14 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
   }
 
   Future<void> _togglePrepConfirm(PurchaseOrder order) async {
+    final employee = ref.read(authProvider).employee;
     final next = !order.prepConfirmed;
     if (!next) {
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('إلغاء التأكيد'),
-          content: const Text('إلغاء علامة تأكيد التجهيز عن هذا الطلب؟'),
+          content: Text(employee?.isReceiptOnly == true ? 'إلغاء إنشاء الوصل عن هذا الطلب؟' : 'إلغاء علامة تأكيد التجهيز عن هذا الطلب؟'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('لا')),
             FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('نعم')),
@@ -102,7 +103,11 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
         final isError = next && result.notify != null && result.notify!['ok'] != true;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(notifyMsg.isNotEmpty ? notifyMsg : (next ? 'تم تأكيد التجهيز ✓' : 'تم إلغاء التأكيد')),
+            content: Text(
+              notifyMsg.isNotEmpty
+                  ? notifyMsg
+                  : (next ? '${employee?.prepConfirmConfirmedLabel ?? 'تم تأكيد التجهيز'} ✓' : 'تم إلغاء التأكيد'),
+            ),
             duration: Duration(seconds: isError ? 6 : 3),
             backgroundColor: isError ? AppColors.rejected : null,
           ),
@@ -271,7 +276,10 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final orderAsync = ref.watch(orderDetailProvider(widget.orderId));
-    final isManager = ref.watch(authProvider).employee?.isManager ?? false;
+    final employee = ref.watch(authProvider).employee;
+    final isManager = employee?.isManager ?? false;
+    final canPrepConfirm = employee?.canPrepConfirm ?? false;
+    final isReceiptOnly = employee?.isReceiptOnly ?? false;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -357,10 +365,19 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              QuickStatusBar(current: order.status, busy: _busy, onSelect: _setStatus),
-                              if (order.status == 'processing') ...[
-                                const SizedBox(height: 12),
-                                PrepConfirmBar(confirmed: order.prepConfirmed, busy: _busy, onToggle: () => _togglePrepConfirm(order)),
+                              if (!isReceiptOnly)
+                                QuickStatusBar(current: order.status, busy: _busy, onSelect: _setStatus),
+                              if (order.status == 'processing' && canPrepConfirm) ...[
+                                if (!isReceiptOnly) const SizedBox(height: 12),
+                                PrepConfirmBar(
+                                  confirmed: order.prepConfirmed,
+                                  busy: _busy,
+                                  onToggle: () => _togglePrepConfirm(order),
+                                  pendingLabel: employee?.prepConfirmPendingLabel ?? 'تأكيد اكتمال التجهيز',
+                                  confirmedLabel: employee?.prepConfirmConfirmedLabel ?? 'تم تأكيد اكتمال التجهيز',
+                                  subtitlePending: employee?.prepConfirmSubtitlePending ?? 'اضغط بعد الانتهاء من تجهيز كل البنود',
+                                  subtitleConfirmed: employee?.prepConfirmSubtitleConfirmed ?? 'اضغط لإلغاء التأكيد',
+                                ),
                               ],
                               if (isManager || order.deletable) ...[
                                 const SizedBox(height: 12),

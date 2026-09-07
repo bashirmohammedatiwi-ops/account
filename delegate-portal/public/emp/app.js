@@ -585,7 +585,8 @@ function renderFilters() {
 }
 
 async function togglePrepConfirm(orderId, confirmed) {
-  if (!confirmed && !confirm('إلغاء علامة تأكيد التجهيز عن هذا الطلب؟')) return;
+  const labels = prepConfirmLabels();
+  if (!confirmed && !confirm(isReceiptOnly() ? 'إلغاء إنشاء الوصل عن هذا الطلب؟' : 'إلغاء علامة تأكيد التجهيز عن هذا الطلب؟')) return;
   setOverlay(true);
   try {
     const data = await api(`/orders/${orderId}/prep-confirm`, {
@@ -594,17 +595,18 @@ async function togglePrepConfirm(orderId, confirmed) {
     });
     if (confirmed) {
       const notify = data.notify || {};
+      const doneMsg = isReceiptOnly() ? `${labels.confirmed} ✓` : 'تم تأكيد التجهيز ✓';
       if (notify.ok && !notify.skipped && !notify.alreadyNotified) {
-        toast('تم تأكيد التجهيز — أُرسل الطلب لتطبيق الأدمن ✓');
+        toast(isReceiptOnly() ? doneMsg : 'تم تأكيد التجهيز — أُرسل الطلب لتطبيق الأدمن ✓');
       } else if (notify.alreadyNotified) {
-        toast('تم تأكيد التجهيز — الطلب مُرسل مسبقاً للأدمن');
+        toast(isReceiptOnly() ? doneMsg : 'تم تأكيد التجهيز — الطلب مُرسل مسبقاً للأدمن');
       } else if (notify.error) {
-        toast(`تم تأكيد التجهيز لكن تعذّر الإرسال للأدمن: ${notify.error}`);
+        toast(isReceiptOnly() ? `${labels.confirmed} لكن تعذّر الإرسال للأدمن: ${notify.error}` : `تم تأكيد التجهيز لكن تعذّر الإرسال للأدمن: ${notify.error}`);
       } else {
-        toast('تم تأكيد التجهيز ✓');
+        toast(doneMsg);
       }
     } else {
-      toast('أُلغي تأكيد التجهيز');
+      toast(isReceiptOnly() ? 'أُلغي إنشاء الوصل' : 'أُلغي تأكيد التجهيز');
     }
     await loadOrders({ keepScreen: state.screen === 'detail' });
     if (state.selectedOrder?.id === orderId) await openOrder(orderId);
@@ -691,14 +693,14 @@ function renderOrdersList() {
           <span class="time-ago">${formatTimeAgo(o.submittedAt || o.updatedAt)}</span>
         </div>
       </button>
-      ${o.status === 'processing' ? `
+      ${o.status === 'processing' && canPrepConfirm() ? `
       <div class="prep-check-row${confirmed ? ' confirmed' : ''}" data-prep-row="${o.id}">
-        <button type="button" class="prep-check-circle" data-prep-toggle="${o.id}" data-prep-state="${confirmed ? '1' : '0'}" aria-label="تأكيد التجهيز">
+        <button type="button" class="prep-check-circle" data-prep-toggle="${o.id}" data-prep-state="${confirmed ? '1' : '0'}" aria-label="${esc(prepConfirmLabels().pending)}">
           ${confirmed ? '✓' : ''}
         </button>
         <div class="prep-check-text">
-          ${confirmed ? 'تم تأكيد التجهيز' : 'تأكيد اكتمال التجهيز'}
-          <div class="prep-check-sub">${confirmed ? 'اضغط لإلغاء التأكيد' : 'اضغط عند الانتهاء من التجهيز'}</div>
+          ${confirmed ? esc(prepConfirmLabels().confirmed) : esc(prepConfirmLabels().pending)}
+          <div class="prep-check-sub">${confirmed ? esc(prepConfirmLabels().subtitleConfirmed) : esc(prepConfirmLabels().subtitlePending)}</div>
         </div>
       </div>` : ''}
     </article>`;
@@ -728,6 +730,34 @@ function lineTotals(lines = []) {
 function isManager() {
   const role = String(state.employee?.role || state.employee?.empRole || '').toLowerCase();
   return role === 'manager' || state.employee?.isManager === true;
+}
+
+function isReceiptOnly() {
+  const role = String(state.employee?.role || state.employee?.empRole || '').toLowerCase();
+  return role === 'receipt' || state.employee?.isReceiptOnly === true;
+}
+
+function canPrepConfirm() {
+  if (state.employee?.canPrepConfirm === true) return true;
+  const role = String(state.employee?.role || state.employee?.empRole || '').toLowerCase();
+  return role === 'manager' || role === 'receipt';
+}
+
+function prepConfirmLabels() {
+  if (isReceiptOnly()) {
+    return {
+      pending: state.employee?.prepConfirmPendingLabel || 'تم انشاء وصل',
+      confirmed: state.employee?.prepConfirmConfirmedLabel || 'تم انشاء وصل',
+      subtitlePending: state.employee?.prepConfirmSubtitlePending || 'اضغط بعد إنشاء وصل التجهيز',
+      subtitleConfirmed: state.employee?.prepConfirmSubtitleConfirmed || 'اضغط لإلغاء إنشاء الوصل'
+    };
+  }
+  return {
+    pending: state.employee?.prepConfirmPendingLabel || 'تأكيد اكتمال التجهيز',
+    confirmed: state.employee?.prepConfirmConfirmedLabel || 'تم تأكيد التجهيز',
+    subtitlePending: state.employee?.prepConfirmSubtitlePending || 'اضغط عند الانتهاء من التجهيز',
+    subtitleConfirmed: state.employee?.prepConfirmSubtitleConfirmed || 'اضغط لإلغاء التأكيد'
+  };
 }
 
 function orderEditable(o) {
@@ -1016,6 +1046,7 @@ async function openOrder(id) {
 
       ${sourceAlert}
 
+      ${isReceiptOnly() ? '' : `
       <div class="quick-status">
         ${[
           { id: 'pending', label: 'انتظار' },
@@ -1024,13 +1055,13 @@ async function openOrder(id) {
         ].map((a) => `
           <button type="button" class="quick-status-btn${o.status === a.id ? ' current active' : ''}"
             data-set-status="${a.id}" ${o.status === a.id ? 'disabled' : ''}>${esc(a.label)}</button>`).join('')}
-      </div>
+      </div>`}
 
-      ${o.status === 'processing' ? `
+      ${o.status === 'processing' && canPrepConfirm() ? `
       <div class="prep-confirm-bar-v3${confirmed ? ' confirmed' : ''}" data-detail-prep="${o.id}" data-prep-state="${confirmed ? '1' : '0'}">
         <div>
-          <strong>${confirmed ? '✓ تم تأكيد التجهيز' : 'تأكيد اكتمال التجهيز'}</strong>
-          <p style="margin:4px 0 0;font-size:0.72rem;color:var(--muted)">${confirmed ? 'اضغط لإلغاء' : 'بعد الانتهاء من التجهيز'}</p>
+          <strong>${confirmed ? `✓ ${esc(prepConfirmLabels().confirmed)}` : esc(prepConfirmLabels().pending)}</strong>
+          <p style="margin:4px 0 0;font-size:0.72rem;color:var(--muted)">${confirmed ? esc(prepConfirmLabels().subtitleConfirmed) : esc(prepConfirmLabels().subtitlePending)}</p>
         </div>
         <span style="font-size:1.4rem">${confirmed ? '✓' : '○'}</span>
       </div>` : ''}

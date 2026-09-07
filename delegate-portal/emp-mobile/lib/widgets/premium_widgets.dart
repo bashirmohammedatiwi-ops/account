@@ -205,11 +205,19 @@ class PrepConfirmBar extends StatelessWidget {
     required this.confirmed,
     required this.busy,
     required this.onToggle,
+    this.pendingLabel = 'تأكيد اكتمال التجهيز',
+    this.confirmedLabel = 'تم تأكيد اكتمال التجهيز',
+    this.subtitlePending = 'اضغط بعد الانتهاء من تجهيز كل البنود',
+    this.subtitleConfirmed = 'اضغط لإلغاء التأكيد',
   });
 
   final bool confirmed;
   final bool busy;
   final VoidCallback onToggle;
+  final String pendingLabel;
+  final String confirmedLabel;
+  final String subtitlePending;
+  final String subtitleConfirmed;
 
   @override
   Widget build(BuildContext context) {
@@ -249,12 +257,12 @@ class PrepConfirmBar extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          confirmed ? 'تم تأكيد اكتمال التجهيز' : 'تأكيد اكتمال التجهيز',
+                          confirmed ? confirmedLabel : pendingLabel,
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          confirmed ? 'اضغط لإلغاء التأكيد' : 'اضغط بعد الانتهاء من تجهيز كل البنود',
+                          confirmed ? subtitleConfirmed : subtitlePending,
                           style: TextStyle(color: Colors.white.withValues(alpha: 0.88), fontWeight: FontWeight.w600, fontSize: 12),
                         ),
                       ],

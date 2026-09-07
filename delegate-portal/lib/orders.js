@@ -1,5 +1,5 @@
 const db = require('./db');
-const { isEmpManager } = require('./emp-accounts');
+const { isEmpManager, isEmpReceiptOnly } = require('./emp-accounts');
 const bcrypt = require('bcryptjs');
 const { notifyNewOrder } = require('./push');
 const { notifyShorjaOrderProcessed } = require('./shorja-notify');
@@ -206,6 +206,7 @@ function loadOrder(id) {
 
 function employeeCanEditLines(orderRow, employee = null) {
   if (!orderRow) return false;
+  if (isEmpReceiptOnly(employee)) return false;
   if (orderRow.status === 'draft' && !orderRow.submitted_at) return false;
   const ui = canonicalStatus(orderRow.status);
   if (ui !== 'pending' && ui !== 'processing') return false;
