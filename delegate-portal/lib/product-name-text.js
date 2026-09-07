@@ -8,9 +8,14 @@ function hasArabic(text) {
   return ARABIC_RE.test(String(text || ''));
 }
 
+function hasReplacementChars(text) {
+  return (String(text || '').match(/\uFFFD/g) || []).length >= 1;
+}
+
 function looksGarbled(text) {
   const t = String(text ?? '').trim();
   if (!t) return true;
+  if (hasReplacementChars(t)) return true;
   if (t === '[object Object]') return true;
   if (/^[\s?.\-_]+$/.test(t)) return true;
   if (/\uFFFD/.test(t)) return true;

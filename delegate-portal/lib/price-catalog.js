@@ -250,7 +250,7 @@ function upsertPosItems(items = []) {
       const mergedName = mergeProductName(barcode, item.productNum, posName);
       stmt.run({
         barcode,
-        name: mergedName || posName,
+        name: mergedName,
         product_code: item.productCode?.trim() || null,
         product_num: item.productNum?.trim() || null,
         original_price: pricing.originalPrice,
@@ -372,40 +372,7 @@ function listProducts({ page = 1, limit = 50, search = '', offersOnly = false } 
     LIMIT @limit OFFSET @offset
   `).all(params);
 
-  const products = rows.map((r) => {
-    const hasPos = r.posSyncedAt != null && String(r.posSyncedAt).trim() !== '';
-    const pricing = hasPos
-      ? resolveStoredPricing({
-          original_price: r.originalPrice,
-          final_price: r.finalPrice,
-          discount_percent: r.discountPercent,
-          discount_value: r.discountValue,
-          discount_type: r.discountType,
-          offer_name: r.offerName,
-          pos_synced_at: r.posSyncedAt,
-        })
-      : {
-          originalPrice: null,
-          finalPrice: null,
-          discountPercent: null,
-          discountValue: null,
-          discountType: null,
-          offerName: null,
-          hasOffer: false,
-        };
-    return {
-      ...r,
-      name: resolveProductDisplayName(r, { persist: true }),
-      originalPrice: pricing.originalPrice,
-      finalPrice: pricing.finalPrice,
-      discountPercent: pricing.discountPercent,
-      discountValue: pricing.discountValue,
-      discountType: pricing.discountType,
-      offerName: pricing.offerName || r.offerName,
-      hasOffer: pricing.hasOffer,
-      quantity: r.posStock ?? r.stockBalance ?? 0,
-    };
-  });
+  const products = rows.map((r) => mapProductRow(r));
 
   return {
     products,
@@ -415,6 +382,99 @@ function listProducts({ page = 1, limit = 50, search = '', offersOnly = false } 
       total,
       totalPages: Math.max(1, Math.ceil(total / safeLimit)),
     },
+  };
+}
+
+function mapProductRow(row) {
+  const hasPos = row.posSyncedAt != null && String(row.posSyncedAt).trim() !== '';
+  const pricing = hasPos
+    ? resolveStoredPricing({
+        original_price: row.originalPrice,
+        final_price: row.finalPrice,
+        discount_percent: row.discountPercent,
+        discount_value: row.discountValue,
+        discount_type: row.discountType,
+        offer_name: row.offerName,
+        pos_synced_at: row.posSyncedAt,
+      })
+    : {
+        originalPrice: null,
+        finalPrice: null,
+        discountPercent: null,
+        discountValue: null,
+        discountType: null,
+        offerName: null,
+        hasOffer: false,
+      };
+  const name = resolveProductDisplayName(row, { persist: true });
+  return {
+    ...row,
+    name,
+    originalPrice: pricing.originalPrice,
+    finalPrice: pricing.finalPrice,
+    discountPercent: pricing.discountPercent,
+    discountValue: pricing.discountValue,
+    discountType: pricing.discountType,
+    offerName: pricing.offerName || row.offerName,
+    hasOffer: pricing.hasOffer,
+    quantity: row.posStock ?? row.stockBalance ?? 0,
+  };
+}
+
+function selectProductRow(barcode) {
+  const code = normalizeBarcode(barcode);
+  if (!code) return null;
+  return db.prepare(`
+    SELECT
+      p.barcode,
+      p.name,
+      p.product_code AS productCode,
+      p.product_num AS productNum,
+      p.original_price AS originalPrice,
+      p.final_price AS finalPrice,
+      p.discount_percent AS discountPercent,
+      p.discount_value AS discountValue,
+      p.discount_type AS discountType,
+      p.offer_name AS offerName,
+      p.pos_stock AS posStock,
+      p.stock_balance AS stockBalance,
+      p.edari_synced_at AS edariSyncedAt,
+      p.pos_synced_at AS posSyncedAt
+    FROM price_products p
+    WHERE p.barcode = ?
+  `).get(code);
+}
+
+function getProductByBarcode(barcode) {
+  const row = selectProductRow(barcode);
+  if (!row) return null;
+  const mapped = mapProductRow(row);
+  const movements = getProductMovements(mapped.barcode, { limit: 30 });
+  return {
+    barcode: mapped.barcode,
+    name: mapped.name || lookupCatalogName(mapped.barcode, mapped.productNum) || mapped.barcode,
+    original_price: mapped.originalPrice,
+    final_price: mapped.finalPrice,
+    discount_percent: mapped.discountPercent,
+    discount_value: mapped.discountValue,
+    discount_type: mapped.discountType,
+    offer_name: mapped.offerName,
+    pos_stock: mapped.posStock,
+    pos_synced_at: mapped.posSyncedAt,
+    has_offer: mapped.hasOffer,
+    consumer_price: mapped.finalPrice ?? mapped.originalPrice,
+    stock_balance: mapped.stockBalance,
+    product_num: mapped.productNum,
+    product_code: mapped.productCode,
+    sources: [],
+    movements: movements.map((m) => ({
+      supplier: m.supplier,
+      invoice: m.invoice,
+      quantity: m.quantity,
+      unit_price: m.unitPrice,
+      total_price: m.totalPrice,
+      date: m.date,
+    })),
   };
 }
 
@@ -452,6 +512,7 @@ module.exports = {
   importEdariBatch,
   getStats,
   listProducts,
+  getProductByBarcode,
   getProductMovements,
   getMeta,
   repairPriceProductNames,

@@ -5,6 +5,7 @@ const {
   upsertPosItems,
   getStats,
   listProducts,
+  getProductByBarcode,
   getProductMovements,
   repairPriceProductNames,
 } = require('../lib/price-catalog');
@@ -81,6 +82,16 @@ router.get('/api/stats', (_req, res) => {
     res.json(getStats());
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/product/:barcode', (req, res) => {
+  try {
+    const product = getProductByBarcode(req.params.barcode);
+    if (!product) return res.status(404).json({ ok: false, error: 'المنتج غير موجود' });
+    res.json(product);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
