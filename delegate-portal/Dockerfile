@@ -13,6 +13,7 @@ COPY server.js ./
 COPY diag-account.js ./
 COPY lib ./lib
 COPY routes ./routes
+COPY scripts ./scripts
 COPY public ./public
 
 ENV NODE_ENV=production
