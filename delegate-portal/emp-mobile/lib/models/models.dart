@@ -152,6 +152,7 @@ class PurchaseOrder {
     this.lines = const [],
     this.events = const [],
     this.editable = false,
+    this.deletable = false,
   });
 
   final int id;
@@ -177,6 +178,7 @@ class PurchaseOrder {
   final List<OrderLine> lines;
   final List<OrderEvent> events;
   final bool editable;
+  final bool deletable;
 
   bool get isShorja => sourceType == 'shorja';
 
@@ -215,6 +217,7 @@ class PurchaseOrder {
       editable: json['editable'] == true
           || ((status == 'pending' || status == 'processing')
               && !(json['prepConfirmed'] == true || json['prep_confirmed'] == 1)),
+      deletable: json['deletable'] == true,
     );
   }
 }

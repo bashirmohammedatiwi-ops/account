@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/order_action_result.dart';
+import '../../core/auth/auth_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/models.dart';
 import '../../widgets/app_widgets.dart';
@@ -23,6 +24,7 @@ class OrderCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isManager = ref.watch(authProvider).employee?.isManager ?? false;
     final giftCount = order.lines.fold<num>(0, (s, l) => s + l.bonus);
     final testerCount = order.lines.fold<num>(0, (s, l) => s + l.tester);
     final muted = themed(context, light: AppColors.muted, dark: AppColors.mutedDark);
@@ -126,6 +128,11 @@ class OrderCard extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                 child: _PrepCheckRow(order: order, onChanged: onChanged),
+              ),
+            if (isManager || order.deletable)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: _DeleteOrderRow(order: order, onChanged: onChanged),
               ),
           ],
         ),
@@ -352,6 +359,71 @@ class _CheckCircle extends StatelessWidget {
               size: 22,
               color: confirmed ? Colors.white : AppColors.confirmed.withValues(alpha: 0.5),
             ),
+    );
+  }
+}
+
+class _DeleteOrderRow extends ConsumerStatefulWidget {
+  const _DeleteOrderRow({required this.order, this.onChanged});
+
+  final PurchaseOrder order;
+  final VoidCallback? onChanged;
+
+  @override
+  ConsumerState<_DeleteOrderRow> createState() => _DeleteOrderRowState();
+}
+
+class _DeleteOrderRowState extends ConsumerState<_DeleteOrderRow> {
+  bool _busy = false;
+
+  Future<void> _delete() async {
+    if (_busy) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('حذف الطلب'),
+        content: Text('حذف «${widget.order.orderNo}» نهائياً من كل الأماكن؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.rejected),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('حذف'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(apiClientProvider).deleteOrder(widget.order.id);
+      ref.invalidate(ordersListProvider);
+      ref.invalidate(pendingCountProvider);
+      ref.invalidate(orderStatsProvider);
+      widget.onChanged?.call();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الطلب')));
+      }
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: _busy ? null : _delete,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.rejected,
+        side: const BorderSide(color: AppColors.rejected),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+      ),
+      icon: _busy
+          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+          : const Icon(Icons.delete_forever_rounded, size: 20),
+      label: const Text('حذف الطلب', style: TextStyle(fontWeight: FontWeight.w900)),
     );
   }
 }

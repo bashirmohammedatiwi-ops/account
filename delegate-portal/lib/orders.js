@@ -683,6 +683,16 @@ function deleteOrderByAdmin(orderId) {
   return hardDeleteOrder(orderId, row.status);
 }
 
+/** Manager hard-deletes any purchase order regardless of status. */
+function deleteOrderByEmployee(orderId, employee) {
+  if (!isEmpManager(employee)) {
+    throw new Error('حذف الطلب متاح للمدير فقط');
+  }
+  const row = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+  if (!row) return null;
+  return hardDeleteOrder(orderId, row.status);
+}
+
 module.exports = {
   STATUS_LABELS,
   STATUS_FILTER_GROUP,
@@ -703,6 +713,7 @@ module.exports = {
   orderFeed,
   deleteOrderByAgent,
   deleteOrderByAdmin,
+  deleteOrderByEmployee,
   listOrders,
   orderStats
 };

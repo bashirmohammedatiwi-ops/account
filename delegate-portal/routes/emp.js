@@ -10,6 +10,7 @@ const {
   maybeNotifyOrderProcessed,
   updateOrderLineByEmployee,
   deleteOrderLineByEmployee,
+  deleteOrderByEmployee,
   employeeCanEditMappedOrder,
   orderFeed,
   orderStats,
@@ -36,7 +37,8 @@ function enrichOrder(order, employee) {
   if (!order) return order;
   return {
     ...order,
-    editable: employeeCanEditMappedOrder(order, employee)
+    editable: employeeCanEditMappedOrder(order, employee),
+    deletable: isEmpManager(employee)
   };
 }
 
@@ -199,6 +201,16 @@ router.delete('/orders/:orderId/lines/:lineId', authEmployee, (req, res) => {
     );
     if (!order) return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
     res.json({ ok: true, order: enrichOrder(order, req.employee) });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+router.delete('/orders/:id', authEmployee, (req, res) => {
+  try {
+    const result = deleteOrderByEmployee(Number(req.params.id), req.employee);
+    if (!result) return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
+    res.json({ ok: true, ...result });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }

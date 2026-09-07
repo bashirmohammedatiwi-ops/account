@@ -886,6 +886,23 @@ async function deleteLine(orderId, lineId) {
   }
 }
 
+async function deleteOrder(id, orderNo = '') {
+  const label = orderNo ? `الطلب ${orderNo}` : 'هذا الطلب';
+  if (!confirm(`حذف ${label} نهائياً؟\nسيُزال من كل الأماكن ولا يمكن التراجع.`)) return;
+  setOverlay(true);
+  try {
+    await api(`/orders/${id}`, { method: 'DELETE' });
+    toast('تم حذف الطلب');
+    state.selectedOrder = null;
+    goToScreen('orders');
+    void loadOrders({ keepScreen: true });
+  } catch (e) {
+    toast(e.message);
+  } finally {
+    setOverlay(false);
+  }
+}
+
 function bindLineThumbs(root) {
   root?.querySelectorAll('.line-thumb[data-img]').forEach((btn) => {
     btn.addEventListener('click', (e) => {
@@ -1018,6 +1035,11 @@ async function openOrder(id) {
         <span style="font-size:1.4rem">${confirmed ? '✓' : '○'}</span>
       </div>` : ''}
 
+      ${isManager() ? `
+      <div class="manager-delete-bar">
+        <button type="button" class="btn danger full" data-delete-order="${o.id}" data-order-no="${esc(o.orderNo)}">حذف الطلب نهائياً</button>
+      </div>` : ''}
+
       <div class="detail-tabs">
         <button type="button" class="detail-tab${state.detailTab === 'lines' ? ' active' : ''}" data-detail-tab="lines">البنود</button>
         <button type="button" class="detail-tab${state.detailTab === 'info' ? ' active' : ''}" data-detail-tab="info">التفاصيل</button>
@@ -1035,6 +1057,9 @@ async function openOrder(id) {
     });
     detailRoot.querySelectorAll('[data-detail-prep]').forEach((btn) => {
       btn.addEventListener('click', () => void togglePrepConfirm(Number(btn.dataset.detailPrep), btn.dataset.prepState !== '1'));
+    });
+    detailRoot.querySelectorAll('[data-delete-order]').forEach((btn) => {
+      btn.addEventListener('click', () => void deleteOrder(Number(btn.dataset.deleteOrder), btn.dataset.orderNo || ''));
     });
     goToScreen('detail');
   } catch (e) {

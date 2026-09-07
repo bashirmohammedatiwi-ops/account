@@ -137,6 +137,10 @@ class ApiClient {
     return PurchaseOrder.fromJson(Map<String, dynamic>.from(data['order'] as Map), serverUrl: serverUrl);
   }
 
+  Future<void> deleteOrder(int id) async {
+    await _json('DELETE', '/orders/$id');
+  }
+
   Future<OrderFeed> orderFeed({int sinceId = 0, String status = 'pending', String? sourceType}) async {
     final data = await _json('GET', '/orders/feed', query: {
       'sinceId': sinceId,

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/auth/auth_provider.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/order_action_result.dart';
@@ -207,6 +208,44 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
     }
   }
 
+  Future<void> _deleteOrder(PurchaseOrder order) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('حذف الطلب', style: TextStyle(fontWeight: FontWeight.w900)),
+        content: Text(
+          'حذف الطلب «${order.orderNo}» نهائياً؟\n'
+          'سيُزال من كل الأماكن ولا يمكن التراجع.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.rejected),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('حذف نهائياً'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(apiClientProvider).deleteOrder(widget.orderId);
+      ref.invalidate(ordersListProvider);
+      ref.invalidate(orderStatsProvider);
+      ref.invalidate(pendingCountProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الطلب')));
+        context.pop();
+      }
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   void _showImage(String? url, String name) {
     if (url == null || url.isEmpty) return;
     showDialog(
@@ -232,6 +271,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final orderAsync = ref.watch(orderDetailProvider(widget.orderId));
+    final isManager = ref.watch(authProvider).employee?.isManager ?? false;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -255,8 +295,15 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
                         actions: [
                           if (_busy)
                             const Padding(padding: EdgeInsets.all(16), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)))
-                          else
+                          else ...[
+                            if (isManager || order.deletable)
+                              IconButton(
+                                tooltip: 'حذف الطلب',
+                                onPressed: () => _deleteOrder(order),
+                                icon: const Icon(Icons.delete_outline_rounded, color: Colors.white),
+                              ),
                             IconButton(onPressed: _reload, icon: const Icon(Icons.refresh_rounded, color: Colors.white)),
+                          ],
                         ],
                         flexibleSpace: FlexibleSpaceBar(
                           background: Container(
@@ -314,6 +361,19 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
                               if (order.status == 'processing') ...[
                                 const SizedBox(height: 12),
                                 PrepConfirmBar(confirmed: order.prepConfirmed, busy: _busy, onToggle: () => _togglePrepConfirm(order)),
+                              ],
+                              if (isManager || order.deletable) ...[
+                                const SizedBox(height: 12),
+                                OutlinedButton.icon(
+                                  onPressed: _busy ? null : () => _deleteOrder(order),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.rejected,
+                                    side: const BorderSide(color: AppColors.rejected),
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                  ),
+                                  icon: const Icon(Icons.delete_forever_rounded),
+                                  label: const Text('حذف الطلب نهائياً', style: TextStyle(fontWeight: FontWeight.w900)),
+                                ),
                               ],
                             ],
                           ),
