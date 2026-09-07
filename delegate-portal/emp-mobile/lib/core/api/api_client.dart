@@ -17,7 +17,8 @@ final dioProvider = Provider<Dio>((ref) {
     headers: {'Accept': 'application/json'},
   ));
   dio.interceptors.add(InterceptorsWrapper(
-    onRequest: (options, handler) {
+    onRequest: (options, handler) async {
+      await ref.read(authProvider.notifier).waitUntilReady();
       final token = ref.read(authProvider).token;
       options.extra['authToken'] = token;
       if (token != null && token.isNotEmpty) {
@@ -27,9 +28,13 @@ final dioProvider = Provider<Dio>((ref) {
     },
     onError: (error, handler) {
       if (error.response?.statusCode == 401) {
+        final auth = ref.read(authProvider);
+        if (auth.loading) {
+          handler.next(error);
+          return;
+        }
         final reqToken = error.requestOptions.extra['authToken'];
-        final current = ref.read(authProvider).token;
-        // تجاهل 401 من طلبات قديمة (مثلاً بعد تسجيل دخول جديد)
+        final current = auth.token;
         if (reqToken != null && reqToken.isNotEmpty && reqToken == current) {
           ref.read(authProvider.notifier).logout();
         }

@@ -1,17 +1,33 @@
 import '../core/utils/json_utils.dart';
 
 class Employee {
-  const Employee({required this.username, required this.name});
+  const Employee({
+    required this.username,
+    required this.name,
+    this.role = 'employee',
+    this.roleLabel = 'موظف تجهيز',
+  });
 
   final String username;
   final String name;
+  final String role;
+  final String roleLabel;
+
+  bool get isManager => role == 'manager';
 
   factory Employee.fromJson(Map<String, dynamic> json) => Employee(
         username: '${json['username'] ?? ''}',
         name: '${json['name'] ?? ''}',
+        role: '${json['role'] ?? json['empRole'] ?? 'employee'}',
+        roleLabel: '${json['roleLabel'] ?? json['role_label'] ?? (json['role'] == 'manager' || json['empRole'] == 'manager' ? 'مدير' : 'موظف تجهيز')}',
       );
 
-  Map<String, dynamic> toJson() => {'username': username, 'name': name};
+  Map<String, dynamic> toJson() => {
+        'username': username,
+        'name': name,
+        'role': role,
+        'roleLabel': roleLabel,
+      };
 }
 
 class OrderLine {
@@ -196,7 +212,9 @@ class PurchaseOrder {
       events: (json['events'] as List? ?? [])
           .map((e) => OrderEvent.fromJson(Map<String, dynamic>.from(e as Map)))
           .toList(),
-      editable: status == 'pending' || status == 'processing',
+      editable: json['editable'] == true
+          || ((status == 'pending' || status == 'processing')
+              && !(json['prepConfirmed'] == true || json['prep_confirmed'] == 1)),
     );
   }
 }

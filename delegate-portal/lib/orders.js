@@ -1,4 +1,4 @@
-const db = require('./db');
+const { isEmpManager } = require('./emp-accounts');
 const bcrypt = require('bcryptjs');
 const { notifyNewOrder } = require('./push');
 const { notifyShorjaOrderProcessed } = require('./shorja-notify');
@@ -203,18 +203,32 @@ function loadOrder(id) {
   return mapOrder(row, lines, events);
 }
 
-function employeeCanEditLines(orderRow) {
+function employeeCanEditLines(orderRow, employee = null) {
   if (!orderRow) return false;
   if (orderRow.status === 'draft' && !orderRow.submitted_at) return false;
   const ui = canonicalStatus(orderRow.status);
-  return ui === 'pending' || ui === 'processing';
+  if (ui !== 'pending' && ui !== 'processing') return false;
+  if (isEmpManager(employee)) return true;
+  return !orderRow.prep_confirmed;
 }
 
-function updateOrderLineByEmployee(orderId, lineId, patch, actorId = '') {
+function employeeCanEditMappedOrder(order, employee = null) {
+  if (!order) return false;
+  const row = {
+    status: order.rawStatus,
+    submitted_at: order.submittedAt,
+    prep_confirmed: order.prepConfirmed ? 1 : 0
+  };
+  return employeeCanEditLines(row, employee);
+}
+
+function updateOrderLineByEmployee(orderId, lineId, patch, actorId = '', employee = null) {
   const orderRow = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
   if (!orderRow) return null;
-  if (!employeeCanEditLines(orderRow)) {
-    throw new Error('لا يمكن تعديل بنود الطلب في هذه الحالة');
+  if (!employeeCanEditLines(orderRow, employee)) {
+    throw new Error(isEmpManager(employee)
+      ? 'لا يمكن تعديل بنود الطلب في هذه الحالة'
+      : 'لا يمكن تعديل البنود بعد تأكيد التجهيز — تواصل مع المدير');
   }
 
   const line = db.prepare('SELECT * FROM order_lines WHERE id = ? AND order_id = ?').get(lineId, orderId);
@@ -254,11 +268,13 @@ function updateOrderLineByEmployee(orderId, lineId, patch, actorId = '') {
   return loadOrder(orderId);
 }
 
-function deleteOrderLineByEmployee(orderId, lineId, actorId = '') {
+function deleteOrderLineByEmployee(orderId, lineId, actorId = '', employee = null) {
   const orderRow = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
   if (!orderRow) return null;
-  if (!employeeCanEditLines(orderRow)) {
-    throw new Error('لا يمكن حذف بنود الطلب في هذه الحالة');
+  if (!employeeCanEditLines(orderRow, employee)) {
+    throw new Error(isEmpManager(employee)
+      ? 'لا يمكن حذف بنود الطلب في هذه الحالة'
+      : 'لا يمكن حذف البنود بعد تأكيد التجهيز — تواصل مع المدير');
   }
 
   const line = db.prepare('SELECT * FROM order_lines WHERE id = ? AND order_id = ?').get(lineId, orderId);
@@ -681,6 +697,8 @@ module.exports = {
   maybeNotifyOrderProcessed,
   updateOrderLineByEmployee,
   deleteOrderLineByEmployee,
+  employeeCanEditLines,
+  employeeCanEditMappedOrder,
   orderFeed,
   deleteOrderByAgent,
   deleteOrderByAdmin,

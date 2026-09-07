@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,6 +38,15 @@ class AuthNotifier extends Notifier<AuthState> {
 
   Future<SharedPreferences> get _prefs async => SharedPreferences.getInstance();
 
+  /// ينتظر حتى تنتهي استعادة الجلسة — قبل أي طلب API.
+  Future<void> waitUntilReady() async {
+    var spins = 0;
+    while (state.loading && spins < 400) {
+      await Future.delayed(const Duration(milliseconds: 25));
+      spins++;
+    }
+  }
+
   Future<void> restoreSession() async {
     final epoch = _epoch;
     try {
@@ -49,7 +59,11 @@ class AuthNotifier extends Notifier<AuthState> {
 
       Employee? employee;
       if (empRaw != null) {
-        employee = Employee.fromJson(Map<String, dynamic>.from(jsonDecode(empRaw) as Map));
+        try {
+          employee = Employee.fromJson(Map<String, dynamic>.from(jsonDecode(empRaw) as Map));
+        } catch (_) {
+          employee = null;
+        }
       }
 
       if (token == null || token.isEmpty) {
@@ -67,13 +81,14 @@ class AuthNotifier extends Notifier<AuthState> {
 
       if (epoch != _epoch) return;
       state = AuthState(token: token, employee: employee, loading: false);
+      unawaited(_refresh(epoch, token, fallbackEmployee: employee));
     } catch (_) {
       if (epoch != _epoch) return;
       state = const AuthState(loading: false);
     }
   }
 
-  Future<void> _refresh(int epoch, String token) async {
+  Future<void> _refresh(int epoch, String token, {Employee? fallbackEmployee}) async {
     try {
       final me = await ref.read(apiClientProvider).me();
       if (epoch != _epoch) return;
@@ -83,12 +98,18 @@ class AuthNotifier extends Notifier<AuthState> {
       if (epoch != _epoch) return;
       if (e.statusCode == 401) {
         await logout();
+      } else if (fallbackEmployee != null) {
+        state = AuthState(token: token, employee: fallbackEmployee, loading: false);
       } else {
         state = AuthState(token: token, loading: false);
       }
     } catch (_) {
       if (epoch != _epoch) return;
-      state = AuthState(token: token, loading: false);
+      if (fallbackEmployee != null) {
+        state = AuthState(token: token, employee: fallbackEmployee, loading: false);
+      } else {
+        state = AuthState(token: token, loading: false);
+      }
     }
   }
 

@@ -405,6 +405,14 @@ class _LinesTab extends StatelessWidget {
               style: TextStyle(color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark), fontSize: 12, fontWeight: FontWeight.w600),
             ),
           )
+        else if (order.prepConfirmed && order.status == 'processing')
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              'تم تأكيد التجهيز — التعديل والحذف للمدير فقط',
+              style: TextStyle(color: themed(context, light: AppColors.muted, dark: AppColors.mutedDark), fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          )
         else
           Padding(
             padding: const EdgeInsets.only(bottom: 10),

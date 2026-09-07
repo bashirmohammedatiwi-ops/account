@@ -1,5 +1,6 @@
 const express = require('express');
 const { signEmployee, authEmployee } = require('../lib/auth');
+const { findEmpAccount, isEmpManager, empRoleLabel } = require('../lib/emp-accounts');
 const { registerDevice, unregisterDevice } = require('../lib/push');
 const {
   listOrders,
@@ -9,6 +10,7 @@ const {
   maybeNotifyOrderProcessed,
   updateOrderLineByEmployee,
   deleteOrderLineByEmployee,
+  employeeCanEditMappedOrder,
   orderFeed,
   orderStats,
   STATUS_LABELS,
@@ -17,32 +19,56 @@ const {
 
 const router = express.Router();
 
-const EMP_USER = process.env.EMP_USER || 'allemp';
-const EMP_PASS = process.env.EMP_PASS || '000000';
-
 const ALLOWED_STATUSES = new Set(['pending', 'processing', 'rejected']);
+
+function mapEmployeeProfile(employee) {
+  const role = String(employee?.empRole || employee?.role || 'employee');
+  return {
+    username: employee?.username || '',
+    name: employee?.name || 'موظف التجهيز',
+    role,
+    roleLabel: empRoleLabel(role),
+    isManager: isEmpManager(employee)
+  };
+}
+
+function enrichOrder(order, employee) {
+  if (!order) return order;
+  return {
+    ...order,
+    editable: employeeCanEditMappedOrder(order, employee)
+  };
+}
 
 router.post('/login', (req, res) => {
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '');
-  if (username !== EMP_USER || password !== EMP_PASS) {
+  const account = findEmpAccount(username, password);
+  if (!account) {
     return res.status(401).json({ ok: false, error: 'بيانات الدخول غير صحيحة' });
   }
-  const token = signEmployee({ username: EMP_USER, name: 'موظف التجهيز' });
+  const token = signEmployee({
+    username: account.username,
+    name: account.name,
+    empRole: account.role
+  });
   res.json({
     ok: true,
     token,
-    employee: { username: EMP_USER, name: 'موظف التجهيز' }
+    employee: {
+      username: account.username,
+      name: account.name,
+      role: account.role,
+      roleLabel: empRoleLabel(account.role),
+      isManager: account.role === 'manager'
+    }
   });
 });
 
 router.get('/me', authEmployee, (req, res) => {
   res.json({
     ok: true,
-    employee: {
-      username: req.employee.username || EMP_USER,
-      name: req.employee.name || 'موظف التجهيز'
-    }
+    employee: mapEmployeeProfile(req.employee)
   });
 });
 
@@ -55,7 +81,13 @@ router.get('/orders/feed', authEmployee, (req, res) => {
   const status = String(req.query.status || 'pending').trim();
   const filter = ALLOWED_STATUSES.has(status) ? status : 'pending';
   const sourceType = String(req.query.sourceType || '').trim();
-  res.json({ ok: true, ...orderFeed({ sinceId, status: filter, sourceType }) });
+  const feed = orderFeed({ sinceId, status: filter, sourceType });
+  res.json({
+    ok: true,
+    ...feed,
+    latest: feed.latest ? enrichOrder(feed.latest, req.employee) : null,
+    newOrders: (feed.newOrders || []).map((o) => enrichOrder(o, req.employee))
+  });
 });
 
 router.get('/orders', authEmployee, (req, res) => {
@@ -70,7 +102,9 @@ router.get('/orders', authEmployee, (req, res) => {
     limit,
     offset
   });
-  orders = orders.filter((o) => o.rawStatus !== 'draft' || o.submittedAt);
+  orders = orders
+    .filter((o) => o.rawStatus !== 'draft' || o.submittedAt)
+    .map((o) => enrichOrder(o, req.employee));
   res.json({ ok: true, orders });
 });
 
@@ -80,7 +114,7 @@ router.get('/orders/:id', authEmployee, (req, res) => {
   if (order.rawStatus === 'draft' && !order.submittedAt) {
     return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
   }
-  res.json({ ok: true, order });
+  res.json({ ok: true, order: enrichOrder(order, req.employee) });
 });
 
 router.patch('/orders/:id/status', authEmployee, async (req, res) => {
@@ -93,7 +127,7 @@ router.patch('/orders/:id/status', authEmployee, async (req, res) => {
     const orderId = Number(req.params.id);
     const order = setOrderStatus(orderId, uiStatus, {
       actorType: 'employee',
-      actorId: String(req.employee.username || EMP_USER),
+      actorId: String(req.employee.username || ''),
       note: req.body?.note || ''
     });
     if (!order) return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
@@ -101,7 +135,7 @@ router.patch('/orders/:id/status', authEmployee, async (req, res) => {
     if (uiStatus === 'processing') {
       notify = await maybeNotifyOrderProcessed(order.id);
     }
-    res.json({ ok: true, order: loadOrder(order.id), notify });
+    res.json({ ok: true, order: enrichOrder(loadOrder(order.id), req.employee), notify });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
@@ -113,7 +147,7 @@ router.post('/orders/:id/retry-admin-sync', authEmployee, async (req, res) => {
     const order = loadOrder(orderId);
     if (!order) return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
     const notify = await maybeNotifyOrderProcessed(orderId, { force: true });
-    res.json({ ok: true, order: loadOrder(orderId), notify });
+    res.json({ ok: true, order: enrichOrder(loadOrder(orderId), req.employee), notify });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
@@ -125,7 +159,7 @@ router.patch('/orders/:id/prep-confirm', authEmployee, async (req, res) => {
     const orderId = Number(req.params.id);
     const order = setPrepConfirmed(orderId, confirmed, {
       actorType: 'employee',
-      actorId: String(req.employee.username || EMP_USER),
+      actorId: String(req.employee.username || ''),
       note: req.body?.note || ''
     });
     if (!order) return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
@@ -133,7 +167,7 @@ router.patch('/orders/:id/prep-confirm', authEmployee, async (req, res) => {
     if (confirmed && canonicalStatus(order.status) === 'processing') {
       notify = await maybeNotifyOrderProcessed(orderId);
     }
-    res.json({ ok: true, order: loadOrder(orderId), notify });
+    res.json({ ok: true, order: enrichOrder(loadOrder(orderId), req.employee), notify });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
@@ -145,10 +179,11 @@ router.patch('/orders/:orderId/lines/:lineId', authEmployee, (req, res) => {
       Number(req.params.orderId),
       Number(req.params.lineId),
       req.body || {},
-      req.employee.username || EMP_USER
+      req.employee.username || '',
+      req.employee
     );
     if (!order) return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
-    res.json({ ok: true, order });
+    res.json({ ok: true, order: enrichOrder(order, req.employee) });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
@@ -159,10 +194,11 @@ router.delete('/orders/:orderId/lines/:lineId', authEmployee, (req, res) => {
     const order = deleteOrderLineByEmployee(
       Number(req.params.orderId),
       Number(req.params.lineId),
-      req.employee.username || EMP_USER
+      req.employee.username || '',
+      req.employee
     );
     if (!order) return res.status(404).json({ ok: false, error: 'الطلب غير موجود' });
-    res.json({ ok: true, order });
+    res.json({ ok: true, order: enrichOrder(order, req.employee) });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
@@ -174,7 +210,7 @@ router.post('/devices', authEmployee, (req, res) => {
     const platform = String(req.body?.platform || 'android').trim();
     const result = registerDevice({
       ownerType: 'employee',
-      ownerId: req.employee.username || EMP_USER,
+      ownerId: req.employee.username || '',
       token,
       platform,
       app: 'emp'
@@ -190,7 +226,7 @@ router.delete('/devices', authEmployee, (req, res) => {
     const token = String(req.body?.token || req.query?.token || '').trim();
     const result = unregisterDevice({
       ownerType: 'employee',
-      ownerId: req.employee.username || EMP_USER,
+      ownerId: req.employee.username || '',
       token
     });
     res.json({ ok: true, ...result });

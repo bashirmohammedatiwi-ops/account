@@ -45,6 +45,8 @@ class ProfileScreen extends ConsumerWidget {
                     children: [
                       _ProfileRow(icon: Icons.badge_outlined, label: 'المستخدم', value: employee?.username ?? '—'),
                       const Divider(height: 20),
+                      _ProfileRow(icon: Icons.shield_outlined, label: 'الصلاحية', value: employee?.roleLabel ?? 'موظف تجهيز'),
+                      const Divider(height: 20),
                       _ProfileRow(icon: Icons.dns_outlined, label: 'الخادم', value: config.serverUrl),
                     ],
                   ),

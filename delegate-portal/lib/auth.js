@@ -11,7 +11,7 @@ function signAgent(payload) {
 }
 
 function signEmployee(payload) {
-  return jwt.sign({ ...payload, role: 'employee' }, SECRET, { expiresIn: '12h' });
+  return jwt.sign({ ...payload, role: 'employee' }, SECRET, { expiresIn: '30d' });
 }
 
 function verifyToken(token) {

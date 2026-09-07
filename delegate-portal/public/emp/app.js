@@ -474,8 +474,9 @@ function filterOrders(list) {
 function renderProfile() {
   const name = state.employee?.name || 'موظف التجهيز';
   const user = state.employee?.username || '—';
+  const roleLabel = state.employee?.roleLabel || (isManager() ? 'مدير' : 'موظف تجهيز');
   document.getElementById('profileName').textContent = name;
-  document.getElementById('profileUser').textContent = user;
+  document.getElementById('profileUser').textContent = `${user} · ${roleLabel}`;
   document.getElementById('profileAvatar').textContent = name.trim().charAt(0) || 'م';
   document.getElementById('profileServer').textContent = window.location.origin;
 }
@@ -724,8 +725,18 @@ function lineTotals(lines = []) {
   }, { qty: 0, gifts: 0, amount: 0, giftLines: 0 });
 }
 
+function isManager() {
+  const role = String(state.employee?.role || state.employee?.empRole || '').toLowerCase();
+  return role === 'manager' || state.employee?.isManager === true;
+}
+
 function orderEditable(o) {
-  return o && (o.status === 'pending' || o.status === 'processing');
+  if (!o) return false;
+  if (typeof o.editable === 'boolean') return o.editable;
+  if (o.status !== 'pending' && o.status !== 'processing') return false;
+  if (isManager()) return true;
+  if (o.status === 'processing' && o.prepConfirmed) return false;
+  return true;
 }
 
 function renderLines(lines = [], { editable = false, orderId = 0 } = {}) {
@@ -933,7 +944,7 @@ function renderDetailTabContent(o, lines, totals) {
   if (tab === 'events') return renderEventTimeline(o.events || []);
   return `
     ${totals.gifts ? `<p class="gift-hint">⚠ يحتوي الطلب على <b dir="ltr">${totals.gifts}</b> قطعة هدية</p>` : ''}
-    ${orderEditable(o) ? '<p class="edit-hint">يمكنك تعديل الكميات أو حذف منتج من الطلب</p>' : ''}
+    ${orderEditable(o) ? '<p class="edit-hint">يمكنك تعديل الكميات أو حذف منتج من الطلب</p>' : (o.status === 'processing' && o.prepConfirmed && !isManager() ? '<p class="edit-hint muted">تم تأكيد التجهيز — التعديل والحذف للمدير فقط</p>' : '')}
     ${renderLines(lines, { editable: orderEditable(o), orderId: o.id })}`;
 }
 
@@ -1092,15 +1103,30 @@ async function tryRestoreSession() {
     initTheme();
     return;
   }
+  let saved = null;
   try {
-    const saved = JSON.parse(localStorage.getItem(EMP_KEY) || '{}');
+    saved = JSON.parse(localStorage.getItem(EMP_KEY) || '{}');
+  } catch {
+    saved = null;
+  }
+  if (saved && saved.username) {
+    state.employee = saved;
+    afterLogin();
+    void loadOrders();
+  }
+  try {
     const data = await api('/me');
     state.employee = data.employee || saved;
-    afterLogin();
-    await loadOrders();
-  } catch {
-    clearSession();
-    showLogin();
+    setSession(token, state.employee);
+    if (!saved?.username) {
+      afterLogin();
+      await loadOrders();
+    }
+  } catch (err) {
+    if (err.message?.includes('انتهت الجلسة') || !getToken()) {
+      clearSession();
+      showLogin('انتهت الجلسة — سجّل الدخول مجدداً');
+    }
   }
 }
 
