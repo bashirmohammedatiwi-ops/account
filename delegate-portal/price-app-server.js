@@ -31,4 +31,15 @@ app.listen(PORT, HOST, () => {
   console.log(`Price App: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}/prices/`);
   console.log(`Sync health: http://localhost:${PORT}/sync/health`);
   console.log(`Price sync key: ${process.env.PRICE_SYNC_KEY || process.env.SYNC_API_KEY || '(none — open)'}`);
+  setImmediate(() => {
+    try {
+      const { repairPriceProductNames } = require('./lib/price-catalog');
+      const result = repairPriceProductNames({ limit: 50000 });
+      if (result.fixed || result.cleared) {
+        console.log(`Price names repair: fixed=${result.fixed}, cleared=${result.cleared}, scanned=${result.scanned}`);
+      }
+    } catch (err) {
+      console.error('Price names repair:', err.message || err);
+    }
+  });
 });

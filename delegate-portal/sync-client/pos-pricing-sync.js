@@ -249,7 +249,6 @@ function rowToSyncItem(row) {
     barcode,
     productCode: String(row.productCode),
     productNum: row.productNum || undefined,
-    name: row.name || undefined,
     price: pricing.finalPrice,
     originalPrice: pricing.originalPrice,
     discountPercent: pricing.discountPercent,

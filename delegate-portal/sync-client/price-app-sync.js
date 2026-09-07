@@ -463,6 +463,7 @@ function mapCatalogRows(rows) {
     if (!barcode) continue;
     map.set(barcode, {
       barcode,
+      product_num: String(row.Num || '').trim() || undefined,
       name: normalizeProductName(String(row.Name1 || '').trim()),
       stock_balance: edariStockQty(row.InTot, row.OutTot),
     });

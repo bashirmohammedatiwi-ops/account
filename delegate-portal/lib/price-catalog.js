@@ -1,6 +1,10 @@
 const db = require('./db');
 const { computePricing, pricingFromSyncItem, resolveStoredPricing } = require('./pos-pricing');
-const { normalizeProductName, pickBestName } = require('./product-name-text');
+const { normalizeProductName, pickBestName, looksGarbled } = require('./product-name-text');
+
+function columnExists(table, column) {
+  return db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
+}
 
 function initPriceCatalogSchema() {
   db.exec(`
@@ -43,6 +47,9 @@ function initPriceCatalogSchema() {
       value TEXT
     );
   `);
+  if (!columnExists('price_products', 'edari_name')) {
+    db.exec('ALTER TABLE price_products ADD COLUMN edari_name TEXT');
+  }
 }
 
 initPriceCatalogSchema();
@@ -69,6 +76,34 @@ const lookupProductNameByBarcode = db.prepare(`
 `);
 const selectPriceProductName = db.prepare('SELECT name, product_num FROM price_products WHERE barcode = ?');
 const repairNameStmt = db.prepare('UPDATE price_products SET name = ? WHERE barcode = ?');
+const upsertEdariMaterialCache = db.prepare(`
+  INSERT INTO edari_materials (seq, num, barcode, name1, synced_at)
+  VALUES (@seq, @num, @barcode, @name1, datetime('now'))
+  ON CONFLICT(seq) DO UPDATE SET
+    num = CASE WHEN trim(excluded.num) != '' THEN excluded.num ELSE edari_materials.num END,
+    barcode = CASE WHEN trim(excluded.barcode) != '' THEN excluded.barcode ELSE edari_materials.barcode END,
+    name1 = CASE WHEN trim(excluded.name1) != '' THEN excluded.name1 ELSE edari_materials.name1 END,
+    synced_at = excluded.synced_at
+`);
+
+function cacheEdariMaterial({ barcode, product_num, name, edari_seq }) {
+  const code = normalizeBarcode(barcode);
+  const n = normalizeProductName(name);
+  if (!code || !n) return;
+  const num = String(product_num ?? '').trim();
+  let seq = String(edari_seq ?? '').trim();
+  if (!seq) {
+    const byBarcode = db.prepare('SELECT seq FROM edari_materials WHERE barcode = ? LIMIT 1').get(code);
+    const byNum = num ? db.prepare('SELECT seq FROM edari_materials WHERE num = ? LIMIT 1').get(num) : null;
+    seq = byBarcode?.seq || byNum?.seq || `price:${code}`;
+  }
+  upsertEdariMaterialCache.run({
+    seq,
+    num: num || null,
+    barcode: code,
+    name1: n,
+  });
+}
 
 function lookupCatalogName(barcode, productNum) {
   const code = normalizeBarcode(barcode);
@@ -92,11 +127,17 @@ function mergeProductName(barcode, productNum, ...incoming) {
 
 function resolveProductDisplayName(row, { persist = false } = {}) {
   const stored = row?.name;
-  const resolved = pickBestName(stored, lookupCatalogName(row?.barcode, row?.productNum || row?.product_num));
-  const finalName = resolved || normalizeProductName(stored) || '';
-  if (persist && finalName && finalName !== stored) {
+  const edariName = row?.edari_name ?? row?.edariName;
+  const catalog = lookupCatalogName(row?.barcode, row?.productNum || row?.product_num);
+  const finalName = pickBestName(edariName, catalog, stored) || '';
+
+  if (persist && row?.barcode) {
     try {
-      repairNameStmt.run(finalName, row.barcode);
+      if (finalName && finalName !== stored) {
+        repairNameStmt.run(finalName, row.barcode);
+      } else if (!finalName && stored && looksGarbled(stored)) {
+        repairNameStmt.run(null, row.barcode);
+      }
     } catch {
       /* ignore */
     }
@@ -104,30 +145,50 @@ function resolveProductDisplayName(row, { persist = false } = {}) {
   return finalName;
 }
 
+function readableProductName(row) {
+  const name = resolveProductDisplayName(row, { persist: false });
+  if (name && !looksGarbled(name)) return name;
+  const catalog = lookupCatalogName(row?.barcode, row?.productNum || row?.product_num);
+  if (catalog && !looksGarbled(catalog)) return catalog;
+  return row?.barcode || '';
+}
+
 function repairPriceProductNames({ limit = 10000 } = {}) {
   const safeLimit = Math.min(50000, Math.max(1, Number(limit) || 10000));
   const rows = db.prepare(`
-    SELECT barcode, name, product_num FROM price_products
+    SELECT barcode, name, edari_name, product_num FROM price_products
     ORDER BY barcode
     LIMIT ?
   `).all(safeLimit);
   let fixed = 0;
+  let cleared = 0;
   for (const row of rows) {
-    const resolved = pickBestName(row.name, lookupCatalogName(row.barcode, row.product_num));
+    const resolved = pickBestName(
+      row.edari_name,
+      lookupCatalogName(row.barcode, row.product_num),
+      row.name,
+    );
     if (resolved && resolved !== row.name) {
       repairNameStmt.run(resolved, row.barcode);
       fixed += 1;
+    } else if (!resolved && row.name && looksGarbled(row.name)) {
+      repairNameStmt.run(null, row.barcode);
+      cleared += 1;
     }
   }
-  return { scanned: rows.length, fixed };
+  return { scanned: rows.length, fixed, cleared };
 }
 
 function upsertEdariProducts(products = []) {
   const now = new Date().toISOString();
   const stmt = db.prepare(`
-    INSERT INTO price_products (barcode, name, stock_balance, edari_synced_at)
-    VALUES (@barcode, @name, @stock_balance, @edari_synced_at)
+    INSERT INTO price_products (barcode, name, edari_name, stock_balance, edari_synced_at)
+    VALUES (@barcode, @name, @edari_name, @stock_balance, @edari_synced_at)
     ON CONFLICT(barcode) DO UPDATE SET
+      edari_name = CASE
+        WHEN excluded.edari_name IS NOT NULL AND trim(excluded.edari_name) != '' THEN excluded.edari_name
+        ELSE price_products.edari_name
+      END,
       name = CASE
         WHEN excluded.name IS NOT NULL AND trim(excluded.name) != '' THEN excluded.name
         ELSE price_products.name
@@ -141,14 +202,19 @@ function upsertEdariProducts(products = []) {
     for (const row of rows) {
       const barcode = normalizeBarcode(row.barcode);
       if (!barcode) continue;
-      const name = mergeProductName(barcode, row.product_num, row.name);
+      const edariName = normalizeProductName(row.name) || null;
+      const name = mergeProductName(barcode, row.product_num, edariName) || edariName;
       const stockBalance = row.stock_balance != null && Number.isFinite(Number(row.stock_balance))
         ? Number(row.stock_balance)
         : null;
-      if (!name && stockBalance == null) continue;
+      if (!name && !edariName && stockBalance == null) continue;
+      if (edariName || name) {
+        cacheEdariMaterial({ barcode, product_num: row.product_num, name: edariName || name });
+      }
       stmt.run({
         barcode,
         name,
+        edari_name: edariName || name,
         stock_balance: stockBalance,
         edari_synced_at: now,
       });
@@ -202,7 +268,21 @@ function upsertEdariMovements(movements = []) {
 
 function upsertPosItems(items = []) {
   const now = new Date().toISOString();
-  const stmt = db.prepare(`
+  const updatePosStmt = db.prepare(`
+    UPDATE price_products SET
+      product_code = COALESCE(@product_code, product_code),
+      product_num = COALESCE(@product_num, product_num),
+      original_price = @original_price,
+      final_price = @final_price,
+      discount_percent = @discount_percent,
+      discount_value = @discount_value,
+      discount_type = @discount_type,
+      offer_name = @offer_name,
+      pos_stock = @pos_stock,
+      pos_synced_at = @pos_synced_at
+    WHERE barcode = @barcode
+  `);
+  const insertPosStmt = db.prepare(`
     INSERT INTO price_products (
       barcode, name, product_code, product_num,
       original_price, final_price, discount_percent, discount_value, discount_type,
@@ -212,22 +292,8 @@ function upsertPosItems(items = []) {
       @original_price, @final_price, @discount_percent, @discount_value, @discount_type,
       @offer_name, @pos_stock, @pos_synced_at
     )
-    ON CONFLICT(barcode) DO UPDATE SET
-      product_code = COALESCE(excluded.product_code, price_products.product_code),
-      product_num = COALESCE(excluded.product_num, price_products.product_num),
-      name = CASE
-        WHEN excluded.name IS NOT NULL AND trim(excluded.name) != '' THEN excluded.name
-        ELSE price_products.name
-      END,
-      original_price = excluded.original_price,
-      final_price = excluded.final_price,
-      discount_percent = excluded.discount_percent,
-      discount_value = excluded.discount_value,
-      discount_type = excluded.discount_type,
-      offer_name = excluded.offer_name,
-      pos_stock = excluded.pos_stock,
-      pos_synced_at = excluded.pos_synced_at
   `);
+  const existsStmt = db.prepare('SELECT 1 AS ok FROM price_products WHERE barcode = ?');
 
   let synced = 0;
   const tx = db.transaction((rows) => {
@@ -246,11 +312,8 @@ function upsertPosItems(items = []) {
       } else {
         pricing = pricingFromSyncItem(item);
       }
-      const posName = normalizeProductName(item.name) || null;
-      const mergedName = mergeProductName(barcode, item.productNum, posName);
-      stmt.run({
+      const payload = {
         barcode,
-        name: mergedName,
         product_code: item.productCode?.trim() || null,
         product_num: item.productNum?.trim() || null,
         original_price: pricing.originalPrice,
@@ -261,7 +324,15 @@ function upsertPosItems(items = []) {
         offer_name: pricing.offerName,
         pos_stock: Math.max(0, Math.round(Number(item.stock) || 0)),
         pos_synced_at: now,
-      });
+      };
+      if (existsStmt.get(barcode)) {
+        updatePosStmt.run(payload);
+      } else {
+        const insertName = mergeProductName(barcode, item.productNum)
+          || lookupCatalogName(barcode, item.productNum)
+          || null;
+        insertPosStmt.run({ ...payload, name: insertName });
+      }
       synced += 1;
     }
   });
@@ -286,12 +357,14 @@ function getStats() {
   const row = db.prepare(`
     SELECT
       (SELECT COUNT(*) FROM price_products) AS totalProducts,
+      (SELECT COUNT(*) FROM price_products WHERE pos_synced_at IS NOT NULL AND trim(pos_synced_at) != '') AS productsPosSynced,
       (SELECT COUNT(*) FROM price_products WHERE original_price > 0) AS pricedProducts,
       (SELECT COUNT(*) FROM price_products WHERE discount_percent IS NOT NULL AND discount_percent > 0) AS productsOnOffer,
       (SELECT COUNT(*) FROM price_movements) AS totalMovements
   `).get();
   return {
     totalProducts: row.totalProducts || 0,
+    productsPosSynced: row.productsPosSynced || 0,
     totalArticles: row.totalProducts || 0,
     totalWithPrice: row.pricedProducts || 0,
     productsOnOffer: row.productsOnOffer || 0,
@@ -339,6 +412,7 @@ function listProducts({ page = 1, limit = 50, search = '', offersOnly = false } 
     SELECT
       p.barcode,
       p.name,
+      p.edari_name AS edariName,
       p.product_code AS productCode,
       p.product_num AS productNum,
       p.original_price AS originalPrice,
@@ -428,6 +502,7 @@ function selectProductRow(barcode) {
     SELECT
       p.barcode,
       p.name,
+      p.edari_name AS edariName,
       p.product_code AS productCode,
       p.product_num AS productNum,
       p.original_price AS originalPrice,
@@ -449,10 +524,24 @@ function getProductByBarcode(barcode) {
   const row = selectProductRow(barcode);
   if (!row) return null;
   const mapped = mapProductRow(row);
+  const displayName = readableProductName({ ...row, ...mapped });
+  if (displayName && displayName !== row.name && !looksGarbled(displayName)) {
+    try {
+      repairNameStmt.run(displayName, row.barcode);
+    } catch {
+      /* ignore */
+    }
+  } else if (row.name && looksGarbled(row.name) && !displayName) {
+    try {
+      repairNameStmt.run(null, row.barcode);
+    } catch {
+      /* ignore */
+    }
+  }
   const movements = getProductMovements(mapped.barcode, { limit: 30 });
   return {
     barcode: mapped.barcode,
-    name: mapped.name || lookupCatalogName(mapped.barcode, mapped.productNum) || mapped.barcode,
+    name: displayName || mapped.barcode,
     original_price: mapped.originalPrice,
     final_price: mapped.finalPrice,
     discount_percent: mapped.discountPercent,
@@ -517,5 +606,6 @@ module.exports = {
   getMeta,
   repairPriceProductNames,
   resolveProductDisplayName,
+  readableProductName,
   lookupCatalogName,
 };

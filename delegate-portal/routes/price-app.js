@@ -22,12 +22,17 @@ function authPriceSync(req, res, next) {
 }
 
 router.get('/sync/health', (_req, res) => {
+  const stats = getStats();
   res.json({
     ok: true,
-    service: 'price-app',
+    service: 'price-sync',
     time: new Date().toISOString(),
     pricingSource: 'pos',
     detailsSource: 'edari',
+    productsTotal: stats.totalProducts,
+    productsPosSynced: stats.productsPosSynced,
+    lastPosSyncAt: stats.lastPosSyncAt,
+    lastEdariSyncAt: stats.lastEdariSyncAt,
   });
 });
 
