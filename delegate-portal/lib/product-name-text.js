@@ -4,6 +4,20 @@ const ARABIC_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/;
 /** Typical mojibake when UTF-8 Arabic was read as Latin-1 / Windows-1252 */
 const MOJIBAKE_MARKERS_RE = /[ØÙÃÂþðŸŽ]/;
 
+/** CJK in a POS/Edari name almost always means a failed encoding decode */
+const CJK_RE = /[\u3040-\u30FF\u3400-\u9FFF]/;
+
+let iconvLite = null;
+function getIconv() {
+  if (iconvLite !== null) return iconvLite || null;
+  try {
+    iconvLite = require('iconv-lite');
+  } catch {
+    iconvLite = false;
+  }
+  return iconvLite || null;
+}
+
 function hasArabic(text) {
   return ARABIC_RE.test(String(text || ''));
 }
@@ -18,10 +32,11 @@ function looksGarbled(text) {
   if (hasReplacementChars(t)) return true;
   if (t === '[object Object]') return true;
   if (/^[\s?.\-_]+$/.test(t)) return true;
-  if (/\uFFFD/.test(t)) return true;
   if (/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(t)) return true;
 
   const hasAr = hasArabic(t);
+  if (!hasAr && CJK_RE.test(t)) return true;
+
   const mojibakeHits = (t.match(MOJIBAKE_MARKERS_RE) || []).length;
 
   // UTF-8 Arabic mis-decoded as Latin-1 (Ø´Ø§Ù… style)
@@ -36,10 +51,26 @@ function looksGarbled(text) {
 
 function tryFixUtf8Mojibake(text) {
   const s = String(text || '').trim();
-  if (!s) return '';
+  if (!s || hasReplacementChars(s)) return s;
   try {
     const fixed = Buffer.from(s, 'latin1').toString('utf8').trim();
     if (fixed && fixed !== s && hasArabic(fixed) && !looksGarbled(fixed)) return fixed;
+  } catch {
+    /* ignore */
+  }
+  return s;
+}
+
+function tryFixWin1256(text) {
+  const s = String(text || '').trim();
+  if (!s || hasReplacementChars(s) || hasArabic(s)) return s;
+  const iconv = getIconv();
+  if (!iconv) return s;
+  try {
+    const decoded = iconv.decode(Buffer.from(s, 'latin1'), 'win1256').trim();
+    if (decoded && decoded !== s && hasArabic(decoded) && !hasReplacementChars(decoded)) {
+      return decoded;
+    }
   } catch {
     /* ignore */
   }
@@ -50,14 +81,17 @@ function normalizeProductName(name) {
   let s = String(name ?? '').trim().replace(/\s+/g, ' ');
   if (!s) return '';
 
-  const fixed = tryFixUtf8Mojibake(s);
-  if (fixed && fixed !== s && hasArabic(fixed)) return fixed;
-
-  if (looksGarbled(s)) {
-    if (fixed && !looksGarbled(fixed)) return fixed;
-    return '';
+  const utf8Fixed = tryFixUtf8Mojibake(s);
+  if (utf8Fixed && utf8Fixed !== s && hasArabic(utf8Fixed) && !looksGarbled(utf8Fixed)) {
+    return utf8Fixed;
   }
 
+  const winFixed = tryFixWin1256(s);
+  if (winFixed && winFixed !== s && hasArabic(winFixed) && !looksGarbled(winFixed)) {
+    return winFixed;
+  }
+
+  if (looksGarbled(s)) return '';
   return s;
 }
 
@@ -102,4 +136,5 @@ module.exports = {
   pickBestName,
   scoreProductName,
   tryFixUtf8Mojibake,
+  tryFixWin1256,
 };

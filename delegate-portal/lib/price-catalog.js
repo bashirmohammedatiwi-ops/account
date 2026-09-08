@@ -270,6 +270,10 @@ function upsertPosItems(items = []) {
   const now = new Date().toISOString();
   const updatePosStmt = db.prepare(`
     UPDATE price_products SET
+      name = CASE
+        WHEN @name IS NOT NULL AND trim(@name) != '' THEN @name
+        ELSE price_products.name
+      END,
       product_code = COALESCE(@product_code, product_code),
       product_num = COALESCE(@product_num, product_num),
       original_price = @original_price,
@@ -312,8 +316,16 @@ function upsertPosItems(items = []) {
       } else {
         pricing = pricingFromSyncItem(item);
       }
+      const name = mergeProductName(barcode, item.productNum, item.name)
+        || lookupCatalogName(barcode, item.productNum)
+        || normalizeProductName(item.name)
+        || null;
+      if (name) {
+        cacheEdariMaterial({ barcode, product_num: item.productNum, name });
+      }
       const payload = {
         barcode,
+        name,
         product_code: item.productCode?.trim() || null,
         product_num: item.productNum?.trim() || null,
         original_price: pricing.originalPrice,
@@ -328,10 +340,7 @@ function upsertPosItems(items = []) {
       if (existsStmt.get(barcode)) {
         updatePosStmt.run(payload);
       } else {
-        const insertName = mergeProductName(barcode, item.productNum)
-          || lookupCatalogName(barcode, item.productNum)
-          || null;
-        insertPosStmt.run({ ...payload, name: insertName });
+        insertPosStmt.run(payload);
       }
       synced += 1;
     }
@@ -481,9 +490,10 @@ function mapProductRow(row) {
         hasOffer: false,
       };
   const name = resolveProductDisplayName(row, { persist: true });
+  const safeName = name && !looksGarbled(name) ? name : '';
   return {
     ...row,
-    name,
+    name: safeName,
     originalPrice: pricing.originalPrice,
     finalPrice: pricing.finalPrice,
     discountPercent: pricing.discountPercent,
@@ -525,13 +535,16 @@ function getProductByBarcode(barcode) {
   if (!row) return null;
   const mapped = mapProductRow(row);
   const displayName = readableProductName({ ...row, ...mapped });
-  if (displayName && displayName !== row.name && !looksGarbled(displayName)) {
+  const safeName = (displayName && !looksGarbled(displayName))
+    ? displayName
+    : ((mapped.name && !looksGarbled(mapped.name)) ? mapped.name : '');
+  if (safeName && safeName !== row.name) {
     try {
-      repairNameStmt.run(displayName, row.barcode);
+      repairNameStmt.run(safeName, row.barcode);
     } catch {
       /* ignore */
     }
-  } else if (row.name && looksGarbled(row.name) && !displayName) {
+  } else if (row.name && looksGarbled(row.name) && !safeName) {
     try {
       repairNameStmt.run(null, row.barcode);
     } catch {
@@ -541,7 +554,7 @@ function getProductByBarcode(barcode) {
   const movements = getProductMovements(mapped.barcode, { limit: 30 });
   return {
     barcode: mapped.barcode,
-    name: displayName || mapped.barcode,
+    name: safeName || mapped.barcode,
     original_price: mapped.originalPrice,
     final_price: mapped.finalPrice,
     discount_percent: mapped.discountPercent,
