@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../auth/auth_provider.dart';
 import '../theme/app_colors.dart';
 import 'connectivity_service.dart';
+import 'live_refresh.dart';
 import 'sync_engine.dart';
 
 class OfflineBanner extends ConsumerWidget {
@@ -66,14 +70,44 @@ class SyncBootstrap extends ConsumerStatefulWidget {
   ConsumerState<SyncBootstrap> createState() => _SyncBootstrapState();
 }
 
-class _SyncBootstrapState extends ConsumerState<SyncBootstrap> {
+class _SyncBootstrapState extends ConsumerState<SyncBootstrap> with WidgetsBindingObserver {
+  static const _pollInterval = Duration(seconds: 20);
+
   bool _wasOnline = true;
+  Timer? _pollTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _pollTimer = Timer.periodic(_pollInterval, (_) => _refreshLiveData());
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshLiveData();
+    }
+  }
+
+  void _refreshLiveData() {
+    if (!ref.read(authProvider).isAuthenticated) return;
+    unawaited(refreshDelegateLiveData(ref));
+  }
 
   @override
   Widget build(BuildContext context) {
     ref.listen(connectivityProvider, (prev, next) {
       if (!_wasOnline && next.isOnline) {
         ref.read(syncEngineProvider).fullSync(deepCatalog: true);
+        _refreshLiveData();
       }
       _wasOnline = next.isOnline;
     });

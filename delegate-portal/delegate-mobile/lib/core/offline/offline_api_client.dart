@@ -60,6 +60,67 @@ List<Map<String, dynamic>> _syncListWithServer(
   return synced;
 }
 
+int _rowInt(dynamic value) {
+  if (value == null) return 0;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse('$value') ?? 0;
+}
+
+String _receiptFingerprint(Map<String, dynamic> row) {
+  final amount = _rowInt(row['amount']);
+  final tree = '${row['treeName'] ?? row['tree_name'] ?? ''}'.trim();
+  final customer = '${row['customerAccSeq'] ?? row['customer_acc_seq'] ?? ''}'.trim();
+  return '$customer|$tree|$amount';
+}
+
+/// يزيل سندات محلية قديمة/محذوفة — السيرفر مصدر الحقيقة عند الاتصال.
+List<Map<String, dynamic>> _syncReceiptsWithServer(
+  List<Map<String, dynamic>> online,
+  List<Map<String, dynamic>> cached, {
+  Set<int> keepLocalIds = const {},
+}) {
+  final onlineIds = online.map((r) => _rowId(r['id'])).where((id) => id > 0).toSet();
+  final onlineDeliveryIds = online
+      .map((r) => _rowInt(r['deliveryReceiptId'] ?? r['delivery_receipt_id']))
+      .where((id) => id > 0)
+      .toSet();
+  final onlineFingerprints = online.map(_receiptFingerprint).toSet();
+
+  bool isStaleLocalRow(Map<String, dynamic> row) {
+    final id = _rowId(row['id']);
+    final isLocal = id < 0 || row['localPending'] == true;
+    if (!isLocal) {
+      // سند محذوف من السيرفر لكنه بقي في الذاكرة المحلية.
+      return id > 0 && !onlineIds.contains(id);
+    }
+
+    // لا نحتفظ بسند محلي إلا إذا ما زال في قائمة الإرسال (outbox).
+    if (!keepLocalIds.contains(id)) return true;
+
+    final drId = _rowInt(row['deliveryReceiptId'] ?? row['delivery_receipt_id']);
+    if (drId > 0 && onlineDeliveryIds.contains(drId)) return true;
+    if (onlineFingerprints.contains(_receiptFingerprint(row))) return true;
+    return false;
+  }
+
+  final byId = <int, Map<String, dynamic>>{};
+  for (final row in online) {
+    byId[_rowId(row['id'])] = row;
+  }
+  for (final row in cached) {
+    if (isStaleLocalRow(row)) continue;
+    final id = _rowId(row['id']);
+    if (id < 0 || row['localPending'] == true) {
+      byId[id] = row;
+    }
+  }
+
+  final synced = byId.values.toList();
+  synced.sort((a, b) => _rowId(b['id']).compareTo(_rowId(a['id'])));
+  return synced;
+}
+
 Map<String, dynamic> _normalizeDeliveryRow(Map<String, dynamic> json) {
   final status = '${json['status'] ?? 'issued'}';
   return {
@@ -705,6 +766,76 @@ class OfflineApiClient {
     return _api.getSalesReport(treeSeq: treeSeq, dateFrom: dateFrom, dateTo: dateTo, limit: limit, offset: offset);
   }
 
+  Future<Set<int>> _pendingOutboxLocalIds() async {
+    final entries = await _outbox.pending();
+    final ids = <int>{};
+    for (final entry in entries) {
+      final opt = entry.optimisticJson;
+      if (opt == null) continue;
+      final id = _rowId(opt['id']);
+      if (id != 0) ids.add(id);
+    }
+    return ids;
+  }
+
+  /// يُزيل سندات/رسائل محلية قديمة لا تطابق السيرفر (مثلاً بعد الحذف من لوحة التحكم).
+  Future<void> reconcileStaleLocalReceipts() async {
+    if (!_online) return;
+    final cacheKey = _receiptsCacheKey();
+    final data = await _api.requestJson('GET', '/receipts');
+    final online = (data['receipts'] as List?)
+            ?.map((e) => Map<String, dynamic>.from(e as Map))
+            .toList() ??
+        <Map<String, dynamic>>[];
+
+    final onlineDeliveryIds = online
+        .map((r) => _rowInt(r['deliveryReceiptId'] ?? r['delivery_receipt_id']))
+        .where((id) => id > 0)
+        .toSet();
+    final onlineFingerprints = online.map(_receiptFingerprint).toSet();
+
+    final entries = await _outbox.pending();
+    final keepLocalIds = <int>{};
+
+    for (final entry in entries) {
+      final opt = entry.optimisticJson;
+      final optId = _rowId(opt?['id']);
+      final body = entry.body;
+
+      bool shouldDrop = false;
+      if (entry.entityType == 'receipt') {
+        final drId = _rowInt(body?['deliveryReceiptId']);
+        if (drId > 0 && onlineDeliveryIds.contains(drId)) shouldDrop = true;
+        if (body != null) {
+          final fp = _receiptFingerprint({
+            'amount': body['amount'],
+            'treeName': body['treeName'],
+            'customerAccSeq': body['customerAccSeq'],
+          });
+          if (onlineFingerprints.contains(fp)) shouldDrop = true;
+        }
+      } else if (entry.retries >= 5) {
+        shouldDrop = true;
+      }
+
+      if (shouldDrop) {
+        if (optId != 0) await _cache.removeListItem(cacheKey, optId);
+        await _outbox.markDone(entry.id);
+        continue;
+      }
+
+      if (optId != 0) keepLocalIds.add(optId);
+    }
+
+    final cachedJson = await _cache.getJson(cacheKey);
+    final cachedRaw = cachedJson is List
+        ? cachedJson.map((e) => Map<String, dynamic>.from(e as Map)).toList()
+        : <Map<String, dynamic>>[];
+    final synced = _syncReceiptsWithServer(online, cachedRaw, keepLocalIds: keepLocalIds);
+    await _cache.setJson(cacheKey, synced);
+    await _ref.read(syncStatusProvider.notifier).refreshPendingCount();
+  }
+
   Future<List<Receipt>> _parseReceiptList(List<Map<String, dynamic>> raw) async {
     final out = <Receipt>[];
     for (final e in raw) {
@@ -738,7 +869,8 @@ class OfflineApiClient {
           final cachedRaw = cachedJson is List
               ? cachedJson.map((e) => Map<String, dynamic>.from(e as Map)).toList()
               : <Map<String, dynamic>>[];
-          final synced = _syncListWithServer(raw, cachedRaw);
+          final keepLocalIds = await _pendingOutboxLocalIds();
+          final synced = _syncReceiptsWithServer(raw, cachedRaw, keepLocalIds: keepLocalIds);
           await _cache.setJson(cacheKey, synced);
           return _parseReceiptList(synced);
         },
@@ -786,10 +918,13 @@ class OfflineApiClient {
       'commission': commission,
       'discount': discount,
       'treeName': treeName,
+      'treeAccSeq': treeAccSeq,
+      'customerAccSeq': customerAccSeq,
       'notes': notes,
       'createdAt': DateTime.now().toIso8601String(),
       'localPending': true,
       if (_agentId != null) 'agentId': _agentId,
+      if (deliveryReceiptId != null) 'deliveryReceiptId': deliveryReceiptId,
     };
 
     Future<Receipt> queueLocal() async {

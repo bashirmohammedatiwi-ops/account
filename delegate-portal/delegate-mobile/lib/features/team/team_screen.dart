@@ -104,6 +104,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => _SecondaryDetailSheet(
         agentId: summary.agentId,
+        periodLabel: ref.read(teamDateRangeProvider).isAll ? null : ref.read(teamDateRangeProvider).label,
         onHandover: _markHandover,
         onCreateReceipt: _createReceiptFor,
         handoverDeliveryId: () => _handoverDeliveryId,
@@ -123,6 +124,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
   @override
   Widget build(BuildContext context) {
     final overviewAsync = ref.watch(teamOverviewProvider);
+    final dateRange = ref.watch(teamDateRangeProvider);
     final layout = EdLayout.of(context);
     final large = layout.isTablet;
 
@@ -132,7 +134,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
       subtitle: 'تابع مندوبيك الثانويين واستلم تحصيلاتهم',
       showBack: true,
       onBack: () => context.go('/home'),
-      unifiedScroll: false,
+      unifiedScroll: true,
       child: ColoredBox(
         color: Colors.transparent,
         child: overviewAsync.when(
@@ -141,26 +143,37 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
             message: e is ApiException ? e.message : '$e',
             onRetry: _refresh,
           ),
-          data: (overview) => _body(context, overview, large),
+          data: (overview) => _body(context, overview, large, dateRange),
         ),
       ),
     );
   }
 
-  Widget _body(BuildContext context, TeamOverview overview, bool large) {
+  Widget _body(BuildContext context, TeamOverview overview, bool large, ReceiptsDateRange dateRange) {
     final visible = _filter(overview.secondaries);
     final bottom = EdPageInsets.bottom(context);
+    final periodLabel = dateRange.isAll ? null : dateRange.label;
 
     return RefreshIndicator(
       onRefresh: _refresh,
       child: CustomScrollView(
-        primary: true,
+        primary: false,
         physics: edPageScrollPhysics,
         slivers: [
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(EdSpacing.page, EdSpacing.md, EdSpacing.page, 0),
             sliver: SliverToBoxAdapter(
-              child: TeamOverviewHeader(overview: overview, large: large),
+              child: TeamDateRangeFilter(
+                dateRange: dateRange,
+                onDateRangeChanged: (range) => ref.read(teamDateRangeProvider.notifier).state = range,
+              ),
+            ),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 10)),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, 0),
+            sliver: SliverToBoxAdapter(
+              child: TeamOverviewHeader(overview: overview, large: large, periodLabel: periodLabel),
             ),
           ),
           if (overview.secondaries.isNotEmpty)
@@ -174,10 +187,12 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: EmptyState(
-                  message: overview.totalSecondaries > 0
-                      ? 'لا توجد وصولات من مندوبيك بعد — ستظهر هنا فور إصدارهم وصل قبض'
-                      : 'لا يوجد مندوبون ثانويون تابعون لك حالياً',
-                  icon: Icons.groups_outlined,
+                  message: !dateRange.isAll
+                      ? 'لا توجد وصولات في الفترة «${dateRange.label}»'
+                      : overview.totalSecondaries > 0
+                          ? 'لا توجد وصولات من مندوبيك بعد — ستظهر هنا فور إصدارهم وصل قبض'
+                          : 'لا يوجد مندوبون ثانويون تابعون لك حالياً',
+                  icon: !dateRange.isAll ? Icons.event_busy_rounded : Icons.groups_outlined,
                 ),
               ),
             )
@@ -249,12 +264,14 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
 class _SecondaryDetailSheet extends ConsumerStatefulWidget {
   const _SecondaryDetailSheet({
     required this.agentId,
+    this.periodLabel,
     required this.onHandover,
     required this.onCreateReceipt,
     required this.handoverDeliveryId,
   });
 
   final int agentId;
+  final String? periodLabel;
   final void Function(DeliveryReceipt) onHandover;
   final void Function(DeliveryReceipt) onCreateReceipt;
   final int? Function() handoverDeliveryId;
@@ -310,122 +327,138 @@ class _SecondaryDetailSheetState extends ConsumerState<_SecondaryDetailSheet> {
             color: Colors.white,
             borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
-          child: Column(
-            children: [
-              const SizedBox(height: 10),
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.borderStrong,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: Row(
+          child: CustomScrollView(
+            controller: scrollController,
+            slivers: [
+              SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Container(
-                      width: 42,
-                      height: 42,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: AppColors.accentTeal.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(12),
+                    const SizedBox(height: 10),
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppColors.borderStrong,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
                       ),
-                      child: const Icon(Icons.person_rounded, color: AppColors.accentTeal),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                      child: Row(
                         children: [
-                          Text(summary.agentName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.navy)),
-                          Text('مندوب ثانوي · ${fmtNumAlways(summary.deliveryCount)} وصل',
-                              style: const TextStyle(
-                                  fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.muted)),
+                          Container(
+                            width: 42,
+                            height: 42,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: AppColors.accentTeal.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.person_rounded, color: AppColors.accentTeal),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(summary.agentName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                                Text(
+                                  widget.periodLabel != null
+                                      ? 'مندوب ثانوي · ${fmtNumAlways(summary.deliveryCount)} وصل · ${widget.periodLabel}'
+                                      : 'مندوب ثانوي · ${fmtNumAlways(summary.deliveryCount)} وصل',
+                                    style: const TextStyle(
+                                        fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.muted)),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.close_rounded),
+                            color: AppColors.muted,
+                          ),
                         ],
                       ),
                     ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close_rounded),
-                      color: AppColors.muted,
+                    if (summary.handoverPendingCount > 0)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: AppColors.warning.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.hourglass_top_rounded, size: 16, color: AppColors.warning),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'بانتظار استلام ${fmtMoney(summary.handoverPendingAmount)} د.ع (${fmtNumAlways(summary.handoverPendingCount)} وصل)',
+                                  style: const TextStyle(
+                                      fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.warning),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    const Divider(height: 1, color: AppColors.borderLight),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+                      child: DeliveryFilterBar(
+                        statusFilter: _statusFilter,
+                        onStatusChanged: (f) => setState(() => _statusFilter = f),
+                        agents: const [],
+                        selectedAgentId: null,
+                        onAgentChanged: (_) {},
+                      ),
                     ),
+                    const SizedBox(height: 8),
                   ],
                 ),
               ),
-              if (summary.handoverPendingCount > 0)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: AppColors.warning.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+              if (visible.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: EmptyState(
+                      message: _statusFilter == DeliveryHandoverFilter.all
+                          ? 'لا توجد وصولات لهذا المندوب'
+                          : 'لا وصولات مطابقة لفلتر «${_statusFilter.label}»',
+                      icon: Icons.filter_list_off_rounded,
                     ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.hourglass_top_rounded, size: 16, color: AppColors.warning),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'بانتظار استلام ${fmtMoney(summary.handoverPendingAmount)} د.ع (${fmtNumAlways(summary.handoverPendingCount)} وصل)',
-                            style: const TextStyle(
-                                fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.warning),
-                          ),
-                        ),
-                      ],
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, i) {
+                        final d = visible[i];
+                        return DeliveryReceiptCard(
+                          item: d,
+                          showPrint: false,
+                          isMarkingHandover: widget.handoverDeliveryId() == d.id,
+                          onReprint: null,
+                          onCreateReceipt: d.canCreateReceipt ? () => widget.onCreateReceipt(d) : null,
+                          onMarkHandover: d.canMarkHandover ? () => widget.onHandover(d) : null,
+                        );
+                      },
+                      childCount: visible.length,
                     ),
                   ),
                 ),
-              const Divider(height: 1, color: AppColors.borderLight),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-                child: DeliveryFilterBar(
-                  statusFilter: _statusFilter,
-                  onStatusChanged: (f) => setState(() => _statusFilter = f),
-                  agents: const [],
-                  selectedAgentId: null,
-                  onAgentChanged: (_) {},
-                ),
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: visible.isEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: EmptyState(
-                            message: _statusFilter == DeliveryHandoverFilter.all
-                                ? 'لا توجد وصولات لهذا المندوب'
-                                : 'لا وصولات مطابقة لفلتر «${_statusFilter.label}»',
-                            icon: Icons.filter_list_off_rounded,
-                          ),
-                        ),
-                      )
-                    : ListView.builder(
-                        controller: scrollController,
-                        padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
-                        itemCount: visible.length,
-                        itemBuilder: (context, i) {
-                          final d = visible[i];
-                          return DeliveryReceiptCard(
-                            item: d,
-                            showPrint: false,
-                            isMarkingHandover: widget.handoverDeliveryId() == d.id,
-                            onReprint: null,
-                            onCreateReceipt: d.canCreateReceipt ? () => widget.onCreateReceipt(d) : null,
-                            onMarkHandover: d.canMarkHandover ? () => widget.onHandover(d) : null,
-                          );
-                        },
-                      ),
-              ),
             ],
           ),
         );

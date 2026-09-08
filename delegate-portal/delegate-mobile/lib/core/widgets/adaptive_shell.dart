@@ -250,53 +250,59 @@ class AdaptiveShell extends ConsumerWidget {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: EdPageBackground(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: Stack(
+            fit: StackFit.expand,
             children: [
-              const OfflineBanner(),
-              Expanded(
-                child: layout.isWide
-                    ? Row(
-                        children: [
-                          Expanded(
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 260),
-                              switchInCurve: Curves.easeOutCubic,
-                              switchOutCurve: Curves.easeIn,
-                              layoutBuilder: (current, previous) => Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  ...previous,
-                                  if (current != null) current,
-                                ],
-                              ),
-                              transitionBuilder: edTabTransition,
-                              child: KeyedSubtree(
-                                key: ValueKey<String>(location),
-                                child: child,
-                              ),
+              layout.isWide
+                  ? Row(
+                      children: [
+                        Expanded(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 260),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeIn,
+                            layoutBuilder: (current, previous) => Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                ...previous,
+                                if (current != null) current,
+                              ],
+                            ),
+                            transitionBuilder: edTabTransition,
+                            child: KeyedSubtree(
+                              key: ValueKey<String>(location),
+                              child: child,
                             ),
                           ),
-                          _TabletNavRail(selected: _tabletSelectedIndex(location, tabletItems), items: tabletItems),
+                        ),
+                        _TabletNavRail(selected: _tabletSelectedIndex(location, tabletItems), items: tabletItems),
+                      ],
+                    )
+                  : AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 260),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeIn,
+                      layoutBuilder: (current, previous) => Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          ...previous,
+                          if (current != null) current,
                         ],
-                      )
-                    : AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 260),
-                        switchInCurve: Curves.easeOutCubic,
-                        switchOutCurve: Curves.easeIn,
-                        layoutBuilder: (current, previous) => Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            ...previous,
-                            if (current != null) current,
-                          ],
-                        ),
-                        transitionBuilder: edTabTransition,
-                        child: KeyedSubtree(
-                          key: ValueKey<String>(location),
-                          child: SizedBox.expand(child: child),
-                        ),
                       ),
+                      transitionBuilder: edTabTransition,
+                      child: KeyedSubtree(
+                        key: ValueKey<String>(location),
+                        child: SizedBox.expand(child: child),
+                      ),
+                    ),
+              const Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: SafeArea(
+                  bottom: false,
+                  child: OfflineBanner(),
+                ),
               ),
             ],
           ),

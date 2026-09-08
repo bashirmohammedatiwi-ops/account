@@ -68,18 +68,28 @@ class SyncEngine {
     final notifier = _ref.read(syncStatusProvider.notifier);
     notifier.setSyncing(true);
     try {
+      final client = _ref.read(apiClientProvider);
+      await client.reconcileStaleLocalReceipts();
+
       final api = _ref.read(rawApiClientProvider);
       final outbox = _ref.read(outboxStoreProvider);
       final entries = await outbox.pending();
       for (final entry in entries) {
         try {
           await _processEntry(api, entry);
+          await _dropOutboxOptimistic(entry);
           await outbox.markDone(entry.id);
         } catch (e) {
+          if (_isBenignOutboxError(e, entry)) {
+            await _dropOutboxOptimistic(entry);
+            await outbox.markDone(entry.id);
+            continue;
+          }
           await outbox.markFailed(entry.id, e.toString());
           notifier.setError(e.toString());
         }
       }
+      await client.reconcileStaleLocalReceipts();
       await notifier.refreshPendingCount();
       notifier.markSynced();
       _ref.read(delegateDataRefreshProvider)();
@@ -94,6 +104,7 @@ class SyncEngine {
     final notifier = _ref.read(syncStatusProvider.notifier);
     notifier.setSyncing(true);
     try {
+      await client.reconcileStaleLocalReceipts();
       await Future.wait([
         client.getTrees(),
         client.getOrders(),
@@ -246,6 +257,23 @@ class SyncEngine {
       if (id != null) return id;
     }
     throw FormatException('لا يوجد رقم في المسار: $path');
+  }
+
+  bool _isBenignOutboxError(Object e, OutboxEntry entry) {
+    final msg = e.toString();
+    if (msg.contains('404') || msg.contains('غير موجود')) return true;
+    if (entry.entityType == 'receipt' && (msg.contains('مسبق') || msg.contains('مسبقاً'))) return true;
+    if (entry.entityType == 'delivery_receipt' && msg.contains('مسبق')) return true;
+    if (entry.entityType == 'delivery_printed') return true;
+    return false;
+  }
+
+  Future<void> _dropOutboxOptimistic(OutboxEntry entry) async {
+    final opt = entry.optimisticJson;
+    if (opt == null || entry.listCacheKey == null) return;
+    final id = opt['id'];
+    if (id == null) return;
+    await _ref.read(cacheStoreProvider).removeListItem(entry.listCacheKey!, id);
   }
 }
 

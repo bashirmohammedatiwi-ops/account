@@ -59,8 +59,10 @@ flutter build appbundle --release   # Google Play
 | البند | القيمة |
 |--------|--------|
 | Bundle ID | `com.edari.edariDelegate` |
+| Team (Xcode) | `629ARMBUX8` |
 | اسم التطبيق | المندوب |
-| الإصدار | `1.2.2+7` |
+| الإصدار | `1.2.42+49` |
+| iOS الأدنى | 15.0 |
 
 ### 1. تجهيز المشروع
 
@@ -109,4 +111,4 @@ flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
 
 ## الإصدار
 
-**1.2.2** — إصلاح الجلسة على iOS، جلب البيانات بعد الدخول، iOS 15+.
+**1.2.42** — إصلاح السندات المحذوفة محلياً، فلتر تاريخ الفريق، تحديث حي، iOS 15+.
