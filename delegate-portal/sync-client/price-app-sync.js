@@ -18,8 +18,13 @@ const edariRoot = process.env.EDARI_READER_ROOT
 const odbcBridge = require(path.join(edariRoot, 'lib', 'odbc-bridge'));
 const { getEdariConnection } = require('./edari-connection');
 const { normalizeEdariDateIso } = require('../lib/date-utils');
-const { normalizeProductName } = require('../lib/product-name-text');
-const { syncPosPricing } = require('./pos-pricing-sync');
+const { normalizeProductName, pickBestName } = require('../lib/product-name-text');
+const {
+  loadPosSyncItems,
+  uploadLoadedPosItems,
+  buildPosBarcodeLookup,
+} = require('./pos-pricing-sync');
+const { normalizeBarcode: normalizePosBarcode } = require('./pos-barcode');
 
 const SERVER = process.argv.includes('--server')
   ? process.argv[process.argv.indexOf('--server') + 1]
@@ -80,8 +85,8 @@ function reportProgress(step, total, pct, msg) {
   console.log(`@PROGRESS|${step}|${total}|${pct}|${msg || ''}`);
 }
 
-/** أقصى وقت لمرحلة Edari — بعده تُلغى وتُكمَل المزامنة دون تعليق. */
-const EDARI_PHASE_TIMEOUT_MS = Number(process.env.PRICE_EDARI_TIMEOUT_MS) || 4 * 60 * 1000;
+/** أقصى وقت لجلب ورفع حركات Edari — لا يشمل رفع POS الذي يعمل بالتوازي. */
+const EDARI_PHASE_TIMEOUT_MS = Number(process.env.PRICE_EDARI_TIMEOUT_MS) || 12 * 60 * 1000;
 
 /** ينفّذ عملية مع مهلة قصوى؛ يرمي خطأ عند تجاوزها بدل التعليق للأبد. */
 function withTimeout(factory, ms, label) {
@@ -112,6 +117,35 @@ function resolveMaterialBarcode(row) {
   const mat = sqlInt(row.Mat);
   if (mat > 0) return `M:${mat}`;
   return '';
+}
+
+function lookupPosItem(posLookup, ...codes) {
+  if (!posLookup) return null;
+  for (const raw of codes) {
+    const code = normalizePosBarcode(raw) || String(raw ?? '').trim();
+    if (!code || code === '0') continue;
+    const hit = posLookup.byBarcode.get(code) || posLookup.byNum.get(code);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/** الباركودات التي يظهر بها المنتج في تطبيق الأسعار (POS أولاً ثم Edari). */
+function movementBarcodesForRow(row, posLookup) {
+  const edariBarcode = resolveMaterialBarcode(row);
+  const num = String(row.Num ?? row.MatNum ?? '').trim();
+  const pos = lookupPosItem(posLookup, edariBarcode, num, row.Barcode);
+  const aliases = [];
+  const add = (value) => {
+    const code = String(value || '').trim();
+    if (!code || code === '0' || aliases.includes(code)) return;
+    aliases.push(code);
+  };
+  if (pos?.barcode) add(pos.barcode);
+  add(edariBarcode);
+  add(num);
+  if (pos?.productNum) add(pos.productNum);
+  return aliases;
 }
 
 function buildEdariLineKey(row) {
@@ -222,6 +256,43 @@ async function queryPurchaseLineBatch(extraWhere, afterSeq, limit) {
   return attachMatInfo(rows, matMap);
 }
 
+async function getMaxPurchaseLineSeq() {
+  try {
+    const rows = await query(`
+      SELECT MAX(l.Seq) AS mx
+      FROM file14n l
+      INNER JOIN File15n i ON i.Seq = l.BillSeq
+      WHERE (${purchaseKindSql('i')})
+    `);
+    const row = rows[0] || {};
+    return sqlInt(row.mx ?? row.MX ?? row.Mx);
+  } catch {
+    return 0;
+  }
+}
+
+async function fetchPagedPurchaseLines({ extraWhere = '', startSeq = 0, limitBatches = INCREMENTAL_BATCH_LIMIT, notify = null } = {}) {
+  const rows = [];
+  const seenSeq = new Set();
+  let cursor = startSeq;
+  let batchNum = 0;
+  while (true) {
+    batchNum += 1;
+    const batch = await queryPurchaseLineBatch(extraWhere, cursor, PURCHASE_LINE_BATCH);
+    if (!batch.length) break;
+    mergePurchaseLineBatch(rows, batch, seenSeq);
+    notify?.(rows.length);
+    const maxSeq = Math.max(...batch.map((r) => sqlInt(r.LineSeq ?? r.Seq)));
+    if (maxSeq <= cursor) break;
+    cursor = maxSeq;
+    if (batch.length < PURCHASE_LINE_BATCH) break;
+    if (limitBatches > 0 && batchNum >= limitBatches) {
+      throw new Error('تحديثات كثيرة جداً — استخدم «مزامنة كاملة»');
+    }
+  }
+  return { rows, seenSeq };
+}
+
 function mergePurchaseLineBatch(target, batch, seenSeq) {
   for (const row of batch) {
     const seq = sqlInt(row.LineSeq ?? row.Seq);
@@ -232,66 +303,77 @@ function mergePurchaseLineBatch(target, batch, seenSeq) {
 }
 
 async function fetchPurchaseLines({ incremental = false, syncState = null, onProgress = null } = {}) {
-  const rows = [];
-  const seenSeq = new Set();
-
   const notify = (msg) => {
-    if (typeof onProgress === 'function') onProgress(rows.length, msg);
+    if (typeof onProgress === 'function') onProgress(0, msg);
+  };
+  const notifyCount = (count, msg) => {
+    if (typeof onProgress === 'function') onProgress(count, msg);
   };
 
   if (incremental && syncState?.lastSyncAt) {
     const lastLineSeq = sqlInt(syncState.lastLineSeq);
     const sinceTs = sqlTimestamp(syncState.lastSyncAt);
+    const merged = [];
+    const seenSeq = new Set();
 
+    let seqReset = false;
     if (lastLineSeq > 0) {
-      let cursor = lastLineSeq;
-      let batchNum = 0;
-      notify('جلب بنود المشتريات الجديدة...');
-      while (true) {
-        batchNum += 1;
-        const batch = await queryPurchaseLineBatch('', cursor, PURCHASE_LINE_BATCH);
-        if (!batch.length) break;
-        mergePurchaseLineBatch(rows, batch, seenSeq);
-        notify(`جلب بنود جديدة... ${rows.length}`);
-        const maxSeq = Math.max(...batch.map((r) => sqlInt(r.LineSeq ?? r.Seq)));
-        if (maxSeq <= cursor) break;
-        cursor = maxSeq;
-        if (batch.length < PURCHASE_LINE_BATCH) break;
-        if (batchNum >= INCREMENTAL_BATCH_LIMIT) {
-          throw new Error('تحديثات كثيرة جداً — استخدم «مزامنة كاملة»');
-        }
+      const maxSeq = await getMaxPurchaseLineSeq();
+      let startSeq = lastLineSeq;
+      let extraWhere = '';
+      if (maxSeq > 0 && lastLineSeq > maxSeq) {
+        seqReset = true;
+        console.error('تحذير: تسلسل بنود المشتريات أُعيد — جلب الحركات الجديدة بتاريخ آخر مزامنة');
+        startSeq = 0;
+        extraWhere = sinceTs ? `AND i."Date" >= ${sinceTs}` : '';
       }
+      notify('جلب بنود المشتريات الجديدة...');
+      const paged = await fetchPagedPurchaseLines({
+        extraWhere,
+        startSeq,
+        notify: (count) => notifyCount(count, `جلب بنود جديدة... ${count}`),
+      });
+      mergePurchaseLineBatch(merged, paged.rows, seenSeq);
     } else if (sinceTs) {
       notify('جلب التحديثات من Edari...');
-      mergePurchaseLineBatch(
-        rows,
-        await queryPurchaseLineBatch(`AND l.DtModified >= ${sinceTs}`, 0, PURCHASE_LINE_BATCH),
-        seenSeq,
-      );
+      const paged = await fetchPagedPurchaseLines({
+        extraWhere: `AND i."Date" >= ${sinceTs}`,
+        startSeq: 0,
+        notify: (count) => notifyCount(count, `جلب التحديثات... ${count}`),
+      });
+      mergePurchaseLineBatch(merged, paged.rows, seenSeq);
     }
 
-    return rows;
+    if (sinceTs && merged.length === 0 && !seqReset) {
+      try {
+        const dated = await fetchPagedPurchaseLines({
+          extraWhere: `AND i."Date" >= ${sinceTs}`,
+          startSeq: 0,
+          notify: (count) => notifyCount(count, `جلب فواتير بتاريخ أحدث... ${count}`),
+        });
+        mergePurchaseLineBatch(merged, dated.rows, seenSeq);
+      } catch (err) {
+        console.error(`تحذير: تعذر جلب المشتريات بالتاريخ: ${err.message || err}`);
+      }
+    }
+
+    return merged;
   }
 
   notify('جلب حركات المشتريات...');
-  let cursor = 0;
-  let batchNum = 0;
-  while (true) {
-    batchNum += 1;
-    const batch = await queryPurchaseLineBatch('', cursor, PURCHASE_LINE_BATCH);
-    if (!batch.length) break;
-    mergePurchaseLineBatch(rows, batch, seenSeq);
-    notify(`جلب حركات المشتريات... ${rows.length} بند`);
-    const maxSeq = Math.max(...batch.map((r) => sqlInt(r.LineSeq ?? r.Seq)));
-    if (maxSeq <= cursor) break;
-    cursor = maxSeq;
-    if (batch.length < PURCHASE_LINE_BATCH) break;
-    reportProgress(1, 4, Math.min(92, 8 + batchNum), `جلب حركات المشتريات... ${rows.length} بند`);
-  }
-  return rows;
+  const full = await fetchPagedPurchaseLines({
+    extraWhere: '',
+    startSeq: 0,
+    limitBatches: 0,
+    notify: (count) => {
+      notifyCount(count, `جلب حركات المشتريات... ${count} بند`);
+      reportProgress(1, 4, Math.min(92, 8 + Math.round(count / 800)), `جلب حركات المشتريات... ${count} بند`);
+    },
+  });
+  return full.rows;
 }
 
-function mapRowsToMovements(rows, accMap) {
+function mapRowsToMovements(rows, accMap, posLookup = null) {
   const movements = [];
   const productMap = new Map();
   const billSeqs = new Set();
@@ -304,18 +386,11 @@ function mapRowsToMovements(rows, accMap) {
     const lineSeqNum = sqlInt(row.LineSeq ?? row.Seq);
     if (lineSeqNum > maxLineSeq) maxLineSeq = lineSeqNum;
 
-    const barcode = resolveMaterialBarcode(row);
-    if (!barcode) {
+    const barcodes = movementBarcodesForRow(row, posLookup);
+    if (!barcodes.length) {
       skippedNoBarcode += 1;
       continue;
     }
-
-    const edariKey = buildEdariLineKey(row);
-    if (seenKeys.has(edariKey)) {
-      skippedDedupe += 1;
-      continue;
-    }
-    seenKeys.add(edariKey);
 
     const quantity = Number(row.Quant || 0);
     const unitPrice = Number(row.Price || 0);
@@ -325,25 +400,37 @@ function mapRowsToMovements(rows, accMap) {
     const supplier = accMap.get(String(sqlInt(row.AccSeq))) || '';
     const date = normalizeEdariDateIso(row.InvDate);
     const name = normalizeProductName(String(row.Name1 || row.MatName || '').trim());
+    const productNum = String(row.Num ?? row.MatNum ?? '').trim() || undefined;
+    const baseKey = buildEdariLineKey(row);
 
     billSeqs.add(String(row.BillSeq));
 
-    movements.push({
-      barcode,
-      supplier,
-      invoice: String(row.InvNum || row.BillNo || '').trim(),
-      quantity,
-      unit_price: unitPrice,
-      total_price: totalPrice,
-      date: date || null,
-      edari_key: edariKey,
-    });
+    for (const barcode of barcodes) {
+      const edariKey = `${baseKey}#${barcode}`;
+      if (seenKeys.has(edariKey)) {
+        skippedDedupe += 1;
+        continue;
+      }
+      seenKeys.add(edariKey);
 
-    if (!productMap.has(barcode)) {
-      productMap.set(barcode, { barcode, name });
-    } else {
-      const existing = productMap.get(barcode);
-      if (name) existing.name = name;
+      movements.push({
+        barcode,
+        supplier,
+        invoice: String(row.InvNum || row.BillNo || '').trim(),
+        quantity,
+        unit_price: unitPrice,
+        total_price: totalPrice,
+        date: date || null,
+        edari_key: edariKey,
+      });
+
+      if (!productMap.has(barcode)) {
+        productMap.set(barcode, { barcode, name, product_num: productNum });
+      } else {
+        const existing = productMap.get(barcode);
+        if (name) existing.name = name;
+        if (productNum && !existing.product_num) existing.product_num = productNum;
+      }
     }
   }
 
@@ -358,7 +445,7 @@ function mapRowsToMovements(rows, accMap) {
   };
 }
 
-async function fetchPurchaseMovements({ incremental = false, syncState = null } = {}) {
+async function fetchPurchaseMovements({ incremental = false, syncState = null, posLookup = null } = {}) {
   const modeLabel = incremental ? 'جلب التحديثات الجديدة...' : 'جلب كل حركات المشتريات...';
   reportProgress(1, 4, 5, modeLabel);
 
@@ -373,7 +460,7 @@ async function fetchPurchaseMovements({ incremental = false, syncState = null } 
 
   reportProgress(1, 4, 55, 'جلب أسماء الموردين...');
   const accMap = await fetchAccountNames(allRows.map((r) => r.AccSeq));
-  const mapped = mapRowsToMovements(allRows, accMap);
+  const mapped = mapRowsToMovements(allRows, accMap, posLookup);
   mapped.matSeqs = [...new Set(allRows.map((r) => sqlInt(r.Mat)).filter((s) => s > 0))];
 
   reportProgress(
@@ -387,7 +474,7 @@ async function fetchPurchaseMovements({ incremental = false, syncState = null } 
 }
 
 /** Materials with PurchaseTot but no invoice lines in the current DB (common after year rollover). */
-async function fetchAggregatePurchaseMovements() {
+async function fetchAggregatePurchaseMovements(posLookup = null) {
   const kindList = PURCHASE_KINDS.join(', ');
   const rows = await query(`
     SELECT m.Seq, m.Barcode, m.Num, m.Name1, m.PurchaseTot, m.PurchaseAm, m.SellPr4
@@ -403,28 +490,31 @@ async function fetchAggregatePurchaseMovements() {
   const movements = [];
   const products = [];
   for (const row of rows) {
-    const barcode = resolveMaterialBarcode(row);
-    if (!barcode) continue;
     const qty = Number(row.PurchaseTot || 0);
     if (qty <= 0) continue;
     const total = Number(row.PurchaseAm || 0);
     const unit = total > 0 ? total / qty : 0;
+    const barcodes = movementBarcodesForRow(row, posLookup);
+    if (!barcodes.length) continue;
+    const name = normalizeProductName(String(row.Name1 || '').trim());
 
-    movements.push({
-      barcode,
-      supplier: 'مشتريات مسجّلة (بدون تفاصيل فواتير)',
-      invoice: '—',
-      quantity: qty,
-      unit_price: unit,
-      total_price: total > 0 ? total : qty * unit,
-      date: null,
-      edari_key: `AGG:${row.Seq}`,
-    });
-
-    products.push({
-      barcode,
-      name: normalizeProductName(String(row.Name1 || '').trim()),
-    });
+    for (const barcode of barcodes) {
+      movements.push({
+        barcode,
+        supplier: 'مشتريات مسجّلة (بدون تفاصيل فواتير)',
+        invoice: '—',
+        quantity: qty,
+        unit_price: unit,
+        total_price: total > 0 ? total : qty * unit,
+        date: null,
+        edari_key: `AGG:${row.Seq}#${barcode}`,
+      });
+      products.push({
+        barcode,
+        name,
+        product_num: String(row.Num || '').trim() || undefined,
+      });
+    }
   }
 
   return { movements, products, count: movements.length };
@@ -476,21 +566,44 @@ function mergeProducts(primary = [], extra = []) {
   for (const p of [...primary, ...extra]) {
     const barcode = String(p.barcode || '').trim();
     if (!barcode) continue;
+    const incomingName = normalizeProductName(p.name);
     const existing = map.get(barcode);
     if (!existing) {
-      map.set(barcode, { ...p, barcode });
+      map.set(barcode, {
+        ...p,
+        barcode,
+        name: incomingName || undefined,
+      });
       continue;
     }
-    if (p.name) existing.name = p.name;
+    const best = pickBestName(existing.name, incomingName);
+    if (best) existing.name = best;
     if (p.stock_balance != null && Number.isFinite(Number(p.stock_balance))) {
       existing.stock_balance = Number(p.stock_balance);
     }
+    if (p.product_num && !existing.product_num) existing.product_num = p.product_num;
   }
   return [...map.values()];
 }
 
+function sanitizeEdariProducts(products = []) {
+  return products.map((p) => {
+    const barcode = String(p.barcode || '').trim();
+    if (!barcode) return null;
+    const name = normalizeProductName(p.name);
+    const out = { barcode };
+    if (p.product_num) out.product_num = p.product_num;
+    if (name) out.name = name;
+    if (p.stock_balance != null && Number.isFinite(Number(p.stock_balance))) {
+      out.stock_balance = Number(p.stock_balance);
+    }
+    if (!out.name && out.stock_balance == null) return null;
+    return out;
+  }).filter(Boolean);
+}
+
 async function uploadBatch(serverUrl, syncKey, payload) {
-  const headers = { 'Content-Type': 'application/json' };
+  const headers = { 'Content-Type': 'application/json; charset=utf-8', Accept: 'application/json' };
   if (syncKey) headers['X-Sync-Key'] = syncKey;
 
   const res = await fetch(`${serverUrl.replace(/\/$/, '')}/sync/edari`, {
@@ -512,7 +625,7 @@ async function uploadAll(serverUrl, syncKey, products, movements) {
   let stockBalancesUpdated = 0;
   let movementsUpserted = 0;
 
-  const productParts = chunk(products, UPLOAD_BATCH);
+  const productParts = chunk(sanitizeEdariProducts(products), UPLOAD_BATCH);
   for (let i = 0; i < productParts.length; i++) {
     const part = productParts[i];
     const result = await uploadBatch(serverUrl, syncKey, { products: part, movements: [] });
@@ -534,17 +647,18 @@ async function uploadAll(serverUrl, syncKey, products, movements) {
 }
 
 async function runPosPricingUpload(serverUrl, syncKey, options = {}, progress = { step: 4, total: 4 }) {
-  return syncPosPricing({
-    serverUrl,
-    syncKey,
-    posConfig: {
-      server: options.posSqlServer,
-      database: options.posSqlDatabase,
-      user: options.posSqlUser,
-      password: options.posSqlPassword,
-    },
+  const loaded = await loadPosSyncItems({
+    server: options.posSqlServer,
+    database: options.posSqlDatabase,
+    user: options.posSqlUser,
+    password: options.posSqlPassword,
+  });
+  const uploaded = await uploadLoadedPosItems(serverUrl, syncKey, loaded.items, {
+    posOffers: loaded.posOffers,
+    posRead: loaded.rows.length,
     onProgress: (pct, msg) => reportProgress(progress.step, progress.total, pct, msg),
   });
+  return { ...uploaded, items: loaded.items };
 }
 
 async function main(options = {}) {
@@ -561,18 +675,33 @@ async function main(options = {}) {
     throw new Error('لا توجد مزامنة سابقة — نفّذ مزامنة كاملة أولاً');
   }
 
-  // ── (1) مرحلة POS أولاً — المصدر الأساسي للأسعار/المنتجات، سريعة وموثوقة ومستقلة تماماً ──
-  reportProgress(1, 2, 0, 'رفع أسعار POS إلى سيرفر الأسعار...');
+  const posConfig = {
+    server: options.posSqlServer,
+    database: options.posSqlDatabase,
+    user: options.posSqlUser,
+    password: options.posSqlPassword,
+  };
+
+  reportProgress(1, 2, 0, 'قراءة أسعار POS من SQL Server...');
+  let posLookup = null;
+  let posItems = [];
   let posResult = { posSynced: 0, posFailed: 0, posOffers: 0 };
+  let posUploadPromise = null;
+
   try {
-    posResult = await runPosPricingUpload(serverUrl, syncKey, options, { step: 1, total: 2 });
-    console.log(`✓ POS: ${posResult.posSynced} منتج (${posResult.posOffers || 0} بعرض)`);
+    const loaded = await loadPosSyncItems(posConfig);
+    posItems = loaded.items;
+    posLookup = buildPosBarcodeLookup(posItems);
+    posUploadPromise = uploadLoadedPosItems(serverUrl, syncKey, posItems, {
+      posOffers: loaded.posOffers,
+      posRead: loaded.rows.length,
+      onProgress: (pct, msg) => reportProgress(1, 2, pct, msg),
+    });
   } catch (err) {
     posResult.posError = err.message || String(err);
     console.error(`تحذير POS: ${posResult.posError}`);
   }
 
-  // ── (2) مرحلة Edari (تفاصيل المشتريات) — أفضل جهد بمهلة صارمة كي لا تعلّق المزامنة أبداً ──
   let edariError = null;
   let edariHadUpdates = false;
   let uploadResult = { productsUpserted: 0, consumerPricesUpdated: 0, stockBalancesUpdated: 0, movementsUpserted: 0 };
@@ -585,12 +714,12 @@ async function main(options = {}) {
   try {
     await withTimeout(async () => {
       reportProgress(2, 2, 0, 'جلب تفاصيل المشتريات من Edari...');
-      purchaseData = await fetchPurchaseMovements({ incremental, syncState: prevState });
+      purchaseData = await fetchPurchaseMovements({ incremental, syncState: prevState, posLookup });
 
       if (!incremental) {
         reportProgress(2, 2, 40, 'جلب مشتريات بدون تفاصيل فواتير...');
         try {
-          const aggregate = await fetchAggregatePurchaseMovements();
+          const aggregate = await fetchAggregatePurchaseMovements(posLookup);
           if (aggregate.movements.length) {
             purchaseData.movements.push(...aggregate.movements);
             purchaseData.products = mergeProducts(purchaseData.products || [], aggregate.products);
@@ -607,26 +736,52 @@ async function main(options = {}) {
         : await fetchProductCatalog();
       products = mergeProducts(purchaseData.products, catalogProducts);
 
+      if (posUploadPromise) {
+        try {
+          posResult = await posUploadPromise;
+          posUploadPromise = null;
+          console.log(`✓ POS: ${posResult.posSynced} منتج (${posResult.posOffers || 0} بعرض، ${posResult.posNames || 0} اسم)`);
+        } catch (err) {
+          posResult.posError = err.message || String(err);
+          console.error(`تحذير POS: ${posResult.posError}`);
+        }
+      }
+
       if (purchaseData.movements.length || products.length) {
         edariHadUpdates = true;
-        reportProgress(2, 2, 75, 'رفع بيانات Edari إلى سيرفر الأسعار...');
+        reportProgress(2, 2, 75, 'رفع حركات المشتريات إلى سيرفر الأسعار...');
         uploadResult = await uploadAll(serverUrl, syncKey, products, purchaseData.movements);
       }
       reportProgress(2, 2, 100, 'اكتمل Edari');
     }, EDARI_PHASE_TIMEOUT_MS, 'تجاوزت مرحلة Edari المهلة — تم رفع أسعار POS، وتفاصيل المشتريات ستُكمَل لاحقاً');
   } catch (err) {
-    // فشل/تعليق Edari لا يمنع رفع POS (تم قبله). المزامنة تُكمَل دون توقف.
     edariError = err.message || String(err);
     console.error(`تحذير Edari: ${edariError}`);
     reportProgress(2, 2, 100, `تعذّر Edari — ${edariError}`);
   }
 
-  // ── حفظ الحالة فقط عند نجاح Edari (كي لا يتقدّم المؤشر التزايدي فوق بيانات لم تُرفع) ──
+  if (posUploadPromise) {
+    try {
+      posResult = await posUploadPromise;
+      console.log(`✓ POS: ${posResult.posSynced} منتج (${posResult.posOffers || 0} بعرض، ${posResult.posNames || 0} اسم)`);
+    } catch (err) {
+      posResult.posError = err.message || String(err);
+      console.error(`تحذير POS: ${posResult.posError}`);
+    }
+  }
+
   if (!edariError) {
     const now = new Date().toISOString();
+    let nextLastSeq = Math.max(sqlInt(prevState?.lastLineSeq), purchaseData.maxLineSeq || 0);
+    try {
+      const dbMax = await getMaxPurchaseLineSeq();
+      if (dbMax > 0 && nextLastSeq > dbMax) nextLastSeq = dbMax;
+    } catch {
+      if (purchaseData.maxLineSeq > 0) nextLastSeq = purchaseData.maxLineSeq;
+    }
     const nextState = {
       lastSyncAt: now,
-      lastLineSeq: Math.max(sqlInt(prevState?.lastLineSeq), purchaseData.maxLineSeq || 0),
+      lastLineSeq: nextLastSeq,
       lastFullSyncAt: incremental ? (prevState?.lastFullSyncAt || null) : now,
       stats: {
         bills: purchaseData.bills,
@@ -649,6 +804,7 @@ async function main(options = {}) {
     ? `تحذير POS: ${posResult.posError}`
     : `POS: ${posResult.posSynced || 0} سعر (${posResult.posOffers || 0} عرض)`;
 
+  const { items: _posItems, ...posSummary } = posResult || {};
   const summary = {
     ok: !edariError || !posResult.posError,
     edariOk: !edariError,
@@ -662,7 +818,7 @@ async function main(options = {}) {
     products: products.length,
     movements: purchaseData.movements.length,
     ...uploadResult,
-    ...posResult,
+    ...posSummary,
     edariError: edariError || undefined,
     message: `${edariMsg} | ${posMsg}`,
   };

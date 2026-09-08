@@ -104,7 +104,7 @@ function receiptMoneyField(id, label, value, locked, { main = false, tone = '' }
     <label class="rcv-money-field${mainCls}${toneCls}">
       <span>${label}</span>
       <div class="rcv-money-input-wrap">
-        <input type="text" class="rcv-money-input num-en" id="${id}" inputmode="numeric" autocomplete="off"
+        <input type="text" class="rcv-money-input num-en" id="${id}" inputmode="decimal" autocomplete="off"
           value="${formatted}" dir="ltr" ${locked ? 'readonly tabindex="-1"' : ''}>
       </div>
     </label>`;
@@ -918,13 +918,13 @@ function renderReceiptDetailTab(tab, r, posting, locked) {
         </div>
         <label class="rcv-field">
           <span>ملاحظات / البيان</span>
-          <textarea class="rcv-textarea" id="rvEditNotes" rows="3" placeholder="بيان سند القبض..."
-            ${locked ? 'readonly tabindex="-1"' : ''}>${esc(r.notes)}</textarea>
+          <textarea class="rcv-textarea" id="rvEditNotes" rows="3" dir="auto" autocomplete="off" spellcheck="false"
+            placeholder="بيان سند القبض..." ${locked ? 'readonly tabindex="-1"' : ''}>${esc(r.notes)}</textarea>
         </label>
         <label class="rcv-field">
           <span>ملاحظة الإدارة</span>
-          <textarea class="rcv-textarea rcv-textarea-admin" id="rvEditAdminNote" rows="2" placeholder="ملاحظة داخلية..."
-            ${locked ? 'readonly tabindex="-1"' : ''}>${esc(r.adminNote)}</textarea>
+          <textarea class="rcv-textarea rcv-textarea-admin" id="rvEditAdminNote" rows="2" dir="auto" autocomplete="off" spellcheck="false"
+            placeholder="ملاحظة داخلية..." ${locked ? 'readonly tabindex="-1"' : ''}>${esc(r.adminNote)}</textarea>
         </label>
       </section>
       ${r.postedError ? `<p class="rcv-error">${esc(r.postedError)}</p>` : ''}
@@ -947,11 +947,6 @@ function bindReceiptMoneyFields() {
   ['rvEditAmount', 'rvEditCommission', 'rvEditDiscount'].forEach((id) => {
     const el = document.getElementById(id);
     if (!el || el.readOnly) return;
-    el.value = formatMoneyInput(el.value);
-    el.addEventListener('focus', () => {
-      const n = parseMoneyInput(el.value);
-      el.value = n > 0 ? String(n) : '';
-    });
     el.addEventListener('blur', () => {
       el.value = formatMoneyInput(el.value);
     });
@@ -1187,7 +1182,9 @@ async function deleteReceiptUi(id) {
   const msg = posted
     ? `حذف سند القبض ${label} من لوحة التحكم؟\nلن يُلغى الترحيل في الإداري — الحذف من اللوحة فقط.`
     : `حذف سند القبض ${label} نهائياً؟\nلا يمكن التراجع.`;
-  if (!confirm(msg)) return;
+  if (typeof edariConfirm === 'function') {
+    if (!(await edariConfirm(msg))) return;
+  } else if (!confirm(msg)) return;
   try {
     const path = posted ? `/receipts/${id}?force=1` : `/receipts/${id}`;
     await commerceApi(path, { method: 'DELETE' });
@@ -1203,7 +1200,9 @@ async function deleteReceiptUi(id) {
 }
 
 async function rejectReceipt(id) {
-  if (!confirm('رفض سند القبض؟')) return;
+  if (typeof edariConfirm === 'function') {
+    if (!(await edariConfirm('رفض سند القبض؟'))) return;
+  } else if (!confirm('رفض سند القبض؟')) return;
   try {
     await commerceApi(`/receipts/${id}/status`, {
       method: 'PATCH',
@@ -1242,7 +1241,10 @@ async function postReceiptToEdariUi(id) {
       return;
     }
     const postingDate = todayLocalIso();
-    if (!confirm(`ترحيل سند ${data.receipt.receiptNo} إلى الإداري بتاريخ ${postingDate}؟`)) return;
+    const postMsg = `ترحيل سند ${data.receipt.receiptNo} إلى الإداري بتاريخ ${postingDate}؟`;
+    if (typeof edariConfirm === 'function') {
+      if (!(await edariConfirm(postMsg))) return;
+    } else if (!confirm(postMsg)) return;
     const payload = {
       id,
       receiptNo: data.receipt.receiptNo,
@@ -1285,6 +1287,7 @@ async function postReceiptToEdariUi(id) {
     showToast(err.message, 'err');
   } finally {
     endEdariPosting(key);
+    if (typeof recoverUiFocus === 'function') void recoverUiFocus({ steal: true });
   }
 }
 
@@ -1317,6 +1320,10 @@ function initReceiptsAdmin() {
   });
   document.addEventListener('keydown', (e) => {
     if (!receiptAdmin.selected || !document.getElementById('page-receipts')?.classList.contains('active')) return;
+    const typing = typeof isTextEntryTarget === 'function'
+      ? isTextEntryTarget(e.target)
+      : ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName);
+    if (typing) return;
     if (e.key === 'Escape') {
       receiptAdmin.selected = null;
       showReceiptDetailEmpty();

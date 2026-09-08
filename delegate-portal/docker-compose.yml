@@ -1,3 +1,7 @@
+# البوابة على 5005. واجهة مسح الباركود تستخدم /price-api (عملية منفصلة، غالباً على 5000).
+# تحديث portal وحده لا يصلح أسماء الأسعار. لتحديث خدمة الأسعار:
+#   git pull && docker compose --profile price-api up -d --build price-api
+# أوقف العملية القديمة على 5000 أولاً، واربط قاعدة البيانات الحالية إن وُجدت.
 services:
   portal:
     build: .
@@ -24,6 +28,24 @@ services:
       - portal_uploads:/app/uploads
     restart: unless-stopped
 
+  price-api:
+    profiles: ["price-api"]
+    build: .
+    container_name: edari-price-api
+    command: ["node", "price-app-server.js"]
+    ports:
+      - "5000:5000"
+    environment:
+      PRICE_APP_PORT: 5000
+      PRICE_APP_HOST: 0.0.0.0
+      DATABASE_PATH: /app/data/portal.db
+      PRICE_SYNC_KEY: ${PRICE_SYNC_KEY:-edari-sync-local-key-2025}
+      SYNC_API_KEY: ${SYNC_API_KEY:-edari-sync-local-key-2025}
+    volumes:
+      - price_data:/app/data
+    restart: unless-stopped
+
 volumes:
   portal_data:
   portal_uploads:
+  price_data:

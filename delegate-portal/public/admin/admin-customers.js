@@ -273,7 +273,9 @@ async function saveCustomerReqEdit(id) {
 }
 
 async function deleteCustomerReqUi(id) {
-  if (!confirm('حذف طلب الزبون؟')) return;
+  if (typeof edariConfirm === 'function') {
+    if (!(await edariConfirm('حذف طلب الزبون؟'))) return;
+  } else if (!confirm('حذف طلب الزبون؟')) return;
   try {
     await commerceApi(`/customer-requests/${id}`, { method: 'DELETE' });
     showToast('تم الحذف');
@@ -316,7 +318,10 @@ async function postCustomerReqToEdariUi(id) {
       showToast('الزبون مُرحَّل مسبقاً');
       return;
     }
-    if (!confirm(`ترحيل ${data.request.name} كفرع جديد تحت ${data.request.treeName || data.request.treeNum}؟`)) return;
+    const postCustMsg = `ترحيل ${data.request.name} كفرع جديد تحت ${data.request.treeName || data.request.treeNum}؟`;
+    if (typeof edariConfirm === 'function') {
+      if (!(await edariConfirm(postCustMsg))) return;
+    } else if (!confirm(postCustMsg)) return;
     const payload = {
       id,
       name: posting.name,
@@ -366,6 +371,7 @@ async function postCustomerReqToEdariUi(id) {
     showToast(err.message, 'err');
   } finally {
     endEdariPosting(key);
+    if (typeof recoverUiFocus === 'function') void recoverUiFocus({ steal: true });
   }
 }
 

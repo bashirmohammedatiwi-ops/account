@@ -147,7 +147,9 @@ function normalizeRow(raw) {
     quantity: Number(raw.quantity) || 0,
     discountValue: raw.discountValue != null ? Number(raw.discountValue) : null,
     discountType: raw.discountType != null ? Number(raw.discountType) : null,
-    offerName: raw.offerName != null ? String(raw.offerName).trim() : null,
+    offerName: raw.offerName != null
+      ? (normalizeProductName(String(raw.offerName).trim()) || null)
+      : null,
   };
 }
 
@@ -245,11 +247,12 @@ function rowToSyncItem(row) {
 
   if (!pricing.originalPrice && !pricing.finalPrice) return null;
 
+  const name = normalizeProductName(row.name);
   return {
     barcode,
     productCode: String(row.productCode),
     productNum: row.productNum || undefined,
-    name: row.name || undefined,
+    name: name || undefined,
     price: pricing.finalPrice,
     originalPrice: pricing.originalPrice,
     discountPercent: pricing.discountPercent,
@@ -266,39 +269,99 @@ function chunk(arr, size) {
   return out;
 }
 
-async function uploadPosBatch(serverUrl, syncKey, items) {
-  const headers = { 'Content-Type': 'application/json' };
+function jsonHeaders(syncKey) {
+  const headers = {
+    'Content-Type': 'application/json; charset=utf-8',
+    Accept: 'application/json',
+  };
   if (syncKey) headers['X-Sync-Key'] = syncKey;
+  return headers;
+}
 
-  const res = await fetch(`${serverUrl.replace(/\/$/, '')}/sync/inventory/bulk`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ items }),
-  });
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data.error || `POS upload failed (${res.status})`);
+async function postJson(url, syncKey, body, errorPrefix) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: jsonHeaders(syncKey),
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `${errorPrefix} (${res.status})`);
+      }
+      return data;
+    } catch (err) {
+      lastError = err;
+      if (attempt < 3) await sleep(400 * attempt);
+    }
   }
+  throw lastError;
+}
+
+async function uploadPosBatch(serverUrl, syncKey, items) {
+  const root = serverUrl.replace(/\/$/, '');
+  try {
+    return await postJson(`${root}/sync/inventory/bulk`, syncKey, { items }, 'POS upload failed');
+  } catch (err) {
+    // بعض النسخ القديمة تقبل المسار البديل فقط
+    return postJson(`${root}/sync/pos/bulk`, syncKey, { items }, err.message || 'POS upload failed');
+  }
+}
+
+function namesFromPosItems(items = []) {
+  const products = [];
+  for (const item of items) {
+    const barcode = String(item?.barcode || '').trim();
+    const name = normalizeProductName(item?.name);
+    if (!barcode || !name) continue;
+    products.push({
+      barcode,
+      name,
+      product_num: item.productNum || undefined,
+    });
+  }
+  return products;
+}
+
+/**
+ * السيرفر الحي القديم: INSERT يأخذ الاسم من أول رفع، وUPDATE الأسعار لا يستبدل الاسم.
+ * /sync/edari يستبدل الاسم — لذلك نرفع الأسماء قبل الأسعار وبعدها.
+ */
+async function uploadPosNames(serverUrl, syncKey, items) {
+  const products = namesFromPosItems(items);
+  if (!products.length) return { skipped: true, products_upserted: 0 };
+  const data = await postJson(
+    `${serverUrl.replace(/\/$/, '')}/sync/edari`,
+    syncKey,
+    { products, movements: [] },
+    'POS name upload failed',
+  );
   return data;
 }
 
-async function syncPosPricing({
-  serverUrl,
-  syncKey,
-  posConfig,
-  onProgress,
-} = {}) {
-  if (process.env.SKIP_POS_SYNC === '1') {
-    return { posSynced: 0, posFailed: 0, posOffers: 0, posSkipped: true };
+function buildPosBarcodeLookup(items = []) {
+  const byBarcode = new Map();
+  const byNum = new Map();
+  for (const item of items) {
+    const barcode = String(item?.barcode || '').trim();
+    const num = String(item?.productNum || '').trim();
+    if (barcode && !byBarcode.has(barcode)) byBarcode.set(barcode, item);
+    if (num && !byNum.has(num)) byNum.set(num, item);
   }
+  return { byBarcode, byNum };
+}
 
+async function loadPosSyncItems(posConfig) {
   const config = getPosConfig(posConfig || {});
   if (!config.server || !config.database) {
     throw new Error('إعدادات POS SQL غير مكتملة (server / database)');
   }
-
-  onProgress?.(0, 'قراءة أسعار POS من SQL Server...');
   const rows = await fetchPosArticles(config);
   if (!rows.length) {
     throw new Error('لم تُقرأ أي مادة من قاعدة POS — تحقق من SQL Server واسم القاعدة');
@@ -310,38 +373,98 @@ async function syncPosPricing({
   for (const row of rows) {
     const item = rowToSyncItem(row);
     if (!item) continue;
-    // إزالة التكرار بالباركود (أساسي + ثانوي قد يتقاطعان) — الأول يفوز.
     if (seenBarcodes.has(item.barcode)) continue;
     seenBarcodes.add(item.barcode);
     if (item.discountPercent != null && item.discountPercent > 0) posOffers += 1;
     items.push(item);
   }
-
   if (!items.length) {
     throw new Error('لا توجد مواد POS بباركود صالح');
   }
+  return { items, rows, posOffers, config };
+}
 
-  onProgress?.(10, `رفع ${items.length} سعر POS (${posOffers} بعرض)...`);
+async function uploadLoadedPosItems(serverUrl, syncKey, items, {
+  posOffers = 0,
+  posRead = 0,
+  onProgress,
+} = {}) {
+  const namedCount = namesFromPosItems(items).length;
+  onProgress?.(10, `رفع ${items.length} منتج POS (${namedCount} باسم عربي، ${posOffers} بعرض)...`);
 
   let posSynced = 0;
   let posFailed = 0;
+  let namesUpserted = 0;
   const parts = chunk(items, UPLOAD_BATCH);
 
   for (let i = 0; i < parts.length; i++) {
-    const result = await uploadPosBatch(serverUrl, syncKey, parts[i]);
-    posSynced += Number(result.synced || result.data?.synced || parts[i].length);
+    const batch = parts[i];
+    let namesOk = false;
+    try {
+      const named = await uploadPosNames(serverUrl, syncKey, batch);
+      namesUpserted += Number(named.products_upserted || namesFromPosItems(batch).length);
+      namesOk = true;
+    } catch (err) {
+      console.error(`تحذير: تعذّر رفع أسماء POS قبل الأسعار: ${err.message || err}`);
+    }
+
+    const result = await uploadPosBatch(serverUrl, syncKey, batch);
+    posSynced += Number(result.synced || result.data?.synced || batch.length);
     posFailed += Number(result.failed || result.data?.failed || 0);
+
+    if (!namesOk) {
+      try {
+        const named = await uploadPosNames(serverUrl, syncKey, batch);
+        namesUpserted += Number(named.products_upserted || 0);
+      } catch (err) {
+        console.error(`تحذير: تعذّر تأكيد أسماء POS بعد الأسعار: ${err.message || err}`);
+      }
+    }
+
     const pct = 10 + Math.round(((i + 1) / parts.length) * 90);
     onProgress?.(pct, `رفع POS: ${posSynced}/${items.length}`);
   }
 
-  return { posSynced, posFailed, posOffers, posTotal: items.length, posRead: rows.length };
+  return {
+    posSynced,
+    posFailed,
+    posOffers,
+    posTotal: items.length,
+    posRead,
+    posNames: namedCount,
+    posNamesUpserted: namesUpserted,
+    items,
+  };
+}
+
+async function syncPosPricing({
+  serverUrl,
+  syncKey,
+  posConfig,
+  onProgress,
+} = {}) {
+  if (process.env.SKIP_POS_SYNC === '1') {
+    return { posSynced: 0, posFailed: 0, posOffers: 0, posSkipped: true, items: [] };
+  }
+
+  onProgress?.(0, 'قراءة أسعار POS من SQL Server...');
+  const loaded = await loadPosSyncItems(posConfig || {});
+  const uploaded = await uploadLoadedPosItems(serverUrl, syncKey, loaded.items, {
+    posOffers: loaded.posOffers,
+    posRead: loaded.rows.length,
+    onProgress,
+  });
+  return uploaded;
 }
 
 module.exports = {
   getPosConfig,
   fetchPosArticles,
   rowToSyncItem,
+  namesFromPosItems,
+  loadPosSyncItems,
+  uploadLoadedPosItems,
+  buildPosBarcodeLookup,
   syncPosPricing,
   ARTICLES_QUERY,
 };

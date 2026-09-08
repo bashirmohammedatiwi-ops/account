@@ -6298,7 +6298,24 @@ body {
 }
 
 .page-viewport.is-switching {
-  pointer-events: none;
+  /* لا نستخدم pointer-events:none — يكسر التركيز ولوحة المفاتيح في Electron/Windows */
+}
+
+.page-viewport.is-switching input,
+.page-viewport.is-switching textarea,
+.page-viewport.is-switching select,
+.page-viewport.is-switching button,
+.page-viewport.is-switching a {
+  pointer-events: auto;
+}
+
+.page.active input,
+.page.active textarea,
+.page.active select,
+.page.active [contenteditable="true"] {
+  caret-color: currentColor;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .page {
@@ -6309,14 +6326,10 @@ body {
   display: block;
 }
 
+.page.is-leaving,
 .page.is-entering {
-  animation: adminPageIn 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.page.is-leaving {
-  display: block;
-  animation: adminPageOut 0.16s ease both;
-  pointer-events: none;
+  animation: none;
+  pointer-events: auto;
 }
 
 .page.is-settled {
@@ -6821,6 +6834,12 @@ body {
   padding: min(12vh, 80px) 16px 16px;
 }
 
+.cmdk[hidden],
+.cmdk.hidden {
+  display: none !important;
+  pointer-events: none !important;
+}
+
 .cmdk-backdrop {
   position: absolute;
   inset: 0;
@@ -7202,7 +7221,13 @@ td.num,
   font-variant-numeric: lining-nums tabular-nums;
   font-feature-settings: "lnum" 1, "tnum" 1;
   direction: ltr;
-  unicode-bidi: embed;
+  unicode-bidi: isolate;
+}
+
+input.num-en,
+textarea.num-en {
+  unicode-bidi: isolate;
+  direction: ltr;
 }
 
 input[type="number"].num-en,
@@ -7745,15 +7770,14 @@ input[type="date"].num-en,
 }
 
 .rcv-detail {
-  position: sticky;
-  top: 12px;
+  position: static;
   border: 1px solid var(--border);
   border-radius: var(--rcv-radius);
   background: var(--surface);
   box-shadow: var(--rcv-shadow);
   min-height: 420px;
-  max-height: calc(100vh - 120px);
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
 }
 
 .rcv-detail-empty {
@@ -8519,6 +8543,9 @@ input[type="date"].num-en,
   font: inherit;
   font-size: 0.88rem;
   color: #0f172a;
+  caret-color: currentColor;
+  user-select: text;
+  -webkit-user-select: text;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -8635,6 +8662,10 @@ input[type="date"].num-en,
 .rcv-textarea-admin {
   background: #fafafa;
   border-style: dashed;
+}
+
+.rcv-notes-input {
+  min-height: 44px;
 }
 
 @media (max-width: 720px) {
@@ -9309,4 +9340,54 @@ input[type="date"].num-en,
   .ag-field-row {
     grid-template-columns: 1fr;
   }
+}
+
+.edari-modal-root {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.edari-modal-root.hidden {
+  display: none !important;
+}
+
+.edari-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.edari-modal-card {
+  position: relative;
+  width: min(420px, 100%);
+  background: #fff;
+  border-radius: 16px;
+  padding: 22px 20px 16px;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.28);
+  border: 1px solid #e2e8f0;
+}
+
+.edari-modal-msg {
+  margin: 0 0 18px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.7;
+  color: #0f172a;
+  white-space: pre-wrap;
+}
+
+.edari-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.rcv-input,
+.rcv-textarea,
+.rcv-money-input {
+  caret-color: currentColor;
 }

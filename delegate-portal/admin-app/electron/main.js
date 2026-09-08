@@ -1,10 +1,28 @@
-const { app, BrowserWindow, Menu, ipcMain, Tray, nativeImage, dialog } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, Tray, nativeImage, dialog, protocol, net } = require('electron');
 const { spawn, execFile } = require('child_process');
 const { promisify } = require('util');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const http = require('http');
 const https = require('https');
 const fs = require('fs');
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'edari-ui',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true
+    }
+  }
+]);
+app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
 const { createBackgroundSync } = require('./background-sync');
 const { startStaticAdmin } = require('./static-admin');
 const appMode = require('./app-mode');
@@ -156,10 +174,37 @@ function getAdminUiIndexPath() {
   return '';
 }
 
+let adminUiProtocolRegistered = false;
+
+function registerAdminUiProtocol() {
+  if (adminUiProtocolRegistered) return;
+  const indexPath = getAdminUiIndexPath();
+  const adminRoot = path.normalize(
+    indexPath ? path.dirname(indexPath) : path.join(getPortalDir(), 'public', 'admin')
+  );
+  protocol.handle('edari-ui', (request) => {
+    try {
+      const u = new URL(request.url);
+      let pathname = decodeURIComponent(u.pathname || '/');
+      if (!pathname || pathname === '/') pathname = '/index.html';
+      const file = path.normalize(path.join(adminRoot, pathname.replace(/^[/\\]+/, '')));
+      const rootWithSep = adminRoot.endsWith(path.sep) ? adminRoot : adminRoot + path.sep;
+      if (file !== adminRoot && !file.startsWith(rootWithSep)) {
+        return new Response('Forbidden', { status: 403 });
+      }
+      return net.fetch(pathToFileURL(file).toString());
+    } catch (err) {
+      return new Response(String(err.message || err), { status: 404 });
+    }
+  });
+  adminUiProtocolRegistered = true;
+}
+
 function getAdminLoadTarget() {
+  if (getAdminUiIndexPath() || adminUiProtocolRegistered) {
+    return { type: 'ui-protocol' };
+  }
   if (ADMIN_LAN_CLIENT) {
-    const file = getAdminUiIndexPath();
-    if (file) return { type: 'file', file };
     return { type: 'url', url: `http://127.0.0.1:${CLIENT_UI_PORT}/admin/` };
   }
   if (USE_BUNDLED_UI) {
@@ -174,6 +219,7 @@ function getAdminLoadTarget() {
 function loadAdminUi(win) {
   if (!win || win.isDestroyed()) return Promise.resolve();
   const target = getAdminLoadTarget();
+  if (target.type === 'ui-protocol') return win.loadURL('edari-ui://admin/index.html');
   if (target.type === 'file') return win.loadFile(target.file);
   if (target.type === 'url' && target.url) return win.loadURL(target.url);
   const html = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>Edari Admin Client</title>
@@ -918,6 +964,9 @@ function createWindow({ show = !START_HIDDEN } = {}) {
     default: 'Edari Admin — لوحة التحكم'
   };
   const isSetup = false;
+  const adminTarget = getAdminLoadTarget();
+  const localEdariHost = `http://127.0.0.1:${PORT}`;
+  const edariHostArg = EDARI_HOST_URL || (LAN_SERVER ? localEdariHost : DEFAULT_EDARI_HOST_URL);
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 920,
@@ -927,16 +976,19 @@ function createWindow({ show = !START_HIDDEN } = {}) {
     title: titles[appMode.mode] || titles.default,
     icon: getAppIcon(),
     backgroundColor: '#f0f4f8',
+    autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      spellcheck: false,
+      backgroundThrottling: false,
       preload: path.join(__dirname, 'preload.js'),
       additionalArguments: [
         `--edari-backend=${BACKEND_URL}`,
         `--edari-remote=${USE_REMOTE_UI ? '1' : '0'}`,
         `--edari-lan-client=${ADMIN_LAN_CLIENT ? '1' : '0'}`,
-        `--edari-api-same-origin=${USE_LOCAL_SERVER ? '1' : '0'}`,
-        `--edari-host=${EDARI_HOST_URL || DEFAULT_EDARI_HOST_URL}`,
+        `--edari-api-same-origin=0`,
+        `--edari-host=${edariHostArg}`,
         `--edari-data-backend=${DATA_BACKEND_URL || BACKEND_URL || REMOTE_DATA_URL}`
       ]
     }
@@ -947,25 +999,30 @@ function createWindow({ show = !START_HIDDEN } = {}) {
     pushAutoSyncState(backgroundSync?.getState() || {});
   });
 
-  if (ADMIN_LAN_CLIENT) {
-    void loadAdminUi(mainWindow);
-  } else {
-    const target = getAdminLoadTarget();
-    if (target.type === 'setup') {
-      mainWindow.loadFile(path.join(__dirname, 'lan-setup.html'));
-    } else if (target.type === 'file') {
-      mainWindow.loadFile(target.file);
-    } else {
-      mainWindow.loadURL(target.url);
-    }
-  }
+  void loadAdminUi(mainWindow);
 
-  if (!USE_BUNDLED_UI && !ADMIN_LAN_CLIENT) {
-    mainWindow.webContents.on('did-fail-load', (_e, code, _desc, url, isMainFrame) => {
-      if (!isMainFrame || code === -3) return;
-      void recoverLanClientConnection(url);
-    });
-  }
+  try {
+    Menu.setApplicationMenu(null);
+    mainWindow.setMenuBarVisibility(false);
+    mainWindow.webContents.setIgnoreMenuShortcuts(true);
+  } catch { /* ignore */ }
+
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return;
+    if (input.key === 'F5') {
+      event.preventDefault();
+      mainWindow.reload();
+      return;
+    }
+    if (input.key === 'F12' || (input.control && input.shift && String(input.key || '').toLowerCase() === 'i')) {
+      event.preventDefault();
+      mainWindow.webContents.toggleDevTools();
+    }
+  });
+
+  mainWindow.on('focus', () => {
+    try { mainWindow.webContents.setIgnoreMenuShortcuts(true); } catch { /* ignore */ }
+  });
 
   mainWindow.on('close', (e) => {
     if (!appIsQuitting) {
@@ -973,79 +1030,6 @@ function createWindow({ show = !START_HIDDEN } = {}) {
       mainWindow.hide();
     }
   });
-
-  Menu.setApplicationMenu(Menu.buildFromTemplate([
-    {
-      label: 'ملف',
-      submenu: [
-        { label: 'إظهار النافذة', click: () => showMainWindow() },
-        { label: 'تحديث', accelerator: 'F5', click: () => mainWindow?.reload() },
-        { type: 'separator' },
-        {
-          label: 'إنهاء',
-          click: () => {
-            appIsQuitting = true;
-            app.quit();
-          }
-        }
-      ]
-    },
-    {
-      label: 'مزامنة',
-      submenu: [
-        {
-          label: 'رفع الآن',
-          click: () => { void refreshBackgroundSyncFromUi().then(() => backgroundSync?.runNow()); }
-        },
-        {
-          label: 'صفحة رفع البيانات',
-          click: () => {
-            showMainWindow();
-            mainWindow?.webContents.executeJavaScript(`
-              document.querySelector('.nav-item[data-page="sync"]')?.click();
-            `);
-          }
-        }
-      ]
-    },
-    { label: 'عرض', submenu: [{ role: 'reload' }, { role: 'toggleDevTools' }] },
-    ...(ADMIN_LAN_CLIENT ? [{
-      label: 'الاتصال',
-      submenu: [
-        {
-          label: 'إعادة البحث عن السيرفر',
-          accelerator: 'CmdOrCtrl+Shift+R',
-          click: async () => {
-            EDARI_HOST_URL = await pickEdariHost();
-            saveLanClientBackendUrl(EDARI_HOST_URL);
-            DATA_BACKEND_URL = await pickDataBackend();
-            BACKEND_URL = DATA_BACKEND_URL || REMOTE_DATA_URL;
-            await prepareLanClientUiUrl();
-            recreateAdminWindow();
-            dialog.showMessageBox({
-              type: EDARI_HOST_URL ? 'info' : 'warning',
-              title: 'حالة الاتصال',
-              message: [
-                EDARI_HOST_URL
-                  ? `الجهاز الرئيسي (Edari): ${EDARI_HOST_URL}`
-                  : 'لم يُعثر على الجهاز الرئيسي.\nتأكد من تشغيل «Edari Admin Server» وتوصيل كابل الشبكة.',
-                DATA_BACKEND_URL
-                  ? `مصدر البيانات: ${DATA_BACKEND_URL}`
-                  : 'سيرفر الإنترنت غير متاح — سيتم عرض بيانات الجهاز الرئيسي فقط.'
-              ].join('\n')
-            });
-          }
-        },
-        {
-          label: 'تغيير عنوان الجهاز الرئيسي',
-          accelerator: 'CmdOrCtrl+Shift+L',
-          click: () => {
-            mainWindow?.loadFile(path.join(__dirname, 'lan-setup.html'));
-          }
-        }
-      ]
-    }] : [])
-  ]));
 }
 
 function runFetchEdariMaterialsScript() {
@@ -1320,6 +1304,21 @@ function notifyLanServerReady() {
   } catch { /* ignore */ }
 }
 
+function recoverWindowKeyboardFocus(win) {
+  const target = win || mainWindow;
+  if (!target || target.isDestroyed()) return;
+  try {
+    if (target.isMinimized()) target.restore();
+    target.show();
+    target.focus();
+  } catch { /* ignore */ }
+}
+
+ipcMain.handle('focus-window', (event) => {
+  recoverWindowKeyboardFocus(BrowserWindow.fromWebContents(event.sender) || mainWindow);
+  return { ok: true };
+});
+
 ipcMain.handle('probe-backend-health', async (_e, url) => {
   const target = normalizeBackendUrl(url || DATA_BACKEND_URL || BACKEND_URL || REMOTE_DATA_URL);
   if (!target) return { ok: false, url: '' };
@@ -1347,7 +1346,7 @@ ipcMain.handle('lan-client:get-host', () => ({
   defaultUrl: DEFAULT_EDARI_HOST_URL
 }));
 
-ipcMain.handle('lan-client:request', async (_e, payload = {}) => {
+ipcMain.handle('lan-client:request', async (event, payload = {}) => {
   const reqPath = String(payload.path || '');
   if (!reqPath.startsWith('/api/admin/')) {
     return { ok: false, error: 'مسار غير مسموح' };
@@ -1367,6 +1366,10 @@ ipcMain.handle('lan-client:request', async (_e, payload = {}) => {
     return data && typeof data === 'object' ? data : { ok: true, data };
   } catch (err) {
     return { ok: false, error: err.message || 'تعذّر الاتصال بالجهاز الرئيسي' };
+  } finally {
+    if (String(payload.path || '').includes('/edari/post-')) {
+      recoverWindowKeyboardFocus(BrowserWindow.fromWebContents(event.sender) || mainWindow);
+    }
   }
 });
 
@@ -1743,48 +1746,56 @@ ipcMain.handle('search-edari-accounts', async (_e, params) => {
   }
 });
 
-ipcMain.handle('post-edari-receipt', async (_e, payload) => {
+ipcMain.handle('post-edari-receipt', async (event, payload) => {
   const key = edariPostingKey('receipt', payload || {});
-  return runEdariPostingJob(key, async () => {
-    try {
-      Object.assign(process.env, { EDARI_READER_ROOT: getEdariReaderRoot() }, edariEnvExtra());
-      const portalDir = getPortalDir();
-      const postingPath = path.join(portalDir, 'lib', 'receipt-posting.js');
-      const postPath = path.join(portalDir, 'sync-client', 'post-receipt.js');
-      for (const modPath of [postingPath, postPath]) {
-        try {
-          delete require.cache[require.resolve(modPath)];
-        } catch (_) {}
+  try {
+    return await runEdariPostingJob(key, async () => {
+      try {
+        Object.assign(process.env, { EDARI_READER_ROOT: getEdariReaderRoot() }, edariEnvExtra());
+        const portalDir = getPortalDir();
+        const postingPath = path.join(portalDir, 'lib', 'receipt-posting.js');
+        const postPath = path.join(portalDir, 'sync-client', 'post-receipt.js');
+        for (const modPath of [postingPath, postPath]) {
+          try {
+            delete require.cache[require.resolve(modPath)];
+          } catch (_) {}
+        }
+        const { postReceiptToEdari } = require(postPath);
+        const result = await postReceiptToEdari(payload || {});
+        return { ok: true, ...result };
+      } catch (err) {
+        return { ok: false, error: err.message || 'فشل ترحيل سند القبض إلى الإداري' };
       }
-      const { postReceiptToEdari } = require(postPath);
-      const result = await postReceiptToEdari(payload || {});
-      return { ok: true, ...result };
-    } catch (err) {
-      return { ok: false, error: err.message || 'فشل ترحيل سند القبض إلى الإداري' };
-    }
-  });
+    });
+  } finally {
+    recoverWindowKeyboardFocus(BrowserWindow.fromWebContents(event.sender) || mainWindow);
+  }
 });
 
-ipcMain.handle('post-edari-customer', async (_e, payload) => {
+ipcMain.handle('post-edari-customer', async (event, payload) => {
   const key = edariPostingKey('customer', payload || {});
-  return runEdariPostingJob(key, async () => {
-    try {
-      Object.assign(process.env, { EDARI_READER_ROOT: getEdariReaderRoot() }, edariEnvExtra());
-      const portalDir = getPortalDir();
-      const postingPath = path.join(portalDir, 'lib', 'customer-posting.js');
-      const postPath = path.join(portalDir, 'sync-client', 'post-customer.js');
-      for (const modPath of [postingPath, postPath]) {
-        try {
-          delete require.cache[require.resolve(modPath)];
-        } catch (_) {}
+  try {
+    return await runEdariPostingJob(key, async () => {
+      try {
+        Object.assign(process.env, { EDARI_READER_ROOT: getEdariReaderRoot() }, edariEnvExtra());
+        const portalDir = getPortalDir();
+        const postingPath = path.join(portalDir, 'lib', 'customer-posting.js');
+        const postPath = path.join(portalDir, 'sync-client', 'post-customer.js');
+        for (const modPath of [postingPath, postPath]) {
+          try {
+            delete require.cache[require.resolve(modPath)];
+          } catch (_) {}
+        }
+        const { postCustomerToEdari } = require(postPath);
+        const result = await postCustomerToEdari(payload || {});
+        return { ok: true, ...result };
+      } catch (err) {
+        return { ok: false, error: err.message || 'فشل ترحيل الزبون إلى الإداري' };
       }
-      const { postCustomerToEdari } = require(postPath);
-      const result = await postCustomerToEdari(payload || {});
-      return { ok: true, ...result };
-    } catch (err) {
-      return { ok: false, error: err.message || 'فشل ترحيل الزبون إلى الإداري' };
-    }
-  });
+    });
+  } finally {
+    recoverWindowKeyboardFocus(BrowserWindow.fromWebContents(event.sender) || mainWindow);
+  }
 });
 
 function showStartupError(err) {
@@ -1825,6 +1836,7 @@ function showStartupError(err) {
 
 app.whenReady().then(async () => {
   try {
+    registerAdminUiProtocol();
     process.env.DATABASE_PATH = getDatabasePath();
     if (USE_LOCAL_SERVER || USE_BUNDLED_UI) {
       if (USE_LOCAL_SERVER) warnIfNodeBundleMissing();
@@ -1844,6 +1856,9 @@ app.whenReady().then(async () => {
     } else {
       DATA_BACKEND_URL = await pickDataBackend();
       BACKEND_URL = DATA_BACKEND_URL || REMOTE_DATA_URL;
+      if (LAN_SERVER) {
+        EDARI_HOST_URL = EDARI_HOST_URL || `http://127.0.0.1:${PORT}`;
+      }
     }
     if (!USE_LOCAL_SERVER && !USE_BUNDLED_UI && !ADMIN_LAN_CLIENT) {
       await checkHealth(BACKEND_URL);

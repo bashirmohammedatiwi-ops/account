@@ -15,6 +15,7 @@ const base = {
   backendUrl,
   useRemote: readLaunchArg('edari-remote', LAN_CLIENT ? '1' : '0') !== '0',
   apiSameOrigin: readLaunchArg('edari-api-same-origin', '0') === '1',
+  focusWindow: () => ipcRenderer.invoke('focus-window'),
   // LAN machine that owns Edari — empty when this machine owns it itself.
   edariHostUrl: readLaunchArg('edari-host', LAN_CLIENT ? 'http://192.168.75.1:4100' : '').replace(/\/$/, ''),
   defaultEdariHostUrl: 'http://192.168.75.1:4100',

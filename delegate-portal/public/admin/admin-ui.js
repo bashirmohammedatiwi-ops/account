@@ -12,6 +12,7 @@ const SECTION_TONES = {
 let _pageSwitchGen = 0;
 let _cmdkIndex = 0;
 let _cmdkItems = [];
+let _lastTextField = null;
 
 function waitMs(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -76,49 +77,22 @@ function setWorkspaceTone(sectionId) {
 }
 
 async function switchAdminPage(name, meta) {
-  const gen = ++_pageSwitchGen;
   const next = document.getElementById(`page-${name}`);
-  const current = document.querySelector('.page.active');
   if (!next) return;
 
-  showPageLoadingBar(true);
   const viewport = document.getElementById('pageViewport');
-  if (viewport) viewport.classList.add('is-switching');
-
-  if (current && current !== next) {
-    current.classList.add('is-leaving');
-    current.setAttribute('aria-hidden', 'true');
-    await waitMs(120);
-    if (gen !== _pageSwitchGen) return;
-    current.classList.remove('active', 'is-leaving');
-  } else if (current === next) {
-    animateTopbar(meta, name);
-    showPageLoadingBar(false);
-    if (viewport) viewport.classList.remove('is-switching');
-    return;
-  }
+  if (viewport) viewport.classList.remove('is-switching');
+  showPageLoadingBar(false);
 
   document.querySelectorAll('.page').forEach((p) => {
-    if (p !== next) {
-      p.classList.remove('active', 'is-leaving', 'is-entering', 'is-settled');
-      p.setAttribute('aria-hidden', 'true');
-    }
+    const on = p === next;
+    p.classList.toggle('active', on);
+    p.classList.remove('is-leaving', 'is-entering', 'is-settled');
+    p.setAttribute('aria-hidden', on ? 'false' : 'true');
   });
 
-  next.classList.add('active', 'is-entering');
-  next.setAttribute('aria-hidden', 'false');
-  void next.offsetWidth;
-  next.classList.remove('is-entering');
-
-  scrollMainToTop(true);
+  scrollMainToTop(false);
   animateTopbar(meta, name);
-
-  await waitMs(300);
-  if (gen !== _pageSwitchGen) return;
-  showPageLoadingBar(false);
-  if (viewport) viewport.classList.remove('is-switching');
-  next.classList.add('is-settled');
-  window.setTimeout(() => next.classList.remove('is-settled'), 400);
 }
 
 function closeMobileSidebarIfOpen() {
@@ -254,7 +228,107 @@ function initSidebarNavFilter() {
   });
 }
 
+function isTextEntryTarget(el) {
+  if (!el || el === document.body || el === document.documentElement) return false;
+  if (el.isContentEditable) return true;
+  const tag = String(el.tagName || '').toUpperCase();
+  if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (tag !== 'INPUT') return false;
+  const type = String(el.type || 'text').toLowerCase();
+  return !['button', 'submit', 'reset', 'checkbox', 'radio', 'file', 'range', 'color', 'hidden', 'image'].includes(type);
+}
+
+function rememberTextField(el) {
+  if (isTextEntryTarget(el)) _lastTextField = el;
+}
+
+function restoreFieldFocus(field) {
+  if (!field || !document.contains(field) || field.disabled || field.readOnly) return false;
+  try {
+    field.focus({ preventScroll: true });
+    return document.activeElement === field;
+  } catch {
+    return false;
+  }
+}
+
+function clearStuckUiState() {
+  const viewport = document.getElementById('pageViewport');
+  if (viewport) viewport.classList.remove('is-switching');
+
+  const cmdk = document.getElementById('cmdk');
+  if (!cmdk || cmdk.hidden || cmdk.classList.contains('hidden')) {
+    document.body.classList.remove('cmdk-open');
+  }
+}
+
+function ensureEdariModalRoot() {
+  let root = document.getElementById('edariModalRoot');
+  if (root) return root;
+  root = document.createElement('div');
+  root.id = 'edariModalRoot';
+  root.className = 'edari-modal-root hidden';
+  root.innerHTML = `
+    <div class="edari-modal-backdrop" data-edari-modal-cancel></div>
+    <div class="edari-modal-card" role="dialog" aria-modal="true" aria-labelledby="edariModalMsg">
+      <p id="edariModalMsg" class="edari-modal-msg"></p>
+      <div class="edari-modal-actions">
+        <button type="button" class="btn btn-primary" data-edari-modal-ok>تأكيد</button>
+        <button type="button" class="btn btn-soft" data-edari-modal-cancel>إلغاء</button>
+      </div>
+    </div>`;
+  document.body.appendChild(root);
+  return root;
+}
+
+function edariConfirm(message) {
+  return new Promise((resolve) => {
+    const root = ensureEdariModalRoot();
+    const msg = root.querySelector('#edariModalMsg');
+    if (msg) msg.textContent = String(message || '');
+    root.classList.remove('hidden');
+    let done = false;
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      root.classList.add('hidden');
+      root.removeEventListener('click', onClick);
+      document.removeEventListener('keydown', onKey);
+      resolve(Boolean(ok));
+    };
+    const onClick = (e) => {
+      if (e.target.closest('[data-edari-modal-ok]')) finish(true);
+      else if (e.target.closest('[data-edari-modal-cancel]')) finish(false);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        finish(false);
+      }
+    };
+    root.addEventListener('click', onClick);
+    document.addEventListener('keydown', onKey);
+    window.setTimeout(() => root.querySelector('[data-edari-modal-ok]')?.focus(), 0);
+  });
+}
+
+function recoverUiFocus() {
+  clearStuckUiState();
+}
+
+function installNativeDialogFocusFix() {
+  window.__edariDialogFocusFix = true;
+}
+
+function installInputFocusGuards() {
+  if (window.__edariInputFocusGuards) return;
+  window.__edariInputFocusGuards = true;
+  document.addEventListener('focusin', (e) => rememberTextField(e.target), true);
+}
+
 function initAdminUi() {
+  installNativeDialogFocusFix();
+  installInputFocusGuards();
   document.getElementById('btnTopbarBack')?.addEventListener('click', () => {
     if (typeof showPage === 'function') showPage('dashboard');
   });
@@ -295,6 +369,11 @@ window.updateTopbarIcon = updateTopbarIcon;
 window.setWorkspaceTone = setWorkspaceTone;
 window.scrollMainToTop = scrollMainToTop;
 window.initAdminUi = initAdminUi;
+window.recoverUiFocus = recoverUiFocus;
+window.edariConfirm = edariConfirm;
+window.isTextEntryTarget = isTextEntryTarget;
 window.openCmdk = openCmdk;
 window.dashGreeting = dashGreeting;
 window.SECTION_TONES = SECTION_TONES;
+
+installNativeDialogFocusFix();

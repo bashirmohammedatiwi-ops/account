@@ -203,7 +203,9 @@ function upsertEdariProducts(products = []) {
       const barcode = normalizeBarcode(row.barcode);
       if (!barcode) continue;
       const edariName = normalizeProductName(row.name) || null;
-      const name = mergeProductName(barcode, row.product_num, edariName) || edariName;
+      const name = edariName
+        ? (mergeProductName(barcode, row.product_num, edariName) || edariName)
+        : null;
       const stockBalance = row.stock_balance != null && Number.isFinite(Number(row.stock_balance))
         ? Number(row.stock_balance)
         : null;
@@ -214,7 +216,7 @@ function upsertEdariProducts(products = []) {
       stmt.run({
         barcode,
         name,
-        edari_name: edariName || name,
+        edari_name: edariName,
         stock_balance: stockBalance,
         edari_synced_at: now,
       });
@@ -316,10 +318,11 @@ function upsertPosItems(items = []) {
       } else {
         pricing = pricingFromSyncItem(item);
       }
-      const name = mergeProductName(barcode, item.productNum, item.name)
+      let name = mergeProductName(barcode, item.productNum, item.name)
         || lookupCatalogName(barcode, item.productNum)
         || normalizeProductName(item.name)
         || null;
+      if (name && looksGarbled(name)) name = null;
       if (name) {
         cacheEdariMaterial({ barcode, product_num: item.productNum, name });
       }
@@ -551,7 +554,10 @@ function getProductByBarcode(barcode) {
       /* ignore */
     }
   }
-  const movements = getProductMovements(mapped.barcode, { limit: 30 });
+  const movements = getProductMovements(mapped.barcode, {
+    limit: 30,
+    extraBarcodes: [mapped.productNum, row.productNum],
+  });
   return {
     barcode: mapped.barcode,
     name: safeName || mapped.barcode,
@@ -580,17 +586,20 @@ function getProductByBarcode(barcode) {
   };
 }
 
-function getProductMovements(barcode, { limit = 50 } = {}) {
-  const code = normalizeBarcode(barcode);
-  if (!code) return [];
+function getProductMovements(barcode, { limit = 50, extraBarcodes = [] } = {}) {
+  const codes = [normalizeBarcode(barcode), ...extraBarcodes.map((c) => normalizeBarcode(c))]
+    .filter(Boolean);
+  const unique = [...new Set(codes)];
+  if (!unique.length) return [];
+  const placeholders = unique.map(() => '?').join(',');
   return db.prepare(`
     SELECT supplier, invoice, quantity, unit_price AS unitPrice,
            total_price AS totalPrice, move_date AS date
     FROM price_movements
-    WHERE barcode = ?
+    WHERE barcode IN (${placeholders})
     ORDER BY move_date DESC, id DESC
     LIMIT ?
-  `).all(code, Math.min(200, Math.max(1, Number(limit) || 50)));
+  `).all(...unique, Math.min(200, Math.max(1, Number(limit) || 50)));
 }
 
 function importEdariBatch({ products = [], movements = [] } = {}) {

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="admin.css?v=20260826col1">
+  <link rel="stylesheet" href="admin.css?v=20260908ime1">
   <link rel="stylesheet" href="admin-agents.css?v=20260902agents6">
   <link rel="stylesheet" href="admin-pro.css?v=20260902pro2">
   <link rel="stylesheet" href="admin-lan.css?v=20260906lan3">
@@ -1049,7 +1049,7 @@
           <div class="sync-hero panel panel-accent">
             <div class="sync-hero-text">
               <h2>مزامنة الأسعار — تطبيق الويب</h2>
-              <p>من Edari: أسماء المواد، الرصيد، وحركات المشتريات. من POS: السعر الأصلي، نسبة الخصم، والسعر النهائي — تُرفع تلقائياً عند «تحديث الأسعار» أو «إعادة مزامنة كاملة».</p>
+              <p>من POS: الاسم العربي، السعر الأصلي، الخصم، والسعر النهائي. من Edari: الرصيد وحركات المشتريات. الأسماء الجديدة تُرفع بترميز عربي عند كل «تحديث الأسعار».</p>
               <p class="muted">واجهة الأسعار: <a href="https://demaalhayaadelivery.online/price/" target="_blank" rel="noopener">demaalhayaadelivery.online/price/</a></p>
               <p class="muted" id="priceSyncLastResult">—</p>
             </div>
@@ -1077,8 +1077,9 @@
               <div class="form-stack">
                 <ul class="simple-list">
                   <li>Edari: حركات مشتريات Kind=1/3، أسماء المواد، الرصيد (InTot − OutTot)</li>
+                  <li>حركات الشراء تُربط بباركود POS (وليس رقم المادة فقط) حتى المنتجات الجديدة تظهر مشترياتها</li>
                   <li>POS (SQL Server): SellPr4 أصلي، offer_details.discount، SellPr5 نهائي</li>
-                  <li>زر التحديث يرفع Edari ثم أسعار POS إلى الويب في خطوة واحدة</li>
+                  <li>زر التحديث يرفع أسعار POS والأسماء ثم تفاصيل Edari إلى الويب</li>
                   <li>أول مزامنة Edari: كل البيانات — بعدها تحديثات جزئية فقط</li>
                 </ul>
                 <p class="field-hint" id="priceSyncModeHint">—</p>
@@ -1798,15 +1799,15 @@
   <script src="admin-lan-connection.js?v=20260906lan3"></script>
   <script src="admin-shared-state.js?v=20260903price4"></script>
   <script src="admin-edari-bridge.js?v=20260906lan3"></script>
-  <script src="admin-ui.js?v=20260902pro1"></script>
+  <script src="admin-ui.js?v=20260908ime1"></script>
   <script src="admin.js?v=20260906lan3"></script>
   <script src="admin-shell.js?v=20260826col1"></script>
   <script src="admin-commerce.js?v=20260826col1"></script>
   <script src="admin-collection-kit.js?v=20260901post1"></script>
   <script src="admin-agents.js?v=20260902agents6"></script>
-  <script src="admin-receipts.js?v=20260906lan4"></script>
+  <script src="admin-receipts.js?v=20260908ime1"></script>
   <script src="admin-delivery-receipts.js?v=20260826col1"></script>
-  <script src="admin-customers.js?v=20260906lan4"></script>
+  <script src="admin-customers.js?v=20260908ime1"></script>
   <script src="admin-promotional-visits.js?v=20260826col1"></script>
   <script src="admin-thermal-template.js?v=20260824thermal8"></script>
   <script src="admin-sales-report.js?v=20260903price4"></script>
