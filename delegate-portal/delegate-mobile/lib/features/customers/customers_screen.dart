@@ -37,6 +37,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   }
 
   Future<void> _submit() async {
+    if (_submitting) return;
     if (_tree == null) {
       _snack('اختر الشجرة التي يُضاف لها الزبون');
       return;

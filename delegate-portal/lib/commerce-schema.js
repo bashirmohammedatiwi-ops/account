@@ -160,6 +160,7 @@ function migrateCommerceSchema(db) {
   migratePromotionalVisits(db);
   migrateDeliveryReceipts(db);
   migrateAgentHierarchy(db);
+  migrateClientRequestIds(db);
   const branchCount = db.prepare('SELECT COUNT(*) AS c FROM catalog_branches').get().c;
   if (!branchCount) {
     db.prepare(`
@@ -462,6 +463,45 @@ function migrateAgentHierarchy(db) {
   `);
 }
 
+/** Idempotency keys so retries / double taps never create a second order or receipt. */
+function migrateClientRequestIds(db) {
+  if (!columnExists(db, 'orders', 'client_request_id')) {
+    try {
+      db.exec('ALTER TABLE orders ADD COLUMN client_request_id TEXT');
+    } catch { /* exists */ }
+  }
+  if (!columnExists(db, 'delivery_receipts', 'client_request_id')) {
+    try {
+      db.exec('ALTER TABLE delivery_receipts ADD COLUMN client_request_id TEXT');
+    } catch { /* exists */ }
+  }
+  if (!columnExists(db, 'receipts', 'client_request_id')) {
+    try {
+      db.exec('ALTER TABLE receipts ADD COLUMN client_request_id TEXT');
+    } catch { /* exists */ }
+  }
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_agent_client_req
+      ON orders(agent_id, client_request_id)
+      WHERE client_request_id IS NOT NULL AND client_request_id != ''
+  `);
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_delivery_agent_client_req
+      ON delivery_receipts(agent_id, client_request_id)
+      WHERE client_request_id IS NOT NULL AND client_request_id != ''
+  `);
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_agent_client_req
+      ON receipts(agent_id, client_request_id)
+      WHERE client_request_id IS NOT NULL AND client_request_id != ''
+  `);
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_delivery_link
+      ON receipts(delivery_receipt_id)
+      WHERE delivery_receipt_id IS NOT NULL
+  `);
+}
+
 module.exports = {
   migrateCommerceSchema,
   migrateShorjaOrderFields,
@@ -469,5 +509,6 @@ module.exports = {
   migrateCustomerRequests,
   migratePromotionalVisits,
   migrateDeliveryReceipts,
-  migrateAgentHierarchy
+  migrateAgentHierarchy,
+  migrateClientRequestIds
 };

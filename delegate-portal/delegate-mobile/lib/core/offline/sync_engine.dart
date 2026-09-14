@@ -62,9 +62,21 @@ class SyncEngine {
   SyncEngine(this._ref);
 
   final Ref _ref;
+  Future<void>? _syncInFlight;
 
   Future<void> syncPending() async {
     if (!_ref.read(connectivityProvider).isOnline) return;
+    if (_syncInFlight != null) return _syncInFlight!;
+    final run = _syncPendingImpl();
+    _syncInFlight = run;
+    try {
+      await run;
+    } finally {
+      if (identical(_syncInFlight, run)) _syncInFlight = null;
+    }
+  }
+
+  Future<void> _syncPendingImpl() async {
     final notifier = _ref.read(syncStatusProvider.notifier);
     notifier.setSyncing(true);
     try {
@@ -154,13 +166,16 @@ class SyncEngine {
     switch (entry.entityType) {
       case 'order':
         final body = entry.body!;
-        await api.submitOrder(
+        final clientRequestId = '${body['clientRequestId'] ?? entry.id}';
+        final order = await api.submitOrder(
           customerAccSeq: body['customerAccSeq'] as String?,
           customerRequestId: body['customerRequestId'] as int?,
           catalogBranchId: body['catalogBranchId'] as int,
           notes: body['notes'] as String?,
           lines: _parseOrderLines(body['lines'] as List),
+          clientRequestId: clientRequestId,
         );
+        await _ref.read(apiClientProvider).applyServerOrderAfterSubmit(order, clientRequestId);
         return;
       case 'order_delete':
         await api.deleteOrder(_idFromPath(entry.path));
@@ -176,6 +191,7 @@ class SyncEngine {
           discount: body['discount'] as num? ?? 0,
           notes: body['notes'] as String?,
           deliveryReceiptId: body['deliveryReceiptId'] as int?,
+          clientRequestId: body['clientRequestId'] as String? ?? entry.id,
         );
         return;
       case 'receipt_delete':
@@ -189,6 +205,7 @@ class SyncEngine {
           treeName: '${body['treeName']}',
           amount: body['amount'] as num,
           notes: body['notes'] as String?,
+          clientRequestId: body['clientRequestId'] as String? ?? entry.id,
         );
         return;
       case 'delivery_delete':
@@ -265,6 +282,7 @@ class SyncEngine {
     if (entry.entityType == 'receipt' && (msg.contains('مسبق') || msg.contains('مسبقاً'))) return true;
     if (entry.entityType == 'delivery_receipt' && msg.contains('مسبق')) return true;
     if (entry.entityType == 'delivery_printed') return true;
+    if (entry.entityType == 'order' && (msg.contains('client_request') || msg.contains('مسبق'))) return true;
     return false;
   }
 

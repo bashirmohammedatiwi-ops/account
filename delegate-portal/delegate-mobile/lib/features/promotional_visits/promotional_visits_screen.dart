@@ -38,6 +38,7 @@ class _PromotionalVisitsScreenState extends ConsumerState<PromotionalVisitsScree
   }
 
   Future<void> _submit() async {
+    if (_submitting) return;
     if (_governorate == null) {
       _snack('اختر المحافظة');
       return;

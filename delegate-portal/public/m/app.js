@@ -513,6 +513,11 @@ function openHomeApp(app) {
   else if (app === 'reports') goToScreen('reports');
 }
 
+function clientRequestId() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  return `cr-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 function setOverlay(open) {
   document.getElementById('overlay').classList.toggle('hidden', !open);
 }

@@ -87,6 +87,7 @@ async function deleteMyCustomerReq(id) {
 
 async function submitCustomerRequest(e) {
   e.preventDefault();
+  if (submitCustomerRequest._busy) return;
   const treeSel = document.getElementById('newCustomerTree');
   const name = document.getElementById('newCustomerName')?.value?.trim();
   if (!treeSel?.value) {
@@ -98,6 +99,8 @@ async function submitCustomerRequest(e) {
     return;
   }
   const tree = (state.trees || []).find((t) => String(t.seq) === String(treeSel.value));
+  submitCustomerRequest._busy = true;
+  setOverlay(true);
   try {
     await api('/customer-requests', {
       method: 'POST',
@@ -107,7 +110,8 @@ async function submitCustomerRequest(e) {
         name,
         phone: document.getElementById('newCustomerPhone')?.value || '',
         address: document.getElementById('newCustomerAddress')?.value || '',
-        notes: document.getElementById('newCustomerNotes')?.value || ''
+        notes: document.getElementById('newCustomerNotes')?.value || '',
+        clientRequestId: typeof clientRequestId === 'function' ? clientRequestId() : `cr-${Date.now()}`
       })
     });
     resetCustomerForm();
@@ -115,6 +119,9 @@ async function submitCustomerRequest(e) {
     alert('أُرسل الطلب للوحة التحكم للمراجعة قبل الترحيل');
   } catch (err) {
     alert(err.message || 'تعذر إرسال الطلب');
+  } finally {
+    submitCustomerRequest._busy = false;
+    setOverlay(false);
   }
 }
 

@@ -48,6 +48,42 @@ List<OrderInvoiceLineData> buildOrderInvoiceLines(List<Product> products, Map<in
   return lines;
 }
 
+/// بناء بنود الفاتورة من المسودة الكاملة — كل أقسام الفرع
+List<OrderInvoiceLineData> buildOrderInvoiceLinesFromCache(
+  Map<int, DraftLine> draft,
+  Map<int, ProductSnapshot> cache,
+) {
+  final lines = <OrderInvoiceLineData>[];
+  for (final entry in draft.entries) {
+    final d = entry.value;
+    if (!draftLineActive(d)) continue;
+    final p = cache[entry.key];
+    if (p == null) continue;
+    lines.add(OrderInvoiceLineData(
+      productId: p.id,
+      matName: p.name,
+      barcode: p.barcode ?? p.skuNum ?? '—',
+      unitPrice: p.price,
+      quant: d.quant,
+      bonus: d.bonus,
+      tester: d.tester,
+    ));
+  }
+  lines.sort((a, b) => a.matName.compareTo(b.matName));
+  return lines;
+}
+
+num draftTotalFromCache(Map<int, DraftLine> draft, Map<int, ProductSnapshot> cache) {
+  num total = 0;
+  for (final entry in draft.entries) {
+    final d = entry.value;
+    if (d.quant <= 0) continue;
+    final p = cache[entry.key];
+    if (p != null) total += d.quant * p.price;
+  }
+  return total;
+}
+
 List<OrderInvoiceLineData> orderLinesToInvoiceData(List<OrderLine> lines) {
   return lines
       .map((l) => OrderInvoiceLineData(

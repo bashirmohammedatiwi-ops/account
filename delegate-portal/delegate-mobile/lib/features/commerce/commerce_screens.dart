@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/auth/auth_session.dart';
 import '../../core/api/delegate_api.dart';
@@ -37,6 +38,36 @@ final catalogProductsProvider = FutureProvider.family<List<Product>, int>((ref, 
   return withAuth(ref, () => ref.read(apiClientProvider).getProducts(sectionId));
 });
 
+const _draftUuid = Uuid();
+
+Future<void> hydrateDraftProductCache(WidgetRef ref, int branchId) async {
+  final notifier = ref.read(invoiceDraftProvider.notifier);
+  final draft = ref.read(invoiceDraftProvider);
+  final needed = draft.entries
+      .where((e) => draftLineActive(e.value) && !notifier.productCache.containsKey(e.key))
+      .map((e) => e.key)
+      .toSet();
+  if (needed.isEmpty) return;
+
+  final sections = await ref.read(catalogSectionsProvider(branchId).future);
+  for (final section in sections) {
+    final products = await ref.read(catalogProductsProvider(section.id).future);
+    for (final product in products) {
+      if (needed.contains(product.id)) notifier.cacheProduct(product);
+    }
+    if (needed.every(notifier.productCache.containsKey)) break;
+  }
+
+  final agentId = ref.read(authProvider).agent?.id;
+  if (agentId != null) await notifier.persist(agentId);
+}
+
+int countMissingDraftProductCache(WidgetRef ref) {
+  final notifier = ref.read(invoiceDraftProvider.notifier);
+  final draft = ref.read(invoiceDraftProvider);
+  return draft.entries.where((e) => draftLineActive(e.value) && !notifier.productCache.containsKey(e.key)).length;
+}
+
 class InvoiceDraftNotifier extends Notifier<Map<int, DraftLine>> {
   int? branchId;
   int? sectionId;
@@ -44,6 +75,8 @@ class InvoiceDraftNotifier extends Notifier<Map<int, DraftLine>> {
   String? sectionName;
   BranchAccount? customer;
   String notes = '';
+  String? pendingClientRequestId;
+  final Map<int, ProductSnapshot> productCache = {};
 
   @override
   Map<int, DraftLine> build() => {};
@@ -58,9 +91,15 @@ class InvoiceDraftNotifier extends Notifier<Map<int, DraftLine>> {
     branchName = data['branchName'] as String?;
     sectionName = data['sectionName'] as String?;
     notes = data['notes'] as String? ?? '';
+    pendingClientRequestId = data['pendingClientRequestId'] as String?;
     final customerJson = data['customer'] as Map<String, dynamic>?;
     if (customerJson != null) {
       customer = BranchAccount.fromJson(customerJson);
+    }
+    productCache.clear();
+    final cacheJson = data['productCache'] as Map<String, dynamic>? ?? {};
+    for (final entry in cacheJson.entries) {
+      productCache[int.parse(entry.key)] = ProductSnapshot.fromJson(entry.value as Map<String, dynamic>);
     }
     final draft = data['draft'] as Map<String, dynamic>? ?? {};
     state = draft.map((k, v) {
@@ -76,12 +115,14 @@ class InvoiceDraftNotifier extends Notifier<Map<int, DraftLine>> {
   Future<void> persist(int agentId) async {
     final prefs = await SharedPreferences.getInstance();
     final draft = state.map((k, v) => MapEntry('$k', {'quant': v.quant, 'bonus': v.bonus, 'tester': v.tester}));
+    final cache = productCache.map((k, v) => MapEntry('$k', v.toJson()));
     await prefs.setString('delegateInvoice:$agentId', jsonEncode({
       'branchId': branchId,
       'sectionId': sectionId,
       'branchName': branchName,
       'sectionName': sectionName,
       'notes': notes,
+      if (pendingClientRequestId != null) 'pendingClientRequestId': pendingClientRequestId,
       'customer': customer == null
           ? null
           : {
@@ -96,7 +137,17 @@ class InvoiceDraftNotifier extends Notifier<Map<int, DraftLine>> {
               if (customer!.pendingLabel != null) 'pendingLabel': customer!.pendingLabel,
             },
       'draft': draft,
+      'productCache': cache,
     }));
+  }
+
+  void cacheProduct(Product product) {
+    productCache[product.id] = ProductSnapshot.fromProduct(product);
+  }
+
+  String clientRequestIdForSubmit() {
+    pendingClientRequestId ??= _draftUuid.v4();
+    return pendingClientRequestId!;
   }
 
   void updateLine(int productId, {num? quant, num? bonus, num? tester}) {
@@ -108,9 +159,11 @@ class InvoiceDraftNotifier extends Notifier<Map<int, DraftLine>> {
       final next = {...state};
       next.remove(productId);
       state = next;
+      productCache.remove(productId);
       return;
     }
     state = {...state, productId: (quant: q, bonus: b, tester: t)};
+    if (pendingClientRequestId == null) pendingClientRequestId = _draftUuid.v4();
   }
 
   void adjustLine(int productId, {required String field, required int delta}) {
@@ -127,8 +180,10 @@ class InvoiceDraftNotifier extends Notifier<Map<int, DraftLine>> {
 
   void clear() {
     state = {};
+    productCache.clear();
     customer = null;
     notes = '';
+    pendingClientRequestId = null;
   }
 }
 
@@ -136,10 +191,9 @@ final invoiceDraftProvider = NotifierProvider<InvoiceDraftNotifier, Map<int, Dra
 
 
 class EdOrderInvoiceSheet extends ConsumerStatefulWidget {
-  const EdOrderInvoiceSheet({super.key, required this.branchId, required this.products});
+  const EdOrderInvoiceSheet({super.key, required this.branchId});
 
   final int branchId;
-  final List<Product> products;
 
   @override
   ConsumerState<EdOrderInvoiceSheet> createState() => _EdOrderInvoiceSheetState();
@@ -192,38 +246,62 @@ class _EdOrderInvoiceSheetState extends ConsumerState<EdOrderInvoiceSheet> {
   }
 
   Future<void> _submit() async {
-    final draftNotifier = ref.read(invoiceDraftProvider.notifier);
-    final customer = draftNotifier.customer;
-    if (customer == null || (!customer.hasPostedAccount && customer.requestId == null)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('اختر الزبون أولاً')));
-      return;
-    }
-    draftNotifier.notes = _notesCtrl.text;
-    final draft = ref.read(invoiceDraftProvider);
-    final lines = <OrderLine>[];
-    for (final p in widget.products) {
-      final d = draft[p.id];
-      if (d == null || !draftLineActive(d)) continue;
-      lines.add(OrderLine(
-        productId: p.id,
-        matName: p.name,
-        quant: d.quant,
-        bonus: d.bonus,
-        tester: d.tester,
-        unitPrice: p.price,
-        barcode: p.barcode ?? p.skuNum,
-      ));
-    }
-    if (lines.isEmpty) return;
+    if (_submitting) return;
+    _submitting = true;
+    if (mounted) setState(() {});
 
-    setState(() => _submitting = true);
     try {
+      final draftNotifier = ref.read(invoiceDraftProvider.notifier);
+      final customer = draftNotifier.customer;
+      if (customer == null || (!customer.hasPostedAccount && customer.requestId == null)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('اختر الزبون أولاً')));
+        }
+        return;
+      }
+
+      draftNotifier.notes = _notesCtrl.text;
+      await hydrateDraftProductCache(ref, widget.branchId);
+      final missing = countMissingDraftProductCache(ref);
+      if (missing > 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('تعذّر تحميل $missing منتج — انتظر قليلاً وحاول مرة أخرى')),
+          );
+        }
+        return;
+      }
+
+      final draft = ref.read(invoiceDraftProvider);
+      final cache = draftNotifier.productCache;
+      final lines = <OrderLine>[];
+      for (final entry in draft.entries) {
+        final d = entry.value;
+        if (!draftLineActive(d)) continue;
+        final p = cache[entry.key];
+        if (p == null) continue;
+        lines.add(OrderLine(
+          productId: p.id,
+          matName: p.name,
+          quant: d.quant,
+          bonus: d.bonus,
+          tester: d.tester,
+          unitPrice: p.price,
+          barcode: p.barcode ?? p.skuNum,
+        ));
+      }
+      if (lines.isEmpty) return;
+
+      final clientRequestId = draftNotifier.clientRequestIdForSubmit();
+      await _persist();
+
       await ref.read(apiClientProvider).submitOrder(
             customerAccSeq: customer.hasPostedAccount ? customer.seq : null,
             customerRequestId: customer.requestId,
             catalogBranchId: widget.branchId,
             notes: draftNotifier.notes,
             lines: lines,
+            clientRequestId: clientRequestId,
           );
       draftNotifier.clear();
       final agentId = ref.read(authProvider).agent?.id;
@@ -240,7 +318,8 @@ class _EdOrderInvoiceSheetState extends ConsumerState<EdOrderInvoiceSheet> {
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      _submitting = false;
+      if (mounted) setState(() {});
     }
   }
 
@@ -249,7 +328,7 @@ class _EdOrderInvoiceSheetState extends ConsumerState<EdOrderInvoiceSheet> {
     final draft = ref.watch(invoiceDraftProvider);
     final draftNotifier = ref.read(invoiceDraftProvider.notifier);
     final customer = draftNotifier.customer;
-    final lines = buildOrderInvoiceLines(widget.products, draft);
+    final lines = buildOrderInvoiceLinesFromCache(draft, draftNotifier.productCache);
     final total = lines.fold<num>(0, (s, l) => s + l.lineTotal);
     final qtySum = lines.fold<num>(0, (s, l) => s + l.quant);
     final bonusSum = lines.fold<num>(0, (s, l) => s + l.bonus);

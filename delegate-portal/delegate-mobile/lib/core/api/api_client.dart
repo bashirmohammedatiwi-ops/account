@@ -172,6 +172,7 @@ class ApiClient {
     required int catalogBranchId,
     required String? notes,
     required List<OrderLine> lines,
+    String? clientRequestId,
   }) async {
     final data = await _json('POST', '/orders', body: {
       if (customerAccSeq != null && customerAccSeq.isNotEmpty) 'customerAccSeq': customerAccSeq,
@@ -180,6 +181,7 @@ class ApiClient {
       'notes': notes,
       'lines': lines.map((l) => l.toJson()).toList(),
       'submit': true,
+      if (clientRequestId != null && clientRequestId.isNotEmpty) 'clientRequestId': clientRequestId,
     });
     return Order.fromJson(Map<String, dynamic>.from(data['order'] as Map));
   }
@@ -237,6 +239,7 @@ class ApiClient {
     num discount = 0,
     String? notes,
     int? deliveryReceiptId,
+    String? clientRequestId,
   }) async {
     final data = await _json('POST', '/receipts', body: {
       'customerAccSeq': customerAccSeq,
@@ -247,6 +250,7 @@ class ApiClient {
       'discount': discount,
       'notes': notes ?? '',
       if (deliveryReceiptId != null) 'deliveryReceiptId': deliveryReceiptId,
+      if (clientRequestId != null && clientRequestId.isNotEmpty) 'clientRequestId': clientRequestId,
     });
     return Receipt.fromJson(Map<String, dynamic>.from(data['receipt'] as Map));
   }
@@ -269,6 +273,7 @@ class ApiClient {
     required String treeName,
     required num amount,
     String? notes,
+    String? clientRequestId,
   }) async {
     final data = await _json('POST', '/delivery-receipts', body: {
       'customerAccSeq': customerAccSeq,
@@ -276,6 +281,7 @@ class ApiClient {
       'treeName': treeName,
       'amount': amount,
       'notes': notes ?? '',
+      if (clientRequestId != null && clientRequestId.isNotEmpty) 'clientRequestId': clientRequestId,
     });
     return DeliveryReceipt.fromJson(Map<String, dynamic>.from(data['deliveryReceipt'] as Map));
   }

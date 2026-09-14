@@ -60,6 +60,7 @@ class ThermalPrintService {
   static const _statusTimeout = Duration(seconds: 8);
 
   static Map<String, dynamic>? _cachedTemplate;
+  static Future<bool>? _printInFlight;
 
   static bool get isSupported => !kIsWeb;
 
@@ -353,16 +354,25 @@ class ThermalPrintService {
     Future<Map<String, dynamic>?> Function()? fetchTemplate,
   }) async {
     if (kIsWeb) return false;
+    if (_printInFlight != null) return false;
+    final run = () async {
+      try {
+        return await _printDeliveryReceiptImpl(
+          receipt,
+          agentName: agentName,
+          template: template,
+          serverUrl: serverUrl,
+          fetchTemplate: fetchTemplate,
+        ).timeout(_printTimeout, onTimeout: () => false);
+      } catch (_) {
+        return false;
+      }
+    }();
+    _printInFlight = run;
     try {
-      return await _printDeliveryReceiptImpl(
-        receipt,
-        agentName: agentName,
-        template: template,
-        serverUrl: serverUrl,
-        fetchTemplate: fetchTemplate,
-      ).timeout(_printTimeout, onTimeout: () => false);
-    } catch (_) {
-      return false;
+      return await run;
+    } finally {
+      if (identical(_printInFlight, run)) _printInFlight = null;
     }
   }
 
@@ -373,15 +383,24 @@ class ThermalPrintService {
     Future<Map<String, dynamic>?> Function()? fetchTemplate,
   }) async {
     if (kIsWeb) return false;
-    if (!await ensureConnected()) return false;
+    if (_printInFlight != null) return false;
+    final run = () async {
+      if (!await ensureConnected()) return false;
+      try {
+        final tpl = template != null
+            ? normalizeAdminPrintTemplate(template)
+            : await ensureAdminTemplate(fetchFromServer: fetchTemplate);
+        final bytes = await buildTestPrintBytes(agentName: agentName, template: tpl, serverUrl: serverUrl);
+        return await _writeBytes(bytes);
+      } catch (_) {
+        return false;
+      }
+    }();
+    _printInFlight = run;
     try {
-      final tpl = template != null
-          ? normalizeAdminPrintTemplate(template)
-          : await ensureAdminTemplate(fetchFromServer: fetchTemplate);
-      final bytes = await buildTestPrintBytes(agentName: agentName, template: tpl, serverUrl: serverUrl);
-      return await _writeBytes(bytes);
-    } catch (_) {
-      return false;
+      return await run;
+    } finally {
+      if (identical(_printInFlight, run)) _printInFlight = null;
     }
   }
 

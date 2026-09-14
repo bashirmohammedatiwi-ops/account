@@ -174,6 +174,16 @@ function deliveryReceiptStats({ agentIds } = {}) {
 }
 
 function createDeliveryReceipt(agentId, data = {}) {
+  const clientRequestId = String(data.clientRequestId || '').trim();
+  if (clientRequestId) {
+    const existing = db.prepare(`
+      SELECT id FROM delivery_receipts
+      WHERE agent_id = ? AND client_request_id = ?
+      LIMIT 1
+    `).get(agentId, clientRequestId);
+    if (existing) return loadDeliveryReceipt(existing.id, { viewerAgentId: agentId });
+  }
+
   const customerAccSeq = String(data.customerAccSeq || '').trim();
   if (!customerAccSeq) throw new Error('اختر زبوناً من الشجرة');
   const customer = findAccount(customerAccSeq);
@@ -183,22 +193,35 @@ function createDeliveryReceipt(agentId, data = {}) {
   if (amount <= 0) throw new Error('أدخل مبلغ وصل الاستلام');
 
   const deliveryNo = nextDeliveryNo();
-  const r = db.prepare(`
-    INSERT INTO delivery_receipts (
-      delivery_no, agent_id, customer_acc_seq, tree_acc_seq, tree_name,
-      amount, notes, receipt_date, status, handover_status, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'issued', 'pending', datetime('now'), datetime('now'))
-  `).run(
-    deliveryNo,
-    agentId,
-    customer.seq,
-    String(data.treeAccSeq || ''),
-    String(data.treeName || ''),
-    amount,
-    String(data.notes || '').trim(),
-    String(data.receiptDate || todayIso()).slice(0, 10)
-  );
-  return loadDeliveryReceipt(r.lastInsertRowid, { viewerAgentId: agentId });
+  try {
+    const r = db.prepare(`
+      INSERT INTO delivery_receipts (
+        delivery_no, agent_id, customer_acc_seq, tree_acc_seq, tree_name,
+        amount, notes, receipt_date, status, handover_status, client_request_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'issued', 'pending', ?, datetime('now'), datetime('now'))
+    `).run(
+      deliveryNo,
+      agentId,
+      customer.seq,
+      String(data.treeAccSeq || ''),
+      String(data.treeName || ''),
+      amount,
+      String(data.notes || '').trim(),
+      String(data.receiptDate || todayIso()).slice(0, 10),
+      clientRequestId || null
+    );
+    return loadDeliveryReceipt(r.lastInsertRowid, { viewerAgentId: agentId });
+  } catch (err) {
+    if (clientRequestId && String(err.message || '').includes('UNIQUE')) {
+      const existing = db.prepare(`
+        SELECT id FROM delivery_receipts
+        WHERE agent_id = ? AND client_request_id = ?
+        LIMIT 1
+      `).get(agentId, clientRequestId);
+      if (existing) return loadDeliveryReceipt(existing.id, { viewerAgentId: agentId });
+    }
+    throw err;
+  }
 }
 
 function markDeliveryReceiptPrinted(id, { agentId } = {}) {

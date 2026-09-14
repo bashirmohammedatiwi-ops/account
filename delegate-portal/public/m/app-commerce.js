@@ -61,6 +61,8 @@ const commerce = {
   selectedSection: null,
   selectedProductId: null,
   draft: {},
+  productCache: {},
+  pendingClientRequestId: null,
   invoiceCustomer: null,
   invoiceNotes: '',
   pickerTree: null,
@@ -140,8 +142,32 @@ function chunkArray(arr, size) {
   return out;
 }
 
+function cacheProduct(product) {
+  if (!product?.id) return;
+  commerce.productCache[product.id] = {
+    id: product.id,
+    name: product.name,
+    price: Number(product.price || 0),
+    barcode: product.barcode || product.skuNum || ''
+  };
+}
+
+function invoiceDraftClientRequestId() {
+  if (!commerce.pendingClientRequestId) {
+    commerce.pendingClientRequestId = typeof clientRequestId === 'function'
+      ? clientRequestId()
+      : `cr-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+  return commerce.pendingClientRequestId;
+}
+
+function findCachedProduct(productId) {
+  const id = Number(productId);
+  return commerce.productCache[id] || commerce.products.find((p) => p.id === id) || null;
+}
+
 function findProduct(id) {
-  return commerce.products.find((p) => p.id === Number(id)) || null;
+  return findCachedProduct(id);
 }
 
 function selectProduct(productId) {
@@ -172,9 +198,10 @@ function updateShopOrderStats() {
 
 function invoiceTotalAmount() {
   let total = 0;
-  for (const p of commerce.products) {
-    const d = commerce.draft[p.id];
+  for (const [productId, d] of Object.entries(commerce.draft)) {
     if (!d?.quant) continue;
+    const p = findCachedProduct(productId);
+    if (!p) continue;
     total += d.quant * Number(p.price || 0);
   }
   return total;
@@ -186,13 +213,14 @@ function orderLineTotal(line) {
 
 function buildOrderLines() {
   const lines = [];
-  for (const p of commerce.products) {
-    const d = commerce.draft[p.id];
+  for (const [productId, d] of Object.entries(commerce.draft)) {
     if (!d || (!d.quant && !d.bonus && !d.tester)) continue;
+    const p = findCachedProduct(productId);
+    if (!p) continue;
     lines.push({
       productId: p.id,
-      barcode: productBarcode(p),
-      matNum: productBarcode(p),
+      barcode: p.barcode || '',
+      matNum: p.barcode || '',
       matName: p.name,
       quant: d.quant || 0,
       bonus: d.bonus || 0,
@@ -213,6 +241,8 @@ function persistInvoiceDraft() {
     sectionId: commerce.selectedSection?.id || null,
     sectionName: commerce.selectedSection?.name || '',
     draft: commerce.draft,
+    productCache: commerce.productCache,
+    pendingClientRequestId: commerce.pendingClientRequestId,
     customer: commerce.invoiceCustomer,
     notes: commerce.invoiceNotes,
     savedAt: new Date().toISOString()
@@ -247,6 +277,8 @@ function applyPersistedDraft() {
   const saved = loadInvoiceDraft();
   if (!saved) return;
   commerce.draft = saved.draft || {};
+  commerce.productCache = saved.productCache || commerce.productCache || {};
+  commerce.pendingClientRequestId = saved.pendingClientRequestId || commerce.pendingClientRequestId || null;
   commerce.invoiceCustomer = saved.customer || commerce.invoiceCustomer;
   commerce.invoiceNotes = saved.notes || '';
   const notesEl = document.getElementById('invoiceNotes');
@@ -257,6 +289,8 @@ function restoreDraftIntoMemory() {
   const saved = loadInvoiceDraft();
   if (!saved) return;
   commerce.draft = saved.draft || {};
+  commerce.productCache = saved.productCache || {};
+  commerce.pendingClientRequestId = saved.pendingClientRequestId || null;
   commerce.invoiceCustomer = saved.customer || null;
   commerce.invoiceNotes = saved.notes || '';
 }
@@ -275,9 +309,14 @@ function updateResumeBanner() {
 }
 
 function adjustDraft(productId, field, delta) {
+  const p = findCachedProduct(productId) || findProduct(productId);
+  if (p) cacheProduct(p);
   const d = getDraft(productId);
   const key = field === 'bonus' ? 'bonus' : field === 'tester' ? 'tester' : 'quant';
   d[key] = Math.max(0, Number(d[key] || 0) + Number(delta || 0));
+  if ((d.quant || 0) > 0 || (d.bonus || 0) > 0 || (d.tester || 0) > 0) {
+    invoiceDraftClientRequestId();
+  }
   syncProductRow(productId);
   updateInvoiceUI();
   persistInvoiceDraft();
@@ -582,6 +621,7 @@ async function loadSectionProducts() {
   const data = await commerceApi(`/catalog/sections/${commerce.selectedSection.id}/products`);
   commerce.products = data.products || [];
   commerce.productGroups = data.groups || [];
+  commerce.products.forEach(cacheProduct);
   commerce.productFilter = '';
   const searchEl = document.getElementById('shopProductSearch');
   if (searchEl) searchEl.value = '';
@@ -847,6 +887,8 @@ function updateInvoiceUI() {
 
 function clearInvoiceDraft({ resetNotes = true } = {}) {
   commerce.draft = {};
+  commerce.productCache = {};
+  commerce.pendingClientRequestId = null;
   if (resetNotes) {
     commerce.invoiceNotes = '';
     const notesEl = document.getElementById('invoiceNotes');
@@ -932,6 +974,7 @@ async function submitInvoice() {
   if (!commerce.selectedBranch?.id) return alert('اختر فرع منتجات');
 
   const btn = document.getElementById('btnSubmitInvoice');
+  if (btn?.disabled) return;
   btn.disabled = true;
   try {
     const data = await commerceApi('/orders', {
@@ -942,7 +985,8 @@ async function submitInvoice() {
         catalogBranchId: commerce.selectedBranch.id,
         notes: document.getElementById('invoiceNotes')?.value?.trim() || '',
         lines,
-        submit: true
+        submit: true,
+        clientRequestId: invoiceDraftClientRequestId()
       })
     });
     clearInvoiceDraft({ resetNotes: true });
@@ -953,7 +997,7 @@ async function submitInvoice() {
   } catch (e) {
     alert(e.message);
   } finally {
-    btn.disabled = false;
+    if (btn) btn.disabled = false;
   }
 }
 

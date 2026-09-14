@@ -184,6 +184,7 @@ function mapOrder(row, lines = [], events = []) {
     prepConfirmed: Boolean(row.prep_confirmed),
     prepConfirmedAt: row.prep_confirmed_at || null,
     processedNotifiedAt: row.processed_notified_at || null,
+    clientRequestId: row.client_request_id || '',
     lines: lines.map(mapLine),
     events: events.map((e) => ({
       id: e.id,
@@ -422,23 +423,113 @@ function createShorjaOrder(data) {
   return order;
 }
 
+function orderLinesFingerprint(lines) {
+  return (lines || [])
+    .map((l) => [
+      Number(l.productId || 0),
+      Number(l.quant || 0),
+      Number(l.bonus || 0),
+      Number(l.tester || 0),
+      Number(l.unitPrice || l.price || 0)
+    ].join(':'))
+    .sort()
+    .join('|');
+}
+
+/** يمنع تكرار الطلب عند إعادة الإرسال بدون clientRequestId (إصدارات قديمة). */
+function findRecentDuplicateOrder(agentId, data) {
+  const customerAccSeq = data.customerAccSeq ? String(data.customerAccSeq) : '';
+  const customerRequestId = data.customerRequestId != null ? Number(data.customerRequestId) : null;
+  const branchId = data.catalogBranchId || null;
+  if (!agentId || !branchId) return null;
+  if (!customerAccSeq && !customerRequestId) return null;
+
+  const fp = orderLinesFingerprint(data.lines);
+  if (!fp) return null;
+
+  const rows = db.prepare(`
+    SELECT id, status FROM orders
+    WHERE agent_id = ?
+      AND catalog_branch_id = ?
+      AND status NOT IN ('draft', 'cancelled', 'rejected')
+      AND datetime(COALESCE(submitted_at, created_at)) >= datetime('now', '-3 minutes')
+      AND (
+        (? != '' AND customer_acc_seq = ?)
+        OR (? IS NOT NULL AND customer_request_id = ?)
+      )
+    ORDER BY id DESC
+    LIMIT 8
+  `).all(agentId, branchId, customerAccSeq, customerAccSeq, customerRequestId, customerRequestId);
+
+  for (const row of rows) {
+    const lines = db.prepare('SELECT * FROM order_lines WHERE order_id = ? ORDER BY id').all(row.id);
+    const mapped = lines.map((line) => ({
+      productId: line.product_id,
+      quant: line.quant,
+      bonus: line.bonus,
+      tester: line.tester,
+      unitPrice: line.unit_price
+    }));
+    if (orderLinesFingerprint(mapped) === fp) return row;
+  }
+  return null;
+}
+
 function createOrder(agentId, data) {
+  const clientRequestId = String(data.clientRequestId || '').trim();
+  if (clientRequestId) {
+    const existing = db.prepare(`
+      SELECT id, status FROM orders WHERE agent_id = ? AND client_request_id = ? LIMIT 1
+    `).get(agentId, clientRequestId);
+    if (existing) {
+      if (data.submit && existing.status === 'draft') {
+        return submitOrder(existing.id, agentId) || loadOrder(existing.id);
+      }
+      return loadOrder(existing.id);
+    }
+  } else {
+    const recent = findRecentDuplicateOrder(agentId, data);
+    if (recent) {
+      if (data.submit && recent.status === 'draft') {
+        return submitOrder(recent.id, agentId) || loadOrder(recent.id);
+      }
+      return loadOrder(recent.id);
+    }
+  }
+
   const customer = resolveOrderCustomer(agentId, data);
   const orderNo = nextOrderNo();
-  const r = db.prepare(`
-    INSERT INTO orders
-      (order_no, agent_id, customer_acc_seq, customer_request_id, customer_display_name, catalog_branch_id, status, notes)
-    VALUES (?, ?, ?, ?, ?, ?, 'draft', ?)
-  `).run(
-    orderNo,
-    agentId,
-    customer.customerAccSeq,
-    customer.customerRequestId,
-    customer.customerDisplayName || null,
-    data.catalogBranchId || null,
-    data.notes || ''
-  );
-  const id = r.lastInsertRowid;
+  let id;
+  try {
+    const r = db.prepare(`
+      INSERT INTO orders
+        (order_no, agent_id, customer_acc_seq, customer_request_id, customer_display_name, catalog_branch_id, status, notes, client_request_id)
+      VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?)
+    `).run(
+      orderNo,
+      agentId,
+      customer.customerAccSeq,
+      customer.customerRequestId,
+      customer.customerDisplayName || null,
+      data.catalogBranchId || null,
+      data.notes || '',
+      clientRequestId || null
+    );
+    id = r.lastInsertRowid;
+  } catch (err) {
+    if (clientRequestId && String(err.message || '').includes('UNIQUE')) {
+      const existing = db.prepare(`
+        SELECT id, status FROM orders WHERE agent_id = ? AND client_request_id = ? LIMIT 1
+      `).get(agentId, clientRequestId);
+      if (existing) {
+        if (data.submit && existing.status === 'draft') {
+          return submitOrder(existing.id, agentId) || loadOrder(existing.id);
+        }
+        return loadOrder(existing.id);
+      }
+    }
+    throw err;
+  }
   if (data.lines?.length) replaceLines(id, data.lines);
   logEvent(id, { fromStatus: '', toStatus: 'draft', actorType: 'agent', actorId: agentId, note: 'إنشاء طلب' });
   return loadOrder(id);

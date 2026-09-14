@@ -386,6 +386,7 @@ async function deleteMyReceipt(id) {
 
 async function submitDelivery(e) {
   e.preventDefault();
+  if (submitDelivery._busy) return;
   if (!receiptsState.deliveryCustomer?.seq) {
     alert('اختر زبوناً من الشجرة أولاً');
     return;
@@ -395,6 +396,7 @@ async function submitDelivery(e) {
     alert('أدخل المبلغ');
     return;
   }
+  submitDelivery._busy = true;
   setOverlay(true);
   try {
     await api('/delivery-receipts', {
@@ -404,7 +406,8 @@ async function submitDelivery(e) {
         treeAccSeq: receiptsState.deliveryTree?.seq || '',
         treeName: receiptsState.deliveryTree?.name1 || '',
         amount,
-        notes: document.getElementById('deliveryNotes')?.value || ''
+        notes: document.getElementById('deliveryNotes')?.value || '',
+        clientRequestId: clientRequestId()
       })
     });
     resetDeliveryForm();
@@ -413,12 +416,14 @@ async function submitDelivery(e) {
   } catch (err) {
     alert(err.message);
   } finally {
+    submitDelivery._busy = false;
     setOverlay(false);
   }
 }
 
 async function submitReceipt(e) {
   e.preventDefault();
+  if (submitReceipt._busy) return;
   if (isSecondaryAgent()) {
     alert('المندوب الثانوي لا يستطيع إنشاء سند قبض');
     return;
@@ -436,6 +441,7 @@ async function submitReceipt(e) {
     alert('أدخل المبلغ');
     return;
   }
+  submitReceipt._busy = true;
   setOverlay(true);
   try {
     await api('/receipts', {
@@ -448,7 +454,8 @@ async function submitReceipt(e) {
         commission: Number(document.getElementById('receiptCommission')?.value || 0),
         discount: Number(document.getElementById('receiptDiscount')?.value || 0),
         notes: document.getElementById('receiptNotes')?.value || '',
-        deliveryReceiptId: linked?.id || null
+        deliveryReceiptId: linked?.id || null,
+        clientRequestId: clientRequestId()
       })
     });
     resetReceiptForm();
@@ -458,6 +465,7 @@ async function submitReceipt(e) {
   } catch (err) {
     alert(err.message);
   } finally {
+    submitReceipt._busy = false;
     setOverlay(false);
   }
 }

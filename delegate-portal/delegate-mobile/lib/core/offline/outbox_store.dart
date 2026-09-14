@@ -62,12 +62,26 @@ class OutboxStore {
     Map<String, dynamic>? optimisticJson,
     String? listCacheKey,
   }) async {
+    final bodyWithId = body == null ? null : Map<String, dynamic>.from(body);
+    if (bodyWithId != null) {
+      final existing = '${bodyWithId['clientRequestId'] ?? ''}'.trim();
+      if (existing.isEmpty) {
+        bodyWithId['clientRequestId'] = _uuid.v4();
+      } else if (entityType == 'order') {
+        final queuedEntries = await this.pending();
+        for (final entry in queuedEntries) {
+          if (entry.entityType != 'order') continue;
+          final queued = '${entry.body?['clientRequestId'] ?? ''}'.trim();
+          if (queued == existing) return entry.id;
+        }
+      }
+    }
     final id = _uuid.v4();
     await _db.insertOutbox({
       'id': id,
       'method': method,
       'path': path,
-      'body': body != null ? jsonEncode(body) : null,
+      'body': bodyWithId != null ? jsonEncode(bodyWithId) : null,
       'entity_type': entityType,
       'optimistic_json': optimisticJson != null ? jsonEncode(optimisticJson) : null,
       'list_cache_key': listCacheKey,

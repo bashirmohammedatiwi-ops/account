@@ -319,6 +319,14 @@ function money(v) {
 
 function createReceipt(agentId, data = {}) {
   assertCanCreateReceipt(agentId);
+  const clientRequestId = String(data.clientRequestId || '').trim();
+  if (clientRequestId) {
+    const existing = db.prepare(`
+      SELECT id FROM receipts WHERE agent_id = ? AND client_request_id = ? LIMIT 1
+    `).get(agentId, clientRequestId);
+    if (existing) return loadReceipt(existing.id);
+  }
+
   const customerAccSeq = String(data.customerAccSeq || '').trim();
   if (!customerAccSeq) throw new Error('اختر زبوناً من الشجرة');
   const customer = findAccount(customerAccSeq);
@@ -332,54 +340,80 @@ function createReceipt(agentId, data = {}) {
   const receiptNo = nextReceiptNo();
   const deliveryReceiptId = Number(data.deliveryReceiptId || 0);
 
-  if (deliveryReceiptId > 0) {
-    const dr = db.prepare('SELECT * FROM delivery_receipts WHERE id = ?').get(deliveryReceiptId);
-    if (!dr) throw new Error('وصل الاستلام غير موجود');
-    if (!canAgentViewDeliveryReceipt(agentId, dr.agent_id)) {
-      throw new Error('لا تملك صلاحية هذا الوصل');
+  const runCreate = db.transaction(() => {
+    if (deliveryReceiptId > 0) {
+      const dr = db.prepare('SELECT * FROM delivery_receipts WHERE id = ?').get(deliveryReceiptId);
+      if (!dr) throw new Error('وصل الاستلام غير موجود');
+      if (!canAgentViewDeliveryReceipt(agentId, dr.agent_id)) {
+        throw new Error('لا تملك صلاحية هذا الوصل');
+      }
+      if (!isPrimary(agentId)) throw new Error('فقط المندوب الرئيسي يستطيع إنشاء سند قبض');
+      if (dr.receipt_id) throw new Error('تم إنشاء سند قبض لهذا الوصل مسبقاً');
+      if (String(dr.customer_acc_seq) !== String(customer.seq)) {
+        throw new Error('الزبون لا يطابق وصل الاستلام');
+      }
+      const linked = db.prepare(`
+        SELECT id FROM receipts WHERE delivery_receipt_id = ? LIMIT 1
+      `).get(deliveryReceiptId);
+      if (linked) throw new Error('تم إنشاء سند قبض لهذا الوصل مسبقاً');
     }
-    if (!isPrimary(agentId)) throw new Error('فقط المندوب الرئيسي يستطيع إنشاء سند قبض');
-    if (dr.receipt_id) throw new Error('تم إنشاء سند قبض لهذا الوصل مسبقاً');
-    if (String(dr.customer_acc_seq) !== String(customer.seq)) {
-      throw new Error('الزبون لا يطابق وصل الاستلام');
-    }
-  }
 
-  const r = db.prepare(`
-    INSERT INTO receipts (
-      receipt_no, agent_id, customer_acc_seq, tree_acc_seq, tree_name,
-      amount, commission, discount, notes, receipt_date, status,
-      cash_acc_seq, commission_debit_acc_seq, commission_credit_acc_seq, discount_acc_seq,
-      delivery_receipt_id, submitted_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-  `).run(
-    receiptNo,
-    agentId,
-    customer.seq,
-    String(data.treeAccSeq || ''),
-    String(data.treeName || ''),
-    amount,
-    commission,
-    discount,
-    String(data.notes || '').trim(),
-    String(data.receiptDate || todayIso()).slice(0, 10),
-    settings.cash.seq || '',
-    settings.commissionDebit.seq || '',
-    settings.commissionCredit.seq || '',
-    settings.discount.seq || '',
-    deliveryReceiptId > 0 ? deliveryReceiptId : null
-  );
-  if (deliveryReceiptId > 0) {
-    linkDeliveryReceiptToReceipt(deliveryReceiptId, r.lastInsertRowid);
-  }
-  logEvent(r.lastInsertRowid, {
-    actorType: 'agent',
-    actorId: agentId,
-    fromStatus: '',
-    toStatus: 'pending',
-    note: 'إنشاء سند قبض'
+    const r = db.prepare(`
+      INSERT INTO receipts (
+        receipt_no, agent_id, customer_acc_seq, tree_acc_seq, tree_name,
+        amount, commission, discount, notes, receipt_date, status,
+        cash_acc_seq, commission_debit_acc_seq, commission_credit_acc_seq, discount_acc_seq,
+        delivery_receipt_id, client_request_id, submitted_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `).run(
+      receiptNo,
+      agentId,
+      customer.seq,
+      String(data.treeAccSeq || ''),
+      String(data.treeName || ''),
+      amount,
+      commission,
+      discount,
+      String(data.notes || '').trim(),
+      String(data.receiptDate || todayIso()).slice(0, 10),
+      settings.cash.seq || '',
+      settings.commissionDebit.seq || '',
+      settings.commissionCredit.seq || '',
+      settings.discount.seq || '',
+      deliveryReceiptId > 0 ? deliveryReceiptId : null,
+      clientRequestId || null
+    );
+    if (deliveryReceiptId > 0) {
+      linkDeliveryReceiptToReceipt(deliveryReceiptId, r.lastInsertRowid);
+    }
+    logEvent(r.lastInsertRowid, {
+      actorType: 'agent',
+      actorId: agentId,
+      fromStatus: '',
+      toStatus: 'pending',
+      note: 'إنشاء سند قبض'
+    });
+    return r.lastInsertRowid;
   });
-  return loadReceipt(r.lastInsertRowid);
+
+  try {
+    const id = runCreate();
+    return loadReceipt(id);
+  } catch (err) {
+    if (clientRequestId && String(err.message || '').includes('UNIQUE')) {
+      const existing = db.prepare(`
+        SELECT id FROM receipts WHERE agent_id = ? AND client_request_id = ? LIMIT 1
+      `).get(agentId, clientRequestId);
+      if (existing) return loadReceipt(existing.id);
+      if (deliveryReceiptId > 0) {
+        const linked = db.prepare(`
+          SELECT id FROM receipts WHERE delivery_receipt_id = ? LIMIT 1
+        `).get(deliveryReceiptId);
+        if (linked) return loadReceipt(linked.id);
+      }
+    }
+    throw err;
+  }
 }
 
 function updateReceiptByAdmin(id, patch = {}) {

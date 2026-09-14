@@ -229,6 +229,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
   }
 
   Future<void> _issueDelivery({required bool tryPrint}) async {
+    if (_drSubmitting || _drPrinting) return;
     if (_drPicked == null) {
       _snack('اختر شجرة ثم زبوناً');
       return;
@@ -282,6 +283,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
       _snack('الطباعة متاحة على الآيباد والهاتف');
       return;
     }
+    if (_drPrinting || _reprintingDeliveryId != null || _drSubmitting) return;
     setState(() => _reprintingDeliveryId = item.id);
     try {
       await _printDelivery(item);
@@ -315,6 +317,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
   }
 
   Future<void> _submitReceipt() async {
+    if (_submitting) return;
     final customerSeq = _picked?.customer.seq ?? _linkedDelivery?.customerAccSeq;
     final treeSeq = _picked?.tree.seq ?? _linkedDelivery?.treeAccSeq ?? '';
     final treeName = _picked?.tree.name1 ?? _linkedDelivery?.treeName ?? '';

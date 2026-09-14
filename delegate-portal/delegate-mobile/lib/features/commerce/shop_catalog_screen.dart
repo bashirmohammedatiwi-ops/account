@@ -17,6 +17,7 @@ import 'commerce_draft.dart';
 import 'commerce_screens.dart';
 import 'commerce_theme.dart';
 import 'commerce_ui.dart';
+import 'order_invoice_ui.dart';
 
 /// كتالوج المنتجات — أقسام فرعية بالأعلى + شبكة + لوحة تفاصيل (iPad)
 class ShopCatalogScreen extends ConsumerStatefulWidget {
@@ -132,13 +133,16 @@ class _ShopCatalogScreenState extends ConsumerState<ShopCatalogScreen> {
   }
 
   void _adjust(Product product, String field, int delta) {
-    ref.read(invoiceDraftProvider.notifier).adjustLine(product.id, field: field, delta: delta);
+    final notifier = ref.read(invoiceDraftProvider.notifier);
+    notifier.cacheProduct(product);
+    notifier.adjustLine(product.id, field: field, delta: delta);
     _persistDraft();
     setState(() {});
   }
 
   void _setField(Product product, String field, num value) {
     final notifier = ref.read(invoiceDraftProvider.notifier);
+    notifier.cacheProduct(product);
     final cur = ref.read(invoiceDraftProvider)[product.id] ?? emptyDraftLine();
     final clamped = value.clamp(0, 999999);
     switch (field) {
@@ -158,9 +162,11 @@ class _ShopCatalogScreenState extends ConsumerState<ShopCatalogScreen> {
     if (code.isEmpty || _branchId == null) return;
     try {
       final product = await ref.read(apiClientProvider).lookupProduct(code, branchId: _branchId);
+      final notifier = ref.read(invoiceDraftProvider.notifier);
+      notifier.cacheProduct(product);
       _selectProduct(product.id, products);
       final cur = ref.read(invoiceDraftProvider)[product.id] ?? emptyDraftLine();
-      ref.read(invoiceDraftProvider.notifier).updateLine(product.id, quant: cur.quant + 1);
+      notifier.updateLine(product.id, quant: cur.quant + 1);
       await _persistDraft();
       _barcodeCtrl.clear();
       if (mounted) {
@@ -171,9 +177,11 @@ class _ShopCatalogScreenState extends ConsumerState<ShopCatalogScreen> {
       final local = products.where((p) => (p.barcode ?? '').contains(code) || (p.skuNum ?? '').contains(code)).toList();
       if (local.length == 1) {
         final p = local.first;
+        final notifier = ref.read(invoiceDraftProvider.notifier);
+        notifier.cacheProduct(p);
         _selectProduct(p.id, products);
         final cur = ref.read(invoiceDraftProvider)[p.id] ?? emptyDraftLine();
-        ref.read(invoiceDraftProvider.notifier).updateLine(p.id, quant: cur.quant + 1);
+        notifier.updateLine(p.id, quant: cur.quant + 1);
         await _persistDraft();
         _barcodeCtrl.clear();
         if (mounted) setState(() {});
@@ -232,24 +240,23 @@ class _ShopCatalogScreenState extends ConsumerState<ShopCatalogScreen> {
     if (mounted) setState(() {});
   }
 
-  num _total(List<Product> products, Map<int, DraftLine> draft) {
-    num t = 0;
-    for (final p in products) {
-      final d = draft[p.id];
-      if (d != null && d.quant > 0) t += d.quant * p.price;
-    }
-    return t;
-  }
-
-  int _lineCount(Map<int, DraftLine> draft) => draft.values.where(draftLineActive).length;
-
-  Future<void> _openInvoiceSheet(List<Product> products) async {
+  Future<void> _openInvoiceSheet() async {
     if (_branchId == null) return;
+    try {
+      await hydrateDraftProductCache(ref, _branchId!);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذّر تحميل بعض المنتجات: $e'), behavior: SnackBarBehavior.floating),
+        );
+      }
+    }
+    if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => EdOrderInvoiceSheet(branchId: _branchId!, products: products),
+      builder: (_) => EdOrderInvoiceSheet(branchId: _branchId!),
     );
   }
 
@@ -303,8 +310,10 @@ class _ShopCatalogScreenState extends ConsumerState<ShopCatalogScreen> {
     final sectionsAsync = ref.watch(catalogSectionsProvider(_branchId!));
     final productsAsync = ref.watch(catalogProductsProvider(_sectionId!));
     final draft = ref.watch(invoiceDraftProvider);
+    final draftNotifier = ref.read(invoiceDraftProvider.notifier);
     final lineCount = ref.watch(invoiceDraftProvider.select((d) => d.values.where(draftLineActive).length));
-    final customer = ref.read(invoiceDraftProvider.notifier).customer;
+    final draftTotal = draftTotalFromCache(draft, draftNotifier.productCache);
+    final customer = draftNotifier.customer;
     final layout = EdLayout.of(context);
 
     final branchName = branchesAsync.valueOrNull?.where((b) => b.id == _branchId).map((b) => b.name).firstOrNull ?? '';
@@ -356,14 +365,12 @@ class _ShopCatalogScreenState extends ConsumerState<ShopCatalogScreen> {
                     onBarcodeScan: () => productsAsync.whenData(_lookupBarcode),
                   ),
                   Expanded(child: _buildTabletCatalog(productsAsync, draft, sectionName, layout)),
-                  productsAsync.maybeWhen(
-                    data: (products) => EdShopOrderDock(
+                  if (lineCount > 0)
+                    EdShopOrderDock(
                       lineCount: lineCount,
-                      totalLabel: fmtMoney(_total(products, draft)),
-                      onPressed: () => _openInvoiceSheet(products),
+                      totalLabel: fmtMoney(draftTotal),
+                      onPressed: _openInvoiceSheet,
                     ),
-                    orElse: () => const SizedBox.shrink(),
-                  ),
                 ],
               )
             : Column(
@@ -380,14 +387,12 @@ class _ShopCatalogScreenState extends ConsumerState<ShopCatalogScreen> {
                       sectionName: sectionName,
                     ),
                   ),
-                  productsAsync.maybeWhen(
-                    data: (products) => EdShopOrderDock(
+                  if (lineCount > 0)
+                    EdShopOrderDock(
                       lineCount: lineCount,
-                      totalLabel: fmtMoney(_total(products, draft)),
-                      onPressed: () => _openInvoiceSheet(products),
+                      totalLabel: fmtMoney(draftTotal),
+                      onPressed: _openInvoiceSheet,
                     ),
-                    orElse: () => const SizedBox.shrink(),
-                  ),
                 ],
               ),
       ),

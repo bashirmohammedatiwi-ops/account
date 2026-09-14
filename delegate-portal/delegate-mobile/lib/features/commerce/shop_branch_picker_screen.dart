@@ -45,6 +45,9 @@ class ShopBranchPickerScreen extends ConsumerWidget {
     try {
       final agentId = ref.read(authProvider).agent?.id;
       final notifier = ref.read(invoiceDraftProvider.notifier);
+      if (notifier.branchId != null && notifier.branchId != branch.id) {
+        notifier.clear();
+      }
       notifier.branchId = branch.id;
       notifier.branchName = branch.name;
       notifier.sectionId = null;

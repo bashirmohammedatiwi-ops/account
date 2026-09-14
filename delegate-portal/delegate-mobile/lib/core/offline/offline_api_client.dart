@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../models/models.dart';
 import '../../features/receipts/thermal_print_service.dart';
@@ -18,7 +19,9 @@ import 'offline_stores.dart';
 import 'outbox_store.dart';
 import 'sync_engine.dart';
 
+const _uuid = Uuid();
 int _localId() => -DateTime.now().millisecondsSinceEpoch;
+String _clientRequestId() => _uuid.v4();
 
 int _rowId(dynamic value) {
   if (value == null) return 0;
@@ -114,6 +117,41 @@ List<Map<String, dynamic>> _syncReceiptsWithServer(
     if (id < 0 || row['localPending'] == true) {
       byId[id] = row;
     }
+  }
+
+  final synced = byId.values.toList();
+  synced.sort((a, b) => _rowId(b['id']).compareTo(_rowId(a['id'])));
+  return synced;
+}
+
+String _orderClientRequestId(Map<String, dynamic> row) =>
+    '${row['clientRequestId'] ?? row['client_request_id'] ?? ''}'.trim();
+
+List<Map<String, dynamic>> _syncOrdersWithServer(
+  List<Map<String, dynamic>> online,
+  List<Map<String, dynamic>> cached, {
+  Set<int> keepLocalIds = const {},
+}) {
+  final onlineIds = online.map((r) => _rowId(r['id'])).where((id) => id > 0).toSet();
+  final onlineCrIds = online.map(_orderClientRequestId).where((s) => s.isNotEmpty).toSet();
+
+  bool isStaleLocalRow(Map<String, dynamic> row) {
+    final cr = _orderClientRequestId(row);
+    if (cr.isNotEmpty && onlineCrIds.contains(cr)) return true;
+    final id = _rowId(row['id']);
+    final isLocal = id < 0 || row['localPending'] == true;
+    if (!isLocal) return id > 0 && !onlineIds.contains(id);
+    if (!keepLocalIds.contains(id)) return true;
+    return false;
+  }
+
+  final byId = <int, Map<String, dynamic>>{};
+  for (final row in online) {
+    byId[_rowId(row['id'])] = row;
+  }
+  for (final row in cached) {
+    if (isStaleLocalRow(row)) continue;
+    byId[_rowId(row['id'])] = row;
   }
 
   final synced = byId.values.toList();
@@ -242,6 +280,21 @@ class OfflineApiClient {
     return e.message ?? 'فشل الاتصال — تحقق من الشبكة وحاول مجدداً';
   }
 
+  /// Queue offline create only when the request almost certainly never reached the server.
+  /// Timeouts / HTTP errors after send can already have created the row — re-queue = duplicates.
+  bool _shouldQueueCreateOffline(DioException e) {
+    if (e.response != null) return false;
+    return e.type == DioExceptionType.connectionError ||
+        e.type == DioExceptionType.connectionTimeout;
+  }
+
+  Never _throwAmbiguousCreateTimeout(DioException e) {
+    throw ApiException(
+      'انتهت مهلة الاتصال بعد الإرسال — تحقق من القائمة قبل إعادة المحاولة حتى لا يتكرر الإنشاء',
+      statusCode: e.response?.statusCode,
+    );
+  }
+
   Future<void> _indexAccounts(List<BranchAccount> accounts) async {
     if (accounts.isEmpty) return;
     final raw = await _cache.getJson(OfflineKeys.searchIndex);
@@ -294,7 +347,7 @@ class OfflineApiClient {
     await _cache.setJson(OfflineKeys.productIndex, codes.values.toList());
   }
 
-  Map<String, dynamic> _orderMap(Order o) => {
+  Map<String, dynamic> _orderMap(Order o, {String? clientRequestId}) => {
         'id': o.id,
         'status': o.status,
         'statusLabel': o.statusLabel ?? displayOrderStatusLabel(status: o.status),
@@ -305,7 +358,42 @@ class OfflineApiClient {
         'notes': o.notes,
         'totalAmount': o.totalAmount,
         'lines': o.lines.map((l) => l.toJson()).toList(),
+        if (clientRequestId != null && clientRequestId.isNotEmpty) 'clientRequestId': clientRequestId,
       };
+
+  Future<void> _resolveOrderOutbox(String clientRequestId) async {
+    if (clientRequestId.isEmpty) return;
+    final entries = await _outbox.pending();
+    for (final entry in entries) {
+      if (entry.entityType != 'order') continue;
+      final cr = _orderClientRequestId(entry.body ?? {});
+      if (cr != clientRequestId) continue;
+      final optId = _rowId(entry.optimisticJson?['id']);
+      if (optId != 0) await _cache.removeListItem(OfflineKeys.orders, optId);
+      await _outbox.markDone(entry.id);
+    }
+    await _bumpPendingCount();
+  }
+
+  Future<void> _upsertOrderInCache(Map<String, dynamic> serverOrder, {required String clientRequestId}) async {
+    final raw = await _cache.getJson(OfflineKeys.orders);
+    final list = raw is List
+        ? List<Map<String, dynamic>>.from(raw.map((e) => Map<String, dynamic>.from(e as Map)))
+        : <Map<String, dynamic>>[];
+    if (clientRequestId.isNotEmpty) {
+      list.removeWhere((row) => _orderClientRequestId(row) == clientRequestId);
+    }
+    final serverId = _rowId(serverOrder['id']);
+    list.removeWhere((row) => _rowId(row['id']) == serverId);
+    list.insert(0, serverOrder);
+    await _cache.setJson(OfflineKeys.orders, list);
+  }
+
+  Future<void> applyServerOrderAfterSubmit(Order order, String clientRequestId) async {
+    final map = _orderMap(order, clientRequestId: clientRequestId);
+    await _resolveOrderOutbox(clientRequestId);
+    await _upsertOrderInCache(map, clientRequestId: clientRequestId);
+  }
 
   Future<LoginResult> login(String username, String password) => _api.login(username, password);
 
@@ -576,8 +664,14 @@ class OfflineApiClient {
         onlineFetch: () async {
           final data = await fetch();
           final raw = (data['orders'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
-          await _cache.setJson(cacheKey, raw);
-          return raw.map((e) => Order.fromJson(e)).toList();
+          final cachedJson = await _cache.getJson(cacheKey);
+          final cachedRaw = cachedJson is List
+              ? cachedJson.map((e) => Map<String, dynamic>.from(e as Map)).toList()
+              : <Map<String, dynamic>>[];
+          final keepLocalIds = await _pendingOutboxLocalIdsFor('order');
+          final synced = _syncOrdersWithServer(raw, cachedRaw, keepLocalIds: keepLocalIds);
+          await _cache.setJson(cacheKey, synced);
+          return synced.map((e) => Order.fromJson(e)).toList();
         },
         offlineRead: () async {
           final raw = await _cache.getJson(cacheKey);
@@ -631,7 +725,9 @@ class OfflineApiClient {
     required int catalogBranchId,
     required String? notes,
     required List<OrderLine> lines,
+    String? clientRequestId,
   }) async {
+    final id = (clientRequestId != null && clientRequestId.isNotEmpty) ? clientRequestId : _clientRequestId();
     final body = {
       if (customerAccSeq != null && customerAccSeq.isNotEmpty) 'customerAccSeq': customerAccSeq,
       if (customerRequestId != null) 'customerRequestId': customerRequestId,
@@ -639,6 +735,7 @@ class OfflineApiClient {
       'notes': notes,
       'lines': lines.map((l) => l.toJson()).toList(),
       'submit': true,
+      'clientRequestId': id,
     };
     final localId = _localId();
     final total = lines.fold<num>(0, (s, l) => s + (l.lineTotal ?? l.quant * l.unitPrice));
@@ -651,6 +748,7 @@ class OfflineApiClient {
       'notes': notes,
       'localPending': true,
       'lines': lines.map((l) => l.toJson()).toList(),
+      'clientRequestId': id,
     };
 
     Future<Order> queueLocal() async {
@@ -675,15 +773,22 @@ class OfflineApiClient {
         catalogBranchId: catalogBranchId,
         notes: notes,
         lines: lines,
+        clientRequestId: id,
       );
-      await _cache.mergeListItem(OfflineKeys.orders, _orderMap(order));
+      await applyServerOrderAfterSubmit(order, id);
       return order;
     } on ApiException catch (e) {
       if (e.statusCode == 401) throw e;
+      // Server responded — do not create a second invoice via outbox.
+      if (e.statusCode != null) throw e;
       return queueLocal();
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
-      return queueLocal();
+      if (_shouldQueueCreateOffline(e)) return queueLocal();
+      if (e.type == DioExceptionType.receiveTimeout || e.type == DioExceptionType.sendTimeout) {
+        _throwAmbiguousCreateTimeout(e);
+      }
+      throw ApiException(_apiNetworkMessage(e), statusCode: e.response?.statusCode);
     }
   }
 
@@ -778,6 +883,19 @@ class OfflineApiClient {
     return ids;
   }
 
+  Future<Set<int>> _pendingOutboxLocalIdsFor(String entityType) async {
+    final entries = await _outbox.pending();
+    final ids = <int>{};
+    for (final entry in entries) {
+      if (entry.entityType != entityType) continue;
+      final opt = entry.optimisticJson;
+      if (opt == null) continue;
+      final id = _rowId(opt['id']);
+      if (id != 0) ids.add(id);
+    }
+    return ids;
+  }
+
   /// يُزيل سندات/رسائل محلية قديمة لا تطابق السيرفر (مثلاً بعد الحذف من لوحة التحكم).
   Future<void> reconcileStaleLocalReceipts() async {
     if (!_online) return;
@@ -833,7 +951,38 @@ class OfflineApiClient {
         : <Map<String, dynamic>>[];
     final synced = _syncReceiptsWithServer(online, cachedRaw, keepLocalIds: keepLocalIds);
     await _cache.setJson(cacheKey, synced);
+    await _reconcileStaleLocalOrders();
     await _ref.read(syncStatusProvider.notifier).refreshPendingCount();
+  }
+
+  Future<void> _reconcileStaleLocalOrders() async {
+    final data = await _api.requestJson('GET', '/orders');
+    final online = (data['orders'] as List?)
+            ?.map((e) => Map<String, dynamic>.from(e as Map))
+            .toList() ??
+        <Map<String, dynamic>>[];
+    final onlineCrIds = online.map(_orderClientRequestId).where((s) => s.isNotEmpty).toSet();
+
+    final entries = await _outbox.pending();
+    final keepLocalIds = <int>{};
+    for (final entry in entries) {
+      if (entry.entityType != 'order') continue;
+      final cr = _orderClientRequestId(entry.body ?? {});
+      final optId = _rowId(entry.optimisticJson?['id']);
+      if (cr.isNotEmpty && onlineCrIds.contains(cr)) {
+        if (optId != 0) await _cache.removeListItem(OfflineKeys.orders, optId);
+        await _outbox.markDone(entry.id);
+        continue;
+      }
+      if (optId != 0) keepLocalIds.add(optId);
+    }
+
+    final cachedJson = await _cache.getJson(OfflineKeys.orders);
+    final cachedRaw = cachedJson is List
+        ? cachedJson.map((e) => Map<String, dynamic>.from(e as Map)).toList()
+        : <Map<String, dynamic>>[];
+    final synced = _syncOrdersWithServer(online, cachedRaw, keepLocalIds: keepLocalIds);
+    await _cache.setJson(OfflineKeys.orders, synced);
   }
 
   Future<List<Receipt>> _parseReceiptList(List<Map<String, dynamic>> raw) async {
@@ -897,6 +1046,7 @@ class OfflineApiClient {
     String? notes,
     int? deliveryReceiptId,
   }) async {
+    final clientRequestId = _clientRequestId();
     final body = {
       'customerAccSeq': customerAccSeq,
       'treeAccSeq': treeAccSeq,
@@ -906,6 +1056,7 @@ class OfflineApiClient {
       'discount': discount,
       'notes': notes ?? '',
       if (deliveryReceiptId != null) 'deliveryReceiptId': deliveryReceiptId,
+      'clientRequestId': clientRequestId,
     };
     final localId = _localId();
     final cacheKey = _receiptsCacheKey();
@@ -925,6 +1076,7 @@ class OfflineApiClient {
       'localPending': true,
       if (_agentId != null) 'agentId': _agentId,
       if (deliveryReceiptId != null) 'deliveryReceiptId': deliveryReceiptId,
+      'clientRequestId': clientRequestId,
     };
 
     Future<Receipt> queueLocal() async {
@@ -951,6 +1103,7 @@ class OfflineApiClient {
         discount: discount,
         notes: notes,
         deliveryReceiptId: deliveryReceiptId,
+        clientRequestId: clientRequestId,
       );
       await _cache.mergeListItem(cacheKey, Map<String, dynamic>.from({
         'id': receipt.id,
@@ -971,10 +1124,15 @@ class OfflineApiClient {
       return receipt;
     } on ApiException catch (e) {
       if (e.statusCode == 401) throw e;
+      if (e.statusCode != null) throw e;
       return queueLocal();
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
-      return queueLocal();
+      if (_shouldQueueCreateOffline(e)) return queueLocal();
+      if (e.type == DioExceptionType.receiveTimeout || e.type == DioExceptionType.sendTimeout) {
+        _throwAmbiguousCreateTimeout(e);
+      }
+      throw ApiException(_apiNetworkMessage(e), statusCode: e.response?.statusCode);
     }
   }
 
@@ -1037,12 +1195,14 @@ class OfflineApiClient {
     String? displayCustomerName,
     String? displayCustomerNum,
   }) async {
+    final clientRequestId = _clientRequestId();
     final body = {
       'customerAccSeq': customerAccSeq,
       'treeAccSeq': treeAccSeq,
       'treeName': treeName,
       'amount': amount,
       'notes': notes ?? '',
+      'clientRequestId': clientRequestId,
     };
     final localId = _localId();
     final cacheKey = _deliveryCacheKey();
@@ -1060,6 +1220,7 @@ class OfflineApiClient {
       'notes': notes,
       'createdAt': DateTime.now().toIso8601String(),
       'localPending': true,
+      'clientRequestId': clientRequestId,
       if (_agentId != null) 'agentId': _agentId,
     };
 
@@ -1084,6 +1245,7 @@ class OfflineApiClient {
         treeName: treeName,
         amount: amount,
         notes: notes,
+        clientRequestId: clientRequestId,
       );
       await _cache.mergeListItem(cacheKey, _normalizeDeliveryRow(Map<String, dynamic>.from({
         'id': receipt.id,
@@ -1112,10 +1274,16 @@ class OfflineApiClient {
       return receipt;
     } on ApiException catch (e) {
       if (e.statusCode == 401) throw e;
+      // Server responded — do not create a second delivery receipt via outbox.
+      if (e.statusCode != null) throw e;
       return queueLocal();
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
-      return queueLocal();
+      if (_shouldQueueCreateOffline(e)) return queueLocal();
+      if (e.type == DioExceptionType.receiveTimeout || e.type == DioExceptionType.sendTimeout) {
+        _throwAmbiguousCreateTimeout(e);
+      }
+      throw ApiException(_apiNetworkMessage(e), statusCode: e.response?.statusCode);
     }
   }
 
@@ -1209,10 +1377,16 @@ class OfflineApiClient {
       return receipt;
     } on ApiException catch (e) {
       if (e.statusCode == 401) throw e;
+      // Handover is idempotent on server — don't invent a local success after rejection.
+      if (e.statusCode != null) throw e;
       return queueLocal();
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
-      return queueLocal();
+      if (_shouldQueueCreateOffline(e)) return queueLocal();
+      if (e.type == DioExceptionType.receiveTimeout || e.type == DioExceptionType.sendTimeout) {
+        _throwAmbiguousCreateTimeout(e);
+      }
+      throw ApiException(_apiNetworkMessage(e), statusCode: e.response?.statusCode);
     }
   }
 
@@ -1365,10 +1539,15 @@ class OfflineApiClient {
       return finalize(request);
     } on ApiException catch (e) {
       if (e.statusCode == 401) throw e;
+      if (e.statusCode != null) throw e;
       return queueLocal();
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
-      return queueLocal();
+      if (_shouldQueueCreateOffline(e)) return queueLocal();
+      if (e.type == DioExceptionType.receiveTimeout || e.type == DioExceptionType.sendTimeout) {
+        _throwAmbiguousCreateTimeout(e);
+      }
+      throw ApiException(_apiNetworkMessage(e), statusCode: e.response?.statusCode);
     }
   }
 
@@ -1521,10 +1700,15 @@ class OfflineApiClient {
       return visit;
     } on ApiException catch (e) {
       if (e.statusCode == 401) throw e;
+      if (e.statusCode != null) throw e;
       return queueLocal();
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
-      return queueLocal();
+      if (_shouldQueueCreateOffline(e)) return queueLocal();
+      if (e.type == DioExceptionType.receiveTimeout || e.type == DioExceptionType.sendTimeout) {
+        _throwAmbiguousCreateTimeout(e);
+      }
+      throw ApiException(_apiNetworkMessage(e), statusCode: e.response?.statusCode);
     }
   }
 

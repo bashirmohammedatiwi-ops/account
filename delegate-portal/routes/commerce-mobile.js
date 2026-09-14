@@ -75,15 +75,25 @@ router.get('/orders/:id', authAgent, (req, res) => {
 });
 
 router.post('/orders', authAgent, (req, res) => {
-  const { customerAccSeq, customerRequestId, catalogBranchId, notes, lines, submit } = req.body || {};
+  const { customerAccSeq, customerRequestId, catalogBranchId, notes, lines, submit, clientRequestId } = req.body || {};
   try {
     resolveOrderCustomer(req.agent.id, { customerAccSeq, customerRequestId });
   } catch (err) {
     return res.status(403).json({ ok: false, error: err.message });
   }
   try {
-    let order = createOrder(req.agent.id, { customerAccSeq, customerRequestId, catalogBranchId, notes, lines });
-    if (submit) order = submitOrder(order.id, req.agent.id);
+    let order = createOrder(req.agent.id, {
+      customerAccSeq,
+      customerRequestId,
+      catalogBranchId,
+      notes,
+      lines,
+      clientRequestId,
+      submit: !!submit
+    });
+    if (submit && order?.rawStatus === 'draft') {
+      order = submitOrder(order.id, req.agent.id);
+    }
     res.json({ ok: true, order });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
