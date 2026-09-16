@@ -79,6 +79,41 @@ function listDatabases(dataRoot) {
     .sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true }));
 }
 
+/**
+ * nxServer's admin panel can keep aliases registered long after the folder they
+ * pointed to was renamed/moved/deleted (e.g. a leftover from a past year-switch
+ * attempt) — it returns them regardless. Only keep aliases whose target folder
+ * still exists and actually holds NexusDB tables, so a stale alias never shows
+ * up as a fake "database" in the discovery list.
+ */
+/**
+ * nxServer's admin panel can keep aliases registered long after the folder they
+ * pointed to was renamed/moved/deleted (e.g. a leftover from a past year-switch
+ * attempt) — it returns them regardless. Only keep aliases whose target folder
+ * still exists and actually holds NexusDB tables, so a truly stale alias never
+ * shows up. The alias name is preserved exactly as registered (a fiscal-year
+ * database such as "20252026" is legitimate and must not be renamed).
+ */
+function filterLiveAliases(aliases) {
+  const out = [];
+  const seen = new Set();
+  for (const a of aliases || []) {
+    const p = String(a?.path || '').trim();
+    const name = String(a?.name || '').trim();
+    if (!p || !name || !fs.existsSync(p)) continue;
+    try {
+      if (!fs.readdirSync(p).some((f) => f.toLowerCase().endsWith('.nx1'))) continue;
+    } catch {
+      continue;
+    }
+    const key = `${name.toLowerCase()}|${p.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name, path: p });
+  }
+  return out;
+}
+
 function listTables(dbPath) {
   if (!fs.existsSync(dbPath)) return [];
 
@@ -144,5 +179,6 @@ module.exports = {
   listTextExports,
   readTextExport,
   formatSize,
-  isLocked
+  isLocked,
+  filterLiveAliases
 };

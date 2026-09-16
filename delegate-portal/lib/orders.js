@@ -108,11 +108,81 @@ function lineImageUrl(productId, barcode) {
   return `/uploads/${String(path).replace(/\\/g, '/')}`;
 }
 
+/** رقم المادة في الإداري (File13n.Num) — هذا ما يطابقه موظف التجهيز، لا باركود EAN الكتالوج. */
+function resolveLineMaterialCodes(row = {}) {
+  const stored = String(row.barcode || '').trim();
+  try {
+    return resolveLineMaterialCodesUnsafe(row, stored);
+  } catch {
+    return { matNum: stored, barcode: stored };
+  }
+}
+
+function resolveLineMaterialCodesUnsafe(row = {}, stored = '') {
+  let product = null;
+  if (row.product_id) {
+    product = db.prepare(`
+      SELECT p.barcode, p.sku_num, p.edari_seq,
+             m.num AS edari_num, m.barcode AS edari_barcode
+      FROM products p
+      LEFT JOIN edari_materials m ON m.seq = p.edari_seq
+      WHERE p.id = ?
+    `).get(row.product_id);
+  }
+  if (!product && stored) {
+    product = db.prepare(`
+      SELECT p.barcode, p.sku_num, p.edari_seq,
+             m.num AS edari_num, m.barcode AS edari_barcode
+      FROM products p
+      LEFT JOIN edari_materials m ON m.seq = p.edari_seq
+      WHERE p.barcode = ? OR p.sku_num = ? OR p.edari_seq = ?
+      ORDER BY p.id DESC LIMIT 1
+    `).get(stored, stored, stored);
+  }
+  if (product && !String(product.edari_num || '').trim()) {
+    const extra = db.prepare(`
+      SELECT num AS edari_num
+      FROM edari_materials
+      WHERE num = ? OR barcode = ? OR seq = ? OR num = ? OR barcode = ?
+      LIMIT 1
+    `).get(
+      String(product.sku_num || ''),
+      String(product.barcode || ''),
+      String(product.edari_seq || ''),
+      stored,
+      stored
+    );
+    if (extra?.edari_num) product = { ...product, edari_num: extra.edari_num };
+  }
+  if (!product && stored) {
+    const mat = db.prepare(`
+      SELECT num AS edari_num, barcode AS edari_barcode
+      FROM edari_materials
+      WHERE num = ? OR barcode = ? OR seq = ?
+      LIMIT 1
+    `).get(stored, stored, stored);
+    const matNum = String(mat?.edari_num || '').trim();
+    return {
+      matNum: matNum || stored,
+      barcode: matNum || stored
+    };
+  }
+  const matNum = String(product?.edari_num || product?.sku_num || '').trim();
+  const display = matNum || stored || String(product?.barcode || '').trim();
+  return {
+    matNum: matNum || display,
+    barcode: display
+  };
+}
+
 function mapLine(row) {
+  const codes = resolveLineMaterialCodes(row);
   return {
     id: row.id,
     productId: row.product_id,
-    barcode: row.barcode || '',
+    barcode: codes.barcode,
+    matNum: codes.matNum,
+    skuNum: codes.matNum,
     matName: row.mat_name,
     quant: Number(row.quant || 0),
     bonus: Number(row.bonus || 0),
@@ -336,9 +406,14 @@ function normalizeLines(lines = []) {
     const tester = Number(line.tester || 0);
     const unitPrice = Number(line.unitPrice ?? line.price ?? 0);
     const lineTotal = Number(line.lineTotal ?? quant * unitPrice);
+    const productId = line.productId || null;
+    const codes = resolveLineMaterialCodes({
+      product_id: productId,
+      barcode: line.barcode || line.matNum || line.skuNum || ''
+    });
     return {
-      productId: line.productId || null,
-      barcode: String(line.barcode || ''),
+      productId,
+      barcode: codes.barcode || String(line.barcode || ''),
       matName: String(line.matName || line.name || '').trim(),
       quant,
       bonus,

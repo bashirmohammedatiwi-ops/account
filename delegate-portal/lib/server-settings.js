@@ -3,11 +3,13 @@ const path = require('path');
 
 const DEFAULT_EDARI = {
   mode: 'tcp',
-  alias: '2025',
+  alias: '2026',
   server: '127.0.0.1',
   port: 16000,
   dataRoot: '',
-  databasePath: ''
+  databasePath: '',
+  includePreviousYearOnSync: false,
+  previousYear: { enabled: true, alias: '2025' }
 };
 
 function settingsPath() {
@@ -35,8 +37,17 @@ function readServerSettings() {
 
 function writeServerSettings(patch = {}) {
   const current = readServerSettings();
+  let nextEdari = current.edari;
+  if (patch.edari != null) {
+    try {
+      const { normalizeEdariConnection } = require('../sync-client/edari-connection');
+      nextEdari = normalizeEdariConnection({ ...current.edari, ...patch.edari });
+    } catch {
+      nextEdari = { ...current.edari, ...patch.edari };
+    }
+  }
   const next = {
-    edari: patch.edari != null ? { ...current.edari, ...patch.edari } : current.edari,
+    edari: nextEdari,
     backgroundSync: patch.backgroundSync != null
       ? { ...current.backgroundSync, ...patch.backgroundSync }
       : current.backgroundSync,
@@ -48,12 +59,25 @@ function writeServerSettings(patch = {}) {
   const file = settingsPath();
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(next, null, 2), 'utf8');
+  if (patch.edari != null) {
+    try {
+      const bgFile = path.join(path.dirname(file), 'background-sync.json');
+      let current = {};
+      if (fs.existsSync(bgFile)) {
+        current = JSON.parse(fs.readFileSync(bgFile, 'utf8')) || {};
+      }
+      current.edari = next.edari;
+      fs.writeFileSync(bgFile, JSON.stringify(current, null, 2), 'utf8');
+    } catch {
+      /* Electron IPC store may be absent in Docker */
+    }
+  }
   return next;
 }
 
 function applyEdariSettingsToEnv(edari = null) {
-  const { connectionToEnv } = require('../sync-client/edari-connection');
-  const settings = edari || readServerSettings().edari;
+  const { connectionToEnv, normalizeEdariConnection } = require('../sync-client/edari-connection');
+  const settings = normalizeEdariConnection(edari || readServerSettings().edari);
   Object.assign(process.env, connectionToEnv(settings));
   return settings;
 }

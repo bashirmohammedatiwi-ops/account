@@ -281,7 +281,12 @@ let agentAssignableTrees = [];
 let primaryAgentsCache = [];
 let agentModalSelectedTrees = [];
 let agentTreeSearchQuery = '';
+let agentTreeFilter = 'all';
 let agentModalEditingMeta = null;
+let syncTreesCache = [];
+let syncSelectedTrees = [];
+let syncTreeSearchQuery = '';
+let syncTreeFilter = 'all';
 
 function syncAgentRoleUi() {
   const roleRadio = document.querySelector('input[name="agentRoleRadio"]:checked');
@@ -580,17 +585,65 @@ function asText(v, depth = 0) {
   return '';
 }
 
+function looksBrokenTreeName(name) {
+  const s = String(name || '');
+  return !s.trim() || s.includes('\uFFFD') || s.includes('�') || /[\u4e00-\u9fff]/.test(s);
+}
+
+function pickBetterTreeName(a, b) {
+  const left = asText(a);
+  const right = asText(b);
+  if (left && !looksBrokenTreeName(left)) return left;
+  if (right && !looksBrokenTreeName(right)) return right;
+  return left || right;
+}
+
+function isCustomerTree(row = {}) {
+  if (row.isCustomer === true) return true;
+  const num = asText(row.num);
+  const name = asText(row.name1);
+  const master = String(row.master ?? '').replace(/[^0-9]/g, '');
+  return master === '13' || /^121/.test(num) || /زبائن|زبون/.test(name);
+}
+
+function sortAssignableTrees(trees = []) {
+  return trees.slice().sort((a, b) => {
+    const ca = isCustomerTree(a);
+    const cb = isCustomerTree(b);
+    if (ca !== cb) return ca ? -1 : 1;
+    const seqDiff = Number(b.seq || 0) - Number(a.seq || 0);
+    if (seqDiff) return seqDiff;
+    return String(a.num || '').localeCompare(String(b.num || ''), 'ar', { numeric: true });
+  });
+}
+
+function newestTreeCutoff(trees = []) {
+  const seqs = [...new Set(trees.map((t) => Number(t.seq) || 0).filter(Boolean))].sort((a, b) => b - a);
+  return seqs[Math.min(4, Math.max(0, seqs.length - 1))] || 0;
+}
+
+function isNewTree(tree, cutoff) {
+  const seq = Number(tree?.seq || 0);
+  return seq > 0 && cutoff > 0 && seq >= cutoff;
+}
+
 function normalizeAssignableTree(row = {}) {
   const seq = asText(row.seq ?? row.Seq);
   const num = asText(row.num ?? row.Num);
   const name1 = asText(row.name1 ?? row.Name1 ?? row.name ?? row.Name);
-  return {
+  const master = asText(row.master ?? row.Master);
+  const tree = {
     seq,
     num,
     name1,
     sub_count: Number(row.sub_count ?? row.subCount ?? row.SubCount ?? 0),
     bal: Number(row.bal ?? row.Bal ?? 0),
+    master,
+    isCustomer: row.isCustomer === true,
+    missingOnServer: row.missingOnServer === true || row.onServer === false
   };
+  tree.isCustomer = tree.isCustomer || isCustomerTree(tree);
+  return tree;
 }
 
 function treeDisplayLabel(tree) {
@@ -601,15 +654,32 @@ function treeDisplayLabel(tree) {
   const num = asText(tree.num);
   const name = asText(tree.name1);
   const seq = asText(tree.seq);
-  if (tree.missingOnServer) {
-    const base = name || num || (seq ? `شجرة #${seq}` : '—');
-    return `${base} (غير مرفوعة للسيرفر)`;
-  }
   if (name && num) return `${name} (${num})`;
   if (name) return name;
   if (num) return `شجرة ${num}`;
   if (seq) return `شجرة #${seq}`;
   return 'شجرة بدون اسم';
+}
+
+function treeSearchHaystack(tree) {
+  return `${asText(tree.num)} ${asText(tree.name1)} ${asText(tree.seq)}`.toLowerCase();
+}
+
+function applyTreeListFilter(trees, { query = '', filter = 'all', selected = [] } = {}) {
+  const q = String(query || '').trim().toLowerCase();
+  const selectedSet = new Set((selected || []).map(String));
+  return trees.filter((t) => {
+    if (filter === 'customers' && !isCustomerTree(t) && !selectedSet.has(String(t.seq))) return false;
+    if (!q) return true;
+    return treeSearchHaystack(t).includes(q);
+  });
+}
+
+function syncTreeFilterButtons(rootId, active) {
+  document.querySelectorAll(`#${rootId} [data-tree-filter]`).forEach((btn) => {
+    btn.classList.toggle('is-active', btn.dataset.treeFilter === active);
+    btn.setAttribute('aria-pressed', btn.dataset.treeFilter === active ? 'true' : 'false');
+  });
 }
 
 async function loadAgentAssignableTrees({ forceLive = false } = {}) {
@@ -618,28 +688,28 @@ async function loadAgentAssignableTrees({ forceLive = false } = {}) {
     const map = new Map();
     for (const raw of edariTrees) {
       const t = normalizeAssignableTree(raw);
-      if (!t.seq || Number(t.sub_count) <= 0) continue;
+      if (!t.seq) continue;
       map.set(String(t.seq), { ...t, missingOnServer: !dbSeqSet.has(String(t.seq)) });
     }
     for (const raw of dbTrees) {
       const t = normalizeAssignableTree(raw);
-      if (!t.seq || Number(t.sub_count) <= 0) continue;
+      if (!t.seq) continue;
       const seq = String(t.seq);
       const hit = map.get(seq);
       map.set(seq, hit
         ? {
           ...hit,
           num: hit.num || t.num,
-          name1: hit.name1 || t.name1,
+          name1: pickBetterTreeName(hit.name1, t.name1),
           sub_count: hit.sub_count || t.sub_count,
           bal: hit.bal ?? t.bal,
+          master: hit.master || t.master,
+          isCustomer: hit.isCustomer || t.isCustomer,
           missingOnServer: false
         }
         : { ...t, missingOnServer: false });
     }
-    return [...map.values()].sort((a, b) =>
-      String(a.num || a.seq).localeCompare(String(b.num || b.seq), 'ar', { numeric: true })
-    );
+    return sortAssignableTrees([...map.values()]);
   };
 
   const loadFromEdari = async () => {
@@ -676,7 +746,7 @@ async function loadAgentAssignableTrees({ forceLive = false } = {}) {
         sub_count: t.sub_count,
         bal: t.bal,
         missingOnServer: t.onServer === false
-      })).filter((t) => t.seq && Number(t.sub_count) > 0);
+      })).filter((t) => t.seq);
       if (agentAssignableTrees.length) return agentAssignableTrees;
     } catch { /* fallback below */ }
   }
@@ -684,21 +754,21 @@ async function loadAgentAssignableTrees({ forceLive = false } = {}) {
   let trees = [];
   if (window.edariDesktop?.listEdariTrees) {
     const data = await window.edariDesktop.listEdariTrees();
-    trees = (data?.trees || []).map(normalizeAssignableTree).filter((t) => t.seq && Number(t.sub_count) > 0);
+    trees = (data?.trees || []).map(normalizeAssignableTree).filter((t) => t.seq);
   } else {
     const data = await api('/api/admin/edari/trees').catch(() => api('/api/admin/trees'));
-    trees = (data?.trees || []).map(normalizeAssignableTree).filter((t) => t.seq && Number(t.sub_count) > 0);
+    trees = (data?.trees || []).map(normalizeAssignableTree).filter((t) => t.seq);
   }
   const dbData = await api('/api/admin/trees').catch(() => ({ trees: [] }));
   const dbSeqSet = new Set((dbData?.trees || []).map((t) => String(t.seq)));
   trees = trees.map((t) => ({ ...t, missingOnServer: !dbSeqSet.has(String(t.seq)) }));
   for (const db of (dbData?.trees || [])) {
-    if (Number(db.sub_count) <= 0) continue;
+    if (!db.seq) continue;
     if (!trees.some((t) => String(t.seq) === String(db.seq))) {
       trees.push(normalizeAssignableTree({ ...db, missingOnServer: false }));
     }
   }
-  trees.sort((a, b) => String(a.num || a.seq).localeCompare(String(b.num || b.seq), 'ar', { numeric: true }));
+  trees = sortAssignableTrees(trees);
   agentAssignableTrees = trees;
   return trees;
 }
@@ -716,9 +786,7 @@ function mergeAgentTreeOptions(selected = []) {
       missingOnServer: true,
     });
   }
-  return [...map.values()].sort((a, b) =>
-    String(a.num || a.seq).localeCompare(String(b.num || b.seq), undefined, { numeric: true })
-  );
+  return sortAssignableTrees([...map.values()]);
 }
 
 async function loadTrees() {
@@ -741,14 +809,16 @@ async function loadTrees() {
         return {
           ...t,
           num: t.num || db.num,
-          name1: t.name1 || db.name1,
+          name1: pickBetterTreeName(t.name1, db.name1),
           sub_count: t.sub_count || db.sub_count,
           bal: t.bal ?? db.bal,
+          master: t.master || db.master,
+          isCustomer: t.isCustomer || db.isCustomer,
         };
       });
     }
 
-    treesCache = trees.filter((t) => t.seq);
+    treesCache = sortAssignableTrees(trees.filter((t) => t.seq));
     explorer.trees = treesCache;
     if (explorer.loaded) renderExplorerTrees();
   } catch (e) {
@@ -1098,6 +1168,7 @@ function initSyncLiveFeed() {
 }
 
 function getSelectedSyncTreeSeqs() {
+  if (syncSelectedTrees.length) return syncSelectedTrees.map(String);
   return [...document.querySelectorAll('#syncTreeChecks input[name=syncTreeSeq]:checked')]
     .map((c) => c.value)
     .filter(Boolean);
@@ -1115,13 +1186,15 @@ function getSavedSyncTreeSeqs() {
 
 /** الشجرات من الواجهة، أو من localStorage إن لم تُحمَّل القائمة بعد */
 function getEffectiveSyncTreeSeqs() {
+  if (syncSelectedTrees.length) return syncSelectedTrees.map(String);
   const fromDom = getSelectedSyncTreeSeqs();
   if (fromDom.length) return fromDom;
   return getSavedSyncTreeSeqs();
 }
 
 function saveSyncTreeSelection() {
-  const seqs = getSelectedSyncTreeSeqs();
+  const seqs = [...new Set(syncSelectedTrees.map(String).filter(Boolean))];
+  syncSelectedTrees = seqs;
   localStorage.setItem('syncTreeSeqs', JSON.stringify(seqs));
   void persistBackgroundSyncSettings({ treeSeqs: seqs });
   window.adminSharedState?.patchUiPrefs?.({ syncTreeSeqs: seqs, updatedAt: new Date().toISOString() });
@@ -1130,41 +1203,130 @@ function saveSyncTreeSelection() {
 async function persistBackgroundSyncSettings(override = {}) {
   if (!window.edariDesktop?.saveBackgroundSyncSettings) return null;
   const treeSeqs = override.treeSeqs ?? getEffectiveSyncTreeSeqs();
-  const edari = override.edari ?? readEdariForm();
-  return window.edariDesktop.saveBackgroundSyncSettings({
+  const payload = {
     serverUrl: resolveSyncServerUrl(),
     syncKey: document.getElementById('syncApiKey')?.value?.trim() || '',
     treeSeqs,
     autoSyncEnabled: document.getElementById('autoSyncEnabled')?.checked !== false,
-    edari,
     ...override
-  });
+  };
+  if (override.edari) payload.edari = override.edari;
+  return window.edariDesktop.saveBackgroundSyncSettings(payload);
 }
 
 const EDARI_LS_KEY = 'edariConnection';
 
 const DEFAULT_EDARI_UI = {
   mode: 'tcp',
-  alias: '2025',
+  alias: '2026',
   server: '127.0.0.1',
   port: 16000,
   dataRoot: 'D:\\Future of Technology\\EdariNX\\Data',
-  databasePath: 'D:\\Future of Technology\\EdariNX\\Data\\2025'
+  databasePath: 'D:\\Future of Technology\\EdariNX\\Data\\2026',
+  includePreviousYearOnSync: false,
+  previousYear: {
+    enabled: true,
+    alias: '2025',
+    dataRoot: 'D:\\Future of Technology\\EdariNX\\Data',
+    databasePath: 'D:\\Future of Technology\\EdariNX\\Data\\2025'
+  }
 };
 
-function readEdariForm() {
+function suggestPrevAlias(alias) {
+  const y = Number(String(alias || '').trim());
+  if (Number.isInteger(y) && y >= 2001 && y <= 2100) return String(y - 1);
+  const glued = String(alias || '').trim().match(/^(20\d{2})(20\d{2})$/);
+  if (glued && glued[1] !== glued[2]) return glued[1] < glued[2] ? glued[1] : glued[2];
+  return '';
+}
+
+function splitGluedYearAlias(alias) {
+  const m = String(alias || '').trim().match(/^(20\d{2})(20\d{2})$/);
+  if (!m || m[1] === m[2]) return null;
   return {
-    mode: document.getElementById('edariMode')?.value === 'internal' ? 'internal' : 'tcp',
-    alias: document.getElementById('edariAlias')?.value?.trim() || '2025',
-    server: document.getElementById('edariServer')?.value?.trim() || '127.0.0.1',
-    port: Number(document.getElementById('edariPort')?.value || 16000),
-    dataRoot: document.getElementById('edariDataRoot')?.value?.trim() || '',
-    databasePath: document.getElementById('edariDatabasePath')?.value?.trim() || ''
+    current: m[1] < m[2] ? m[2] : m[1],
+    previous: m[1] < m[2] ? m[1] : m[2]
   };
 }
 
+function joinEdariPath(...parts) {
+  return parts.filter(Boolean).join('\\').replace(/[\\/]+/g, '\\');
+}
+
+function edariFolderName(p) {
+  return String(p || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '';
+}
+
+function normalizeEdariForm(edari = {}) {
+  const next = {
+    mode: edari.mode === 'internal' ? 'internal' : 'tcp',
+    alias: (() => {
+      const rawAlias = String(edari.alias || '').trim();
+      const glued = splitGluedYearAlias(rawAlias);
+      return glued ? glued.current : rawAlias;
+    })(),
+    server: String(edari.server || '127.0.0.1').trim() || '127.0.0.1',
+    port: Number(edari.port || 16000) || 16000,
+    dataRoot: String(edari.dataRoot || '').trim(),
+    databasePath: String(edari.databasePath || '').trim()
+  };
+  if (!next.dataRoot && next.databasePath) {
+    next.dataRoot = next.databasePath.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]+$/, '');
+  }
+  if (!next.alias && next.databasePath) {
+    next.alias = edariFolderName(next.databasePath);
+  }
+  if (next.dataRoot && next.alias) {
+    const expected = joinEdariPath(next.dataRoot, next.alias);
+    const pathAlias = edariFolderName(next.databasePath);
+    if (!next.databasePath || (pathAlias && pathAlias !== next.alias)) {
+      next.databasePath = expected;
+    }
+  }
+  const prevSrc = edari.previousYear && typeof edari.previousYear === 'object' ? edari.previousYear : {};
+  const suggested = suggestPrevAlias(next.alias);
+  const prevEnabled = prevSrc.enabled == null ? Boolean(suggested || prevSrc.alias) : !!prevSrc.enabled;
+  let prevAlias = String(prevSrc.alias || '').trim();
+  if (prevEnabled && !prevAlias) prevAlias = suggested;
+  const prevRoot = String(prevSrc.dataRoot || next.dataRoot || '').trim();
+  let prevPath = String(prevSrc.databasePath || '').trim();
+  if (prevRoot && prevAlias) {
+    const expectedPrev = joinEdariPath(prevRoot, prevAlias);
+    const prevPathAlias = edariFolderName(prevPath);
+    if (!prevPath || (prevPathAlias && prevPathAlias !== prevAlias)) {
+      prevPath = expectedPrev;
+    }
+  }
+  next.previousYear = {
+    enabled: Boolean(prevEnabled && prevAlias && prevAlias !== next.alias),
+    alias: prevAlias && prevAlias !== next.alias ? prevAlias : '',
+    dataRoot: prevRoot,
+    databasePath: prevPath
+  };
+  next.includePreviousYearOnSync = !!edari.includePreviousYearOnSync;
+  return next;
+}
+
+function readEdariForm() {
+  return normalizeEdariForm({
+    mode: document.getElementById('edariMode')?.value === 'internal' ? 'internal' : 'tcp',
+    alias: document.getElementById('edariAlias')?.value?.trim() || '',
+    server: document.getElementById('edariServer')?.value?.trim() || '127.0.0.1',
+    port: Number(document.getElementById('edariPort')?.value || 16000),
+    dataRoot: document.getElementById('edariDataRoot')?.value?.trim() || '',
+    databasePath: document.getElementById('edariDatabasePath')?.value?.trim() || '',
+    includePreviousYearOnSync: false,
+    previousYear: {
+      enabled: document.getElementById('edariPrevEnabled')?.checked !== false,
+      alias: document.getElementById('edariPrevAlias')?.value?.trim() || '',
+      dataRoot: document.getElementById('edariDataRoot')?.value?.trim() || '',
+      databasePath: document.getElementById('edariPrevDatabasePath')?.value?.trim() || ''
+    }
+  });
+}
+
 function fillEdariForm(edari = {}) {
-  const e = { ...DEFAULT_EDARI_UI, ...edari };
+  const e = normalizeEdariForm({ ...DEFAULT_EDARI_UI, ...edari });
   const modeEl = document.getElementById('edariMode');
   if (modeEl) modeEl.value = e.mode === 'internal' ? 'internal' : 'tcp';
   const set = (id, val) => {
@@ -1176,10 +1338,23 @@ function fillEdariForm(edari = {}) {
   set('edariDatabasePath', e.databasePath);
   set('edariServer', e.server);
   set('edariPort', e.port);
+  set('edariPrevAlias', e.previousYear?.alias || '');
+  set('edariPrevDatabasePath', e.previousYear?.databasePath || '');
+  const prevEn = document.getElementById('edariPrevEnabled');
+  if (prevEn) prevEn.checked = e.previousYear?.enabled !== false;
+  const syncPrev = document.getElementById('syncIncludePrevYear');
+  if (syncPrev) syncPrev.checked = false;
 }
 
 function setEdariConnStatus(msg, type = '') {
   const el = document.getElementById('edariConnStatus');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = `field-hint edari-conn-status db-conn-status${type ? ` is-${type}` : ''}`;
+}
+
+function setEdariPrevConnStatus(msg, type = '') {
+  const el = document.getElementById('edariPrevConnStatus');
   if (!el) return;
   el.textContent = msg;
   el.className = `field-hint edari-conn-status db-conn-status${type ? ` is-${type}` : ''}`;
@@ -1196,13 +1371,13 @@ async function loadEdariConnectionSettings() {
         const remote = await api('/api/admin/server-settings');
         edari = { ...edari, ...(remote.edari || {}) };
       } catch {
-        if (!window.edariDesktop?.isLanClient) {
+        if (!isLanClientMode()) {
           const saved = localStorage.getItem(EDARI_LS_KEY);
           if (saved) edari = { ...edari, ...JSON.parse(saved) };
         }
       }
     }
-    if (!window.edariDesktop?.isLanClient) {
+    if (!isLanClientMode() && !edari.alias) {
       try {
         const saved = localStorage.getItem(EDARI_LS_KEY);
         if (saved) edari = { ...edari, ...JSON.parse(saved) };
@@ -1211,25 +1386,71 @@ async function loadEdariConnectionSettings() {
   } catch {
     /* ignore */
   }
+  edari = normalizeEdariForm(edari);
   fillEdariForm(edari);
-  if (!window.edariDesktop?.isLanClient) {
+  if (!isLanClientMode()) {
     localStorage.setItem(EDARI_LS_KEY, JSON.stringify(edari));
   }
+  const hostNote = isLanClientMode() ? ' على الجهاز الرئيسي' : '';
+  const prevNote = edari.previousYear?.enabled && edari.previousYear.alias
+    ? ` · السنة السابقة ${edari.previousYear.alias}`
+    : '';
+  setEdariConnStatus(`القاعدة النشطة: ${edari.alias || '—'}${prevNote}${hostNote}`, '');
+  setEdariPrevConnStatus(
+    edari.previousYear?.enabled && edari.previousYear.alias
+      ? `مرتبطة بـ ${edari.previousYear.alias} — تظهر في كشف الحساب والرصيد المدور`
+      : 'الربط بالسنة السابقة غير مفعّل'
+  );
 }
 
-async function saveEdariConnectionSettings() {
+async function saveEdariConnectionSettings({ silent = false } = {}) {
   const edari = readEdariForm();
-  localStorage.setItem(EDARI_LS_KEY, JSON.stringify(edari));
+  fillEdariForm(edari);
+  // لا نحفظ أي قاعدة لم نتأكد من وجودها فعلياً — يمنع التحويل الصامت إلى مسار
+  // أو alias وهمي (مثل alias قديم متبقٍّ في nxServer لا يقابله مجلد حقيقي).
+  if (typeof window.edariDesktop?.testEdariConnection === 'function') {
+    setEdariConnStatus('جاري التحقق من القاعدة قبل الحفظ...', '');
+    try {
+      const check = await window.edariDesktop.testEdariConnection(edari);
+      if (!check?.ok) {
+        const msg = `تعذّر التحويل — القاعدة "${edari.alias}" غير موجودة أو لا يمكن الاتصال بها: ${check?.error || ''}`;
+        setEdariConnStatus(msg, 'err');
+        notifyAdmin(msg, 'err');
+        throw new Error(msg);
+      }
+    } catch (err) {
+      if (err?.message) throw err;
+      const msg = `تعذّر التحقق من القاعدة "${edari.alias}" — لم يُحفظ التغيير`;
+      setEdariConnStatus(msg, 'err');
+      throw new Error(msg);
+    }
+  }
+  if (!isLanClientMode()) {
+    localStorage.setItem(EDARI_LS_KEY, JSON.stringify(edari));
+  }
   if (window.edariDesktop?.saveEdariSettings) {
-    await window.edariDesktop.saveEdariSettings(edari);
+    const saved = await window.edariDesktop.saveEdariSettings(edari);
+    if (saved?.edari) fillEdariForm(saved.edari);
   } else {
     try {
-      await api('/api/admin/server-settings', { method: 'PUT', body: JSON.stringify({ edari }) });
+      const remote = await api('/api/admin/server-settings', { method: 'PUT', body: JSON.stringify({ edari }) });
+      if (remote?.edari) fillEdariForm(remote.edari);
     } catch {
       await persistBackgroundSyncSettings({ edari });
     }
   }
-  setEdariConnStatus('تم حفظ إعدادات قاعدة البيانات', 'ok');
+  treesCache = [];
+  syncTreesCache = [];
+  agentAssignableTrees = [];
+  try { await loadSyncTrees(); } catch { /* optional */ }
+  if (!silent) {
+    const prevLabel = edari.previousYear?.enabled && edari.previousYear.alias
+      ? ` مع السنة السابقة ${edari.previousYear.alias}`
+      : '';
+    setEdariConnStatus(`تم التحويل إلى قاعدة ${edari.alias}${prevLabel} وتطبيقها على كل التطبيق`, 'ok');
+    notifyAdmin(`تم ربط الإداري بقاعدة ${edari.alias}${prevLabel}`, 'ok');
+  }
+  return edari;
 }
 
 async function testEdariConnectionSettings() {
@@ -1246,6 +1467,36 @@ async function testEdariConnectionSettings() {
     setEdariConnStatus(data.message || `تم الاتصال — ${data.alias}`, 'ok');
   } catch (e) {
     setEdariConnStatus(e.message, 'err');
+  }
+}
+
+async function testEdariPrevConnectionSettings() {
+  const edari = readEdariForm();
+  const prev = edari.previousYear;
+  if (!prev?.enabled || !prev.alias) {
+    setEdariPrevConnStatus('فعّل الربط واكتب اسم قاعدة السنة السابقة أولاً', 'err');
+    return;
+  }
+  const prevConn = {
+    ...edari,
+    alias: prev.alias,
+    dataRoot: prev.dataRoot || edari.dataRoot,
+    databasePath: prev.databasePath,
+    previousYear: { enabled: false },
+    includePreviousYearOnSync: false
+  };
+  setEdariPrevConnStatus('جاري اختبار السنة السابقة...');
+  try {
+    let data;
+    if (window.edariDesktop?.testEdariConnection) {
+      data = await window.edariDesktop.testEdariConnection(prevConn);
+    } else {
+      data = await api('/api/admin/edari/test-connection', { method: 'POST', body: JSON.stringify({ edari: prevConn }) });
+    }
+    if (!data.ok) throw new Error(data.error || 'فشل الاتصال');
+    setEdariPrevConnStatus(data.message || `تم الاتصال بالسنة السابقة — ${prev.alias}`, 'ok');
+  } catch (e) {
+    setEdariPrevConnStatus(e.message, 'err');
   }
 }
 
@@ -1270,8 +1521,10 @@ async function discoverEdariDatabases() {
       items.push({ name: db.name, path: db.path, label: `${db.name} — ${db.tableCount} جدول` });
     }
     for (const a of data.aliases || []) {
-      if (!items.some((x) => x.name === a.name)) {
-        items.push({ name: a.name, path: a.path, label: `${a.name} (nxServer) — ${a.path}` });
+      const name = String(a.name || '').trim() || edariFolderName(a.path);
+      if (!name) continue;
+      if (!items.some((x) => x.name === name || x.path === a.path)) {
+        items.push({ name, path: a.path, label: `${name} — ${a.path}` });
       }
     }
     if (!items.length) {
@@ -1291,25 +1544,72 @@ async function discoverEdariDatabases() {
   }
 }
 
-function renderSyncTreeChecks(trees, selected = []) {
+function updateSyncTreesCountMeta(shown, total, selected) {
+  const el = document.getElementById('syncTreesCount');
+  if (!el) return;
+  const customers = syncTreesCache.filter(isCustomerTree).length;
+  el.textContent = `معروض ${shown} من ${total} · ${selected} محددة · ${customers} شجرة زبائن`;
+}
+
+function renderSyncTreeChecks() {
   const el = document.getElementById('syncTreeChecks');
   if (!el) return;
-  if (!trees.length) {
-    el.innerHTML = '<p class="muted">لا توجد شجرات — تأكد أن EdariNX يعمل أو ارفع بيانات كاملة مرة واحدة</p>';
+  syncTreeFilterButtons('syncTreeFilter', syncTreeFilter);
+
+  const allTrees = sortAssignableTrees(syncTreesCache.map(normalizeAssignableTree).filter((t) => t.seq));
+  const selected = syncSelectedTrees.map(String);
+  const selectedSet = new Set(selected);
+  const trees = applyTreeListFilter(allTrees, {
+    query: syncTreeSearchQuery,
+    filter: syncTreeFilter,
+    selected
+  });
+  const cutoff = newestTreeCutoff(allTrees.filter(isCustomerTree));
+
+  if (!allTrees.length) {
+    el.innerHTML = '<p class="muted">لا توجد شجرات — تأكد أن EdariNX يعمل على هذا الجهاز ثم اضغط تحديث</p>';
+    updateSyncTreesCountMeta(0, 0, selectedSet.size);
     return;
   }
-  el.innerHTML = trees.map((t) => `
-    <label class="tree-pick">
-      <input type="checkbox" name="syncTreeSeq" value="${esc(t.seq)}" ${selected.includes(String(t.seq)) ? 'checked' : ''}>
+  if (!trees.length) {
+    el.innerHTML = '<p class="muted">لا توجد شجرات مطابقة — جرّب «كل الشجرات» أو امسح البحث</p>';
+    updateSyncTreesCountMeta(0, allTrees.length, selectedSet.size);
+    return;
+  }
+
+  el.innerHTML = trees.map((t) => {
+    const checked = selectedSet.has(String(t.seq));
+    const fresh = isNewTree(t, cutoff);
+    const customer = isCustomerTree(t);
+    const empty = Number(t.sub_count || 0) <= 0;
+    const badges = [
+      fresh ? '<span class="tree-badge tree-badge-new">جديدة</span>' : '',
+      customer ? '<span class="tree-badge tree-badge-cust">زبائن</span>' : '',
+      empty ? '<span class="tree-badge tree-badge-wait">فارغة</span>' : ''
+    ].filter(Boolean).join('');
+    return `
+    <label class="tree-pick${checked ? ' is-checked' : ''}${fresh ? ' tree-pick-new' : ''}">
+      <input type="checkbox" name="syncTreeSeq" value="${esc(t.seq)}" ${checked ? 'checked' : ''}>
       <div class="tree-pick-body">
-        <div class="tree-pick-name">${esc(asText(t.name1) || treeDisplayLabel(t))}</div>
-        <div class="tree-pick-meta">${esc(asText(t.num) || asText(t.seq))} · ${t.sub_count || 0} فرع</div>
+        <div class="tree-pick-name">${esc(treeDisplayLabel(t))} ${badges}</div>
+        <div class="tree-pick-meta">${esc(asText(t.num) || asText(t.seq))} · ${empty ? 'بدون فروع بعد' : `${t.sub_count || 0} فرع`}</div>
       </div>
-    </label>`).join('');
+    </label>`;
+  }).join('');
 
   el.querySelectorAll('input[name=syncTreeSeq]').forEach((input) => {
-    input.addEventListener('change', saveSyncTreeSelection);
+    input.addEventListener('change', () => {
+      input.closest('.tree-pick')?.classList.toggle('is-checked', input.checked);
+      const seq = String(input.value || '').trim();
+      const set = new Set(syncSelectedTrees.map(String));
+      if (input.checked) set.add(seq);
+      else set.delete(seq);
+      syncSelectedTrees = [...set];
+      saveSyncTreeSelection();
+      updateSyncTreesCountMeta(trees.length, allTrees.length, syncSelectedTrees.length);
+    });
   });
+  updateSyncTreesCountMeta(trees.length, allTrees.length, selectedSet.size);
 }
 
 async function loadSyncTrees() {
@@ -1324,6 +1624,10 @@ async function loadSyncTrees() {
       if (saved.length) localStorage.setItem('syncTreeSeqs', JSON.stringify(saved.map(String)));
     } catch { /* ignore */ }
   }
+  syncSelectedTrees = saved.map(String).filter(Boolean);
+  try {
+    syncTreeFilter = localStorage.getItem('syncTreeFilterV2') || 'all';
+  } catch { syncTreeFilter = 'all'; }
   const el = document.getElementById('syncTreeChecks');
   if (el) el.innerHTML = '<p class="muted">جاري تحميل الشجرات من EdariNX...</p>';
 
@@ -1331,14 +1635,17 @@ async function loadSyncTrees() {
     let trees = [];
     if (window.edariDesktop?.listEdariTrees) {
       const data = await window.edariDesktop.listEdariTrees();
+      if (data?.ok === false) throw new Error(data.error || 'فشل قراءة الشجرات من Edari');
       trees = data.trees || [];
     } else {
       const data = await api('/api/admin/edari/trees').catch(() => api('/api/admin/trees'));
+      if (data?.ok === false && !data?.trees?.length) throw new Error(data.error || 'فشل تحميل الشجرات');
       trees = data.trees || [];
     }
-    renderSyncTreeChecks(trees, saved.map(String));
-    treesCache = trees;
+    syncTreesCache = sortAssignableTrees((trees || []).map(normalizeAssignableTree).filter((t) => t.seq));
+    treesCache = syncTreesCache;
     explorer.trees = treesCache;
+    renderSyncTreeChecks();
     await persistBackgroundSyncSettings({ treeSeqs: getEffectiveSyncTreeSeqs() });
   } catch (e) {
     if (el) el.innerHTML = `<p class="muted">تعذّر تحميل الشجرات: ${esc(e.message)}</p>`;
@@ -1346,7 +1653,7 @@ async function loadSyncTrees() {
 }
 
 function getSelectedAgentTreeSeqs() {
-  return [...document.querySelectorAll('#agentTreeChecks input[name=treeSeq]:checked:not(:disabled)')]
+  return [...document.querySelectorAll('#agentTreeChecks input[name=treeSeq]:checked')]
     .map((c) => String(c.value || '').trim())
     .filter(Boolean);
 }
@@ -1354,8 +1661,17 @@ function getSelectedAgentTreeSeqs() {
 function updateAgentTreesCountMeta(shown, total, selected) {
   const el = document.getElementById('agentTreesCount');
   if (!el) return;
-  const ready = agentAssignableTrees.filter((t) => !t.missingOnServer).length;
-  el.textContent = `معروض ${shown} من ${total} · ${selected} محددة · ${ready} جاهزة للتفعيل`;
+  const customers = agentAssignableTrees.filter(isCustomerTree).length;
+  const pending = agentAssignableTrees.filter((t) => t.missingOnServer).length;
+  el.textContent = `معروض ${shown} من ${total} · ${selected} محددة · ${customers} زبائن · ${pending} بانتظار الرفع`;
+}
+
+function resolveAgentTreeFilter(selected = []) {
+  try {
+    const saved = localStorage.getItem('agentTreeFilterV2') || 'all';
+    if (saved === 'customers') return 'customers';
+  } catch { /* ignore */ }
+  return 'all';
 }
 
 function renderTreeChecks(selected = []) {
@@ -1364,25 +1680,25 @@ function renderTreeChecks(selected = []) {
   if (selected.length) agentModalSelectedTrees = selected.map(String);
   else if (!agentModalSelectedTrees.length) agentModalSelectedTrees = getSelectedAgentTreeSeqs();
 
+  syncTreeFilterButtons('agentTreeFilter', agentTreeFilter);
+
   const allTrees = mergeAgentTreeOptions(agentModalSelectedTrees);
-  const q = agentTreeSearchQuery.trim().toLowerCase();
-  let trees = allTrees;
-  if (q) {
-    trees = allTrees.filter((t) => {
-      const hay = `${t.num || ''} ${t.name1 || ''} ${t.seq || ''}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }
+  const trees = applyTreeListFilter(allTrees, {
+    query: agentTreeSearchQuery,
+    filter: agentTreeFilter,
+    selected: agentModalSelectedTrees
+  });
+  const cutoff = newestTreeCutoff(allTrees.filter(isCustomerTree));
 
   if (!allTrees.length) {
-    el.innerHTML = '<p class="muted">لا توجد شجرات — تحقق من اتصال Edari أو ارفع البيانات من «رفع البيانات»</p>';
+    el.innerHTML = '<p class="muted">لا توجد شجرات — تحقق من اتصال Edari على هذا الجهاز ثم اضغط تحديث</p>';
     updateAgentTreesCountMeta(0, 0, 0);
     return;
   }
 
   const selectedSet = new Set(agentModalSelectedTrees.map(String));
   if (!trees.length) {
-    el.innerHTML = '<p class="muted">لا توجد شجرات مطابقة للبحث</p>';
+    el.innerHTML = '<p class="muted">لا توجد شجرات مطابقة — جرّب «كل الشجرات» أو امسح البحث</p>';
     updateAgentTreesCountMeta(0, allTrees.length, selectedSet.size);
     return;
   }
@@ -1392,16 +1708,25 @@ function renderTreeChecks(selected = []) {
     const num = asText(t.num) || asText(t.seq) || '—';
     const subCount = Number(t.sub_count || 0);
     const missing = !!t.missingOnServer;
-    const checked = !missing && selectedSet.has(String(t.seq));
+    const checked = selectedSet.has(String(t.seq));
+    const fresh = isNewTree(t, cutoff);
+    const customer = isCustomerTree(t);
+    const empty = subCount <= 0;
     const meta = missing
-      ? 'غير مرفوعة — ارفعها من «رفع البيانات» لتفعيلها'
-      : `رقم ${num} · ${subCount} فرع · جاهزة`;
+      ? `رقم ${num} · ${empty ? 'فارغة' : `${subCount} فرع`} · ارفعها من «رفع البيانات» حتى تظهر زبائنها`
+      : `رقم ${num} · ${empty ? 'فارغة — بدون حسابات بعد' : `${subCount} فرع`} · جاهزة`;
     const safeLabel = (label && label !== '[object Object]') ? label : (num !== '—' ? `شجرة ${num}` : 'شجرة بدون اسم');
+    const badges = [
+      fresh ? '<span class="tree-badge tree-badge-new">جديدة</span>' : '',
+      customer ? '<span class="tree-badge tree-badge-cust">زبائن</span>' : '',
+      empty ? '<span class="tree-badge tree-badge-wait">فارغة</span>' : '',
+      missing ? '<span class="tree-badge tree-badge-wait">ارفعها</span>' : ''
+    ].filter(Boolean).join('');
     return `
-    <label class="tree-pick${missing ? ' tree-pick-muted' : ''}${checked ? ' is-checked' : ''}" title="${esc(safeLabel)}">
-      <input type="checkbox" name="treeSeq" value="${esc(t.seq)}" ${missing ? 'disabled' : ''} ${checked ? 'checked' : ''}>
+    <label class="tree-pick${missing ? ' tree-pick-muted' : ''}${checked ? ' is-checked' : ''}${fresh ? ' tree-pick-new' : ''}" title="${esc(safeLabel)}">
+      <input type="checkbox" name="treeSeq" value="${esc(t.seq)}" ${checked ? 'checked' : ''}>
       <span class="tree-pick-body">
-        <strong class="tree-pick-name">${esc(safeLabel)}</strong>
+        <strong class="tree-pick-name">${esc(safeLabel)} ${badges}</strong>
         <small class="tree-pick-meta">${esc(meta)}</small>
       </span>
     </label>`;
@@ -1410,7 +1735,6 @@ function renderTreeChecks(selected = []) {
   el.querySelectorAll('input[name=treeSeq]').forEach((input) => {
     input.addEventListener('change', () => {
       input.closest('.tree-pick')?.classList.toggle('is-checked', input.checked);
-      // عدّل المجموعة بالمفتاح لا بمسح DOM — كي لا تُفقد الشجرات المحددة المخفية بالبحث.
       const seq = String(input.value || '').trim();
       const set = new Set(agentModalSelectedTrees.map(String));
       if (input.checked) set.add(seq);
@@ -1494,6 +1818,7 @@ async function openAgentModal(id = null) {
   if (treeEl) treeEl.innerHTML = '<p class="muted loading">جاري تحميل الشجرات من Edari...</p>';
   try {
     await loadAgentAssignableTrees();
+    agentTreeFilter = resolveAgentTreeFilter(selectedTreeSeqs);
     renderTreeChecks(selectedTreeSeqs);
   } catch (e) {
     // أبقِ الشجرات المحفوظة قابلة للعرض حتى لو تعذّر جلب القائمة الكاملة.
@@ -1657,7 +1982,7 @@ async function initAutoSync() {
 }
 
 async function runSync(opts = {}) {
-  const { auto = false } = opts;
+  const { auto = false, prevYearOnly = false } = opts;
   if (auto && window.edariDesktop?.runBackgroundSyncNow) {
     await persistBackgroundSyncSettings();
     await window.edariDesktop.runBackgroundSyncNow();
@@ -1671,7 +1996,7 @@ async function runSync(opts = {}) {
   const serverUrl = resolveSyncServerUrl();
   const syncKey = document.getElementById('syncApiKey').value.trim();
   const backendUrl = (getBackendDisplayUrl() || '').replace(/\/$/, '');
-  await persistBackgroundSyncSettings();
+  await persistBackgroundSyncSettings({ edari: readEdariForm() });
   const treeSeqs = getEffectiveSyncTreeSeqs();
   if (!treeSeqs.length) {
     if (auto) {
@@ -1720,7 +2045,7 @@ async function runSync(opts = {}) {
   if (bar) bar.style.width = '0%';
   if (step) step.textContent = 'الخطوة 1 من 6';
   applySyncProgressLine('التحقق من اتصال سيرفر الرفع...');
-  appendSyncLiveLine('بدء رفع يدوي...', 'manual');
+  appendSyncLiveLine(prevYearOnly ? 'بدء رفع يدوي للسنة السابقة...' : 'بدء رفع يدوي...', 'manual');
 
   try {
     await verifySyncTarget(serverUrl, syncKey);
@@ -1728,11 +2053,18 @@ async function runSync(opts = {}) {
 
     let data;
     if (window.edariDesktop?.runLocalSync) {
-      data = await window.edariDesktop.runLocalSync(serverUrl, syncKey, treeSeqs);
+      data = await window.edariDesktop.runLocalSync(serverUrl, syncKey, treeSeqs, {
+        mode: prevYearOnly ? 'previous-year' : 'current'
+      });
     } else {
       data = await api('/api/admin/trigger-sync', {
         method: 'POST',
-        body: JSON.stringify({ serverUrl, syncKey, treeSeqs })
+        body: JSON.stringify({
+          serverUrl,
+          syncKey,
+          treeSeqs,
+          mode: prevYearOnly ? 'previous-year' : 'current'
+        })
       });
     }
     if (!data.ok) throw new Error(data.error || 'فشل الرفع');
@@ -1783,10 +2115,16 @@ document.getElementById('agentTreeSearch')?.addEventListener('input', (e) => {
   agentTreeSearchQuery = e.target.value || '';
   renderTreeChecks(agentModalSelectedTrees);
 });
+document.getElementById('agentTreeFilter')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-tree-filter]');
+  if (!btn) return;
+  agentTreeFilter = btn.dataset.treeFilter === 'all' ? 'all' : 'customers';
+  try { localStorage.setItem('agentTreeFilterV2', agentTreeFilter); } catch { /* ignore */ }
+  renderTreeChecks(agentModalSelectedTrees);
+});
 document.getElementById('btnAgentTreesAll')?.addEventListener('click', () => {
-  // يضيف الشجرات الظاهرة الجاهزة فقط، محافظاً على المحدد المخفي بالبحث.
   const set = new Set(agentModalSelectedTrees.map(String));
-  document.querySelectorAll('#agentTreeChecks input[name=treeSeq]:not(:disabled)').forEach((c) => {
+  document.querySelectorAll('#agentTreeChecks input[name=treeSeq]').forEach((c) => {
     set.add(String(c.value || '').trim());
   });
   agentModalSelectedTrees = [...set];
@@ -1823,6 +2161,16 @@ document.getElementById('btnSyncNow')?.addEventListener('click', async () => {
   await persistBackgroundSyncSettings();
   void runSync({ auto: false });
 });
+document.getElementById('btnSyncPrevYear')?.addEventListener('click', async () => {
+  const ok = confirm(
+    'رفع يدوي لسنة سابقة: حركات + فواتير بنفس التفاصيل.\n\n' +
+    'يُنفَّذ مرة واحدة ولا يدخل في التحديث التلقائي.\n' +
+    'رفع السنة الحالية بعد ذلك لن يحذف هذه البيانات.\n\nمتابعة؟'
+  );
+  if (!ok) return;
+  await persistBackgroundSyncSettings();
+  void runSync({ auto: false, prevYearOnly: true });
+});
 document.getElementById('autoSyncEnabled')?.addEventListener('change', (e) => {
   void setAutoSyncEnabled(e.target.checked);
 });
@@ -1834,12 +2182,34 @@ document.getElementById('startAtLoginEnabled')?.addEventListener('change', async
 });
 document.getElementById('syncServerUrl')?.addEventListener('change', () => { void persistBackgroundSyncSettings(); });
 document.getElementById('syncApiKey')?.addEventListener('change', () => { void persistBackgroundSyncSettings(); });
+document.getElementById('syncTreeSearch')?.addEventListener('input', (e) => {
+  syncTreeSearchQuery = e.target.value || '';
+  renderSyncTreeChecks();
+});
+document.getElementById('syncTreeFilter')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-tree-filter]');
+  if (!btn) return;
+  syncTreeFilter = btn.dataset.treeFilter === 'all' ? 'all' : 'customers';
+  try { localStorage.setItem('syncTreeFilterV2', syncTreeFilter); } catch { /* ignore */ }
+  renderSyncTreeChecks();
+});
 document.getElementById('btnSyncTreesAll')?.addEventListener('click', () => {
-  document.querySelectorAll('#syncTreeChecks input[name=syncTreeSeq]').forEach((c) => { c.checked = true; });
+  const set = new Set(syncSelectedTrees.map(String));
+  document.querySelectorAll('#syncTreeChecks input[name=syncTreeSeq]').forEach((c) => {
+    set.add(String(c.value || '').trim());
+  });
+  syncSelectedTrees = [...set];
+  renderSyncTreeChecks();
   saveSyncTreeSelection();
 });
 document.getElementById('btnSyncTreesNone')?.addEventListener('click', () => {
-  document.querySelectorAll('#syncTreeChecks input[name=syncTreeSeq]').forEach((c) => { c.checked = false; });
+  const visible = new Set(
+    [...document.querySelectorAll('#syncTreeChecks input[name=syncTreeSeq]')].map((c) => String(c.value || '').trim())
+  );
+  syncSelectedTrees = syncTreeSearchQuery.trim() || syncTreeFilter !== 'all'
+    ? syncSelectedTrees.filter((s) => !visible.has(String(s)))
+    : [];
+  renderSyncTreeChecks();
   saveSyncTreeSelection();
 });
 document.getElementById('btnSyncTreesReload')?.addEventListener('click', loadSyncTrees);
@@ -1853,15 +2223,100 @@ function notifyAdmin(msg, type = 'ok') {
   alert(msg);
 }
 
+function collectSelectedAgentTreeSeqs() {
+  const fromMemory = (agentModalSelectedTrees || []).map((s) => String(s || '').trim()).filter(Boolean);
+  const fromDom = getSelectedAgentTreeSeqs();
+  return [...new Set([...fromMemory, ...fromDom])];
+}
+
+function selectedAgentTreeMeta(treeSeqs = []) {
+  const bySeq = new Map(agentAssignableTrees.map((t) => [String(t.seq), t]));
+  return treeSeqs.map((seq) => {
+    const t = bySeq.get(String(seq)) || {};
+    return {
+      seq: String(seq),
+      num: asText(t.num),
+      name1: asText(t.name1),
+      master: asText(t.master) || '13',
+      sub_count: Math.max(1, Number(t.sub_count || 0)),
+      bal: Number(t.bal || 0)
+    };
+  });
+}
+
+function resolveSyncKey() {
+  return String(
+    document.getElementById('syncApiKey')?.value
+    || localStorage.getItem('syncApiKey')
+    || window.ADMIN_CONFIG?.SYNC_API_KEY
+    || 'edari-sync-local-key-2025'
+  ).trim();
+}
+
+async function syncJson(server, path, body, key) {
+  const res = await fetch(`${server}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Sync-Key': key
+    },
+    body: JSON.stringify(body || {})
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.ok === false) {
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+  return data;
+}
+
+async function ensureTreesOnDelegateServer(trees = []) {
+  if (!trees.length) return { ok: true, skipped: true };
+  const server = (resolveSyncServerUrl() || resolveApiBase() || window.ADMIN_CONFIG?.BACKEND_URL || '').replace(/\/$/, '');
+  const key = resolveSyncKey();
+  if (!server || !key) {
+    throw new Error('تعذّر تجهيز الشجرات على سيرفر المندوبين — تحقق من عنوان الرفع ومفتاح المزامنة');
+  }
+  try {
+    const res = await fetch(`${server}/api/admin/trees/ensure`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trees })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.ok !== false) return data;
+  } catch { /* السيرفر الحالي قد لا يملك هذا المسار */ }
+
+  const start = await syncJson(server, '/api/sync/start', { accountSeqs: [] }, key);
+  await syncJson(server, '/api/sync/chunk', {
+    syncId: start.syncId,
+    kind: 'accounts',
+    rows: trees.map((t) => ({
+      Seq: t.seq,
+      Num: t.num || '',
+      Name1: t.name1 || '',
+      Master: t.master || '13',
+      SubCount: Math.max(1, Number(t.sub_count || 0)),
+      Bal: t.bal || 0
+    }))
+  }, key);
+  try {
+    await syncJson(server, '/api/sync/finish', {
+      syncId: start.syncId,
+      stats: { accounts: trees.length }
+    }, key);
+  } catch { /* الحسابات وصلت حتى لو فشل إنهاء السجل */ }
+  return { ok: true };
+}
+
 async function saveAgentForm(e) {
   if (e) e.preventDefault();
   const form = document.getElementById('agentForm');
-  const submitBtn = document.querySelector('#agentForm button[type="submit"]');
+  const submitBtn = document.querySelector('#agentForm button[type="submit"]') || document.getElementById('agentSaveBtn');
   if (!form) return;
 
   const id = String(document.getElementById('agentId')?.value || '').trim();
-  // المصدر الموثوق هو المجموعة المحفوظة في الذاكرة، لا صناديق DOM (قد تكون مخفية بالبحث).
-  const treeSeqs = [...new Set(agentModalSelectedTrees.map((s) => String(s || '').trim()).filter(Boolean))];
+  const treeSeqs = collectSelectedAgentTreeSeqs();
+  agentModalSelectedTrees = [...treeSeqs];
   const roleRadio = document.querySelector('input[name="agentRoleRadio"]:checked');
   if (roleRadio) {
     const sel = document.getElementById('agentRole');
@@ -1875,6 +2330,7 @@ async function saveAgentForm(e) {
     delegateRole: String(document.getElementById('agentRole')?.value || 'primary'),
     parentAgentId: null,
     treeSeqs,
+    trees: selectedAgentTreeMeta(treeSeqs),
   };
   if (body.delegateRole === 'secondary') {
     body.parentAgentId = String(document.getElementById('agentParentId')?.value || '').trim() || null;
@@ -1906,28 +2362,41 @@ async function saveAgentForm(e) {
     submitBtn.dataset.busy = '1';
   }
   try {
+    if (body.trees.length) {
+      await ensureTreesOnDelegateServer(body.trees);
+    }
     let result;
     if (id) {
       result = await api(`/api/admin/agents/${encodeURIComponent(id)}`, {
         method: 'PUT',
         body: JSON.stringify(body)
       });
-      let msg = 'تم تحديث المندوب';
-      if (result?.treesSkipped > 0) {
-        msg += ` — تم تجاهل ${result.treesSkipped} شجرة غير موجودة على السيرفر`;
-      }
-      notifyAdmin(msg, result?.treesSkipped > 0 ? 'warn' : 'ok');
     } else {
       result = await api('/api/admin/agents', {
         method: 'POST',
         body: JSON.stringify(body)
       });
-      let msg = 'تم إضافة المندوب';
-      if (result?.treesSkipped > 0) {
-        msg += ` — تم تجاهل ${result.treesSkipped} شجرة غير موجودة على السيرفر`;
-      }
-      notifyAdmin(msg, result?.treesSkipped > 0 ? 'warn' : 'ok');
     }
+    if (result?.treesSkipped > 0 && body.trees.length) {
+      await ensureTreesOnDelegateServer(body.trees);
+      const retryId = id || result?.id;
+      if (retryId) {
+        result = await api(`/api/admin/agents/${encodeURIComponent(retryId)}`, {
+          method: 'PUT',
+          body: JSON.stringify(body)
+        });
+      }
+    }
+    const assigned = Number(result?.treesAssigned ?? treeSeqs.length);
+    const skipped = Number(result?.treesSkipped || 0);
+    if (treeSeqs.length && skipped === treeSeqs.length) {
+      notifyAdmin('تم حفظ المندوب لكن الشجرات لم تُربط — ارفع الشجرة من «رفع البيانات» ثم أعد الحفظ', 'err');
+      return;
+    }
+    let msg = id ? 'تم حفظ المندوب والشجرات' : 'تم إضافة المندوب والشجرات';
+    if (assigned) msg += ` (${assigned})`;
+    if (skipped > 0) msg += ` — لم يُربط ${skipped}`;
+    notifyAdmin(msg, skipped > 0 ? 'warn' : 'ok');
     document.getElementById('agentModal')?.classList.add('hidden');
     primaryAgentsCache = [];
     await loadAgents();
@@ -2065,18 +2534,37 @@ document.getElementById('btnCopyMobileUrl').addEventListener('click', async () =
   }
 });
 
-document.getElementById('btnEdariSave')?.addEventListener('click', () => void saveEdariConnectionSettings());
+document.getElementById('btnEdariSave')?.addEventListener('click', () => { saveEdariConnectionSettings().catch(() => { /* status already shown */ }); });
 document.getElementById('btnEdariTest')?.addEventListener('click', () => void testEdariConnectionSettings());
+document.getElementById('btnEdariPrevTest')?.addEventListener('click', () => void testEdariPrevConnectionSettings());
 document.getElementById('btnEdariDiscover')?.addEventListener('click', () => void discoverEdariDatabases());
+document.getElementById('edariAlias')?.addEventListener('change', () => {
+  fillEdariForm(readEdariForm());
+});
+document.getElementById('edariDataRoot')?.addEventListener('change', () => {
+  fillEdariForm(readEdariForm());
+});
+document.getElementById('edariPrevAlias')?.addEventListener('change', () => {
+  fillEdariForm(readEdariForm());
+});
+document.getElementById('edariPrevEnabled')?.addEventListener('change', () => {
+  fillEdariForm(readEdariForm());
+});
 document.getElementById('edariDatabasePick')?.addEventListener('change', (e) => {
   const pick = e.target;
   const item = pick._items?.[Number(pick.value)];
   if (!item) return;
   const aliasEl = document.getElementById('edariAlias');
   const pathEl = document.getElementById('edariDatabasePath');
+  const rootEl = document.getElementById('edariDataRoot');
   if (aliasEl) aliasEl.value = item.name;
   if (pathEl) pathEl.value = item.path;
-  setEdariConnStatus(`تم اختيار ${item.name}`, 'ok');
+  if (rootEl && item.path) {
+    rootEl.value = String(item.path).replace(/[\\/]+$/, '').replace(/[\\/][^\\/]+$/, '');
+  }
+  fillEdariForm(readEdariForm());
+  setEdariConnStatus(`جاري التحويل إلى ${item.name}...`, '');
+  saveEdariConnectionSettings().catch(() => { /* status already shown */ });
 });
 
 function parseAdminHash() {

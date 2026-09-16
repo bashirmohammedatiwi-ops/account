@@ -60,24 +60,28 @@ function parseEdariSlashDate(raw) {
 
 function edariCalendarDayStart(value) {
   const raw = String(value || '').trim().replace(' 00:00:00', '');
-  if (!raw || raw.startsWith('12/30/1899')) return null;
+  // التاريخ الصفري في NexusDB/Delphi (30/12/1899) قد يأتي بأي صيغة: 12/30/1899
+  // أو 30/12/1899 أو 1899-12-30 — كلها تعني "لا تاريخ تثبيت". لا توجد بيانات
+  // محاسبية حقيقية في 1899، فأي ظهور لها = تاريخ فارغ.
+  if (!raw || raw.includes('1899')) return null;
 
   const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (iso) {
     const d = buildLocalDate(Number(iso[1]), Number(iso[2]), Number(iso[3]));
-    if (!d) return null;
+    if (!d || d.getFullYear() <= 1899) return null;
     d.setHours(0, 0, 0, 0);
     return d.getTime();
   }
 
   const slash = parseEdariSlashDate(raw);
   if (slash) {
+    if (slash.getFullYear() <= 1899) return null;
     slash.setHours(0, 0, 0, 0);
     return slash.getTime();
   }
 
   const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return null;
+  if (Number.isNaN(d.getTime()) || d.getFullYear() <= 1899) return null;
   d.setHours(0, 0, 0, 0);
   return d.getTime();
 }
@@ -100,7 +104,10 @@ function journalSortKey(row) {
   const raw = row.tx_date || row.Date || row.date || '';
   const d = parseEdariDate(raw);
   const t = d ? d.getTime() : 0;
-  const seq = Number(row.seq ?? row.Seq ?? 0);
+  const rawSeq = String(row.seq ?? row.Seq ?? '');
+  const seq = /^PY/i.test(rawSeq)
+    ? Number(rawSeq.split(':').pop() || 0)
+    : Number(rawSeq.replace(/[^0-9]/g, '') || 0);
   return { t, seq };
 }
 
@@ -569,7 +576,17 @@ function resolvePeriodOpeningBalance(account, allRows, dateFrom, dateTo) {
   const hasValidFixDate = isValidFixDate(fixDateRaw);
 
   if (!hasValidFixDate) {
-    // حسابات تراكمية (مثل زيادة ونقص 31209) — FixDate فارغ، الرصيد من الحركات السابقة
+    const yearStart = startOfCalendarDay(account?.currentYearStart);
+    const currentRows = (allRows || []).filter((row) => {
+      const seq = String(row.seq || row.Seq || '');
+      return !seq.startsWith('PY') && !row.sourceYear;
+    });
+    const prevOpeningRaw = account?.prevYearOpening ?? account?.prev_year_opening;
+    const hasPrevOpening = prevOpeningRaw != null && prevOpeningRaw !== ''
+      && Number.isFinite(Number(prevOpeningRaw));
+    if (hasPrevOpening && !(yearStart && periodStart < yearStart)) {
+      return parseAmount(prevOpeningRaw) + computeBalanceBeforePeriod(currentRows, dateFrom);
+    }
     return computeBalanceBeforePeriod(allRows, dateFrom);
   }
 
@@ -669,5 +686,7 @@ module.exports = {
   isValidFixDate,
   sortJournalRowsAsc,
   sortJournalRowsDesc,
-  endOfCalendarDay
+  endOfCalendarDay,
+  computeBalanceBeforePeriod,
+  balanceAtPeriodStartFromFix
 };

@@ -3,7 +3,9 @@ const { canAgentAccess } = require('./accounts');
 const { invoiceKindLabel, isReturnInvoiceKind } = require('./invoice-kinds');
 
 function normalizeBillSeq(value) {
-  const seq = String(value ?? '').replace(/[^0-9]/g, '');
+  const s = String(value ?? '').trim();
+  if (/^PY[0-9A-Za-z]+:/i.test(s)) return s;
+  const seq = s.replace(/[^0-9]/g, '');
   return seq && seq !== '0' ? seq : '';
 }
 
@@ -310,9 +312,12 @@ function getInvoiceByNum(billNum, accSeq) {
   const acc = normalizeAccSeq(accSeq);
   let invoice = null;
   if (acc) {
-    invoice = db.prepare(
-      'SELECT seq FROM invoices WHERE num = ? AND acc_seq = ? LIMIT 1'
-    ).get(num, acc);
+    invoice = db.prepare(`
+      SELECT seq FROM invoices
+      WHERE num = ? AND acc_seq = ?
+      ORDER BY CASE WHEN seq LIKE 'PY%' THEN 1 ELSE 0 END
+      LIMIT 1
+    `).get(num, acc);
   }
   if (!invoice) {
     invoice = db.prepare('SELECT seq FROM invoices WHERE num = ? LIMIT 1').get(num);

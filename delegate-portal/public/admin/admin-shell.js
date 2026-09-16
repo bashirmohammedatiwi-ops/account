@@ -223,7 +223,10 @@ const TOPBAR_ACTIONS = {
     { label: 'PDF', cls: 'btn-primary', target: 'btnStmtPdf' }
   ],
   priceSync: [{ label: 'مزامنة', cls: 'btn-primary', target: 'btnPriceSyncNow' }],
-  sync: [{ label: 'رفع الآن', cls: 'btn-primary', target: 'btnSyncNow' }],
+  sync: [
+    { label: 'رفع الآن', cls: 'btn-primary', target: 'btnSyncNow' },
+    { label: 'السنة السابقة', cls: 'btn-soft', target: 'btnSyncPrevYear' }
+  ],
   database: [
     { label: 'اختبار', cls: 'btn-soft', target: 'btnEdariTest' },
     { label: 'حفظ', cls: 'btn-primary', target: 'btnEdariSave' }

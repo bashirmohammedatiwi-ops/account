@@ -1210,6 +1210,10 @@
   margin: 10px 0 8px;
 }
 
+.ag-trees-section .tree-filter-chips {
+  margin: 0 0 8px;
+}
+
 .ag-trees-search {
   flex: 1 1 180px;
   min-width: 0;

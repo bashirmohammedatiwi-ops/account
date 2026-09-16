@@ -350,10 +350,55 @@ function loadEdariConnectionModule() {
   return require(path.join(getPortalDir(), 'sync-client', 'edari-connection'));
 }
 
+function readEdariFromDisk() {
+  const { DEFAULT_EDARI, normalizeEdariConnection } = loadEdariConnectionModule();
+  let edari = { ...DEFAULT_EDARI };
+  try {
+    process.env.DATABASE_PATH = process.env.DATABASE_PATH || getDatabasePath();
+    const { readServerSettings } = require(path.join(getPortalDir(), 'lib', 'server-settings'));
+    edari = { ...edari, ...(readServerSettings().edari || {}) };
+  } catch { /* ignore */ }
+  try {
+    const fromBg = backgroundSync?.getSettings?.()?.edari;
+    if (fromBg) {
+      edari = { ...edari, ...fromBg };
+    } else if (fs.existsSync(getSettingsPath())) {
+      const parsed = JSON.parse(fs.readFileSync(getSettingsPath(), 'utf8'));
+      if (parsed.edari) edari = { ...edari, ...parsed.edari };
+    }
+  } catch { /* ignore */ }
+  return normalizeEdariConnection(edari);
+}
+
+function persistEdariSettingsEverywhere(edari) {
+  const { normalizeEdariConnection, connectionToEnv } = loadEdariConnectionModule();
+  const normalized = normalizeEdariConnection(edari || readEdariFromDisk());
+  process.env.DATABASE_PATH = getDatabasePath();
+  Object.assign(process.env, connectionToEnv(normalized));
+  if (backgroundSync?.saveSettings) {
+    backgroundSync.saveSettings({ edari: normalized });
+  } else {
+    try {
+      const file = getSettingsPath();
+      let current = {};
+      if (fs.existsSync(file)) current = JSON.parse(fs.readFileSync(file, 'utf8')) || {};
+      current.edari = { ...(current.edari || {}), ...normalized };
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, JSON.stringify(current, null, 2), 'utf8');
+    } catch { /* ignore */ }
+  }
+  try {
+    const { writeServerSettings, applyEdariSettingsToEnv } = require(path.join(getPortalDir(), 'lib', 'server-settings'));
+    writeServerSettings({ edari: normalized });
+    applyEdariSettingsToEnv(normalized);
+  } catch (err) {
+    console.warn('persistEdariSettingsEverywhere', err.message);
+  }
+  return normalized;
+}
+
 function getEdariSettings() {
-  const { DEFAULT_EDARI } = loadEdariConnectionModule();
-  const saved = backgroundSync?.getSettings?.() || {};
-  return { ...DEFAULT_EDARI, ...(saved.edari || {}) };
+  return readEdariFromDisk();
 }
 
 function edariEnvExtra(settings = null) {
@@ -387,7 +432,8 @@ function serverEnv() {
     LAN_SERVER: LAN_SERVER ? '1' : '',
     DATABASE_PATH: getDatabasePath(),
     EDARI_READER_ROOT: getEdariReaderRoot(),
-    NODE_BIN: getNodeBin()
+    NODE_BIN: getNodeBin(),
+    ...edariEnvExtra()
   });
 }
 
@@ -718,12 +764,16 @@ let activeSyncPromise = null;
 function buildSyncTargets(serverUrl) {
   const targets = [];
   const primary = normalizeBackendUrl(serverUrl || BACKEND_URL);
-  if (primary) targets.push(primary);
   if (LAN_SERVER) {
+    if (REMOTE_BACKEND_URL) targets.push(REMOTE_BACKEND_URL);
     targets.push(`http://127.0.0.1:${PORT}`);
-    targets.push(REMOTE_BACKEND_URL);
+    if (primary && primary !== REMOTE_BACKEND_URL && !/127\.0\.0\.1|localhost/i.test(primary)) {
+      targets.push(primary);
+    }
+  } else if (primary) {
+    targets.push(primary);
   }
-  return [...new Set(targets)].join(',');
+  return [...new Set(targets.filter(Boolean))].join(',');
 }
 
 function runLocalSyncScript(serverUrl, syncKey, treeSeqs = [], options = {}) {
@@ -750,17 +800,24 @@ function runLocalSyncScript(serverUrl, syncKey, treeSeqs = [], options = {}) {
 
     const syncTarget = buildSyncTargets(serverUrl);
 
-    const child = spawn(nodeBin, [
+    const prevYearOnly = options.mode === 'previous-year' || options.prevYearOnly === true;
+    const args = [
       script,
       '--server', syncTarget,
       '--key', syncKey,
       '--trees', treeSeqs.join(',')
-    ], {
+    ];
+    if (prevYearOnly) args.push('--prev-year-only');
+
+    const child = spawn(nodeBin, args, {
       cwd: portalDir,
       env: portalChildEnv({
         SYNC_SERVER: syncTarget,
         SYNC_API_KEY: syncKey,
         SYNC_SOURCE: source,
+        SYNC_SKIP_PRODUCTS: '1',
+        SYNC_INCLUDE_PREV_YEAR: '0',
+        SYNC_PREV_YEAR_ONLY: prevYearOnly ? '1' : '0',
         EDARI_BACKEND_URL: BACKEND_URL,
         EDARI_USE_REMOTE: USE_REMOTE_UI ? '1' : '0'
       }),
@@ -1183,6 +1240,15 @@ async function listEdariMaterialTreesInProcess() {
   return { ok: true, trees, count: trees.length };
 }
 
+async function listEdariAccountTreesInProcess() {
+  Object.assign(process.env, edariEnvExtra());
+  const modPath = path.join(getPortalDir(), 'sync-client', 'list-edari-trees.js');
+  try { delete require.cache[require.resolve(modPath)]; } catch (_) { /* ignore */ }
+  const { listEdariTrees } = require(modPath);
+  const trees = await listEdariTrees();
+  return { ok: true, trees, count: trees.length };
+}
+
 function runEdariSalesReportScript(params = {}) {
   return queryEdariSalesReportSerialized(params);
 }
@@ -1385,8 +1451,11 @@ ipcMain.handle('lan-client:save-url', async (_e, url) => {
   return { ok: true, backendUrl: norm, edariHostUrl: norm };
 });
 
-ipcMain.handle('run-local-sync', (_e, { serverUrl, syncKey, treeSeqs }) => {
-  return runLocalSyncScript(serverUrl, syncKey, treeSeqs, { source: 'manual' });
+ipcMain.handle('run-local-sync', (_e, payload = {}) => {
+  return runLocalSyncScript(payload.serverUrl, payload.syncKey, payload.treeSeqs, {
+    source: 'manual',
+    mode: payload.mode
+  });
 });
 
 ipcMain.handle('verify-sync-target', async (_e, { serverUrl, syncKey }) => {
@@ -1404,8 +1473,16 @@ ipcMain.handle('verify-sync-target', async (_e, { serverUrl, syncKey }) => {
   return data;
 });
 
-ipcMain.handle('list-edari-trees', () => {
-  return runListEdariTreesScript();
+ipcMain.handle('list-edari-trees', async () => {
+  try {
+    return await listEdariAccountTreesInProcess();
+  } catch (err) {
+    try {
+      return await runListEdariTreesScript();
+    } catch (fallbackErr) {
+      return { ok: false, error: fallbackErr.message || err.message || 'فشل قراءة الشجرات' };
+    }
+  }
 });
 
 ipcMain.handle('list-edari-material-trees', async () => {
@@ -1505,8 +1582,8 @@ ipcMain.handle('get-edari-settings', () => {
 });
 
 ipcMain.handle('save-edari-settings', (_e, edari) => {
-  backgroundSync?.saveSettings({ edari: edari || {} });
-  return { ok: true, edari: getEdariSettings() };
+  const saved = persistEdariSettingsEverywhere(edari || {});
+  return { ok: true, edari: saved };
 });
 
 ipcMain.handle('test-edari-connection', async (_e, edari) => {
@@ -1533,7 +1610,7 @@ ipcMain.handle('list-edari-databases', async (_e, { dataRoot } = {}) => {
     let aliases = [];
     try {
       const { fetchAliases } = require(path.join(getEdariReaderRoot(), 'lib', 'nexus-admin'));
-      aliases = await fetchAliases();
+      aliases = scanner.filterLiveAliases(await fetchAliases());
     } catch {
       /* nxServer admin optional */
     }
@@ -1551,6 +1628,14 @@ ipcMain.handle('get-auto-sync-state', () => backgroundSync?.getState() || {});
 
 ipcMain.handle('save-background-sync-settings', (_e, patch) => {
   backgroundSync?.saveSettings(patch || {});
+  if (patch?.edari && ('includePreviousYearOnSync' in patch.edari || patch.edari.previousYear)) {
+    const current = getEdariSettings();
+    persistEdariSettingsEverywhere({
+      ...current,
+      includePreviousYearOnSync: !!patch.edari.includePreviousYearOnSync,
+      previousYear: patch.edari.previousYear || current.previousYear
+    });
+  }
   return backgroundSync?.getState() || {};
 });
 
@@ -1838,6 +1923,7 @@ app.whenReady().then(async () => {
   try {
     registerAdminUiProtocol();
     process.env.DATABASE_PATH = getDatabasePath();
+    persistEdariSettingsEverywhere(readEdariFromDisk());
     if (USE_LOCAL_SERVER || USE_BUNDLED_UI) {
       if (USE_LOCAL_SERVER) warnIfNodeBundleMissing();
       await startBackend();

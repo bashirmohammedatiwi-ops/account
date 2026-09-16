@@ -1,5 +1,13 @@
 import '../core/utils/json_utils.dart';
 
+String? _firstCode([Object? a, Object? b, Object? c]) {
+  for (final value in [a, b, c]) {
+    final text = '${value ?? ''}'.trim();
+    if (text.isNotEmpty && text != 'null') return text;
+  }
+  return null;
+}
+
 class Employee {
   const Employee({
     required this.username,
@@ -68,6 +76,7 @@ class OrderLine {
     required this.tester,
     required this.unitPrice,
     this.barcode,
+    this.matNum,
     this.lineTotal,
     this.imageUrl,
     this.remarks,
@@ -81,9 +90,16 @@ class OrderLine {
   final num tester;
   final num unitPrice;
   final String? barcode;
+  final String? matNum;
   final num? lineTotal;
   final String? imageUrl;
   final String? remarks;
+
+  String get displayCode {
+    final mat = matNum?.trim() ?? '';
+    if (mat.isNotEmpty) return mat;
+    return barcode?.trim() ?? '';
+  }
 
   num get deliverQty => quant + bonus + tester;
 
@@ -96,6 +112,7 @@ class OrderLine {
         tester: tester ?? this.tester,
         unitPrice: unitPrice,
         barcode: barcode,
+        matNum: matNum,
         lineTotal: lineTotal,
         imageUrl: imageUrl,
         remarks: remarks,
@@ -114,7 +131,8 @@ class OrderLine {
       bonus: asNum(json['bonus']),
       tester: asNum(json['tester']),
       unitPrice: asNum(json['unitPrice']),
-      barcode: json['barcode'] as String?,
+      barcode: _firstCode(json['matNum'], json['skuNum'], json['barcode']),
+      matNum: _firstCode(json['matNum'], json['skuNum']),
       lineTotal: json['lineTotal'] == null ? null : asNum(json['lineTotal']),
       imageUrl: imageUrl,
       remarks: json['remarks'] as String?,

@@ -29,11 +29,18 @@ function createBackgroundSync({
       startAtLogin: true,
       edari: {
         mode: 'tcp',
-        alias: '2025',
+        alias: '2026',
         server: '127.0.0.1',
         port: 16000,
         dataRoot: 'D:\\Future of Technology\\EdariNX\\Data',
-        databasePath: 'D:\\Future of Technology\\EdariNX\\Data\\2025'
+        databasePath: 'D:\\Future of Technology\\EdariNX\\Data\\2026',
+        includePreviousYearOnSync: false,
+        previousYear: {
+          enabled: true,
+          alias: '2025',
+          dataRoot: 'D:\\Future of Technology\\EdariNX\\Data',
+          databasePath: 'D:\\Future of Technology\\EdariNX\\Data\\2025'
+        }
       }
     };
     try {
@@ -55,6 +62,12 @@ function createBackgroundSync({
     const next = { ...settings, ...patch };
     if (patch.edari) {
       next.edari = { ...(settings.edari || {}), ...patch.edari };
+      if (patch.edari.previousYear) {
+        next.edari.previousYear = {
+          ...(settings.edari?.previousYear || {}),
+          ...patch.edari.previousYear
+        };
+      }
     }
     settings = next;
     fs.mkdirSync(path.dirname(getSettingsPath()), { recursive: true });

@@ -9,7 +9,7 @@ const path = require('path');
 const edariRoot = process.env.EDARI_READER_ROOT
   || path.join(__dirname, '..', '..', 'edari-reader');
 const odbcBridge = require(path.join(edariRoot, 'lib', 'odbc-bridge'));
-const { getEdariConnection } = require('./edari-connection');
+const { getEdariConnection, getPreviousYearConnection } = require('./edari-connection');
 const {
   parseAmount,
   parseJournalAmount,
@@ -31,12 +31,12 @@ const {
 
 const JOURNAL_CHUNK = 80;
 
-function connOptions() {
-  return { ...getEdariConnection() };
+function connOptions(conn) {
+  return { ...(conn || getEdariConnection()) };
 }
 
-async function query(sql, timeoutMs = 60000) {
-  const pending = odbcBridge.runQuery({ ...connOptions(), sql });
+async function query(sql, timeoutMs = 60000, conn = null) {
+  const pending = odbcBridge.runQuery({ ...connOptions(conn), sql });
   const r = await Promise.race([
     pending,
     new Promise((_, reject) => {
@@ -106,13 +106,51 @@ function mapJournalRow(j) {
   };
 }
 
-async function fetchAccounts(refs) {
-  const nums = refs.map((r) => sqlQuote(r)).join(',');
+function stripLeadingZeros(value) {
+  const s = String(value || '').trim();
+  const stripped = s.replace(/^0+(?=\d)/, '');
+  return stripped || s;
+}
+
+function currentYearStartIso(alias, prevAlias) {
+  const y = Number(String(alias || '').trim());
+  if (Number.isInteger(y) && y >= 2000 && y <= 2100) return `${y}-01-01`;
+  const glued = String(alias || '').trim().match(/^(20\d{2})(20\d{2})$/);
+  if (glued) {
+    const later = glued[1] > glued[2] ? glued[1] : glued[2];
+    return `${later}-01-01`;
+  }
+  const py = Number(String(prevAlias || '').trim());
+  if (Number.isInteger(py) && py >= 2000 && py <= 2100) return `${py + 1}-01-01`;
+  const nowY = new Date().getFullYear();
+  if (nowY >= 2000 && nowY <= 2100) return `${nowY}-01-01`;
+  return '';
+}
+
+async function fetchAccounts(refs, conn = null, options = {}) {
+  const variants = new Set();
+  const seqs = new Set();
+  for (const ref of refs) {
+    const trimmed = String(ref || '').trim();
+    if (!trimmed) continue;
+    variants.add(trimmed);
+    const noZeros = stripLeadingZeros(trimmed);
+    if (noZeros) variants.add(noZeros);
+    const n = sqlInt(trimmed);
+    if (n > 0) seqs.add(n);
+  }
+  const nums = [...variants].map((r) => sqlQuote(r)).join(',');
+  const seqList = options.numOnly ? '' : [...seqs].join(',');
+  if (!nums && !seqList) return [];
+  const where = [
+    nums ? `Num IN (${nums})` : '',
+    seqList ? `Seq IN (${seqList})` : ''
+  ].filter(Boolean).join(' OR ');
   const rows = await query(`
     SELECT Seq, Num, Name1, Name2, Address, Bal, Tot1, Tot2, FixDate, FixBal, SubCount
     FROM File11n
-    WHERE Num IN (${nums})
-  `, 30000);
+    WHERE ${where}
+  `, 30000, conn);
   return rows.map(mapAccount);
 }
 
@@ -137,9 +175,8 @@ function sqlTimestampStart(iso) {
  * أصغر نافذة تواريخ تكفي لبناء كشف الحساب — تُطبَّق في SQL بدل سحب كل
  * تاريخ الحساب (الفرق كبير جداً على صناديق فيها مئات آلاف الحركات).
  *
- * صناديق الكاشير (FixBal = 0 وتاريخ تثبيت صالح): الرصيد المدور صفر دائماً،
- * فتكفي حركات الفترة. الحسابات المرتكزة على FixBal تحتاج ما بين تاريخ
- * التثبيت وحدود الفترة. الحسابات التراكمية تحتاج كل ما قبل نهاية الفترة.
+ * الحسابات المرتكزة على FixDate تحتاج ما بين تاريخ التثبيت وحدود الفترة.
+ * الحسابات التراكمية (بلا تاريخ تثبيت) تحتاج كل ما قبل نهاية الفترة.
  */
 function journalWindowFor(account, dateFrom, dateTo) {
   const fixDateIso = toIsoDay(account?.fix_date);
@@ -167,7 +204,7 @@ function journalWhereForWindow(win) {
   return clauses.join(' AND ');
 }
 
-async function fetchJournalForWindow(seqs, win) {
+async function fetchJournalForWindow(seqs, win, conn = null) {
   const rows = [];
   const dateWhere = journalWhereForWindow(win);
   for (const part of chunk(seqs, JOURNAL_CHUNK)) {
@@ -179,14 +216,14 @@ async function fetchJournalForWindow(seqs, win) {
       FROM File12n
       WHERE ${where}
       ORDER BY Acc, "Date", Seq
-    `, 120000);
+    `, 120000, conn);
     rows.push(...chunkRows);
   }
   return rows;
 }
 
 /** يجمع الحسابات ذات النافذة الزمنية نفسها في استعلام واحد. */
-async function fetchJournalForAccounts(accounts, dateFrom, dateTo) {
+async function fetchJournalForAccounts(accounts, dateFrom, dateTo, conn = null) {
   const groups = new Map();
   for (const acc of accounts) {
     if (!acc.seq) continue;
@@ -198,7 +235,7 @@ async function fetchJournalForAccounts(accounts, dateFrom, dateTo) {
 
   const byAcc = new Map();
   for (const { win, seqs } of groups.values()) {
-    const rows = await fetchJournalForWindow(seqs, win);
+    const rows = await fetchJournalForWindow(seqs, win, conn);
     for (const raw of rows) {
       const mapped = mapJournalRow(raw);
       if (!byAcc.has(mapped.acc_seq)) byAcc.set(mapped.acc_seq, []);
@@ -260,7 +297,9 @@ function buildStatement(account, allRows, period = {}) {
   const stmt = buildLines(movementRows, openingBalance);
 
   if (openingBalance !== 0) {
-    const openingLine = buildOpeningLine(openingBalance, null);
+    const openingLine = buildOpeningLine(openingBalance, null, {
+      note: account.prevYearAlias ? `رصيد مدور · سنة ${account.prevYearAlias}` : ''
+    });
     if (openingLine) {
       openingLine.date = '';
       stmt.lines.unshift(openingLine);
@@ -292,6 +331,8 @@ function buildStatement(account, allRows, period = {}) {
       tot2: account.tot2,
       fixDate: account.fix_date || null,
       fixBal: account.fix_bal ?? 0,
+      prevYearAlias: account.prevYearAlias || null,
+      prevYearBal: account.prevYearBal ?? null,
       debtStatus: debtStatusFromBalance(finalBalance)
     },
     lines: stmt.lines,
@@ -305,6 +346,96 @@ function buildStatement(account, allRows, period = {}) {
     periodEnd: dateTo,
     lineCount: stmt.lines.length
   };
+}
+
+/**
+ * يربط السنة السابقة: الرصيد المدور = نفس معادلة كشف السنة السابقة عند
+ * بداية الفترة (وليس Bal الحالي، لأنه قد يشمل حركات بعد التحويل).
+ * حركات السنة السابقة تظهر كسطور فقط إذا طُلب التاريخ الكامل أو الفترة
+ * تبدأ قبل السنة الحالية.
+ */
+async function mergePreviousYearJournals(accounts, journalByAcc, options = {}) {
+  const prev = getPreviousYearConnection();
+  if (!prev) return;
+  const current = getEdariConnection();
+  if (prev.alias && current.alias && prev.alias === current.alias) return;
+
+  const nums = accounts.map((a) => a.num).filter(Boolean);
+  if (!nums.length) return;
+
+  let prevAccounts = [];
+  try {
+    prevAccounts = await fetchAccounts(nums, prev, { numOnly: true });
+  } catch (err) {
+    console.warn('previous-year accounts', err.message);
+    return;
+  }
+  if (!prevAccounts.length) return;
+
+  const yearStart = currentYearStartIso(current.alias, prev.alias);
+  const dateFrom = String(options.dateFrom || '').trim();
+  const dateTo = String(options.dateTo || '').trim();
+  const includeAllPrevious = options.includeAllPrevious === true
+    || Boolean(dateFrom && yearStart && dateFrom < yearStart);
+
+  const prevByNum = new Map();
+  for (const acc of prevAccounts) {
+    if (acc.num) prevByNum.set(acc.num, acc);
+    prevByNum.set(stripLeadingZeros(acc.num), acc);
+  }
+  const matchedPrev = [];
+  const prevSeqToCurrent = new Map();
+  for (const acc of accounts) {
+    const p = prevByNum.get(acc.num) || prevByNum.get(stripLeadingZeros(acc.num));
+    if (!p) continue;
+    prevSeqToCurrent.set(p.seq, acc.seq);
+    acc.prevYearAlias = prev.alias;
+    acc.prevYearBal = p.bal;
+    acc.currentYearStart = yearStart;
+    matchedPrev.push(p);
+  }
+  if (!matchedPrev.length) return;
+
+  let prevJournalByAcc = new Map();
+  try {
+    prevJournalByAcc = includeAllPrevious
+      ? (await (async () => {
+        const byAcc = new Map();
+        const rawRows = await fetchJournalForWindow(matchedPrev.map((a) => a.seq), { from: '', to: '' }, prev);
+        for (const raw of rawRows) {
+          const mapped = mapJournalRow(raw);
+          if (!byAcc.has(mapped.acc_seq)) byAcc.set(mapped.acc_seq, []);
+          byAcc.get(mapped.acc_seq).push(mapped);
+        }
+        return byAcc;
+      })())
+      : await fetchJournalForAccounts(matchedPrev, dateFrom || yearStart || '1990-01-01', dateTo || dateFrom || '2099-12-31', prev);
+  } catch (err) {
+    console.warn('previous-year journal', err.message);
+    return;
+  }
+
+  const currentBySeq = new Map(accounts.map((a) => [a.seq, a]));
+  for (const p of matchedPrev) {
+    const currentAcc = currentBySeq.get(prevSeqToCurrent.get(p.seq));
+    if (!currentAcc) continue;
+    const prevRows = prevJournalByAcc.get(p.seq) || [];
+    if (dateFrom && dateTo) {
+      currentAcc.prevYearOpening = resolvePeriodOpeningBalance(p, prevRows, dateFrom, dateTo);
+    }
+    if (!includeAllPrevious) continue;
+    for (const mapped of prevRows) {
+      const row = {
+        ...mapped,
+        seq: `PY${prev.alias}:${mapped.seq}`,
+        acc_seq: currentAcc.seq,
+        sourceYear: prev.alias,
+        exp2: mapped.exp2 || `سنة ${prev.alias}`
+      };
+      if (!journalByAcc.has(currentAcc.seq)) journalByAcc.set(currentAcc.seq, []);
+      journalByAcc.get(currentAcc.seq).push(row);
+    }
+  }
 }
 
 async function queryEdariAccountStatements(params = {}) {
@@ -327,11 +458,15 @@ async function queryEdariAccountStatements(params = {}) {
   const journalByAcc = accounts.length
     ? await fetchJournalForAccounts(accounts, dateFrom, dateTo)
     : new Map();
+  if (accounts.length) {
+    await mergePreviousYearJournals(accounts, journalByAcc, { dateFrom, dateTo });
+  }
 
   const statements = [];
   const missing = [];
   for (const ref of refs) {
-    const acc = byNum.get(String(ref)) || bySeq.get(String(ref));
+    const key = String(ref).trim();
+    const acc = byNum.get(key) || bySeq.get(key) || byNum.get(stripLeadingZeros(key));
     if (!acc) {
       missing.push(ref);
       continue;
@@ -355,6 +490,27 @@ async function queryEdariAccountStatements(params = {}) {
   };
 }
 
+async function queryEdariFullAccountStatement(ref) {
+  const key = String(ref || '').trim();
+  if (!key) return null;
+  const accounts = await fetchAccounts([key]);
+  if (!accounts.length) return null;
+  const journalByAcc = new Map();
+  const rawRows = await fetchJournalForWindow(accounts.map((a) => a.seq), { from: '', to: '' });
+  for (const raw of rawRows) {
+    const mapped = mapJournalRow(raw);
+    if (!journalByAcc.has(mapped.acc_seq)) journalByAcc.set(mapped.acc_seq, []);
+    journalByAcc.get(mapped.acc_seq).push(mapped);
+  }
+  await mergePreviousYearJournals(accounts, journalByAcc, { includeAllPrevious: true });
+  const acc = accounts[0];
+  return buildStatement(acc, journalByAcc.get(acc.seq) || [], {
+    dateFrom: '1990-01-01',
+    dateTo: '2099-12-31'
+  });
+}
+
 module.exports = {
-  queryEdariAccountStatements
+  queryEdariAccountStatements,
+  queryEdariFullAccountStatement
 };

@@ -16,10 +16,10 @@ Barcode barcodeTypeFor(String raw) {
 String barcodeTypeLabel(Barcode barcode) => barcode.name;
 
 Future<void> showProductBarcodeSheet(BuildContext context, OrderLine line, {int? lineNo}) async {
-  final code = line.barcode?.trim() ?? '';
+  final code = line.displayCode;
   if (code.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('لا يوجد باركود لهذا المنتج')),
+      const SnackBar(content: Text('لا يوجد رقم مادة لهذا المنتج')),
     );
     return;
   }
@@ -109,7 +109,7 @@ Future<void> showProductBarcodeSheet(BuildContext context, OrderLine line, {int?
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      barcodeTypeLabel(barcode),
+                      'رقم المادة · ${barcodeTypeLabel(barcode)}',
                       style: TextStyle(color: themed(ctx, light: AppColors.muted, dark: AppColors.mutedDark), fontWeight: FontWeight.w700, fontSize: 12),
                     ),
                   ],
@@ -117,7 +117,7 @@ Future<void> showProductBarcodeSheet(BuildContext context, OrderLine line, {int?
               ),
               const SizedBox(height: 16),
               Text(
-                'وجّه الماسح نحو الشريط الأسود — مناسب لقراءة EAN وCode 128',
+                'رقم المادة كما في النظام — وجّه الماسح نحو الشريط الأسود',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: themed(ctx, light: AppColors.muted, dark: AppColors.mutedDark), fontSize: 12, fontWeight: FontWeight.w600),
               ),
@@ -128,7 +128,7 @@ Future<void> showProductBarcodeSheet(BuildContext context, OrderLine line, {int?
                     child: OutlinedButton.icon(
                       onPressed: () {
                         Clipboard.setData(ClipboardData(text: code));
-                        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('تم نسخ الباركود')));
+                        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('تم نسخ رقم المادة')));
                       },
                       icon: const Icon(Icons.copy_rounded),
                       label: const Text('نسخ الرقم'),

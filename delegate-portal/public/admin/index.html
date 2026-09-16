@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="admin.css?v=20260908ime1">
-  <link rel="stylesheet" href="admin-agents.css?v=20260902agents6">
+  <link rel="stylesheet" href="admin.css?v=20260912trees2">
+  <link rel="stylesheet" href="admin-agents.css?v=20260912trees2">
   <link rel="stylesheet" href="admin-pro.css?v=20260902pro2">
   <link rel="stylesheet" href="admin-lan.css?v=20260906lan3">
 </head>
@@ -77,7 +77,7 @@
       <div class="sidebar-search-wrap">
         <svg class="sidebar-search-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <input type="search" id="sidebarNavFilter" class="sidebar-search" placeholder="بحث في القائمة…" autocomplete="off" aria-label="بحث في القائمة">
-      </div>
+        </div>
 
       <nav class="sidebar-nav" id="sidebarNav" aria-label="التنقل الرئيسي"></nav>
 
@@ -129,7 +129,7 @@
             <span>انتقل إلى…</span>
             <kbd class="kbd-hint">⌘K</kbd>
           </button>
-          <div class="topbar-actions" id="topbarActions"></div>
+        <div class="topbar-actions" id="topbarActions"></div>
         </div>
       </header>
 
@@ -141,23 +141,23 @@
           <div class="dash-layout">
             <div class="dash-layout-main">
               <div class="dash-hero panel dash-hero-v6">
-                <div class="dash-hero-main">
+            <div class="dash-hero-main">
                   <p class="dash-eyebrow" id="dashGreeting">مرحباً</p>
-                  <h2 class="dash-hero-title">لوحة التحكم</h2>
+              <h2 class="dash-hero-title">لوحة التحكم</h2>
                   <p class="dash-hero-sub">متابعة التجارة والتحصيل والمزامنة — واجهة موحّدة لإدارة العمل اليومي.</p>
                   <div class="dash-quick-actions" id="dashQuickActions"></div>
-                </div>
-                <div class="dash-hero-side">
+            </div>
+            <div class="dash-hero-side">
                   <div class="dash-live-status dash-live-card">
-                    <span class="status-dot off" id="dashStatusDot"></span>
+                <span class="status-dot off" id="dashStatusDot"></span>
                     <div>
                       <strong id="dashStatusText">جاري الاتصال...</strong>
                       <span class="muted">حالة السيرفر</span>
-                    </div>
+              </div>
                   </div>
                   <button type="button" class="btn btn-hero-soft" id="btnDashQuickRefresh">↻ تحديث اللوحة</button>
-                </div>
-              </div>
+            </div>
+          </div>
 
               <div class="dash-section-tiles" id="dashSectionTiles"></div>
 
@@ -176,12 +176,12 @@
               <div class="dash-block">
                 <div class="section-head section-head-inline">
                   <div>
-                    <h3 class="section-head-title">الأقسام</h3>
+            <h3 class="section-head-title">الأقسام</h3>
                     <p class="section-head-sub">تجارة · تحصيل · تقارير · نظام</p>
                   </div>
                 </div>
                 <div class="dash-hubs-grid dash-hubs-v5" id="dashHubs"></div>
-              </div>
+          </div>
 
               <div class="dash-block">
                 <div class="section-head section-head-inline">
@@ -195,22 +195,22 @@
                   <div id="dashRecentActivity" class="dash-recent-list muted">جاري التحميل…</div>
                 </div>
               </div>
-            </div>
+          </div>
 
             <aside class="dash-layout-side">
               <section class="panel panel-flat dash-side-card">
-                <h2 class="panel-title">آخر مزامنة</h2>
-                <div id="lastSyncInfo" class="panel-body muted">—</div>
-              </section>
+              <h2 class="panel-title">آخر مزامنة</h2>
+              <div id="lastSyncInfo" class="panel-body muted">—</div>
+            </section>
               <section class="panel panel-flat panel-highlight dash-side-card">
-                <h2 class="panel-title">تطبيق المندوب</h2>
-                <p class="panel-desc">رابط الويب للهاتف</p>
-                <div class="btn-row">
-                  <a class="btn btn-primary" id="mobileAppLink" href="/m" target="_blank">فتح التطبيق</a>
-                  <button type="button" class="btn btn-soft" id="btnCopyMobileUrl">نسخ الرابط</button>
-                </div>
-                <p class="url-preview" id="mobileUrlDisplay">—</p>
-              </section>
+              <h2 class="panel-title">تطبيق المندوب</h2>
+              <p class="panel-desc">رابط الويب للهاتف</p>
+              <div class="btn-row">
+                <a class="btn btn-primary" id="mobileAppLink" href="/m" target="_blank">فتح التطبيق</a>
+                <button type="button" class="btn btn-soft" id="btnCopyMobileUrl">نسخ الرابط</button>
+              </div>
+              <p class="url-preview" id="mobileUrlDisplay">—</p>
+            </section>
             </aside>
           </div>
         </section>
@@ -383,7 +383,7 @@
               <button type="button" class="btn btn-soft btn-sm" id="btnReceiptRefresh" title="تحديث القائمة">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
                 تحديث
-              </button>
+                </button>
               <button type="button" class="btn btn-primary btn-sm" id="btnReceiptQuickReady">جاهزة للترحيل</button>
             </div>
           </div>
@@ -467,7 +467,7 @@
                   <div class="rcv-view-toggle" role="group" aria-label="طريقة العرض">
                     <button type="button" class="rcv-view-btn is-active" data-rcv-view="table" title="جدول">
                       <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-                    </button>
+                </button>
                     <button type="button" class="rcv-view-btn" data-rcv-view="cards" title="بطاقات">
                       <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
                     </button>
@@ -1155,7 +1155,7 @@
             <div class="section-hub-icon tone-system" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
             <div class="section-hub-body">
               <h2 class="section-hub-title">النظام · رفع البيانات</h2>
-              <p class="section-hub-sub">رفع الطلبات والفواتير والسندات إلى الإداري — يدوياً أو كل 30 دقيقة تلقائياً</p>
+              <p class="section-hub-sub">رفع شجرات المندوبين إلى السيرفر — دفعات صغيرة مع إعادة محاولة تلقائية</p>
             </div>
           </div>
           <div class="sync-hero panel panel-accent">
@@ -1167,8 +1167,15 @@
                 <strong id="autoSyncPillTime">30:00</strong>
               </div>
             </div>
+            <div class="btn-row" style="flex-wrap:wrap;gap:8px">
             <button type="button" class="btn btn-primary btn-lg" id="btnSyncNow">رفع البيانات الآن</button>
+              <button type="button" class="btn btn-soft btn-lg" id="btnSyncPrevYear">رفع بيانات السنة السابقة</button>
           </div>
+          </div>
+          <p class="field-hint sync-prev-year-row" style="margin:12px 0 0;max-width:760px">
+            الرفع العادي والتلقائي (كل 30 دقيقة) للسنة الحالية فقط، ولا يحذف فواتير أو حركات السنة السابقة.
+            اضغط «رفع بيانات السنة السابقة» مرة واحدة لرفع حركاتها وفواتيرها بنفس التفاصيل إلى تطبيق المندوب.
+          </p>
 
           <div class="sync-progress hidden" id="syncProgress">
             <div class="sync-progress-inner">
@@ -1191,6 +1198,15 @@
                   <button type="button" class="btn btn-soft btn-sm" id="btnSyncTreesReload">تحديث</button>
                 </div>
               </div>
+              <p class="field-hint">حدّد الشجرات المطلوبة فقط. الرفع يقرأ الشجرة من الإداري ويرسلها على دفعات صغيرة حتى لا ينقطع.</p>
+              <div class="tree-filter-bar">
+                <input type="search" id="syncTreeSearch" class="search" placeholder="بحث: 12112، ايفولديرم، ريتينول..." autocomplete="off">
+                <div class="tree-filter-chips" id="syncTreeFilter">
+                  <button type="button" class="tree-filter-chip is-active" data-tree-filter="all" aria-pressed="true">كل الشجرات</button>
+                  <button type="button" class="tree-filter-chip" data-tree-filter="customers" aria-pressed="false">شجرات الزبائن</button>
+                </div>
+              </div>
+              <p class="muted tree-list-count" id="syncTreesCount"></p>
               <div class="tree-picks" id="syncTreeChecks">
                 <p class="muted">جاري تحميل الشجرات...</p>
               </div>
@@ -1340,10 +1356,10 @@
           </div>
           <div class="panel panel-accent db-settings-hero">
             <h2 class="panel-title">إعدادات قاعدة البيانات</h2>
-            <p class="panel-desc">ربط لوحة الإدارة بقاعدة <strong>EdariNX</strong> على هذا الجهاز. تُستخدم هذه الإعدادات في رفع الحسابات، قراءة الشجرات، وتحديث المنتجات من الإداري.</p>
+            <p class="panel-desc">ربط لوحة الإدارة بقاعدة <strong>EdariNX</strong>. على الجهاز الثانوي تُقرأ هذه الإعدادات من <strong>الجهاز الرئيسي</strong> وتُحفظ عليه.</p>
             <ul class="simple-list db-settings-notes">
               <li>تأكد أن <strong>nxServer</strong> يعمل قبل اختبار الاتصال (وضع TCP).</li>
-              <li>عند تغيير سنة القاعدة، عدّل <strong>Alias</strong> و<strong>مسار مجلد القاعدة</strong> ثم احفظ.</li>
+              <li>عند تغيير السنة اختر القاعدة من «اكتشاف القواعد» — يُطبَّق Alias والمسار معاً فوراً على كل التطبيق.</li>
               <li>زر «اكتشاف القواعد» يبحث تلقائياً داخل مجلد Data عن السنوات المتاحة.</li>
             </ul>
           </div>
@@ -1373,8 +1389,8 @@
 
               <label class="field">
                 <span>اسم القاعدة (Alias)</span>
-                <input type="text" id="edariAlias" dir="ltr" value="2025" autocomplete="off">
-                <p class="field-hint">اسم السنة أو Alias كما في EdariNX — عادةً رقم السنة مثل <code dir="ltr">2025</code>.</p>
+                <input type="text" id="edariAlias" dir="ltr" value="2026" autocomplete="off">
+                <p class="field-hint">اسم السنة الحالية أو Alias كما في EdariNX — الافتراضي <code dir="ltr">2026</code>.</p>
               </label>
 
               <label class="field field-wide">
@@ -1385,8 +1401,8 @@
 
               <label class="field field-wide">
                 <span>مسار مجلد القاعدة</span>
-                <input type="text" id="edariDatabasePath" dir="ltr" value="D:\Future of Technology\EdariNX\Data\2025" autocomplete="off">
-                <p class="field-hint">المسار الكامل لمجلد سنة القاعدة — يجب أن ينتهي باسم Alias (مثال: <code dir="ltr">...\Data\2025</code>).</p>
+                <input type="text" id="edariDatabasePath" dir="ltr" value="D:\Future of Technology\EdariNX\Data\2026" autocomplete="off">
+                <p class="field-hint">المسار الكامل لمجلد سنة القاعدة — يجب أن ينتهي باسم Alias (مثال: <code dir="ltr">...\Data\2026</code>).</p>
               </label>
 
               <label class="field">
@@ -1412,6 +1428,34 @@
               <p class="field-hint db-conn-status" id="edariConnStatus">—</p>
             </div>
           </section>
+
+          <section class="panel db-settings-form">
+            <div class="panel-head">
+              <div>
+                <h2 class="panel-title">السنة السابقة</h2>
+                <p class="panel-desc muted">ربط قاعدة السنة السابقة حتى يظهر الرصيد المدور وكشف حساب الزبون بكل الحركات السابقة. الرفع للمندوبين يبقى اختياريًا.</p>
+              </div>
+              <div class="btn-row">
+                <button type="button" class="btn btn-soft btn-sm" id="btnEdariPrevTest">اختبار السنة السابقة</button>
+              </div>
+            </div>
+            <div class="form-stack db-form-grid">
+              <label class="field field-wide" style="display:flex;align-items:center;gap:10px">
+                <input type="checkbox" id="edariPrevEnabled" checked>
+                <span>تفعيل الربط بالسنة السابقة في كشوف الحساب (لوحة التحكم + الزبون)</span>
+              </label>
+              <label class="field">
+                <span>اسم قاعدة السنة السابقة</span>
+                <input type="text" id="edariPrevAlias" dir="ltr" value="2025" autocomplete="off">
+                <p class="field-hint">عادةً السنة السابقة مثل <code dir="ltr">2025</code> عندما تكون السنة الحالية 2026.</p>
+              </label>
+              <label class="field field-wide">
+                <span>مسار قاعدة السنة السابقة</span>
+                <input type="text" id="edariPrevDatabasePath" dir="ltr" value="D:\Future of Technology\EdariNX\Data\2025" autocomplete="off">
+              </label>
+              <p class="field-hint db-conn-status" id="edariPrevConnStatus">—</p>
+            </div>
+          </section>
         </section>
 
         <!-- Agents -->
@@ -1430,7 +1474,7 @@
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                     <span>مندوب جديد</span>
                   </button>
-                </div>
+          </div>
               </div>
             </header>
 
@@ -1562,17 +1606,17 @@
           <div class="product-modal-media">
             <span class="field-label">صورة المنتج</span>
             <div class="product-image-dropzone" id="productImageDropzone" tabindex="0" role="button" aria-label="رفع صورة المنتج">
-              <div class="product-modal-media-row">
-                <div class="product-image-preview" id="productImagePreview">
-                  <span class="product-image-placeholder">صورة</span>
+            <div class="product-modal-media-row">
+              <div class="product-image-preview" id="productImagePreview">
+                <span class="product-image-placeholder">صورة</span>
+              </div>
+              <div class="product-image-side">
+                <div class="btn-row product-image-actions">
+                  <button type="button" class="btn btn-soft btn-sm" id="btnProductUploadImage">رفع صورة</button>
+                  <button type="button" class="btn btn-soft btn-sm hidden" id="btnProductRemoveImage">حذف الصورة</button>
                 </div>
-                <div class="product-image-side">
-                  <div class="btn-row product-image-actions">
-                    <button type="button" class="btn btn-soft btn-sm" id="btnProductUploadImage">رفع صورة</button>
-                    <button type="button" class="btn btn-soft btn-sm hidden" id="btnProductRemoveImage">حذف الصورة</button>
-                  </div>
                   <p class="field-hint" id="productImageHint">اسحب وأفلت، أو الصق (Ctrl+V)، أو اختر ملفاً — PNG / JPG / WebP</p>
-                </div>
+              </div>
               </div>
               <p class="product-dropzone-overlay" aria-hidden="true">أفلت الصورة هنا</p>
             </div>
@@ -1686,7 +1730,7 @@
           </div>
           <div>
             <p class="ag-modal-kicker">حساب المندوب</p>
-            <h3 id="agentModalTitle">مندوب جديد</h3>
+        <h3 id="agentModalTitle">مندوب جديد</h3>
           </div>
         </div>
         <button type="button" class="btn btn-icon" id="agentCancel" aria-label="إغلاق">×</button>
@@ -1727,9 +1771,9 @@
               </div>
               <label class="field"><span>كلمة المرور</span><input type="password" id="agentPassword" placeholder="فارغ = بدون تغيير عند التعديل" autocomplete="new-password"></label>
               <label class="check-row ag-active-row">
-                <input type="checkbox" id="agentActive" checked>
+          <input type="checkbox" id="agentActive" checked>
                 <span>حساب نشط — يستطيع تسجيل الدخول لتطبيق المندوب</span>
-              </label>
+        </label>
             </section>
             <section class="ag-form-card">
               <h4 class="ag-form-section-title"><span class="ag-form-step">2</span> التسلسل الهرمي</h4>
@@ -1738,7 +1782,7 @@
               <div class="ag-role-pills" role="radiogroup" aria-label="نوع المندوب">
                 <label class="ag-role-pill"><input type="radio" name="agentRoleRadio" value="primary" checked><span class="ag-role-pill-body"><strong>مندوب رئيسي</strong><small>وصل + سند قبض + فريق</small></span></label>
                 <label class="ag-role-pill"><input type="radio" name="agentRoleRadio" value="secondary"><span class="ag-role-pill-body"><strong>مندوب ثانوي</strong><small>وصل قبض فقط</small></span></label>
-              </div>
+        </div>
               <select id="agentRole" class="hidden" aria-hidden="true" tabindex="-1">
                 <option value="primary">مندوب رئيسي</option>
                 <option value="secondary">مندوب ثانوي</option>
@@ -1755,15 +1799,19 @@
             <section class="ag-form-card ag-trees-section">
               <div class="ag-trees-head">
                 <h4 class="ag-form-section-title"><span class="ag-form-step">3</span> صلاحية الشجرات</h4>
-                <p class="ag-form-hint">تُعرض كل شجرات Edari. الشجرات «الجاهزة» مرفوعة للسيرفر ويمكن تفعيلها فوراً.</p>
+                <p class="ag-form-hint">تظهر كل الشجرات بما فيها الفارغة والجديدة. يمكنك تعيين شجرة حتى قبل رفعها.</p>
               </div>
               <div class="ag-trees-toolbar">
-                <input type="search" id="agentTreeSearch" class="search ag-trees-search" placeholder="بحث بالاسم أو الرقم..." autocomplete="off">
+                <input type="search" id="agentTreeSearch" class="search ag-trees-search" placeholder="بحث: 12112، ايفولديرم، ريتينول..." autocomplete="off">
                 <div class="ag-trees-toolbar-actions">
                   <button type="button" class="btn btn-soft btn-xs" id="btnAgentTreesAll">تحديد الكل</button>
                   <button type="button" class="btn btn-soft btn-xs" id="btnAgentTreesNone">إلغاء الكل</button>
                   <button type="button" class="btn btn-soft btn-xs" id="btnAgentTreesReload">تحديث</button>
                 </div>
+              </div>
+              <div class="tree-filter-chips" id="agentTreeFilter">
+                <button type="button" class="tree-filter-chip is-active" data-tree-filter="all" aria-pressed="true">كل الشجرات</button>
+                <button type="button" class="tree-filter-chip" data-tree-filter="customers" aria-pressed="false">شجرات الزبائن</button>
               </div>
               <p class="ag-trees-count muted" id="agentTreesCount"></p>
               <div class="tree-picks tree-picks-sm ag-tree-picks" id="agentTreeChecks"></div>
@@ -1798,9 +1846,9 @@
   <script src="admin-auth.js?v=20260903price4"></script>
   <script src="admin-lan-connection.js?v=20260906lan3"></script>
   <script src="admin-shared-state.js?v=20260903price4"></script>
-  <script src="admin-edari-bridge.js?v=20260906lan3"></script>
+  <script src="admin-edari-bridge.js?v=20260915db1"></script>
   <script src="admin-ui.js?v=20260908ime1"></script>
-  <script src="admin.js?v=20260906lan3"></script>
+  <script src="admin.js?v=20260915db8"></script>
   <script src="admin-shell.js?v=20260826col1"></script>
   <script src="admin-commerce.js?v=20260826col1"></script>
   <script src="admin-collection-kit.js?v=20260901post1"></script>
@@ -1811,7 +1859,7 @@
   <script src="admin-promotional-visits.js?v=20260826col1"></script>
   <script src="admin-thermal-template.js?v=20260824thermal8"></script>
   <script src="admin-sales-report.js?v=20260903price4"></script>
-  <script src="admin-account-statements.js?v=20260903price4"></script>
+  <script src="admin-account-statements.js?v=20260915db8"></script>
   <script src="admin-price-sync.js?v=20260903price4"></script>
   <script src="admin-lan.js?v=20260906lan3"></script>
   <script>

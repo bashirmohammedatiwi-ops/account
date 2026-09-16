@@ -161,6 +161,10 @@ function bindPullToRefresh() {
   }, { passive: true });
 }
 
+function lineMaterialCode(line = {}) {
+  return String(line.matNum || line.skuNum || line.barcode || '').trim();
+}
+
 function esc(v) {
   return String(v ?? '')
     .replace(/&/g, '&amp;')
@@ -788,7 +792,7 @@ function renderLines(lines = [], { editable = false, orderId = 0 } = {}) {
           ${hasGift ? `<span class="gift-tag">+${gift} هدية</span>` : ''}
           ${hasTester ? `<span class="tester-tag">+${tester} تيستر</span>` : ''}
         </div>
-        ${l.barcode ? `<button type="button" class="prep-line-code tappable" dir="ltr" data-barcode="${esc(l.barcode)}" data-line-name="${name}" data-line-no="${idx + 1}">${esc(l.barcode)}</button>` : ''}
+        ${lineMaterialCode(l) ? `<button type="button" class="prep-line-code tappable" dir="ltr" data-barcode="${esc(lineMaterialCode(l))}" data-line-name="${name}" data-line-no="${idx + 1}">${esc(lineMaterialCode(l))}</button>` : ''}
         <div class="prep-line-stats">
           <span><em dir="ltr">${qty}</em> بيع</span>
           <span class="${hasGift ? 'gift-stat' : ''}"><em dir="ltr">${gift}</em> هدية</span>
@@ -830,7 +834,7 @@ function bindLineActions(root) {
 }
 
 function openBarcodeModal(line, idx) {
-  const code = String(line.barcode || '').trim();
+  const code = lineMaterialCode(line);
   if (!code) return;
   const dlg = document.getElementById('barcodeModal');
   const svg = document.getElementById('barcodeSvg');

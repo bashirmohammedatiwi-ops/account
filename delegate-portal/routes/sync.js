@@ -17,8 +17,13 @@ const VALID_KINDS = new Set(['accounts', 'journal', 'invoices', 'invoiceLines', 
 router.post('/start', authSync, (req, res) => {
   try {
     const accountSeqs = Array.isArray(req.body?.accountSeqs) ? req.body.accountSeqs : [];
-    const syncId = startSyncSession(accountSeqs);
-    res.json({ ok: true, syncId });
+    const scope = req.body?.scope === 'previous-year' ? 'previous-year' : 'current';
+    const purge = scope === 'previous-year'
+      || req.body?.refreshCurrent === true
+      || req.body?.purge === true
+      || req.body?.replace === true;
+    const syncId = startSyncSession(accountSeqs, { purge, scope });
+    res.json({ ok: true, syncId, purged: purge, scope });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -39,7 +44,6 @@ router.post('/chunk', authSync, (req, res) => {
     const result = importSyncChunk(kind, rows);
     res.json({ ok: true, ...result, batch, totalBatches, syncId });
   } catch (err) {
-    if (req.body?.syncId) failSyncSession(req.body.syncId, err.message);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -75,7 +79,8 @@ router.post('/push', authSync, (req, res) => {
       invoices = [],
       invoiceLines = [],
       products = [],
-      accountSeqs = []
+      accountSeqs = [],
+      scope = 'current'
     } = req.body || {};
     if (!accounts.length) {
       return res.status(400).json({ ok: false, error: 'لا توجد حسابات للرفع' });
@@ -86,7 +91,8 @@ router.post('/push', authSync, (req, res) => {
       invoices,
       invoiceLines,
       products,
-      accountSeqs
+      accountSeqs,
+      scope
     });
     res.json({ ok: true, ...result, status: getSyncStatus() });
   } catch (err) {

@@ -15,7 +15,7 @@ const {
 const edariRoot = process.env.EDARI_READER_ROOT
   || path.join(__dirname, '..', '..', 'edari-reader');
 const odbcBridge = require(path.join(edariRoot, 'lib', 'odbc-bridge'));
-const { getEdariConnection } = require('./edari-connection');
+const { getEdariConnection, getPreviousYearConnection } = require('./edari-connection');
 
 const SERVER_ARG = process.argv.includes('--server')
   ? process.argv[process.argv.indexOf('--server') + 1]
@@ -35,24 +35,32 @@ const SYNC_KEY = process.argv.includes('--key')
   ? process.argv[process.argv.indexOf('--key') + 1]
   : (process.env.SYNC_API_KEY || 'edari-sync-local-key-2025');
 
+const QUERY_IN_CHUNK = 300;
 const UPLOAD_BATCH = {
-  journal: 2500,
-  invoices: 400,
-  invoiceLines: 1500,
-  products: 800
+  accounts: 400,
+  journal: 800,
+  invoices: 250,
+  invoiceLines: 800,
+  products: 400
 };
+const SKIP_PRODUCTS = process.env.SYNC_SKIP_PRODUCTS !== '0'
+  && !process.argv.includes('--with-products');
 
 const ACCOUNT_COLS = [
   'Seq', 'Num', 'Name1', 'Name2', 'Master', 'SubCount', 'Bal', 'Tot1', 'Tot2',
   'Address', 'Remarks', 'OfficialName', 'FixDate', 'FixBal'
 ].map((c) => `"${c}"`).join(', ');
 
-const { MATCH_SQL, isReconciliationMovement } = require('../lib/reconciliation-utils');
+const { isReconciliationMovement } = require('../lib/reconciliation-utils');
 
-async function query(sql) {
-  const r = await odbcBridge.runQuery({ ...getEdariConnection(), sql });
+async function query(sql, timeoutMs = 120000, conn = null) {
+  const r = await odbcBridge.runQuery({ ...(conn || getEdariConnection()), sql, timeoutMs });
   if (!r.ok) throw new Error(r.error || 'Query failed');
   return r.rows;
+}
+
+function sqlIdList(ids) {
+  return [...new Set((ids || []).map((id) => String(id).replace(/[^0-9]/g, '')).filter(Boolean))].join(',');
 }
 
 function chunk(arr, size) {
@@ -143,6 +151,55 @@ function filterAccountsByTrees(allAccounts, treeSeqs) {
     for (const seq of collectDescendantSeqs(root, children)) allowed.add(seq);
   }
   return allAccounts.filter((a) => allowed.has(accountSeq(a)));
+}
+
+async function fetchAccountsBySeqs(seqs) {
+  const out = [];
+  for (const part of chunk(seqs, QUERY_IN_CHUNK)) {
+    const ids = sqlIdList(part);
+    if (!ids) continue;
+    out.push(...await query(`SELECT ${ACCOUNT_COLS} FROM File11n WHERE Seq IN (${ids})`));
+  }
+  return out;
+}
+
+async function fetchChildAccounts(masterSeqs) {
+  const out = [];
+  for (const part of chunk(masterSeqs, QUERY_IN_CHUNK)) {
+    const ids = sqlIdList(part);
+    if (!ids) continue;
+    out.push(...await query(`SELECT ${ACCOUNT_COLS} FROM File11n WHERE Master IN (${ids})`));
+  }
+  return out;
+}
+
+async function fetchAccountsForTrees(treeSeqs) {
+  if (!treeSeqs.length) throw new Error('حدد شجرة واحدة على الأقل للرفع');
+  const bySeq = new Map();
+  const roots = await fetchAccountsBySeqs(treeSeqs);
+  for (const row of roots) {
+    const seq = accountSeq(row);
+    if (seq) bySeq.set(seq, row);
+  }
+  let frontier = [...bySeq.keys()];
+  let depth = 0;
+  while (frontier.length && depth < 24) {
+    depth += 1;
+    const kids = await fetchChildAccounts(frontier);
+    const next = [];
+    for (const row of kids) {
+      const seq = accountSeq(row);
+      if (!seq || bySeq.has(seq)) continue;
+      bySeq.set(seq, row);
+      next.push(seq);
+    }
+    frontier = next;
+    reportProgress(1, 7, Math.min(95, 15 + bySeq.size), `قراءة الشجرة: ${bySeq.size} حساب`);
+  }
+  if (!bySeq.size) {
+    throw new Error('تعذّر إيجاد الشجرات المحددة في الإداري');
+  }
+  return [...bySeq.values()];
 }
 
 function isDebitRow(row) {
@@ -249,61 +306,176 @@ async function postJson(urlPath, body, timeoutMs = 600000) {
   }
 }
 
-async function postJsonWithRetry(urlPath, body, retries = 3) {
+function isRetryableSyncError(err) {
+  const message = String(err?.message || err);
+  if (/401|403|404|Not Found|غير صالح|حدد شجرة/i.test(message)) return false;
+  return true;
+}
+
+async function postJsonWithRetry(urlPath, body, retries = 5, timeoutMs = 180000) {
   let lastErr;
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      return await postJson(urlPath, body);
+      return await postJson(urlPath, body, timeoutMs);
     } catch (err) {
       lastErr = err;
-      if (attempt < retries) {
-        reportProgress(5, 7, 0, `إعادة محاولة الرفع (${attempt}/${retries - 1})...`);
-        await new Promise((r) => setTimeout(r, 2000 * attempt));
+      if (attempt < retries && isRetryableSyncError(err)) {
+        const waitMs = Math.min(15000, 1500 * (2 ** (attempt - 1)));
+        reportProgress(6, 7, 0, `انقطع الرفع — إعادة المحاولة ${attempt}/${retries - 1} بعد ${Math.round(waitMs / 1000)} ث`);
+        await new Promise((r) => setTimeout(r, waitMs));
+        continue;
       }
+      break;
     }
   }
   throw lastErr;
 }
 
-async function fetchAllJournal(accSeqs) {
+async function fetchAllJournal(accSeqs, conn = null) {
   if (!accSeqs.length) return [];
   const all = [];
-  const parts = chunk(accSeqs, 60);
+  const parts = chunk(accSeqs, QUERY_IN_CHUNK);
   let done = 0;
   for (const part of parts) {
-    const ids = part.join(',');
+    const ids = sqlIdList(part);
+    if (!ids) continue;
     const rows = await query(
       `SELECT Seq, Acc, "Date", Am, Dept, Exp1, Exp2, Remarks, BillNum, BillSeq, BillKind FROM File12n
        WHERE Acc IN (${ids})
-       ORDER BY Acc, "Date", Seq`
+       ORDER BY Acc, "Date", Seq`,
+      180000,
+      conn
     );
     all.push(...rows);
     done += part.length;
     const pct = Math.round((done / accSeqs.length) * 100);
-    reportProgress(2, 7, pct, `كل حركات الحساب: ${all.length} (${done}/${accSeqs.length} حساب)`);
+    reportProgress(2, 7, pct, `حركات الحساب: ${all.length} (${done}/${accSeqs.length} حساب)`);
   }
   return all;
 }
 
-async function fetchLastMatchByAccount(accSeqs) {
-  const map = new Map();
-  if (!accSeqs.length) return map;
-  const parts = chunk(accSeqs, 60);
-  for (const part of parts) {
-    const ids = part.join(',');
-    // لا تقارن Dept بـ 'False' في SQL — NexusDB يخزّنها Boolean وتسبب Type mismatch
+function isPrevYearOnlySync() {
+  return process.env.SYNC_PREV_YEAR_ONLY === '1' || process.argv.includes('--prev-year-only');
+}
+
+function pyId(alias, raw) {
+  const n = String(raw ?? '').replace(/[^0-9]/g, '');
+  return n && n !== '0' ? `PY${alias}:${n}` : '';
+}
+
+async function mapPreviousYearAccounts(currentAccounts) {
+  const prev = getPreviousYearConnection();
+  if (!prev) throw new Error('السنة السابقة غير مربوطة في الإعدادات');
+  const current = getEdariConnection();
+  if (prev.alias && current.alias && prev.alias === current.alias) {
+    throw new Error('قاعدة السنة السابقة هي نفسها الحالية');
+  }
+
+  const nums = [...new Set(
+    currentAccounts.map((a) => String(a.Num ?? a.num ?? '').trim()).filter(Boolean)
+  )];
+  if (!nums.length) throw new Error('لا توجد أرقام حسابات لربط السنة السابقة');
+
+  reportProgress(2, 7, 0, `قراءة حسابات السنة السابقة (${prev.alias})...`);
+  const prevAccounts = [];
+  for (const part of chunk(nums, QUERY_IN_CHUNK)) {
+    const quoted = part.map((n) => `'${n.replace(/'/g, "''")}'`).join(',');
+    if (!quoted) continue;
     const rows = await query(
-      `SELECT Acc, Seq, "Date", Exp1, Remarks, Dept, BillSeq, BillNum FROM File12n
-       WHERE Acc IN (${ids}) AND ${MATCH_SQL}
-       ORDER BY Acc, "Date", Seq`
+      `SELECT Seq, Num FROM File11n WHERE Num IN (${quoted})`,
+      60000,
+      prev
     );
-    for (const row of rows) {
-      if (!isReconciliationMovement(row)) continue;
-      map.set(String(row.Acc), {
-        LastMatchSeq: String(row.Seq),
-        LastMatchDate: row.Date || ''
-      });
+    prevAccounts.push(...(rows || []));
+  }
+  const numToCurrent = new Map();
+  for (const a of currentAccounts) {
+    const num = String(a.Num ?? a.num ?? '').trim();
+    const seq = accountSeq(a);
+    if (num && seq) numToCurrent.set(num, seq);
+  }
+  const prevSeqToCurrent = new Map();
+  for (const row of prevAccounts || []) {
+    const cur = numToCurrent.get(String(row.Num ?? '').trim());
+    const prevSeq = accountSeq(row);
+    if (cur && prevSeq) prevSeqToCurrent.set(prevSeq, cur);
+  }
+  return { prev, prevSeqToCurrent };
+}
+
+async function fetchPreviousYearBundle(currentAccounts) {
+  const { prev, prevSeqToCurrent } = await mapPreviousYearAccounts(currentAccounts);
+  const prevSeqs = [...prevSeqToCurrent.keys()];
+  if (!prevSeqs.length) throw new Error('تعذّر مطابقة حسابات السنة السابقة بأرقام السنة الحالية');
+
+  reportProgress(2, 7, 20, `قراءة حركات السنة السابقة ${prev.alias}...`);
+  const rawJournal = await fetchAllJournal(prevSeqs, prev);
+  reportProgress(2, 7, 70, `حركات السنة السابقة: ${rawJournal.length}`);
+
+  const billSeqs = await resolveBillSeqsFromJournal(rawJournal, prev);
+  reportProgress(3, 7, 0, `قراءة ${billSeqs.length} فاتورة من السنة السابقة...`);
+  const rawInvoices = await fetchInvoices(billSeqs, prev);
+  reportProgress(3, 7, 100, `فواتير السنة السابقة: ${rawInvoices.length}`);
+
+  reportProgress(4, 7, 0, 'قراءة بنود فواتير السنة السابقة...');
+  const rawLines = await fetchInvoiceLines(billSeqs, prev);
+  reportProgress(4, 7, 100, `بنود السنة السابقة: ${rawLines.length}`);
+
+  const journal = rawJournal.map((row) => {
+    const prevAcc = String(row.Acc ?? row.acc ?? '').replace(/[^0-9]/g, '');
+    const currentAcc = prevSeqToCurrent.get(prevAcc);
+    const origSeq = pyId(prev.alias, row.Seq ?? row.seq);
+    if (!currentAcc || !origSeq) return null;
+    const origBill = pyId(prev.alias, row.BillSeq ?? row.bill_seq);
+    return {
+      ...row,
+      Seq: origSeq,
+      Acc: currentAcc,
+      BillSeq: origBill || row.BillSeq || '',
+      Exp2: String(row.Exp2 ?? row.exp2 ?? '').trim() || `سنة ${prev.alias}`
+    };
+  }).filter(Boolean);
+
+  const invoices = rawInvoices.map((inv) => {
+    const orig = pyId(prev.alias, inv.Seq ?? inv.seq);
+    if (!orig) return null;
+    const prevTwo = String(inv.Two ?? inv.acc_seq ?? '').replace(/[^0-9]/g, '');
+    return {
+      ...inv,
+      Seq: orig,
+      Two: prevSeqToCurrent.get(prevTwo) || inv.Two
+    };
+  }).filter(Boolean);
+
+  const invoiceLines = rawLines.map((line) => {
+    const bill = pyId(prev.alias, line.BillSeq ?? line.bill_seq);
+    if (!bill) return null;
+    return { ...line, BillSeq: bill };
+  }).filter(Boolean);
+
+  return { journal, invoices, invoiceLines, alias: prev.alias };
+}
+
+function lastMatchMapFromJournal(journal = []) {
+  const map = new Map();
+  for (const row of journal) {
+    if (String(row.Seq ?? row.seq ?? '').startsWith('PY')) continue;
+    if (!isReconciliationMovement(row)) continue;
+    const acc = String(row.Acc ?? row.acc ?? '').replace(/[^0-9]/g, '');
+    if (!acc) continue;
+    const next = {
+      LastMatchSeq: String(row.Seq ?? row.seq ?? ''),
+      LastMatchDate: row.Date || row.date || ''
+    };
+    const prev = map.get(acc);
+    if (!prev) {
+      map.set(acc, next);
+      continue;
     }
+    const newerDate = String(next.LastMatchDate) > String(prev.LastMatchDate);
+    const sameDateNewer = String(next.LastMatchDate) === String(prev.LastMatchDate)
+      && Number(next.LastMatchSeq || 0) > Number(prev.LastMatchSeq || 0);
+    if (newerDate || sameDateNewer) map.set(acc, next);
   }
   return map;
 }
@@ -332,12 +504,12 @@ function collectBillSeqs(journal) {
   return { seqs, nums };
 }
 
-async function lookupBillSeqsByNums(nums) {
+async function lookupBillSeqsByNums(nums, conn = null) {
   const map = new Map();
   if (!nums.length) return map;
   for (const part of chunk(nums, 120)) {
     const list = part.join(',');
-    const rows = await query(`SELECT Seq, Num FROM File15n WHERE Num IN (${list})`);
+    const rows = await query(`SELECT Seq, Num FROM File15n WHERE Num IN (${list})`, 120000, conn);
     for (const row of rows) {
       map.set(String(row.Num), String(row.Seq));
     }
@@ -345,24 +517,27 @@ async function lookupBillSeqsByNums(nums) {
   return map;
 }
 
-async function resolveBillSeqsFromJournal(journal) {
+async function resolveBillSeqsFromJournal(journal, conn = null) {
   const { seqs, nums } = collectBillSeqs(journal);
   const resolved = new Set(seqs);
   if (nums.size) {
-    const byNum = await lookupBillSeqsByNums([...nums]);
+    const byNum = await lookupBillSeqsByNums([...nums], conn);
     for (const seq of byNum.values()) resolved.add(seq);
   }
   return [...resolved];
 }
 
-async function fetchInvoices(billSeqs) {
+async function fetchInvoices(billSeqs, conn = null) {
   if (!billSeqs.length) return [];
   const all = [];
-  const parts = chunk(billSeqs, 120);
+  const parts = chunk(billSeqs, QUERY_IN_CHUNK);
   for (let i = 0; i < parts.length; i++) {
-    const ids = parts[i].join(',');
+    const ids = sqlIdList(parts[i]);
+    if (!ids) continue;
     const rows = await query(
-      `SELECT Seq, Num, Kind, "Date", Total, Payment, DisCnt, "count", Two, remarks FROM File15n WHERE Seq IN (${ids})`
+      `SELECT Seq, Num, Kind, "Date", Total, Payment, DisCnt, "count", Two, remarks FROM File15n WHERE Seq IN (${ids})`,
+      180000,
+      conn
     );
     all.push(...rows);
     const pct = Math.round(((i + 1) / parts.length) * 100);
@@ -371,13 +546,16 @@ async function fetchInvoices(billSeqs) {
   return all;
 }
 
-async function fetchMaterialMap(matSeqs) {
+async function fetchMaterialMap(matSeqs, conn = null) {
   const map = new Map();
   if (!matSeqs.length) return map;
-  for (const part of chunk(matSeqs, 120)) {
-    const ids = part.join(',');
+  for (const part of chunk(matSeqs, QUERY_IN_CHUNK)) {
+    const ids = sqlIdList(part);
+    if (!ids) continue;
     const rows = await query(
-      `SELECT Seq, Num, Name1 FROM File13n WHERE Seq IN (${ids})`
+      `SELECT Seq, Num, Name1 FROM File13n WHERE Seq IN (${ids})`,
+      120000,
+      conn
     );
     for (const row of rows) {
       map.set(String(row.Seq), { num: String(row.Num || ''), name1: row.Name1 || '' });
@@ -386,23 +564,24 @@ async function fetchMaterialMap(matSeqs) {
   return map;
 }
 
-async function fetchInvoiceLineRows(ids) {
+async function fetchInvoiceLineRows(ids, conn = null) {
   const baseCols = 'BillSeq, BillNo, Mat, MatName, Quant, Price, OBonus, MatRem, Kind';
   const withSum = `${baseCols}, Sum`;
   try {
-    return await query(`SELECT ${withSum} FROM file14n WHERE BillSeq IN (${ids}) ORDER BY BillSeq, BillNo`);
+    return await query(`SELECT ${withSum} FROM file14n WHERE BillSeq IN (${ids}) ORDER BY BillSeq, BillNo`, 180000, conn);
   } catch {
-    return await query(`SELECT ${baseCols} FROM file14n WHERE BillSeq IN (${ids}) ORDER BY BillSeq, BillNo`);
+    return await query(`SELECT ${baseCols} FROM file14n WHERE BillSeq IN (${ids}) ORDER BY BillSeq, BillNo`, 180000, conn);
   }
 }
 
-async function fetchInvoiceLines(billSeqs) {
+async function fetchInvoiceLines(billSeqs, conn = null) {
   if (!billSeqs.length) return [];
   const all = [];
-  const parts = chunk(billSeqs, 100);
+  const parts = chunk(billSeqs, QUERY_IN_CHUNK);
   for (let i = 0; i < parts.length; i++) {
-    const ids = parts[i].join(',');
-    const rows = await fetchInvoiceLineRows(ids);
+    const ids = sqlIdList(parts[i]);
+    if (!ids) continue;
+    const rows = await fetchInvoiceLineRows(ids, conn);
     all.push(...rows);
     const pct = Math.round(((i + 1) / parts.length) * 100);
     reportProgress(4, 7, pct, `بنود الفواتير: ${all.length} (${i + 1}/${parts.length})`);
@@ -417,7 +596,7 @@ async function fetchInvoiceLines(billSeqs) {
   let materials = new Map();
   if (missingNameMats.length) {
     reportProgress(4, 7, 95, `جلب بيانات ${missingNameMats.length} مادة...`);
-    materials = await fetchMaterialMap(missingNameMats);
+    materials = await fetchMaterialMap(missingNameMats, conn);
   }
 
   return assignBillNosForLines(all.map((line) => {
@@ -467,9 +646,13 @@ async function fetchCatalogMaterialsForSync() {
   return lookupEdariMaterialsByCodes(codes);
 }
 
+function syncScope() {
+  return isPrevYearOnlySync() ? 'previous-year' : 'current';
+}
+
 async function uploadLegacy(payload, accountSeqs = []) {
   reportProgress(6, 7, 50, 'رفع دفعة واحدة (وضع قديم)...');
-  const data = await postJson('/api/sync/push', { ...payload, accountSeqs }, 900000);
+  const data = await postJson('/api/sync/push', { ...payload, accountSeqs, scope: syncScope() }, 900000);
   reportProgress(7, 7, 100, 'اكتمل الرفع');
   return data;
 }
@@ -486,7 +669,14 @@ async function uploadChunked(payload, accountSeqs = []) {
   reportProgress(6, 7, 0, 'بدء الرفع إلى السيرفر...');
   let start;
   try {
-    start = await postJson('/api/sync/start', { accountSeqs }, 120000);
+    start = await postJsonWithRetry('/api/sync/start', {
+      accountSeqs,
+      purge: false,
+      replace: false,
+      scope: syncScope(),
+      preservePreviousYear: true,
+      refreshCurrent: syncScope() === 'current'
+    }, 4, 60000);
   } catch (err) {
     if (/404|Cannot POST|Not Found/i.test(err.message)) {
       return uploadLegacy(payload, accountSeqs);
@@ -496,7 +686,7 @@ async function uploadChunked(payload, accountSeqs = []) {
   const syncId = start.syncId;
 
   const uploadPlan = [
-    { kind: 'accounts', rows: payload.accounts, batchSize: Math.max(payload.accounts.length, 1), label: 'حسابات' },
+    { kind: 'accounts', rows: payload.accounts, batchSize: UPLOAD_BATCH.accounts, label: 'حسابات' },
     { kind: 'journal', rows: payload.journal, batchSize: UPLOAD_BATCH.journal, label: 'حركات' },
     { kind: 'invoices', rows: payload.invoices, batchSize: UPLOAD_BATCH.invoices, label: 'فواتير' },
     { kind: 'invoiceLines', rows: payload.invoiceLines, batchSize: UPLOAD_BATCH.invoiceLines, label: 'بنود' },
@@ -529,7 +719,7 @@ async function uploadChunked(payload, accountSeqs = []) {
       rows: job.part,
       batch: job.index,
       totalBatches: job.total
-    });
+    }, 5, 180000);
   }
 
   reportProgress(7, 7, 100, 'جاري إنهاء المزامنة...');
@@ -541,14 +731,8 @@ async function uploadChunked(payload, accountSeqs = []) {
 }
 
 async function listEdariTrees() {
-  const rows = await query(`SELECT Seq, Num, Name1, SubCount, Bal FROM File11n WHERE SubCount > 0 ORDER BY Num`);
-  return rows.map((r) => ({
-    seq: accountSeq(r),
-    num: fieldText(r.Num ?? r.num),
-    name1: fieldText(r.Name1 ?? r.name1),
-    sub_count: Number(r.SubCount ?? r.sub_count ?? 0),
-    bal: Number(r.Bal ?? r.bal ?? 0)
-  }));
+  const { listEdariTrees: listLive } = require('./list-edari-trees');
+  return listLive();
 }
 
 async function listEdariMaterialTrees() {
@@ -572,43 +756,80 @@ async function main() {
     throw new Error('حدد شجرة واحدة على الأقل للرفع');
   }
 
-  reportProgress(1, 7, 0, 'جاري قراءة الحسابات من EdariNX...');
-  const allAccounts = await query(`SELECT ${ACCOUNT_COLS} FROM File11n ORDER BY Num`);
-  const accounts = filterAccountsByTrees(allAccounts, treeSeqs);
+  reportProgress(1, 7, 0, `جاري قراءة ${treeSeqs.length} شجرة من EdariNX...`);
+  const accounts = await fetchAccountsForTrees(treeSeqs);
   reportProgress(1, 7, 100, `تم: ${accounts.length} حساب (${treeSeqs.length} شجرة)`);
 
   const leafSeqs = accounts
-    .filter((a) => Number(a.SubCount) === 0)
+    .filter((a) => Number(a.SubCount ?? a.sub_count) === 0)
     .map((a) => accountSeq(a));
+  const journalSeqs = [...new Set([...treeSeqs.map((s) => String(s).replace(/[^0-9]/g, '')), ...leafSeqs].filter(Boolean))];
 
-  reportProgress(1, 7, 50, 'جاري قراءة آخر مطابقة لكل حساب...');
-  const lastMatchMap = await fetchLastMatchByAccount(leafSeqs);
-  const accountsForUpload = enrichAccountsWithMatchInfo(accounts, lastMatchMap);
+  const prevYearOnly = isPrevYearOnlySync();
+  let journal = [];
+  let invoices = [];
+  let invoiceLines = [];
 
-  reportProgress(2, 7, 0, `جاري قراءة كل حركات ${leafSeqs.length} حساب (مثل النظام الإداري)...`);
-  const journal = await fetchAllJournal(leafSeqs);
-  reportProgress(2, 7, 100, `تم: ${journal.length} حركة`);
+  if (prevYearOnly) {
+    reportProgress(2, 7, 0, 'رفع يدوي لسنة سابقة — حركات وفواتير بالتفاصيل...');
+    const bundle = await fetchPreviousYearBundle(accounts);
+    journal = bundle.journal;
+    invoices = bundle.invoices;
+    invoiceLines = bundle.invoiceLines;
+    reportProgress(2, 7, 100, `سنة ${bundle.alias}: ${journal.length} حركة · ${invoices.length} فاتورة · ${invoiceLines.length} بند`);
+  } else {
+    reportProgress(2, 7, 0, `جاري قراءة حركات ${journalSeqs.length} حساب...`);
+    journal = await fetchAllJournal(journalSeqs);
+    reportProgress(2, 7, 100, `تم: ${journal.length} حركة`);
 
-  const billSeqs = await resolveBillSeqsFromJournal(journal);
-  reportProgress(3, 7, 0, `جاري قراءة ${billSeqs.length} فاتورة بيع...`);
-  const invoices = await fetchInvoices(billSeqs);
-  reportProgress(3, 7, 100, `تم: ${invoices.length} فاتورة`);
+    const billSeqs = await resolveBillSeqsFromJournal(journal);
+    reportProgress(3, 7, 0, `جاري قراءة ${billSeqs.length} فاتورة بيع...`);
+    invoices = await fetchInvoices(billSeqs);
+    reportProgress(3, 7, 100, `تم: ${invoices.length} فاتورة`);
 
-  reportProgress(4, 7, 0, 'جاري قراءة بنود فواتير البيع...');
-  const invoiceLines = await fetchInvoiceLines(billSeqs);
-  reportProgress(4, 7, 100, `تم: ${invoiceLines.length} بند`);
+    reportProgress(4, 7, 0, 'جاري قراءة بنود فواتير البيع...');
+    invoiceLines = await fetchInvoiceLines(billSeqs);
+    reportProgress(4, 7, 100, `تم: ${invoiceLines.length} بند`);
+  }
 
-  const productsAll = await fetchAllProducts();
-  const catalogMaterials = await fetchCatalogMaterialsForSync();
-  const products = catalogMaterials.length
-    ? mergeMaterialRows(productsAll, catalogMaterials)
-    : productsAll;
-  if (catalogMaterials.length) {
-    reportProgress(5, 7, 100, `تم: ${products.length} صنف (${catalogMaterials.length} محدّث للكتalog)`);
+  const accountsForUpload = enrichAccountsWithMatchInfo(accounts, lastMatchMapFromJournal(journal));
+
+  let products = [];
+  if (prevYearOnly || SKIP_PRODUCTS) {
+    reportProgress(5, 7, 100, prevYearOnly
+      ? 'رفع السنة السابقة: بدون تحديث شجرة المواد'
+      : 'تخطي شجرة المواد — رفع حسابات المندوبين فقط');
+  } else {
+    const productsAll = await fetchAllProducts();
+    const catalogMaterials = await fetchCatalogMaterialsForSync();
+    products = catalogMaterials.length
+      ? mergeMaterialRows(productsAll, catalogMaterials)
+      : productsAll;
+    if (catalogMaterials.length) {
+      reportProgress(5, 7, 100, `تم: ${products.length} صنف (${catalogMaterials.length} محدّث للكتalog)`);
+    }
   }
 
   const allAccountSeqs = accounts.map((a) => accountSeq(a)).filter(Boolean);
-  const payload = { accounts: accountsForUpload, journal, invoices, invoiceLines, products };
+  const payload = {
+    accounts: accountsForUpload,
+    journal: journal.map((row) => ({
+      Seq: row.Seq ?? row.seq,
+      Acc: row.Acc ?? row.acc,
+      Date: row.Date ?? row.date,
+      Am: row.Am ?? row.am,
+      Dept: row.Dept ?? row.dept,
+      Exp1: row.Exp1 ?? row.exp1,
+      Exp2: row.Exp2 ?? row.exp2,
+      Remarks: row.Remarks ?? row.remarks,
+      BillNum: row.BillNum ?? row.bill_num,
+      BillSeq: row.BillSeq ?? row.bill_seq,
+      BillKind: row.BillKind ?? row.bill_kind
+    })),
+    invoices,
+    invoiceLines,
+    products
+  };
 
   let result = null;
   const failures = [];
@@ -627,6 +848,10 @@ async function main() {
   }
   if (!result) {
     throw new Error(failures.join(' | ') || 'فشل الرفع إلى كل السيرفرات');
+  }
+  const remoteFailures = failures.filter((line) => !/127\.0\.0\.1|localhost/i.test(line));
+  if (remoteFailures.length) {
+    throw new Error(remoteFailures.join(' | '));
   }
   console.log(`@SYNC_RESULT|${JSON.stringify({
     ok: true,

@@ -11,6 +11,7 @@ const backendUrl = readLaunchArg('edari-backend', (process.env.BACKEND_URL || ''
 
 const base = {
   isDesktop: !LAN_CLIENT,
+  isLanClient: LAN_CLIENT,
   lanClient: LAN_CLIENT,
   backendUrl,
   useRemote: readLaunchArg('edari-remote', LAN_CLIENT ? '1' : '0') !== '0',
@@ -38,7 +39,14 @@ if (LAN_CLIENT) {
     postEdariCustomer: (payload) => lanInvoke('/api/admin/edari/post-customer', 'POST', payload || {}),
     searchEdariAccounts: (params) => lanInvoke('/api/admin/edari/search-accounts', 'POST', params || {}),
     listEdariTrees: () => lanInvoke('/api/admin/edari/trees', 'GET'),
-    listEdariMaterialTrees: () => lanInvoke('/api/admin/edari/material-trees', 'GET')
+    listEdariMaterialTrees: () => lanInvoke('/api/admin/edari/material-trees', 'GET'),
+    getEdariSettings: async () => {
+      const data = await lanInvoke('/api/admin/server-settings', 'GET');
+      return { ok: true, edari: data.edari || {} };
+    },
+    saveEdariSettings: (edari) => lanInvoke('/api/admin/server-settings', 'PUT', { edari }),
+    testEdariConnection: (edari) => lanInvoke('/api/admin/edari/test-connection', 'POST', { edari: edari || {} }),
+    listEdariDatabases: (opts) => lanInvoke('/api/admin/edari/list-databases', 'POST', opts || {})
   });
   contextBridge.exposeInMainWorld('lanSetup', {
     getConfig: () => ipcRenderer.invoke('lan-client:get-setup-config'),
@@ -49,7 +57,12 @@ if (LAN_CLIENT) {
 
 if (!LAN_CLIENT) {
   Object.assign(base, {
-    runLocalSync: (serverUrl, syncKey, treeSeqs) => ipcRenderer.invoke('run-local-sync', { serverUrl, syncKey, treeSeqs }),
+    runLocalSync: (serverUrl, syncKey, treeSeqs, options) => ipcRenderer.invoke('run-local-sync', {
+      serverUrl,
+      syncKey,
+      treeSeqs,
+      ...(options || {})
+    }),
     verifySyncTarget: (serverUrl, syncKey) => ipcRenderer.invoke('verify-sync-target', { serverUrl, syncKey }),
     listEdariTrees: () => ipcRenderer.invoke('list-edari-trees'),
     listEdariMaterialTrees: () => ipcRenderer.invoke('list-edari-material-trees'),

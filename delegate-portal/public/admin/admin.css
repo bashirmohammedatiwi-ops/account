@@ -892,12 +892,82 @@ body {
 }
 
 .tree-pick-muted {
-  opacity: 0.72;
+  opacity: 0.88;
   border-style: dashed;
 }
 
 .tree-pick-muted .tree-pick-name {
   color: var(--text-muted);
+}
+
+.tree-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin: 8px 0 10px;
+}
+
+.tree-filter-bar .search {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.tree-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tree-filter-chip {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: #334155;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.tree-filter-chip.is-active {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #fff;
+}
+
+.tree-list-count {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+}
+
+.tree-pick-new {
+  border-color: #f59e0b !important;
+  background: #fffbeb;
+}
+
+.tree-badge {
+  display: inline-block;
+  margin-inline-start: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.tree-badge-new {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.tree-badge-cust {
+  background: #ccfbf1;
+  color: #115e59;
+}
+
+.tree-badge-wait {
+  background: #ffedd5;
+  color: #9a3412;
 }
 
 .tree-pick {

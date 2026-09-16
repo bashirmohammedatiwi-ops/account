@@ -202,11 +202,18 @@
       if (Number(p.previewLines) > 0) qs.set('previewLines', String(Number(p.previewLines)));
       return apiJson(`/api/admin/reports/sales?${qs.toString()}`, { method: 'GET' });
     },
-    runLocalSync: async (serverUrl, syncKey, treeSeqs) => {
-      if (typeof desktop.runLocalSync === 'function') return desktop.runLocalSync(serverUrl, syncKey, treeSeqs);
+    runLocalSync: async (serverUrl, syncKey, treeSeqs, options = {}) => {
+      if (typeof desktop.runLocalSync === 'function') {
+        return desktop.runLocalSync(serverUrl, syncKey, treeSeqs, options);
+      }
       return apiJson('/api/admin/trigger-sync', {
         method: 'POST',
-        body: JSON.stringify({ serverUrl, syncKey, treeSeqs })
+        body: JSON.stringify({
+          serverUrl,
+          syncKey,
+          treeSeqs,
+          mode: options.mode || 'current'
+        })
       });
     },
     verifySyncTarget: async (serverUrl, syncKey) => {

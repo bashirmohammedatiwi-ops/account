@@ -92,18 +92,54 @@ function canAgentAccess(agentId, accountSeq) {
   return allowed.has(String(accountSeq));
 }
 
+function looksBrokenTreeName(name) {
+  const s = String(name || '');
+  return !s.trim() || s.includes('\uFFFD') || s.includes('�') || /[\u4e00-\u9fff]/.test(s);
+}
+
+function pickBetterTreeName(a, b) {
+  const left = String(a || '').trim();
+  const right = String(b || '').trim();
+  if (left && !looksBrokenTreeName(left)) return left;
+  if (right && !looksBrokenTreeName(right)) return right;
+  return left || right;
+}
+
+function classifyAssignableTree(row = {}) {
+  const num = String(row.num || '').trim();
+  const name = String(row.name1 || '').trim();
+  const master = String(row.master ?? row.master_seq ?? '').replace(/[^0-9]/g, '') || '0';
+  const isCustomer = row.isCustomer === true
+    || master === '13'
+    || /^121/.test(num)
+    || /زبائن|زبون/.test(name);
+  return { isCustomer, master };
+}
+
+function sortAssignableTrees(trees = []) {
+  return trees.slice().sort((a, b) => {
+    if (!!b.isCustomer !== !!a.isCustomer) return a.isCustomer ? -1 : 1;
+    const seqDiff = Number(b.seq || 0) - Number(a.seq || 0);
+    if (seqDiff) return seqDiff;
+    return String(a.num || '').localeCompare(String(b.num || ''), 'ar', { numeric: true });
+  });
+}
+
 function getAssignableTrees() {
   return db.prepare(`
-    SELECT seq, num, name1, sub_count, bal
+    SELECT seq, num, name1, sub_count, bal, master_seq
     FROM accounts
     WHERE CAST(sub_count AS INTEGER) > 0
-    ORDER BY num
+       OR master_seq = '13'
+       OR name1 LIKE '%زبائن%'
+       OR name1 LIKE '%شجرة%'
+    ORDER BY seq DESC
   `).all();
 }
 
 /**
  * دمج شجرات Edari الحية مع المرفوعة للسيرفر — للعرض في صلاحيات المندوب.
- * onServer=true يعني يمكن تفعيلها فوراً؛ false = يجب رفعها من «رفع البيانات».
+ * onServer=true يعني الحسابات مرفوعة؛ يمكن تعيين الشجرة حتى قبل الرفع.
  */
 function getMergedAssignableTrees(edariTrees = []) {
   const dbTrees = getAssignableTrees();
@@ -113,43 +149,53 @@ function getMergedAssignableTrees(edariTrees = []) {
   for (const raw of edariTrees || []) {
     const seq = String(raw.seq ?? '').trim();
     if (!seq) continue;
+    const name1 = String(raw.name1 || '').trim();
+    const extra = classifyAssignableTree({ ...raw, name1 });
     map.set(seq, {
       seq,
       num: String(raw.num || '').trim(),
-      name1: String(raw.name1 || '').trim(),
+      name1,
       sub_count: Number(raw.sub_count ?? raw.subCount ?? 0),
       bal: Number(raw.bal ?? 0),
+      master: extra.master,
+      isCustomer: extra.isCustomer,
       onServer: dbSeqSet.has(seq)
     });
   }
 
-  for (const db of dbTrees) {
-    const seq = String(db.seq);
+  for (const dbRow of dbTrees) {
+    const seq = String(dbRow.seq);
     const hit = map.get(seq);
     if (hit) {
+      const name1 = pickBetterTreeName(hit.name1, dbRow.name1);
+      const extra = classifyAssignableTree({ ...hit, name1, num: hit.num || dbRow.num });
       map.set(seq, {
         ...hit,
         onServer: true,
-        num: hit.num || String(db.num || '').trim(),
-        name1: hit.name1 || String(db.name1 || '').trim(),
-        sub_count: hit.sub_count || Number(db.sub_count || 0),
-        bal: hit.bal ?? db.bal
+        num: hit.num || String(dbRow.num || '').trim(),
+        name1,
+        sub_count: hit.sub_count || Number(dbRow.sub_count || 0),
+        bal: hit.bal ?? dbRow.bal,
+        master: extra.master,
+        isCustomer: extra.isCustomer
       });
     } else {
+      const name1 = String(dbRow.name1 || '').trim();
+      const extra = classifyAssignableTree({ ...dbRow, name1 });
       map.set(seq, {
         seq,
-        num: String(db.num || '').trim(),
-        name1: String(db.name1 || '').trim(),
-        sub_count: Number(db.sub_count || 0),
-        bal: Number(db.bal || 0),
+        num: String(dbRow.num || '').trim(),
+        name1,
+        sub_count: Number(dbRow.sub_count || 0),
+        bal: Number(dbRow.bal || 0),
+        master: extra.master,
+        isCustomer: extra.isCustomer,
         onServer: true
       });
     }
   }
 
-  return [...map.values()].sort((a, b) =>
-    String(a.num || a.seq).localeCompare(String(b.num || b.seq), undefined, { numeric: true })
-  );
+  return sortAssignableTrees([...map.values()]);
 }
 
 /**
@@ -215,12 +261,15 @@ function getStatementForAccount(accSeq) {
   const cutoff = resolveLastMatchCutoff(account, rows);
   const matchAvailable = hasMatchCutoff(account, rows);
 
+  const hasPreviousYear = rows.some((r) => String(r.seq || '').startsWith('PY'));
   const {
     openingBalance,
     movementRows: filteredRows,
     periodCutoff,
     openingNote
-  } = resolveCumulativeStatementWindow(account, rows);
+  } = hasPreviousYear
+    ? { openingBalance: 0, movementRows: rows, periodCutoff: null, openingNote: '' }
+    : resolveCumulativeStatementWindow(account, rows);
 
   const stmt = buildStatementLines(filteredRows, { openingBalance });
 
@@ -352,14 +401,25 @@ function mapAccountRow(a, now) {
   };
 }
 
+function normalizeJournalSeq(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return '';
+  if (/^PY[0-9A-Za-z]+:/i.test(s)) return s;
+  return s.replace(/[^0-9]/g, '');
+}
+
+function preserveSyncId(raw) {
+  const s = String(raw ?? '').trim();
+  if (/^PY[0-9A-Za-z]+:/i.test(s)) return s;
+  const n = s.replace(/[^0-9]/g, '');
+  return n && n !== '0' ? n : '';
+}
+
 function mapJournalRow(j) {
   const dept = j.Dept ?? j.is_debit;
-  const billSeqRaw = j.BillSeq ?? j.bill_seq;
-  const billSeq = billSeqRaw != null && String(billSeqRaw).replace(/[^0-9]/g, '') !== '0'
-    ? String(billSeqRaw).replace(/[^0-9]/g, '')
-    : '';
+  const billSeq = preserveSyncId(j.BillSeq ?? j.bill_seq);
   return {
-    seq: String(j.Seq ?? j.seq).replace(/[^0-9]/g, ''),
+    seq: normalizeJournalSeq(j.Seq ?? j.seq),
     acc_seq: String(j.Acc ?? j.acc_seq ?? '').replace(/[^0-9]/g, ''),
     tx_date: normalizeEdariDateIso(j.Date ?? j.tx_date ?? j.DtCreated ?? '')
       || String(j.Date ?? j.tx_date ?? j.DtCreated ?? '').trim(),
@@ -375,7 +435,7 @@ function mapJournalRow(j) {
 
 function mapInvoiceRow(inv, now) {
   return {
-    seq: String(inv.Seq ?? inv.seq),
+    seq: preserveSyncId(inv.Seq ?? inv.seq) || String(inv.Seq ?? inv.seq ?? ''),
     num: String(inv.Num ?? inv.num ?? ''),
     kind: String(inv.Kind ?? inv.kind ?? ''),
     inv_date: normalizeEdariDateIso(inv.Date ?? inv.inv_date ?? '')
@@ -405,7 +465,7 @@ function ensureInvoiceLineBillNosForImport(rows = []) {
 }
 
 function mapInvoiceLineRow(line) {
-  const billSeq = String(line.BillSeq ?? line.bill_seq ?? '').replace(/[^0-9]/g, '');
+  const billSeq = preserveSyncId(line.BillSeq ?? line.bill_seq);
   if (!billSeq) return null;
   const quant = readSyncNum(line, 'Quant', 'quant');
   const price = readSyncNum(line, 'Price', 'price');
@@ -433,56 +493,110 @@ function mapInvoiceLineRow(line) {
   };
 }
 
-function startSyncSession(accountSeqs = []) {
+function startSyncSession(accountSeqs = [], options = {}) {
   const started = new Date().toISOString();
   const logId = db.prepare(
     'INSERT INTO sync_logs (started_at, status, message) VALUES (?, ?, ?)'
   ).run(started, 'running', 'جاري الاستيراد').lastInsertRowid;
 
-  if (accountSeqs.length) {
-    purgeSyncScope(accountSeqs);
+  const shouldPurge = options.purge === true || options.replace === true;
+  if (shouldPurge && accountSeqs.length) {
+    if (options.scope === 'previous-year') purgePreviousYearScope(accountSeqs);
+    else purgeCurrentYearScope(accountSeqs);
   }
 
   return logId;
 }
 
-function purgeSyncScope(accountSeqs = []) {
-  const seqs = [...new Set(accountSeqs.map((s) => String(s)).filter(Boolean))];
+function uniqueAccountSeqs(accountSeqs = []) {
+  return [...new Set(accountSeqs.map((s) => String(s)).filter(Boolean))];
+}
+
+function deleteInvoicesBySeqs(billSeqs = []) {
+  const seqs = [...new Set(billSeqs.map((s) => String(s || '').trim()).filter(Boolean))];
+  if (!seqs.length) return { invoices: { changes: 0 }, lines: { changes: 0 } };
+  const placeholders = seqs.map(() => '?').join(',');
+  const lines = db.prepare(`DELETE FROM invoice_lines WHERE bill_seq IN (${placeholders})`).run(...seqs);
+  const invoices = db.prepare(`DELETE FROM invoices WHERE seq IN (${placeholders})`).run(...seqs);
+  return { invoices, lines };
+}
+
+/** يحذف حركات وفواتير السنة الحالية فقط — لا يمس بيانات السنة السابقة (PY...). */
+function purgeCurrentYearScope(accountSeqs = []) {
+  const seqs = uniqueAccountSeqs(accountSeqs);
   if (!seqs.length) return { purgedAccounts: 0, purgedJournal: 0, purgedInvoices: 0 };
 
   const placeholders = seqs.map(() => '?').join(',');
   const billRows = db.prepare(`
     SELECT DISTINCT bill_seq FROM journal
-    WHERE acc_seq IN (${placeholders}) AND bill_seq IS NOT NULL AND bill_seq != ''
+    WHERE acc_seq IN (${placeholders})
+      AND bill_seq IS NOT NULL AND bill_seq != ''
+      AND IFNULL(seq, '') NOT LIKE 'PY%'
+      AND bill_seq NOT LIKE 'PY%'
   `).all(...seqs);
-  const billSeqs = billRows.map((r) => String(r.bill_seq)).filter(Boolean);
+  const extraInvoices = db.prepare(`
+    SELECT seq FROM invoices
+    WHERE acc_seq IN (${placeholders}) AND seq NOT LIKE 'PY%'
+  `).all(...seqs);
+  const billSeqs = [...new Set([
+    ...billRows.map((r) => String(r.bill_seq || '')),
+    ...extraInvoices.map((r) => String(r.seq || ''))
+  ].filter((s) => s && !s.startsWith('PY')))];
 
   const tx = db.transaction(() => {
     const journalResult = db.prepare(`
-      DELETE FROM journal WHERE acc_seq IN (${placeholders})
+      DELETE FROM journal
+      WHERE acc_seq IN (${placeholders}) AND IFNULL(seq, '') NOT LIKE 'PY%'
     `).run(...seqs);
-
-    let invoiceLinesResult = { changes: 0 };
-    let invoicesResult = { changes: 0 };
-    if (billSeqs.length) {
-      const billPlaceholders = billSeqs.map(() => '?').join(',');
-      invoiceLinesResult = db.prepare(`
-        DELETE FROM invoice_lines WHERE bill_seq IN (${billPlaceholders})
-      `).run(...billSeqs);
-      invoicesResult = db.prepare(`
-        DELETE FROM invoices WHERE seq IN (${billPlaceholders})
-      `).run(...billSeqs);
-    }
-
+    const deleted = deleteInvoicesBySeqs(billSeqs);
     return {
       purgedAccounts: seqs.length,
       purgedJournal: journalResult.changes || 0,
-      purgedInvoices: invoicesResult.changes || 0,
-      purgedInvoiceLines: invoiceLinesResult.changes || 0
+      purgedInvoices: deleted.invoices.changes || 0,
+      purgedInvoiceLines: deleted.lines.changes || 0
     };
   });
-
   return tx();
+}
+
+/** يحذف بيانات السنة السابقة المرفوعة يدوياً فقط، قبل إعادة رفعها. */
+function purgePreviousYearScope(accountSeqs = []) {
+  const seqs = uniqueAccountSeqs(accountSeqs);
+  if (!seqs.length) return { purgedAccounts: 0, purgedJournal: 0, purgedInvoices: 0 };
+
+  const placeholders = seqs.map(() => '?').join(',');
+  const billRows = db.prepare(`
+    SELECT DISTINCT bill_seq FROM journal
+    WHERE acc_seq IN (${placeholders})
+      AND (seq LIKE 'PY%' OR bill_seq LIKE 'PY%')
+  `).all(...seqs);
+  const extraInvoices = db.prepare(`
+    SELECT seq FROM invoices
+    WHERE acc_seq IN (${placeholders}) AND seq LIKE 'PY%'
+  `).all(...seqs);
+  const billSeqs = [...new Set([
+    ...billRows.map((r) => String(r.bill_seq || '')),
+    ...extraInvoices.map((r) => String(r.seq || ''))
+  ].filter((s) => s.startsWith('PY')))];
+
+  const tx = db.transaction(() => {
+    const journalResult = db.prepare(`
+      DELETE FROM journal
+      WHERE acc_seq IN (${placeholders}) AND seq LIKE 'PY%'
+    `).run(...seqs);
+    const deleted = deleteInvoicesBySeqs(billSeqs);
+    return {
+      purgedAccounts: seqs.length,
+      purgedJournal: journalResult.changes || 0,
+      purgedInvoices: deleted.invoices.changes || 0,
+      purgedInvoiceLines: deleted.lines.changes || 0
+    };
+  });
+  return tx();
+}
+
+function purgeSyncScope(accountSeqs = []) {
+  return purgeCurrentYearScope(accountSeqs);
 }
 
 function importSyncChunk(kind, rows = []) {
@@ -596,10 +710,11 @@ function importSyncData({
   invoices = [],
   invoiceLines = [],
   products = [],
-  accountSeqs = []
+  accountSeqs = [],
+  scope = 'current'
 }) {
   const purgeSeqs = collectAccountSeqs(accounts, accountSeqs);
-  const logId = startSyncSession(purgeSeqs);
+  const logId = startSyncSession(purgeSeqs, { purge: true, scope });
   try {
     importSyncChunk('accounts', accounts);
     importSyncChunk('journal', journal);
@@ -620,23 +735,72 @@ function importSyncData({
 }
 
 function filterAssignableTreeSeqs(treeSeqs = []) {
-  const allowed = new Set(
-    db.prepare(`SELECT seq FROM accounts WHERE CAST(sub_count AS INTEGER) > 0`).all()
-      .map((r) => String(r.seq))
-  );
   const valid = [];
   const invalid = [];
+  const seen = new Set();
   for (const raw of treeSeqs) {
-    const seq = String(raw ?? '').trim();
-    if (!seq) continue;
-    if (allowed.has(seq)) valid.push(seq);
-    else invalid.push(seq);
+    const seq = String(raw ?? '').replace(/[^0-9]/g, '');
+    if (!seq) {
+      const leftover = String(raw ?? '').trim();
+      if (leftover) invalid.push(leftover);
+      continue;
+    }
+    if (seen.has(seq)) continue;
+    seen.add(seq);
+    valid.push(seq);
   }
   return { valid, invalid };
 }
 
-function assignAgentTrees(agentId, treeSeqs = []) {
+function ensureAssignableAccountStubs(treeInfos = []) {
+  const now = new Date().toISOString();
+  const get = db.prepare('SELECT seq, sub_count FROM accounts WHERE seq = ?');
+  const insert = db.prepare(`
+    INSERT INTO accounts (seq, num, name1, name2, master_seq, sub_count, bal, tot1, tot2, address, remarks, official_name, fix_date, fix_bal, last_match_seq, last_match_date, synced_at)
+    VALUES (@seq, @num, @name1, '', @master_seq, @sub_count, 0, 0, 0, '', '', '', '', 0, '', '', @synced_at)
+  `);
+  const bump = db.prepare(`
+    UPDATE accounts
+    SET sub_count = CASE WHEN CAST(sub_count AS INTEGER) < 1 THEN 1 ELSE sub_count END,
+        num = CASE WHEN @num != '' THEN @num ELSE num END,
+        name1 = CASE WHEN @name1 != '' THEN @name1 ELSE name1 END,
+        master_seq = CASE WHEN @master_seq != '' AND @master_seq != '0' THEN @master_seq ELSE master_seq END
+    WHERE seq = @seq
+  `);
+
+  const tx = db.transaction(() => {
+    for (const raw of treeInfos || []) {
+      const seq = String(raw?.seq ?? raw).replace(/[^0-9]/g, '');
+      if (!seq) continue;
+      const num = String(raw?.num || '').trim();
+      const name1 = String(raw?.name1 || raw?.name || '').trim();
+      const master = String(raw?.master || raw?.master_seq || '13').replace(/[^0-9]/g, '') || '13';
+      const subCount = Math.max(1, Number(raw?.sub_count || 0));
+      const existing = get.get(seq);
+      if (!existing) {
+        insert.run({
+          seq,
+          num,
+          name1,
+          master_seq: master,
+          sub_count: subCount,
+          synced_at: now
+        });
+      } else {
+        bump.run({ seq, num, name1, master_seq: master });
+      }
+    }
+  });
+  tx();
+  return { ok: true, count: (treeInfos || []).length };
+}
+
+function assignAgentTrees(agentId, treeSeqs = [], treeMeta = []) {
   const { valid, invalid } = filterAssignableTreeSeqs(treeSeqs);
+  const metaBySeq = new Map(
+    (Array.isArray(treeMeta) ? treeMeta : []).map((t) => [String(t.seq || '').replace(/[^0-9]/g, ''), t])
+  );
+  ensureAssignableAccountStubs(valid.map((seq) => metaBySeq.get(seq) || { seq }));
   const replace = db.transaction(() => {
     db.prepare('DELETE FROM agent_trees WHERE agent_id = ?').run(agentId);
     const ins = db.prepare('INSERT INTO agent_trees (agent_id, account_seq) VALUES (?, ?)');
@@ -667,6 +831,7 @@ module.exports = {
   getAssignableTrees,
   getMergedAssignableTrees,
   filterAssignableTreeSeqs,
+  ensureAssignableAccountStubs,
   assignAgentTrees,
   getStatementForAccount,
   importSyncData,

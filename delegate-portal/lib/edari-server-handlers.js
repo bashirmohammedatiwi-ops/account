@@ -63,6 +63,13 @@ async function queryEdariAccountStatements(params = {}) {
   });
 }
 
+async function queryEdariFullAccountStatement(ref) {
+  return withEdariEnv(async () => {
+    const { queryEdariFullAccountStatement: query } = requireFresh('sync-client/edari-account-statement.js');
+    return query(ref);
+  });
+}
+
 async function exportEdariAccountStatementsPdf(params = {}) {
   const result = params.statements
     ? { statements: params.statements }
@@ -114,8 +121,16 @@ function loadEdariSalesReportModule() {
 
 async function listEdariTreesLive() {
   return withEdariEnv(async () => {
-    const { listEdariTrees } = require(path.join(portalDir, 'sync-client', 'list-edari-trees.js'));
+    const { listEdariTrees } = requireFresh('sync-client/list-edari-trees.js');
     const trees = await listEdariTrees();
+    return { ok: true, trees, count: trees.length };
+  });
+}
+
+async function searchEdariAccountTreesLive(q = '') {
+  return withEdariEnv(async () => {
+    const { searchEdariAccountTrees } = requireFresh('sync-client/list-edari-trees.js');
+    const trees = await searchEdariAccountTrees(q);
     return { ok: true, trees, count: trees.length };
   });
 }
@@ -210,7 +225,13 @@ async function listEdariDatabases({ dataRoot } = {}) {
     const root = String(dataRoot || process.env.EDARI_DATA_ROOT || '').trim();
     if (!root) return { ok: false, error: 'مجلد Data مطلوب' };
     const databases = scanner.listDatabases(root);
-    const aliases = typeof scanner.listAliases === 'function' ? scanner.listAliases(root) : [];
+    let aliases = [];
+    try {
+      const { fetchAliases } = require(path.join(edariRoot, 'lib', 'nexus-admin'));
+      aliases = scanner.filterLiveAliases(await fetchAliases());
+    } catch {
+      /* nxServer admin optional */
+    }
     return { ok: true, databases, aliases };
   });
 }
@@ -269,9 +290,11 @@ module.exports = {
   searchEdariAccounts,
   searchEdariMaterialTrees,
   queryEdariAccountStatements,
+  queryEdariFullAccountStatement,
   exportEdariAccountStatementsPdf,
   listEdariMaterialTreesLive,
   listEdariTreesLive,
+  searchEdariAccountTreesLive,
   listEdariSalesBranchesLive,
   searchEdariSalesBranchesLive,
   queryEdariSalesReportLive,

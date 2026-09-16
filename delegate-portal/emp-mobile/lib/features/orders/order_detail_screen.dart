@@ -680,7 +680,7 @@ class _LineCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasGift = line.bonus > 0;
     final hasTester = line.tester > 0;
-    final hasBarcode = line.barcode != null && line.barcode!.trim().isNotEmpty;
+    final hasBarcode = line.displayCode.isNotEmpty;
     void onCardTap() {
       if (hasBarcode) {
         onShowBarcode();
@@ -743,14 +743,14 @@ class _LineCard extends StatelessWidget {
                         Expanded(child: Text(line.matName, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15))),
                       ],
                     ),
-                    if (line.barcode != null && line.barcode!.isNotEmpty)
+                    if (line.displayCode.isNotEmpty)
                       Row(
                         children: [
                           Icon(Icons.qr_code_2_rounded, size: 14, color: themed(context, light: AppColors.primary, dark: AppColors.primary)),
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
-                              line.barcode!,
+                              line.displayCode,
                               style: TextStyle(color: themed(context, light: AppColors.primary, dark: AppColors.primary), fontSize: 12, fontWeight: FontWeight.w800),
                             ),
                           ),

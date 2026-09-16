@@ -81,6 +81,17 @@ function sqlToHex(sqlText) {
   return Buffer.from(String(sqlText || ''), 'latin1').toString('hex');
 }
 
+/**
+ * SELECT queries carry Arabic (N'...') text and can grow long (IN (...) lists,
+ * batched account/tree seqs) — hex-encode as UTF-8 bytes so the URL never
+ * depends on percent-encoding survivng proxies/URL-length limits. The Pascal
+ * side hex-decodes byte-for-byte, which is exactly what the old %XX path
+ * produced, so Arabic (N'' Unicode literals) keeps working unchanged.
+ */
+function sqlToHexUtf8(sqlText) {
+  return Buffer.from(String(sqlText || ''), 'utf8').toString('hex');
+}
+
 /** Windows-1256 high-byte map (0x80–0xFF) — Edari ANSI Arabic. */
 const CP1256_HI = [
   0x20AC, 0x067E, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021,
@@ -192,7 +203,7 @@ async function runQueryViaNxscript(options) {
     };
   }
 
-  const url = `${config.nexusAdminUrl}/${QUERY_SCRIPT}?alias=${encodeURIComponent(alias)}&sql=${encodeURIComponent(sql)}`;
+  const url = `${config.nexusAdminUrl}/${QUERY_SCRIPT}?alias=${encodeURIComponent(alias)}&sqlhex=${sqlToHexUtf8(sql)}`;
 
   let response;
   try {

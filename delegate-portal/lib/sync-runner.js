@@ -97,12 +97,13 @@ async function queryEdariSalesReport(params = {}) {
   return parseSalesReportResult(stdout);
 }
 
-async function runLocalSync(serverUrl, syncKey, treeSeqs = [], onProgress) {
+async function runLocalSync(serverUrl, syncKey, treeSeqs = [], onProgress, options = {}) {
   if (!Array.isArray(treeSeqs) || !treeSeqs.length) {
     throw new Error('حدد شجرة واحدة على الأقل للرفع');
   }
 
   const args = ['--server', serverUrl, '--key', syncKey, '--trees', treeSeqs.join(',')];
+  if (options.mode === 'previous-year' || options.prevYearOnly) args.push('--prev-year-only');
   const stdout = await spawnScript(args, { onProgress });
   return parseSyncResult(stdout);
 }

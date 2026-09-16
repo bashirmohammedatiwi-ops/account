@@ -16,6 +16,7 @@ const {
   getAssignableTrees,
   getMergedAssignableTrees,
   assignAgentTrees,
+  ensureAssignableAccountStubs,
   getSyncStatus,
   getChildren,
   getStatementForAccount,
@@ -51,9 +52,11 @@ const {
   searchEdariAccounts,
   searchEdariMaterialTrees,
   queryEdariAccountStatements,
+  queryEdariFullAccountStatement,
   exportEdariAccountStatementsPdf,
   listEdariMaterialTreesLive,
   listEdariTreesLive,
+  searchEdariAccountTreesLive,
   listEdariSalesBranchesLive,
   searchEdariSalesBranchesLive,
   queryEdariSalesReportLive,
@@ -381,6 +384,16 @@ router.get('/trees', (_req, res) => {
   res.json({ ok: true, trees: getAssignableTrees() });
 });
 
+router.post('/trees/ensure', (req, res) => {
+  try {
+    const trees = Array.isArray(req.body?.trees) ? req.body.trees : [];
+    const result = ensureAssignableAccountStubs(trees);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'فشل تجهيز الشجرات' });
+  }
+});
+
 router.get('/trees/assignable', async (_req, res) => {
   try {
     let edariTrees = [];
@@ -456,7 +469,7 @@ router.post('/agents', (req, res) => {
       'INSERT INTO agents (name, phone, username, password_hash, parent_agent_id, delegate_role) VALUES (?, ?, ?, ?, ?, ?)'
     ).run(name, phone || '', username, hash, hierarchy.parentAgentId, hierarchy.delegateRole);
     const agentId = r.lastInsertRowid;
-    const { valid, invalid } = assignAgentTrees(agentId, treeSeqs);
+    const { valid, invalid } = assignAgentTrees(agentId, treeSeqs, req.body?.trees || []);
     res.json({
       ok: true,
       id: agentId,
@@ -495,7 +508,7 @@ router.put('/agents/:id', (req, res) => {
     }
   }
   if (Array.isArray(treeSeqs)) {
-    const { valid, invalid } = assignAgentTrees(id, treeSeqs);
+    const { valid, invalid } = assignAgentTrees(id, treeSeqs, req.body?.trees || []);
     res.json({
       ok: true,
       treesAssigned: valid.length,
@@ -534,10 +547,16 @@ router.get('/accounts/:seq/children', (req, res) => {
   res.json({ ok: true, children });
 });
 
-router.get('/accounts/:seq/statement', (req, res) => {
+router.get('/accounts/:seq/statement', async (req, res) => {
+  try {
+    const live = await queryEdariFullAccountStatement(req.params.seq);
+    if (live) return res.json({ ok: true, source: 'edari', ...live });
+  } catch (err) {
+    console.warn('live customer statement', err.message);
+  }
   const stmt = getStatementForAccount(req.params.seq);
   if (!stmt) return res.status(404).json({ ok: false, error: 'الحساب غير موجود' });
-  res.json({ ok: true, ...stmt });
+  res.json({ ok: true, source: 'db', ...stmt });
 });
 
 router.get('/search', (req, res) => {
@@ -575,6 +594,16 @@ router.get('/edari/trees', async (_req, res) => {
   }
 });
 
+router.post('/edari/search-account-trees', async (req, res) => {
+  try {
+    const q = req.body?.q ?? req.query?.q ?? '';
+    const result = await searchEdariAccountTreesLive(q);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'فشل البحث في الشجرات' });
+  }
+});
+
 router.get('/edari/material-trees', async (_req, res) => {
   try {
     const result = await listEdariMaterialTreesLive();
@@ -588,8 +617,9 @@ router.post('/trigger-sync', async (req, res) => {
   const serverUrl = req.body?.serverUrl || getPublicBaseUrl(req);
   const syncKey = req.body?.syncKey || process.env.SYNC_API_KEY;
   const treeSeqs = Array.isArray(req.body?.treeSeqs) ? req.body.treeSeqs : [];
+  const mode = req.body?.mode === 'previous-year' ? 'previous-year' : 'current';
   try {
-    const result = await runLocalSync(serverUrl, syncKey, treeSeqs);
+    const result = await runLocalSync(serverUrl, syncKey, treeSeqs, undefined, { mode });
     res.json({ ok: true, ...result, status: getSyncStatus() });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message, stderr: err.stderr });
