@@ -26,7 +26,7 @@ class DataService {
 
   setConnection(conn = {}) {
     this.conn = {
-      alias: conn.alias || '2025',
+      alias: conn.alias || '2026',
       server: conn.server || config.defaultServer,
       port: Number(conn.port || config.defaultPort)
     };

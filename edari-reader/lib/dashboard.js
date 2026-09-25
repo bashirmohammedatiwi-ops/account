@@ -3,7 +3,7 @@ const config = require('./config');
 
 const DEFAULT_CONN = {
   mode: 'tcp',
-  alias: '2025',
+  alias: '2026',
   server: config.defaultServer,
   port: config.defaultPort
 };

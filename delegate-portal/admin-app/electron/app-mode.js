@@ -1,1 +1,1 @@
-module.exports = { mode: 'lan-client' };
+module.exports = { mode: 'default' };
