@@ -196,7 +196,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                 subtitle: '${inv.customerName ?? ''} · ${fmtDate(inv.date)}',
                 accent: accent,
                 trailing: fmtNumAlways(inv.amount),
-                onTap: () => context.push('/invoice/${inv.ref}?by=auto${inv.accSeq != null ? '&acc=${inv.accSeq}' : ''}'),
+                onTap: () => context.push('/invoice/${Uri.encodeComponent(inv.ref)}?by=auto${inv.accSeq != null ? '&acc=${inv.accSeq}' : ''}'),
               ),
             );
           }),

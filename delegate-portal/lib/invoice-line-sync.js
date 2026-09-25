@@ -1,19 +1,105 @@
-function readSyncNum(row, ...keys) {
-  if (!row) return 0;
+function unwrapSyncValue(value, depth = 0) {
+  if (value == null) return '';
+  if (typeof value === 'number' || typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const s = value.trim();
+    return (!s || s === '[object Object]') ? '' : s;
+  }
+  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(value)) {
+    return value.toString('utf8').trim();
+  }
+  if (typeof value === 'object' && depth < 5) {
+    if (Array.isArray(value)) return unwrapSyncValue(value[0], depth + 1);
+    return unwrapSyncValue(
+      value.value ?? value.Value ?? value.data ?? value.Data
+        ?? value.Seq ?? value.seq ?? value.Num ?? value.num
+        ?? value.name ?? value.Name ?? value.text ?? value.Text,
+      depth + 1
+    );
+  }
+  return '';
+}
+
+function fieldKey(name) {
+  return String(name || '').toLowerCase().replace(/[_-\s]/g, '');
+}
+
+function pickRaw(row, ...keys) {
+  if (!row || typeof row !== 'object') return undefined;
   const entries = Object.entries(row);
   for (const key of keys) {
-    const lower = key.toLowerCase();
-    const hit = entries.find(([name]) => String(name).toLowerCase() === lower);
-    const value = hit ? hit[1] : row[key];
-    if (value == null || value === '') continue;
-    const n = Number(value);
-    if (!Number.isNaN(n)) return n;
+    const want = fieldKey(key);
+    const hit = entries.find(([name]) => fieldKey(name) === want);
+    if (!hit) continue;
+    const unwrapped = unwrapSyncValue(hit[1]);
+    if (unwrapped !== '' && unwrapped != null) return unwrapped;
   }
-  return 0;
+  return undefined;
+}
+
+function pickText(row, ...keys) {
+  return String(pickRaw(row, ...keys) ?? '').trim();
+}
+
+function readSyncNum(row, ...keys) {
+  if (!row) return 0;
+  const value = keys.length ? pickRaw(row, ...keys) : undefined;
+  if (value == null || value === '') {
+    if (keys.length) return 0;
+    return 0;
+  }
+  const n = Number(value);
+  return Number.isNaN(n) ? 0 : n;
+}
+
+function preserveBillSeq(value) {
+  const s = String(unwrapSyncValue(value) ?? '').trim();
+  if (/^PY[0-9A-Za-z]+:/i.test(s)) return s;
+  const n = s.replace(/[^0-9]/g, '');
+  return n && n !== '0' ? n : '';
 }
 
 function billSeqOf(row) {
-  return String(row.BillSeq ?? row.bill_seq ?? '').replace(/[^0-9]/g, '');
+  return preserveBillSeq(pickRaw(row, 'BillSeq', 'bill_seq', 'BILLSEQ') ?? row?.BillSeq ?? row?.bill_seq);
+}
+
+function edariSeqOf(value) {
+  const s = String(unwrapSyncValue(value) ?? '').trim();
+  if (/^PY[0-9A-Za-z]+:/i.test(s)) {
+    const n = s.replace(/^PY[0-9A-Za-z]+:/i, '').replace(/[^0-9]/g, '');
+    return n && n !== '0' ? n : '';
+  }
+  const n = s.replace(/[^0-9]/g, '');
+  return n && n !== '0' ? n : '';
+}
+
+function normalizeInvoiceLineRow(row = {}) {
+  const billSeq = billSeqOf(row);
+  return {
+    ...row,
+    BillSeq: billSeq,
+    bill_seq: billSeq,
+    BillNo: readSyncNum(row, 'BillNo', 'bill_no', 'LineIndex', 'lineIndex', 'Seq'),
+    bill_no: readSyncNum(row, 'BillNo', 'bill_no', 'LineIndex', 'lineIndex', 'Seq'),
+    Mat: pickText(row, 'Mat', 'mat'),
+    mat: pickText(row, 'Mat', 'mat'),
+    MatNum: pickText(row, 'MatNum', 'mat_num', 'Num'),
+    mat_num: pickText(row, 'MatNum', 'mat_num', 'Num'),
+    MatName: pickText(row, 'MatName', 'mat_name', 'Name1', 'name1'),
+    mat_name: pickText(row, 'MatName', 'mat_name', 'Name1', 'name1'),
+    Quant: readSyncNum(row, 'Quant', 'quant'),
+    quant: readSyncNum(row, 'Quant', 'quant'),
+    Price: readSyncNum(row, 'Price', 'price'),
+    price: readSyncNum(row, 'Price', 'price'),
+    OBonus: readSyncNum(row, 'OBonus', 'obonus', 'Bonus', 'bonus'),
+    bonus: readSyncNum(row, 'OBonus', 'obonus', 'Bonus', 'bonus'),
+    Sum: readSyncNum(row, 'Sum', 'sum', 'line_total', 'lineTotal'),
+    line_total: readSyncNum(row, 'Sum', 'sum', 'line_total', 'lineTotal'),
+    MatRem: pickText(row, 'MatRem', 'remarks', 'Remarks'),
+    remarks: pickText(row, 'MatRem', 'remarks', 'Remarks'),
+    Kind: pickText(row, 'Kind', 'kind'),
+    kind: pickText(row, 'Kind', 'kind')
+  };
 }
 
 /**
@@ -24,10 +110,11 @@ function billSeqOf(row) {
 function assignBillNosForLines(rows = [], { getMaxBillNo = () => 0, getUsedBillNos = null } = {}) {
   const grouped = new Map();
   rows.forEach((row, index) => {
-    const billSeq = billSeqOf(row);
+    const normalized = normalizeInvoiceLineRow(row);
+    const billSeq = billSeqOf(normalized);
     if (!billSeq) return;
     if (!grouped.has(billSeq)) grouped.set(billSeq, []);
-    grouped.get(billSeq).push({ row, index });
+    grouped.get(billSeq).push({ row: normalized, index });
   });
 
   const out = [];
@@ -51,7 +138,14 @@ function assignBillNosForLines(rows = [], { getMaxBillNo = () => 0, getUsedBillN
         next += 1;
       } while (used.has(next));
       used.add(next);
-      out.push({ ...row, BillNo: next, bill_no: next, LineIndex: next });
+      out.push({
+        ...row,
+        BillSeq: billSeq,
+        bill_seq: billSeq,
+        BillNo: next,
+        bill_no: next,
+        LineIndex: next
+      });
     }
   }
 
@@ -63,7 +157,7 @@ function chunkInvoiceLinesByBill(rows = [], maxSize = 1500) {
   if (!rows.length) return [];
   const groups = new Map();
   rows.forEach((row, index) => {
-    const billSeq = billSeqOf(row);
+    const billSeq = billSeqOf(row) || preserveBillSeq(row.BillSeq ?? row.bill_seq);
     if (!billSeq) return;
     if (!groups.has(billSeq)) groups.set(billSeq, []);
     groups.get(billSeq).push({ row, index });
@@ -103,9 +197,9 @@ function isActiveInvoiceLineRow(line) {
   const quant = readSyncNum(line, 'Quant', 'quant');
   const bonus = readSyncNum(line, 'OBonus', 'bonus');
   const price = readSyncNum(line, 'Price', 'price');
-  const total = Number(line.line_total ?? line.lineTotal ?? 0);
-  const name = String(line.MatName ?? line.mat_name ?? '').trim();
-  const mat = String(line.Mat ?? line.mat ?? '').trim();
+  const total = Number(line.line_total ?? line.lineTotal ?? line.Sum ?? 0);
+  const name = pickText(line, 'MatName', 'mat_name');
+  const mat = pickText(line, 'Mat', 'mat');
   return quant !== 0 || bonus !== 0 || price !== 0 || total !== 0 || Boolean(name) || Boolean(mat);
 }
 
@@ -122,8 +216,14 @@ function resolveLineTotal(line) {
 }
 
 module.exports = {
+  unwrapSyncValue,
+  pickRaw,
+  pickText,
   readSyncNum,
+  preserveBillSeq,
   billSeqOf,
+  edariSeqOf,
+  normalizeInvoiceLineRow,
   assignBillNosForLines,
   chunkInvoiceLinesByBill,
   isActiveInvoiceLineRow,

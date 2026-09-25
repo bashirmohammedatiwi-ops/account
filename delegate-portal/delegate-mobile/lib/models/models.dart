@@ -200,16 +200,22 @@ class StatementLine {
 
   InvoiceLookup? get invoiceLookup {
     if (!isInvoiceLine) return null;
-    final seq = _digits(billSeq);
-    if (seq.isNotEmpty) return InvoiceLookup(ref: seq, by: 'seq');
-    final num = _digits(billNum);
-    if (num.isNotEmpty) return InvoiceLookup(ref: num, by: 'num');
-    final fallback = _digits(invoiceRef);
-    if (fallback.isNotEmpty) return InvoiceLookup(ref: fallback, by: 'auto');
+    final seq = _invoiceKey(billSeq);
+    if (seq != null) return InvoiceLookup(ref: seq, by: 'seq');
+    final num = _invoiceKey(billNum);
+    if (num != null) return InvoiceLookup(ref: num, by: 'num');
+    final fallback = _invoiceKey(invoiceRef);
+    if (fallback != null) return InvoiceLookup(ref: fallback, by: 'auto');
     return null;
   }
 
-  static String _digits(String? v) => (v ?? '').replaceAll(RegExp(r'[^0-9]'), '');
+  static String? _invoiceKey(String? v) {
+    final s = (v ?? '').trim();
+    if (s.isEmpty) return null;
+    if (RegExp(r'^PY[0-9A-Za-z]+:', caseSensitive: false).hasMatch(s)) return s;
+    final digits = s.replaceAll(RegExp(r'[^0-9]'), '');
+    return digits.isEmpty ? null : digits;
+  }
 
   factory StatementLine.fromJson(Map<String, dynamic> json) => StatementLine(
         description: '${json['description'] ?? json['desc'] ?? ''}',

@@ -590,7 +590,7 @@ class OfflineApiClient {
   Future<InvoiceDetail> getInvoice(String ref, {String by = 'auto', String? accSeq}) => _withCache(
         cacheKey: OfflineKeys.invoice(ref, by, accSeq),
         onlineFetch: () async {
-          final data = await _api.requestJson('GET', '/invoices/$ref', query: {
+          final data = await _api.requestJson('GET', '/invoices/${Uri.encodeComponent(ref)}', query: {
             'by': by,
             if (accSeq != null && accSeq.isNotEmpty) 'acc': accSeq,
           });
@@ -606,7 +606,7 @@ class OfflineApiClient {
 
   Future<Uint8List> getInvoicePdf(String ref, {String by = 'auto', String? accSeq}) async {
     if (!_online) throw ApiException('تحميل PDF يتطلب اتصالاً بالشبكة');
-    return _api.requestBytes('/invoices/$ref.pdf', query: {
+    return _api.requestBytes('/invoices/${Uri.encodeComponent(ref)}.pdf', query: {
       'by': by,
       if (accSeq != null && accSeq.isNotEmpty) 'acc': accSeq,
     });

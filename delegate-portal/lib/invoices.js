@@ -9,6 +9,78 @@ function normalizeBillSeq(value) {
   return seq && seq !== '0' ? seq : '';
 }
 
+function pySeqSuffix(value) {
+  const s = String(value ?? '').trim();
+  const py = s.match(/^PY[0-9A-Za-z]+:(.+)$/i);
+  if (py) {
+    const n = String(py[1]).replace(/[^0-9]/g, '');
+    return n && n !== '0' ? n : '';
+  }
+  const digits = s.replace(/[^0-9]/g, '');
+  return digits && digits !== '0' ? digits : '';
+}
+
+/** مراجع الفاتورة كما يرسلها التطبيق: PY2025:99 أو 202599 بعد حذف الحروف. */
+function invoiceSeqCandidates(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return [];
+  const out = [];
+  const add = (v) => {
+    const s = String(v || '').trim();
+    if (s && !out.includes(s)) out.push(s);
+  };
+  add(raw);
+  if (/^PY[0-9A-Za-z]+:/i.test(raw)) {
+    add(pySeqSuffix(raw));
+    return out;
+  }
+  const digits = raw.replace(/[^0-9]/g, '');
+  add(digits);
+  const glued = digits.match(/^(20\d{2})(\d+)$/);
+  if (glued) add(`PY${glued[1]}:${glued[2]}`);
+  return out;
+}
+
+function looksLikeGluedPrevYearRef(value) {
+  const digits = String(value ?? '').replace(/[^0-9]/g, '');
+  const glued = digits.match(/^(20\d{2})(\d+)$/);
+  return Boolean(glued && glued[2]);
+}
+
+function findInvoiceRowByRef(billSeq) {
+  const raw = String(billSeq ?? '').trim();
+  if (!raw) return null;
+  for (const seq of invoiceSeqCandidates(raw)) {
+    const row = db.prepare('SELECT * FROM invoices WHERE seq = ?').get(seq);
+    if (row) return row;
+  }
+  const suffix = pySeqSuffix(raw);
+  if (!suffix) return null;
+  const preferPy = /^PY/i.test(raw) || looksLikeGluedPrevYearRef(raw);
+  const rows = db.prepare(`
+    SELECT * FROM invoices
+    WHERE seq = ? OR seq LIKE 'PY%:' || ?
+    ORDER BY CASE WHEN seq LIKE 'PY%' THEN 0 ELSE 1 END, seq DESC
+  `).all(suffix, suffix);
+  if (!rows.length) return null;
+  if (preferPy) return rows.find((r) => String(r.seq).startsWith('PY')) || rows[0];
+  return rows.find((r) => !String(r.seq).startsWith('PY')) || rows[0];
+}
+
+function findInvoiceSibling(invoice) {
+  if (!invoice?.seq) return null;
+  const suffix = pySeqSuffix(invoice.seq);
+  if (!suffix) return null;
+  if (String(invoice.seq).startsWith('PY')) {
+    return db.prepare('SELECT * FROM invoices WHERE seq = ?').get(suffix) || null;
+  }
+  return db.prepare(`
+    SELECT * FROM invoices
+    WHERE seq LIKE 'PY%:' || ? AND seq != ?
+    ORDER BY seq DESC LIMIT 1
+  `).get(suffix, String(invoice.seq)) || null;
+}
+
 function normalizeBillNum(value) {
   const num = String(value ?? '').replace(/[^0-9]/g, '');
   return num && num !== '0' ? num : '';
@@ -62,14 +134,23 @@ function lookupBillSeqByNum(billNum, accSeq) {
   const num = normalizeBillNum(billNum);
   if (!num) return '';
   const acc = normalizeAccSeq(accSeq);
+  const pick = (row) => (row ? String(row.seq) : '');
   if (acc) {
-    const scoped = db.prepare(
-      'SELECT seq FROM invoices WHERE num = ? AND acc_seq = ? LIMIT 1'
-    ).get(num, acc);
-    if (scoped) return String(scoped.seq);
+    const scoped = db.prepare(`
+      SELECT seq FROM invoices
+      WHERE num = ? AND acc_seq = ?
+      ORDER BY CASE WHEN seq LIKE 'PY%' THEN 1 ELSE 0 END
+      LIMIT 1
+    `).get(num, acc);
+    if (scoped) return pick(scoped);
   }
-  const hit = db.prepare('SELECT seq FROM invoices WHERE num = ? LIMIT 1').get(num);
-  return hit ? String(hit.seq) : '';
+  const hit = db.prepare(`
+    SELECT seq FROM invoices
+    WHERE num = ?
+    ORDER BY CASE WHEN seq LIKE 'PY%' THEN 1 ELSE 0 END
+    LIMIT 1
+  `).get(num);
+  return pick(hit);
 }
 
 function isInvoiceMovement(row) {
@@ -283,11 +364,9 @@ function repairInvoiceLineBillNumbers(billSeq) {
   tx();
 }
 
-function getInvoiceByBillSeq(billSeq) {
-  const seq = normalizeBillSeq(billSeq);
-  if (!seq) return null;
-  const invoice = db.prepare('SELECT * FROM invoices WHERE seq = ?').get(seq);
+function loadInvoiceDetail(invoice) {
   if (!invoice) return null;
+  const seq = String(invoice.seq);
   const account = invoice.acc_seq
     ? db.prepare('SELECT seq, num, name1 FROM accounts WHERE seq = ?').get(String(invoice.acc_seq))
     : null;
@@ -299,31 +378,55 @@ function getInvoiceByBillSeq(billSeq) {
     prepareInvoiceLinesFromDb(rawLines).map(mapInvoiceLineRow)
   );
   const totals = resolveInvoiceTotals(invoice, mappedLines);
-  const mappedInvoice = mapInvoiceRow(invoice, account, totals);
   return {
-    invoice: mappedInvoice,
+    invoice: mapInvoiceRow(invoice, account, totals),
     lines: mappedLines
   };
+}
+
+function getInvoiceByBillSeq(billSeq) {
+  let invoice = findInvoiceRowByRef(billSeq);
+  if (!invoice) return null;
+  let detail = loadInvoiceDetail(invoice);
+  if (detail?.lines?.length) return detail;
+  const sibling = findInvoiceSibling(invoice);
+  if (sibling) {
+    const alt = loadInvoiceDetail(sibling);
+    if (alt?.lines?.length) return alt;
+  }
+  return detail;
 }
 
 function getInvoiceByNum(billNum, accSeq) {
   const num = normalizeBillNum(billNum);
   if (!num) return null;
   const acc = normalizeAccSeq(accSeq);
-  let invoice = null;
-  if (acc) {
-    invoice = db.prepare(`
-      SELECT seq FROM invoices
-      WHERE num = ? AND acc_seq = ?
-      ORDER BY CASE WHEN seq LIKE 'PY%' THEN 1 ELSE 0 END
-      LIMIT 1
-    `).get(num, acc);
+  const rows = acc
+    ? db.prepare(`
+        SELECT * FROM invoices
+        WHERE num = ? AND acc_seq = ?
+        ORDER BY CASE WHEN seq LIKE 'PY%' THEN 1 ELSE 0 END, seq DESC
+      `).all(num, acc)
+    : db.prepare(`
+        SELECT * FROM invoices
+        WHERE num = ?
+        ORDER BY CASE WHEN seq LIKE 'PY%' THEN 1 ELSE 0 END, seq DESC
+      `).all(num);
+  if (!rows.length && acc) {
+    rows.push(...db.prepare(`
+      SELECT * FROM invoices
+      WHERE num = ?
+      ORDER BY CASE WHEN seq LIKE 'PY%' THEN 1 ELSE 0 END, seq DESC
+    `).all(num));
   }
-  if (!invoice) {
-    invoice = db.prepare('SELECT seq FROM invoices WHERE num = ? LIMIT 1').get(num);
+  if (!rows.length) return null;
+  let fallback = null;
+  for (const row of rows) {
+    const detail = loadInvoiceDetail(row);
+    if (!fallback) fallback = detail;
+    if (detail?.lines?.length) return detail;
   }
-  if (!invoice) return null;
-  return getInvoiceByBillSeq(invoice.seq);
+  return fallback;
 }
 
 function getInvoiceByRef(ref) {
@@ -336,7 +439,7 @@ function getInvoiceForExport(ref, mode = 'auto', accSeq) {
   if (mode === 'seq') return getInvoiceByBillSeq(raw);
   if (mode === 'num') return getInvoiceByNum(raw, accSeq);
 
-  if (db.prepare('SELECT 1 FROM invoices WHERE seq = ?').get(raw)) {
+  if (findInvoiceRowByRef(raw)) {
     return getInvoiceByBillSeq(raw);
   }
   const byNum = getInvoiceByNum(raw, accSeq);
@@ -348,23 +451,29 @@ function canAgentAccessInvoice(agentId, ref, options = {}) {
   const raw = String(ref ?? '').trim();
   if (!raw) return false;
   const accHint = normalizeAccSeq(options.accSeq);
+  const seqKeys = invoiceSeqCandidates(raw);
+  const suffix = pySeqSuffix(raw);
+  if (suffix && !seqKeys.includes(suffix)) seqKeys.push(suffix);
 
-  const seq = normalizeBillSeq(raw);
-  if (seq) {
+  for (const seq of seqKeys) {
     if (accHint) {
       const journalScoped = db.prepare(
         'SELECT acc_seq FROM journal WHERE bill_seq = ? AND acc_seq = ? LIMIT 1'
       ).get(seq, accHint);
       if (journalScoped && canAgentAccess(agentId, journalScoped.acc_seq)) return true;
+      const journalPy = db.prepare(
+        `SELECT acc_seq FROM journal WHERE acc_seq = ? AND (bill_seq = ? OR bill_seq LIKE 'PY%:' || ?) LIMIT 1`
+      ).get(accHint, seq, suffix || seq);
+      if (journalPy && canAgentAccess(agentId, journalPy.acc_seq)) return true;
     }
     const journalRows = db.prepare(
-      'SELECT DISTINCT acc_seq FROM journal WHERE bill_seq = ?'
-    ).all(seq);
+      `SELECT DISTINCT acc_seq FROM journal WHERE bill_seq = ? OR bill_seq LIKE 'PY%:' || ?`
+    ).all(seq, suffix || seq);
     for (const row of journalRows) {
       if (row?.acc_seq && canAgentAccess(agentId, row.acc_seq)) return true;
     }
 
-    const invoice = db.prepare('SELECT acc_seq FROM invoices WHERE seq = ?').get(seq);
+    const invoice = findInvoiceRowByRef(seq);
     if (invoice?.acc_seq && canAgentAccess(agentId, invoice.acc_seq)) return true;
   }
 
@@ -403,6 +512,7 @@ function canAgentAccessInvoice(agentId, ref, options = {}) {
 module.exports = {
   invoiceKindLabel,
   normalizeBillSeq,
+  invoiceSeqCandidates,
   normalizeBillNum,
   normalizeAccSeq,
   extractBillNumFromText,

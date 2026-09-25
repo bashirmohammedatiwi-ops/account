@@ -312,7 +312,7 @@ class EdStatementMovesSection extends StatelessWidget {
           stmt: stmt,
           accSeq: accSeq,
           onInvoicePdf: onInvoicePdf,
-          onOpenInvoice: (ref, by) => context.push('/invoice/$ref?by=$by&acc=$accSeq'),
+          onOpenInvoice: (ref, by) => context.push('/invoice/${Uri.encodeComponent(ref)}?by=$by&acc=$accSeq'),
         ),
       ],
     );
@@ -325,7 +325,7 @@ List<Widget> edStatementMoveSlivers(
   required String accSeq,
   Future<void> Function(String ref, String by)? onInvoicePdf,
 }) {
-  void openInvoice(String ref, String by) => context.push('/invoice/$ref?by=$by&acc=$accSeq');
+  void openInvoice(String ref, String by) => context.push('/invoice/${Uri.encodeComponent(ref)}?by=$by&acc=$accSeq');
 
   if (stmt.lines.isEmpty) {
     return [

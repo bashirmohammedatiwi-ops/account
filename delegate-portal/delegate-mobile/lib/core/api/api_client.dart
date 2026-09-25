@@ -120,7 +120,7 @@ class ApiClient {
   Future<Uint8List> getStatementPdf(String seq) => _bytes('/accounts/$seq/statement.pdf');
 
   Future<InvoiceDetail> getInvoice(String ref, {String by = 'auto', String? accSeq}) async {
-    final data = await _json('GET', '/invoices/$ref', query: {
+    final data = await _json('GET', '/invoices/${Uri.encodeComponent(ref)}', query: {
       'by': by,
       if (accSeq != null && accSeq.isNotEmpty) 'acc': accSeq,
     });
@@ -128,7 +128,7 @@ class ApiClient {
   }
 
   Future<Uint8List> getInvoicePdf(String ref, {String by = 'auto', String? accSeq}) =>
-      _bytes('/invoices/$ref.pdf', query: {
+      _bytes('/invoices/${Uri.encodeComponent(ref)}.pdf', query: {
         'by': by,
         if (accSeq != null && accSeq.isNotEmpty) 'acc': accSeq,
       });

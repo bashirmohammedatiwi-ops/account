@@ -415,7 +415,7 @@ function buildStatementLines(rows, options = {}) {
     const isReturnInvoice = !isRecon && isSalesReturnMovement(row);
     const isSalesInvoice = !isRecon && isSalesInvoiceMovement(row);
     const hasInvoice = !isRecon && (isSalesInvoice || isReturnInvoice);
-    const invoiceRef = billNum || billSeq || null;
+    const invoiceRef = billSeq || billNum || null;
     const description = buildJournalDescription(row);
     const branch2 = String(row.exp2 || row.Exp2 || '').trim() || null;
     return {

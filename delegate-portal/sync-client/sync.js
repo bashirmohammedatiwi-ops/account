@@ -10,7 +10,14 @@ const {
   assignBillNosForLines,
   chunkInvoiceLinesByBill,
   isActiveInvoiceLineRow,
-  resolveLineTotal
+  resolveLineTotal,
+  pickText,
+  pickRaw,
+  billSeqOf,
+  edariSeqOf,
+  preserveBillSeq,
+  normalizeInvoiceLineRow,
+  unwrapSyncValue
 } = require(path.join(__dirname, '..', 'lib', 'invoice-line-sync'));
 const edariRoot = process.env.EDARI_READER_ROOT
   || path.join(__dirname, '..', '..', 'edari-reader');
@@ -208,8 +215,7 @@ function isDebitRow(row) {
 }
 
 function normalizeBillSeq(value) {
-  const seq = String(value ?? '').replace(/[^0-9]/g, '');
-  return seq && seq !== '0' ? seq : '';
+  return edariSeqOf(value);
 }
 
 function normalizeBillNum(value) {
@@ -358,9 +364,20 @@ function isPrevYearOnlySync() {
   return process.env.SYNC_PREV_YEAR_ONLY === '1' || process.argv.includes('--prev-year-only');
 }
 
+function isAutoSync() {
+  return String(process.env.SYNC_SOURCE || '').trim() === 'auto';
+}
+
+function shouldAttachPreviousYear() {
+  if (isPrevYearOnlySync() || isAutoSync()) return false;
+  return Boolean(getPreviousYearConnection());
+}
+
 function pyId(alias, raw) {
-  const n = String(raw ?? '').replace(/[^0-9]/g, '');
-  return n && n !== '0' ? `PY${alias}:${n}` : '';
+  const s = String(unwrapSyncValue(raw) ?? '').trim();
+  if (/^PY[0-9A-Za-z]+:/i.test(s)) return s;
+  const n = edariSeqOf(s);
+  return n ? `PY${alias}:${n}` : '';
 }
 
 async function mapPreviousYearAccounts(currentAccounts) {
@@ -422,35 +439,36 @@ async function fetchPreviousYearBundle(currentAccounts) {
   reportProgress(4, 7, 100, `بنود السنة السابقة: ${rawLines.length}`);
 
   const journal = rawJournal.map((row) => {
-    const prevAcc = String(row.Acc ?? row.acc ?? '').replace(/[^0-9]/g, '');
+    const prevAcc = edariSeqOf(pickRaw(row, 'Acc', 'acc') ?? row.Acc ?? row.acc);
     const currentAcc = prevSeqToCurrent.get(prevAcc);
-    const origSeq = pyId(prev.alias, row.Seq ?? row.seq);
+    const origSeq = pyId(prev.alias, pickRaw(row, 'Seq', 'seq') ?? row.Seq ?? row.seq);
     if (!currentAcc || !origSeq) return null;
-    const origBill = pyId(prev.alias, row.BillSeq ?? row.bill_seq);
+    const origBill = pyId(prev.alias, pickRaw(row, 'BillSeq', 'bill_seq') ?? row.BillSeq ?? row.bill_seq);
     return {
       ...row,
       Seq: origSeq,
       Acc: currentAcc,
-      BillSeq: origBill || row.BillSeq || '',
-      Exp2: String(row.Exp2 ?? row.exp2 ?? '').trim() || `سنة ${prev.alias}`
+      BillSeq: origBill || preserveBillSeq(row.BillSeq ?? row.bill_seq),
+      Exp2: pickText(row, 'Exp2', 'exp2') || `سنة ${prev.alias}`
     };
   }).filter(Boolean);
 
   const invoices = rawInvoices.map((inv) => {
-    const orig = pyId(prev.alias, inv.Seq ?? inv.seq);
+    const orig = pyId(prev.alias, pickRaw(inv, 'Seq', 'seq') ?? inv.Seq ?? inv.seq);
     if (!orig) return null;
-    const prevTwo = String(inv.Two ?? inv.acc_seq ?? '').replace(/[^0-9]/g, '');
+    const prevTwo = edariSeqOf(pickRaw(inv, 'Two', 'acc_seq') ?? inv.Two ?? inv.acc_seq);
     return {
       ...inv,
       Seq: orig,
+      seq: orig,
       Two: prevSeqToCurrent.get(prevTwo) || inv.Two
     };
   }).filter(Boolean);
 
   const invoiceLines = rawLines.map((line) => {
-    const bill = pyId(prev.alias, line.BillSeq ?? line.bill_seq);
+    const bill = pyId(prev.alias, billSeqOf(line) || line.BillSeq || line.bill_seq);
     if (!bill) return null;
-    return { ...line, BillSeq: bill };
+    return { ...normalizeInvoiceLineRow(line), BillSeq: bill, bill_seq: bill };
   }).filter(Boolean);
 
   return { journal, invoices, invoiceLines, alias: prev.alias };
@@ -493,12 +511,10 @@ function collectBillSeqs(journal) {
   const seqs = new Set();
   const nums = new Set();
   for (const row of journal) {
-    const seq = normalizeBillSeq(row.BillSeq ?? row.bill_seq);
-    if (seq) {
-      seqs.add(seq);
-      continue;
-    }
-    const num = normalizeBillNum(row.BillNum ?? row.bill_num) || extractBillNumFromText(row.Exp1 ?? row.exp1);
+    const seq = normalizeBillSeq(pickRaw(row, 'BillSeq', 'bill_seq') ?? row.BillSeq ?? row.bill_seq);
+    if (seq) seqs.add(seq);
+    const num = normalizeBillNum(pickRaw(row, 'BillNum', 'bill_num') ?? row.BillNum ?? row.bill_num)
+      || extractBillNumFromText(pickText(row, 'Exp1', 'exp1'));
     if (num) nums.add(num);
   }
   return { seqs, nums };
@@ -511,7 +527,9 @@ async function lookupBillSeqsByNums(nums, conn = null) {
     const list = part.join(',');
     const rows = await query(`SELECT Seq, Num FROM File15n WHERE Num IN (${list})`, 120000, conn);
     for (const row of rows) {
-      map.set(String(row.Num), String(row.Seq));
+      const num = pickText(row, 'Num', 'num') || String(row.Num ?? '');
+      const seq = edariSeqOf(pickRaw(row, 'Seq', 'seq') ?? row.Seq);
+      if (num && seq) map.set(num, seq);
     }
   }
   return map;
@@ -519,18 +537,47 @@ async function lookupBillSeqsByNums(nums, conn = null) {
 
 async function resolveBillSeqsFromJournal(journal, conn = null) {
   const { seqs, nums } = collectBillSeqs(journal);
-  const resolved = new Set(seqs);
-  if (nums.size) {
-    const byNum = await lookupBillSeqsByNums([...nums], conn);
-    for (const seq of byNum.values()) resolved.add(seq);
+  const resolved = new Set();
+  const foundHeaders = seqs.size ? await fetchInvoices([...seqs], conn) : [];
+  for (const inv of foundHeaders) {
+    const seq = edariSeqOf(pickRaw(inv, 'Seq', 'seq') ?? inv.Seq ?? inv.seq);
+    if (seq) resolved.add(seq);
+  }
+  const missingSeqs = [...seqs].filter((s) => !resolved.has(s));
+  const lookupNums = [...new Set([...nums, ...missingSeqs])];
+  if (lookupNums.length) {
+    const byNum = await lookupBillSeqsByNums(lookupNums, conn);
+    for (const seq of byNum.values()) {
+      const n = edariSeqOf(seq);
+      if (n) resolved.add(n);
+    }
   }
   return [...resolved];
+}
+
+function normalizeInvoiceHeader(row) {
+  const seq = preserveBillSeq(pickRaw(row, 'Seq', 'seq') ?? row.Seq ?? row.seq)
+    || edariSeqOf(row.Seq ?? row.seq);
+  return {
+    ...row,
+    Seq: seq,
+    seq,
+    Num: pickText(row, 'Num', 'num'),
+    Kind: pickRaw(row, 'Kind', 'kind') ?? row.Kind,
+    Date: pickRaw(row, 'Date', 'inv_date') ?? row.Date,
+    Total: pickRaw(row, 'Total', 'total') ?? row.Total,
+    Payment: pickRaw(row, 'Payment', 'payment') ?? row.Payment,
+    DisCnt: pickRaw(row, 'DisCnt', 'discount') ?? row.DisCnt,
+    count: pickRaw(row, 'count', 'Count', 'line_count') ?? row.count,
+    Two: pickText(row, 'Two', 'acc_seq') || String(row.Two ?? row.acc_seq ?? ''),
+    remarks: pickText(row, 'remarks', 'Remarks')
+  };
 }
 
 async function fetchInvoices(billSeqs, conn = null) {
   if (!billSeqs.length) return [];
   const all = [];
-  const parts = chunk(billSeqs, QUERY_IN_CHUNK);
+  const parts = chunk(billSeqs.map(edariSeqOf).filter(Boolean), QUERY_IN_CHUNK);
   for (let i = 0; i < parts.length; i++) {
     const ids = sqlIdList(parts[i]);
     if (!ids) continue;
@@ -539,7 +586,7 @@ async function fetchInvoices(billSeqs, conn = null) {
       180000,
       conn
     );
-    all.push(...rows);
+    all.push(...(rows || []).map(normalizeInvoiceHeader));
     const pct = Math.round(((i + 1) / parts.length) * 100);
     reportProgress(3, 7, pct, `فواتير بيع: ${all.length}/${billSeqs.length}`);
   }
@@ -567,17 +614,43 @@ async function fetchMaterialMap(matSeqs, conn = null) {
 async function fetchInvoiceLineRows(ids, conn = null) {
   const baseCols = 'BillSeq, BillNo, Mat, MatName, Quant, Price, OBonus, MatRem, Kind';
   const withSum = `${baseCols}, Sum`;
+  const sqls = [
+    `SELECT ${withSum} FROM file14n WHERE BillSeq IN (${ids}) ORDER BY BillSeq, BillNo`,
+    `SELECT ${baseCols} FROM file14n WHERE BillSeq IN (${ids}) ORDER BY BillSeq, BillNo`,
+    `SELECT ${withSum} FROM File14n WHERE BillSeq IN (${ids}) ORDER BY BillSeq, BillNo`,
+    `SELECT ${baseCols} FROM File14n WHERE BillSeq IN (${ids}) ORDER BY BillSeq, BillNo`,
+    `SELECT l.BillSeq, l.BillNo, l.Mat, l.MatName, l.Quant, l.Price, l.OBonus, l.MatRem, l.Kind
+     FROM file14n l INNER JOIN File15n i ON i.Seq = l.BillSeq
+     WHERE i.Seq IN (${ids}) ORDER BY l.BillSeq, l.BillNo`
+  ];
+  let lastErr = null;
+  for (const sql of sqls) {
+    try {
+      const rows = await query(sql, 180000, conn);
+      return (rows || []).map(normalizeInvoiceLineRow);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  if (lastErr) throw lastErr;
+  return [];
+}
+
+async function fetchInvoiceLinesForSingle(seq, conn = null) {
+  const id = edariSeqOf(seq);
+  if (!id) return [];
   try {
-    return await query(`SELECT ${withSum} FROM file14n WHERE BillSeq IN (${ids}) ORDER BY BillSeq, BillNo`, 180000, conn);
+    return await fetchInvoiceLineRows(id, conn);
   } catch {
-    return await query(`SELECT ${baseCols} FROM file14n WHERE BillSeq IN (${ids}) ORDER BY BillSeq, BillNo`, 180000, conn);
+    return [];
   }
 }
 
 async function fetchInvoiceLines(billSeqs, conn = null) {
   if (!billSeqs.length) return [];
+  const numericSeqs = [...new Set(billSeqs.map(edariSeqOf).filter(Boolean))];
   const all = [];
-  const parts = chunk(billSeqs, QUERY_IN_CHUNK);
+  const parts = chunk(numericSeqs, QUERY_IN_CHUNK);
   for (let i = 0; i < parts.length; i++) {
     const ids = sqlIdList(parts[i]);
     if (!ids) continue;
@@ -585,6 +658,20 @@ async function fetchInvoiceLines(billSeqs, conn = null) {
     all.push(...rows);
     const pct = Math.round(((i + 1) / parts.length) * 100);
     reportProgress(4, 7, pct, `بنود الفواتير: ${all.length} (${i + 1}/${parts.length})`);
+  }
+
+  const got = new Set(all.map((line) => edariSeqOf(billSeqOf(line))).filter(Boolean));
+  const missing = numericSeqs.filter((seq) => !got.has(seq));
+  if (missing.length) {
+    reportProgress(4, 7, 90, `إعادة قراءة ${missing.length} فاتورة بلا بنود...`);
+    for (const part of chunk(missing, 40)) {
+      const rows = await fetchInvoiceLineRows(sqlIdList(part), conn);
+      all.push(...rows);
+      const still = part.filter((seq) => !all.some((line) => edariSeqOf(billSeqOf(line)) === seq));
+      for (const seq of still) {
+        all.push(...await fetchInvoiceLinesForSingle(seq, conn));
+      }
+    }
   }
 
   const missingNameMats = [...new Set(
@@ -777,6 +864,9 @@ async function main() {
     invoices = bundle.invoices;
     invoiceLines = bundle.invoiceLines;
     reportProgress(2, 7, 100, `سنة ${bundle.alias}: ${journal.length} حركة · ${invoices.length} فاتورة · ${invoiceLines.length} بند`);
+    if (invoices.length && !invoiceLines.length) {
+      throw new Error(`تم قراءة فواتير السنة ${bundle.alias} لكن بنودها لم تُجلب من File14n`);
+    }
   } else {
     reportProgress(2, 7, 0, `جاري قراءة حركات ${journalSeqs.length} حساب...`);
     journal = await fetchAllJournal(journalSeqs);
@@ -790,6 +880,27 @@ async function main() {
     reportProgress(4, 7, 0, 'جاري قراءة بنود فواتير البيع...');
     invoiceLines = await fetchInvoiceLines(billSeqs);
     reportProgress(4, 7, 100, `تم: ${invoiceLines.length} بند`);
+
+    if (invoices.length && !invoiceLines.length) {
+      throw new Error('تم قراءة الفواتير من الإداري لكن بنودها لم تُجلب من File14n');
+    }
+
+    if (shouldAttachPreviousYear()) {
+      try {
+        reportProgress(4, 7, 0, 'إرفاق فواتير السنة السابقة مع التفاصيل...');
+        const bundle = await fetchPreviousYearBundle(accounts);
+        journal = journal.concat(bundle.journal);
+        invoices = invoices.concat(bundle.invoices);
+        invoiceLines = invoiceLines.concat(bundle.invoiceLines);
+        reportProgress(4, 7, 100, `أُرفقت سنة ${bundle.alias}: ${bundle.invoices.length} فاتورة · ${bundle.invoiceLines.length} بند`);
+        if (bundle.invoices.length && !bundle.invoiceLines.length) {
+          throw new Error(`فواتير السنة ${bundle.alias} بلا بنود — أعد رفع السنة السابقة`);
+        }
+      } catch (err) {
+        if (/بلا بنود|File14n/.test(err.message || '')) throw err;
+        reportProgress(4, 7, 100, `تعذّر إرفاق السنة السابقة: ${err.message}`);
+      }
+    }
   }
 
   const accountsForUpload = enrichAccountsWithMatchInfo(accounts, lastMatchMapFromJournal(journal));
@@ -814,17 +925,17 @@ async function main() {
   const payload = {
     accounts: accountsForUpload,
     journal: journal.map((row) => ({
-      Seq: row.Seq ?? row.seq,
-      Acc: row.Acc ?? row.acc,
-      Date: row.Date ?? row.date,
-      Am: row.Am ?? row.am,
-      Dept: row.Dept ?? row.dept,
-      Exp1: row.Exp1 ?? row.exp1,
-      Exp2: row.Exp2 ?? row.exp2,
-      Remarks: row.Remarks ?? row.remarks,
-      BillNum: row.BillNum ?? row.bill_num,
-      BillSeq: row.BillSeq ?? row.bill_seq,
-      BillKind: row.BillKind ?? row.bill_kind
+      Seq: preserveBillSeq(pickRaw(row, 'Seq', 'seq') ?? row.Seq ?? row.seq) || pickText(row, 'Seq', 'seq'),
+      Acc: edariSeqOf(pickRaw(row, 'Acc', 'acc') ?? row.Acc ?? row.acc) || pickText(row, 'Acc', 'acc'),
+      Date: pickRaw(row, 'Date', 'date') ?? row.Date ?? row.date,
+      Am: pickRaw(row, 'Am', 'am') ?? row.Am ?? row.am,
+      Dept: pickRaw(row, 'Dept', 'dept') ?? row.Dept ?? row.dept,
+      Exp1: pickText(row, 'Exp1', 'exp1'),
+      Exp2: pickText(row, 'Exp2', 'exp2'),
+      Remarks: pickText(row, 'Remarks', 'remarks'),
+      BillNum: pickText(row, 'BillNum', 'bill_num'),
+      BillSeq: preserveBillSeq(pickRaw(row, 'BillSeq', 'bill_seq') ?? row.BillSeq ?? row.bill_seq),
+      BillKind: pickText(row, 'BillKind', 'bill_kind')
     })),
     invoices,
     invoiceLines,

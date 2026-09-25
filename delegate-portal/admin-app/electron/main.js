@@ -816,7 +816,7 @@ function runLocalSyncScript(serverUrl, syncKey, treeSeqs = [], options = {}) {
         SYNC_API_KEY: syncKey,
         SYNC_SOURCE: source,
         SYNC_SKIP_PRODUCTS: '1',
-        SYNC_INCLUDE_PREV_YEAR: '0',
+        SYNC_INCLUDE_PREV_YEAR: source === 'auto' ? '0' : '1',
         SYNC_PREV_YEAR_ONLY: prevYearOnly ? '1' : '0',
         EDARI_BACKEND_URL: BACKEND_URL,
         EDARI_USE_REMOTE: USE_REMOTE_UI ? '1' : '0'

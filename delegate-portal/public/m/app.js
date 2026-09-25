@@ -59,12 +59,19 @@ function isInvoiceLine(line) {
   return Number(line?.debit) > 0;
 }
 
+function invoiceKey(value) {
+  const s = String(value || '').trim();
+  if (!s) return '';
+  if (/^PY[0-9A-Za-z]+:/i.test(s)) return s;
+  return s.replace(/[^0-9]/g, '');
+}
+
 function invoiceLookupFor(line, accSeq) {
-  const billSeq = String(line?.billSeq || '').replace(/[^0-9]/g, '');
+  const billSeq = invoiceKey(line?.billSeq);
   if (billSeq) return { ref: billSeq, by: 'seq', acc: accSeq || '' };
-  const billNum = String(line?.billNum || '').replace(/[^0-9]/g, '');
+  const billNum = invoiceKey(line?.billNum);
   if (billNum) return { ref: billNum, by: 'num', acc: accSeq || '' };
-  const fallback = String(line?.invoiceRef || '').replace(/[^0-9]/g, '');
+  const fallback = invoiceKey(line?.invoiceRef);
   if (fallback) return { ref: fallback, by: 'auto', acc: accSeq || '' };
   return null;
 }

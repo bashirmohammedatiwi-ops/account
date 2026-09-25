@@ -2,7 +2,12 @@ const db = require('./db');
 const {
   readSyncNum,
   assignBillNosForLines,
-  resolveLineTotal
+  resolveLineTotal,
+  pickText,
+  pickRaw,
+  preserveBillSeq,
+  billSeqOf,
+  normalizeInvoiceLineRow
 } = require('./invoice-line-sync');
 const { syncMaterialsFromEdari, refreshAllProductsFromEdariCache } = require('./products');
 const { normalizeEdariDateIso } = require('./date-utils');
@@ -409,43 +414,40 @@ function normalizeJournalSeq(raw) {
 }
 
 function preserveSyncId(raw) {
-  const s = String(raw ?? '').trim();
-  if (/^PY[0-9A-Za-z]+:/i.test(s)) return s;
-  const n = s.replace(/[^0-9]/g, '');
-  return n && n !== '0' ? n : '';
+  return preserveBillSeq(raw);
 }
 
 function mapJournalRow(j) {
-  const dept = j.Dept ?? j.is_debit;
-  const billSeq = preserveSyncId(j.BillSeq ?? j.bill_seq);
+  const dept = pickRaw(j, 'Dept', 'is_debit', 'dept');
+  const billSeq = preserveSyncId(pickRaw(j, 'BillSeq', 'bill_seq') ?? j.BillSeq ?? j.bill_seq);
   return {
-    seq: normalizeJournalSeq(j.Seq ?? j.seq),
-    acc_seq: String(j.Acc ?? j.acc_seq ?? '').replace(/[^0-9]/g, ''),
-    tx_date: normalizeEdariDateIso(j.Date ?? j.tx_date ?? j.DtCreated ?? '')
-      || String(j.Date ?? j.tx_date ?? j.DtCreated ?? '').trim(),
-    am: Number(j.Am ?? j.am ?? 0),
-    is_debit: dept === 'True' || dept === true || dept === 1 ? 1 : 0,
-    exp1: String(j.Exp1 ?? j.exp1 ?? j.Remarks ?? j.remarks ?? '').trim(),
-    exp2: String(j.Exp2 ?? j.exp2 ?? '').trim(),
-    bill_num: String(j.BillNum ?? j.bill_num ?? ''),
+    seq: normalizeJournalSeq(pickRaw(j, 'Seq', 'seq') ?? j.Seq ?? j.seq),
+    acc_seq: String(pickRaw(j, 'Acc', 'acc_seq', 'acc') ?? j.Acc ?? j.acc_seq ?? '').replace(/[^0-9]/g, ''),
+    tx_date: normalizeEdariDateIso(pickRaw(j, 'Date', 'tx_date', 'DtCreated') ?? j.Date ?? j.tx_date ?? j.DtCreated ?? '')
+      || pickText(j, 'Date', 'tx_date', 'DtCreated'),
+    am: Number(pickRaw(j, 'Am', 'am') ?? 0),
+    is_debit: dept === 'True' || dept === true || dept === 1 || dept === '1' ? 1 : 0,
+    exp1: pickText(j, 'Exp1', 'exp1', 'Remarks', 'remarks'),
+    exp2: pickText(j, 'Exp2', 'exp2'),
+    bill_num: pickText(j, 'BillNum', 'bill_num'),
     bill_seq: billSeq,
-    bill_kind: String(j.BillKind ?? j.bill_kind ?? '')
+    bill_kind: pickText(j, 'BillKind', 'bill_kind')
   };
 }
 
 function mapInvoiceRow(inv, now) {
   return {
-    seq: preserveSyncId(inv.Seq ?? inv.seq) || String(inv.Seq ?? inv.seq ?? ''),
-    num: String(inv.Num ?? inv.num ?? ''),
-    kind: String(inv.Kind ?? inv.kind ?? ''),
-    inv_date: normalizeEdariDateIso(inv.Date ?? inv.inv_date ?? '')
-      || String(inv.Date ?? inv.inv_date ?? '').trim(),
-    total: Number(inv.Total ?? inv.total ?? 0),
-    payment: Number(inv.Payment ?? inv.payment ?? 0),
-    discount: Number(inv.DisCnt ?? inv.discount ?? 0),
-    line_count: Number(inv.count ?? inv.line_count ?? 0),
-    remarks: inv.remarks ?? inv.Remarks ?? '',
-    acc_seq: String(inv.Two ?? inv.acc_seq ?? ''),
+    seq: preserveSyncId(pickRaw(inv, 'Seq', 'seq') ?? inv.Seq ?? inv.seq) || pickText(inv, 'Seq', 'seq'),
+    num: pickText(inv, 'Num', 'num'),
+    kind: pickText(inv, 'Kind', 'kind'),
+    inv_date: normalizeEdariDateIso(pickRaw(inv, 'Date', 'inv_date') ?? inv.Date ?? inv.inv_date ?? '')
+      || pickText(inv, 'Date', 'inv_date'),
+    total: Number(pickRaw(inv, 'Total', 'total') ?? 0),
+    payment: Number(pickRaw(inv, 'Payment', 'payment') ?? 0),
+    discount: Number(pickRaw(inv, 'DisCnt', 'discount') ?? 0),
+    line_count: Number(pickRaw(inv, 'count', 'line_count', 'Count') ?? 0),
+    remarks: pickText(inv, 'remarks', 'Remarks'),
+    acc_seq: pickText(inv, 'Two', 'acc_seq'),
     synced_at: now
   };
 }
@@ -465,31 +467,32 @@ function ensureInvoiceLineBillNosForImport(rows = []) {
 }
 
 function mapInvoiceLineRow(line) {
-  const billSeq = preserveSyncId(line.BillSeq ?? line.bill_seq);
+  const normalized = normalizeInvoiceLineRow(line);
+  const billSeq = billSeqOf(normalized) || preserveSyncId(normalized.BillSeq ?? normalized.bill_seq);
   if (!billSeq) return null;
-  const quant = readSyncNum(line, 'Quant', 'quant');
-  const price = readSyncNum(line, 'Price', 'price');
-  const bonus = readSyncNum(line, 'OBonus', 'bonus');
-  const lineTotalVal = resolveLineTotal(line);
-  const matName = line.MatName ?? line.mat_name ?? line.Name1 ?? '';
-  const mat = String(line.Mat ?? line.mat ?? '');
-  const billNo = readSyncNum(line, 'BillNo', 'bill_no', 'LineIndex', 'lineIndex');
+  const quant = readSyncNum(normalized, 'Quant', 'quant');
+  const price = readSyncNum(normalized, 'Price', 'price');
+  const bonus = readSyncNum(normalized, 'OBonus', 'bonus');
+  const lineTotalVal = resolveLineTotal(normalized);
+  const matName = pickText(normalized, 'MatName', 'mat_name');
+  const mat = pickText(normalized, 'Mat', 'mat');
+  const billNo = readSyncNum(normalized, 'BillNo', 'bill_no', 'LineIndex', 'lineIndex');
   if (!billNo) return null;
-  if (!quant && !bonus && !price && !lineTotalVal && !String(matName).trim() && !mat.trim()) {
+  if (!quant && !bonus && !price && !lineTotalVal && !matName && !mat) {
     return null;
   }
   return {
     bill_seq: billSeq,
     bill_no: billNo,
     mat,
-    mat_num: String(line.MatNum ?? line.mat_num ?? line.Num ?? ''),
+    mat_num: pickText(normalized, 'MatNum', 'mat_num', 'Num'),
     mat_name: matName,
     quant,
     bonus,
     price,
     line_total: lineTotalVal,
-    remarks: line.MatRem ?? line.remarks ?? '',
-    kind: String(line.Kind ?? line.kind ?? '')
+    remarks: pickText(normalized, 'MatRem', 'remarks'),
+    kind: pickText(normalized, 'Kind', 'kind')
   };
 }
 
@@ -631,9 +634,16 @@ function importSyncChunk(kind, rows = []) {
       return;
     }
     if (kind === 'invoiceLines') {
-      for (const row of ensureInvoiceLineBillNosForImport(rows)) {
+      const prepared = ensureInvoiceLineBillNosForImport(rows.map(normalizeInvoiceLineRow));
+      let imported = 0;
+      for (const row of prepared) {
         const mapped = mapInvoiceLineRow(row);
-        if (mapped) upsert.run(mapped);
+        if (!mapped) continue;
+        upsert.run(mapped);
+        imported += 1;
+      }
+      if (!imported && rows.length) {
+        throw new Error(`تعذّر استيراد بنود الفواتير (${rows.length} سجل وصل بدون رقم فاتورة صالح)`);
       }
     }
   });

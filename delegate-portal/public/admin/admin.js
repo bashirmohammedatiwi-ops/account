@@ -2071,6 +2071,9 @@ async function runSync(opts = {}) {
 
     const invPart = data.invoices ? `، ${data.invoices} فاتورة` : '';
     const linesPart = data.invoiceLines ? `، ${data.invoiceLines} بند` : '';
+    if (Number(data.invoices || 0) > 0 && Number(data.invoiceLines || 0) === 0) {
+      throw new Error('رُفعت الفواتير بدون بنود — أعد الرفع بعد تحديث التطبيق');
+    }
     const catalogPart = data.catalogUpdated ? `، ${data.catalogUpdated} منتج كتalog` : '';
     applySyncProgressLine(`تم! ${data.accounts} حساب، ${data.journal} حركة${invPart}${linesPart}${catalogPart}`);
     if (bar) bar.style.width = '100%';

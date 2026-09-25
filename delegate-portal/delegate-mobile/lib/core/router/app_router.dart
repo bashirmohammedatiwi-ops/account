@@ -85,7 +85,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) {
               final q = state.uri.queryParameters;
               return InvoiceScreen(
-                ref: state.pathParameters['ref']!,
+                ref: Uri.decodeComponent(state.pathParameters['ref']!),
                 by: q['by'] ?? 'auto',
                 accSeq: q['acc'],
               );
