@@ -462,10 +462,17 @@ function debtStatusFromBalance(bal) {
   return 'الديون';
 }
 
-/** مبلغ الديون = مجموع المدين − مجموع الدائن (يشمل رصيد مدور في Tot1) */
+/**
+ * مبلغ الديون = مجموع المدين − مجموع الدائن.
+ * إذا وُجد إجمالي مدين/دائن فهو المرجع، حتى لو كان صافيه صفراً.
+ * Bal يُستخدم فقط عندما لا يوجد إجمالي (حساب بلا حركات وبلا Tot1/Tot2).
+ */
 function resolveDebtDisplayAmount(data = {}) {
-  const net = parseAmount(data.totalDebit) - parseAmount(data.totalCredit);
-  if (net > 0) return net;
+  const totalDebit = parseAmount(data.totalDebit);
+  const totalCredit = parseAmount(data.totalCredit);
+  if (totalDebit !== 0 || totalCredit !== 0) {
+    return Math.max(0, totalDebit - totalCredit);
+  }
   const bal = parseAmount(data.finalBalance ?? data.account?.bal);
   if (bal < 0) return Math.abs(bal);
   return 0;
@@ -618,62 +625,28 @@ function resolvePeriodOpeningBalance(account, allRows, dateFrom, dateTo) {
  * وأن إجمالي المدين/الدائن في التذييل يطابق Edari بالضبط.
  */
 /**
- * توحيد ملخص الكشف مع بطاقة الحساب — Tot1/Tot2/Bal من Edari مصدر الحقيقة.
- * يُعيد بناء سطر «رصيد مدور» من (Edari − حركات) ويُثبت الديون كما في القائمة.
+ * ملخص الكشف من الأسطر المعروضة نفسها.
+ * المجموع = مجموع عمود المدين/الدائن (مع الرصيد المدور إن وُجد).
+ * الرصيد النهائي = آخر حركة رصيد. لا يُستبدل بـ Bal إذا خالف الكشف.
  */
 function reconcileStatementSummary(account, stmt = {}) {
-  const edariDebit = parseAmount(account?.tot1 ?? account?.Tot1);
-  const edariCredit = parseAmount(account?.tot2 ?? account?.Tot2);
-  const edariBal = parseAmount(account?.bal ?? account?.Bal);
-
   const lines = [...(stmt.lines || [])];
-  const movementLines = lines.filter((l) => !l.isOpening);
-  const movDebit = sumLineAmounts(movementLines, 'debit');
-  const movCredit = sumLineAmounts(movementLines, 'credit');
-
-  let totalDebit = movDebit;
-  let totalCredit = movCredit;
-  let openingBalance = parseAmount(stmt.openingBalance);
-
-  if (edariDebit > 0 || edariCredit > 0) {
-    totalDebit = edariDebit;
-    totalCredit = edariCredit;
-
-    const needOpeningDebit = Math.max(0, edariDebit - movDebit);
-    const needOpeningCredit = Math.max(0, edariCredit - movCredit);
-    openingBalance = needOpeningCredit - needOpeningDebit;
-
-    const openingIdx = lines.findIndex((l) => l.isOpening);
-    if (Math.abs(needOpeningDebit) >= 1 || Math.abs(needOpeningCredit) >= 1) {
-      const openingLine = buildOpeningLine(openingBalance, null, {
-        note: 'رصيد مدور · أرصدة سابقة'
-      });
-      if (openingLine) {
-        if (openingIdx >= 0) lines[openingIdx] = openingLine;
-        else lines.unshift(openingLine);
-      }
-    } else if (openingIdx >= 0) {
-      lines.splice(openingIdx, 1);
-      openingBalance = 0;
-    }
-
-    let balance = openingBalance;
-    for (const line of lines) {
-      if (line.isOpening) {
-        line.balance = openingBalance;
-        line.runningBalance = formatRunningBalance(openingBalance);
-        continue;
-      }
-      balance = balance - parseAmount(line.debit) + parseAmount(line.credit);
-      line.balance = balance;
-      line.runningBalance = formatRunningBalance(balance);
-    }
-  }
-
-  const finalBalance = edariBal !== 0
-    ? edariBal
+  const totalDebit = sumLineAmounts(lines, 'debit');
+  const totalCredit = sumLineAmounts(lines, 'credit');
+  const openingLine = lines.find((line) => line.isOpening);
+  const openingBalance = openingLine
+    ? parseAmount(openingLine.balance)
+    : parseAmount(stmt.openingBalance);
+  const lastLine = lines.length ? lines[lines.length - 1] : null;
+  const finalBalance = lastLine
+    ? parseAmount(lastLine.balance)
     : (totalCredit - totalDebit);
-  const debtAmount = resolveDebtFromAccount(account);
+  const debtAmount = resolveDebtDisplayAmount({
+    totalDebit,
+    totalCredit,
+    finalBalance,
+    account
+  });
 
   return {
     lines,
