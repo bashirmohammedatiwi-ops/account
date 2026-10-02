@@ -231,7 +231,7 @@ router.get('/search', authAgent, (req, res) => {
   const qDigits = q.replace(/\D/g, '');
   const like = `%${q}%`;
   const rows = db.prepare(`
-    SELECT seq, num, name1, name2, address, remarks, bal, master_seq, sub_count FROM accounts
+    SELECT seq, num, name1, name2, address, remarks, bal, tot1, tot2, master_seq, sub_count FROM accounts
     WHERE (num LIKE ? OR name1 LIKE ? OR name2 LIKE ? OR address LIKE ? OR remarks LIKE ?)
     ORDER BY sub_count ASC, num LIMIT 80
   `).all(like, like, like, like, like).filter((r) => {
@@ -246,7 +246,9 @@ router.get('/search', authAgent, (req, res) => {
 
   const posted = rows.slice(0, 50).map((r) => ({
     ...r,
-    debtStatus: debtStatusFromBalance(r.bal)
+    debtAmount: resolveDebtFromAccount(r),
+    debtStatus: debtStatusFromBalance(r.bal),
+    summary: balanceSummaryLabel(r.bal)
   }));
   const pending = searchPendingPickableForAgent(req.agent.id, q).slice(0, 20);
   const seenRequestIds = new Set();

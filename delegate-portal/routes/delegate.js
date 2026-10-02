@@ -5,7 +5,7 @@ const {
   getStatementForAccount,
   getAssignableTrees
 } = require('../lib/accounts');
-const { debtStatusFromBalance, balanceSummaryLabel } = require('../lib/statement-utils');
+const { debtStatusFromBalance, balanceSummaryLabel, resolveDebtFromAccount } = require('../lib/statement-utils');
 const { getInvoiceForExport } = require('../lib/invoices');
 
 const router = express.Router();
@@ -73,6 +73,7 @@ router.get('/accounts/:seq/children', (req, res) => {
     tot1: c.tot1,
     tot2: c.tot2,
     subCount: c.sub_count,
+    debtAmount: resolveDebtFromAccount(c),
     debtStatus: debtStatusFromBalance(c.bal),
     summary: balanceSummaryLabel(c.bal)
   }));

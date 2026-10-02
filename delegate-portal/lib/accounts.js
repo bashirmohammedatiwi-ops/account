@@ -254,27 +254,22 @@ function getStatementForAccount(accSeq) {
     buildStatementLines,
     balanceSummaryLabel,
     debtStatusFromBalance,
-    resolveDebtDisplayAmount,
-    resolveStatementTotals,
-    resolveFinalBalance,
     buildOpeningLine,
     resolveStatementPeriod,
-    resolveCumulativeStatementWindow
+    resolveCumulativeStatementWindow,
+    reconcileStatementSummary
   } = require('./statement-utils');
   const { resolveLastMatchCutoff, hasMatchCutoff } = require('./reconciliation-utils');
 
   const cutoff = resolveLastMatchCutoff(account, rows);
   const matchAvailable = hasMatchCutoff(account, rows);
 
-  const hasPreviousYear = rows.some((r) => String(r.seq || '').startsWith('PY'));
   const {
     openingBalance,
     movementRows: filteredRows,
     periodCutoff,
     openingNote
-  } = hasPreviousYear
-    ? { openingBalance: 0, movementRows: rows, periodCutoff: null, openingNote: '' }
-    : resolveCumulativeStatementWindow(account, rows);
+  } = resolveCumulativeStatementWindow(account, rows);
 
   const stmt = buildStatementLines(filteredRows, { openingBalance });
 
@@ -287,25 +282,12 @@ function getStatementForAccount(accSeq) {
 
   const { periodStart, periodEnd } = resolveStatementPeriod(filteredRows, periodCutoff);
 
-  const { totalDebit, totalCredit } = resolveStatementTotals({
+  const reconciled = reconcileStatementSummary(account, {
     lines: stmt.lines,
-    stmt,
-    account,
-    preferLineTotals: true
+    openingBalance
   });
-  const finalBalance = resolveFinalBalance({
-    accountBal: account.bal,
-    totalDebit,
-    totalCredit,
-    stmtFinalBalance: stmt.finalBalance,
-    preferLineBalance: true
-  });
-  const debtAmount = resolveDebtDisplayAmount({
-    finalBalance,
-    totalDebit,
-    totalCredit,
-    account: { bal: account.bal }
-  });
+  const { totalDebit, totalCredit, finalBalance, debtAmount } = reconciled;
+  stmt.lines = reconciled.lines;
 
   return {
     account: {
@@ -328,7 +310,7 @@ function getStatementForAccount(accSeq) {
     finalBalance,
     debtAmount,
     summary: balanceSummaryLabel(finalBalance, account.name1),
-    openingBalance,
+    openingBalance: reconciled.openingBalance,
     sinceLastMatch: false,
     periodStart,
     periodEnd,
