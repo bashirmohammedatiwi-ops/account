@@ -245,10 +245,41 @@ function getAccountJournalRows(account) {
   return rows;
 }
 
+/**
+ * حساب أب: الكشف يجمع حركات الأبناء، فالرصيد الرسمي هو مجموع أرصدة
+ * الحسابات التي تظهر حركاتها (الأوراق + الأب إن كانت له حركات مباشرة).
+ */
+function statementLedgerAccount(account) {
+  if (Number(account.sub_count) <= 0) return account;
+  const seqs = getDescendantSeqs(account.seq);
+  if (seqs.length <= 1) return account;
+  const placeholders = seqs.map(() => '?').join(',');
+  const accRows = db.prepare(
+    `SELECT seq, sub_count, tot1, tot2, bal FROM accounts WHERE seq IN (${placeholders})`
+  ).all(...seqs);
+  const journalSeqs = new Set(
+    db.prepare(
+      `SELECT DISTINCT acc_seq FROM journal WHERE acc_seq IN (${placeholders})`
+    ).all(...seqs).map((row) => String(row.acc_seq))
+  );
+  let tot1 = 0;
+  let tot2 = 0;
+  let bal = 0;
+  for (const row of accRows) {
+    const leaf = Number(row.sub_count) <= 0;
+    if (!leaf && !journalSeqs.has(String(row.seq))) continue;
+    tot1 += Number(row.tot1) || 0;
+    tot2 += Number(row.tot2) || 0;
+    bal += Number(row.bal) || 0;
+  }
+  return { ...account, tot1, tot2, bal };
+}
+
 function getStatementForAccount(accSeq) {
-  const account = db.prepare('SELECT * FROM accounts WHERE seq = ?').get(String(accSeq));
-  if (!account) return null;
-  const rows = getAccountJournalRows(account);
+  const stored = db.prepare('SELECT * FROM accounts WHERE seq = ?').get(String(accSeq));
+  if (!stored) return null;
+  const account = statementLedgerAccount(stored);
+  const rows = getAccountJournalRows(stored);
 
   const {
     buildStatementLines,
@@ -296,7 +327,8 @@ function getStatementForAccount(accSeq) {
       name1: account.name1,
       name2: account.name2,
       address: account.address,
-      bal: account.bal,
+      bal: finalBalance,
+      edariBal: stored.bal,
       tot1: account.tot1,
       tot2: account.tot2,
       fixDate: account.fix_date || null,

@@ -11,7 +11,12 @@ const {
   getStatementForAccount,
   agentAllowedSeqs
 } = require('../lib/accounts');
-const { debtStatusFromBalance, balanceSummaryLabel, resolveDebtFromAccount } = require('../lib/statement-utils');
+const {
+  debtStatusFromBalance,
+  balanceSummaryLabel,
+  resolveDebtFromAccount,
+  resolveOfficialNet
+} = require('../lib/statement-utils');
 const { getInvoiceForExport, canAgentAccessInvoice } = require('../lib/invoices');
 const { buildStatementPdf, buildInvoicePdf } = require('../lib/pdf-export');
 const { queryAgentSalesReport } = require('../lib/sales-reports');
@@ -34,6 +39,7 @@ router.get('/me', authAgent, (req, res) => {
 });
 
 function mapBranchAccount(c, { rootSeq = '', includeGroupPath = false } = {}) {
+  const net = resolveOfficialNet(c);
   return {
     seq: c.seq,
     num: c.num,
@@ -41,14 +47,15 @@ function mapBranchAccount(c, { rootSeq = '', includeGroupPath = false } = {}) {
     name2: c.name2,
     address: c.address,
     remarks: c.remarks,
-    bal: c.bal,
+    bal: net,
+    edariBal: c.bal,
     tot1: c.tot1,
     tot2: c.tot2,
     subCount: c.sub_count,
     groupPath: includeGroupPath && rootSeq ? getGroupPath(c.seq, rootSeq) : '',
     debtAmount: resolveDebtFromAccount(c),
-    debtStatus: debtStatusFromBalance(c.bal),
-    summary: balanceSummaryLabel(c.bal)
+    debtStatus: debtStatusFromBalance(net),
+    summary: balanceSummaryLabel(net)
   };
 }
 
@@ -93,12 +100,16 @@ router.get('/accounts/:seq', authAgent, (req, res) => {
   }
   const acc = db.prepare('SELECT * FROM accounts WHERE seq = ?').get(String(req.params.seq));
   if (!acc) return res.status(404).json({ ok: false, error: 'الحساب غير موجود' });
+  const net = resolveOfficialNet(acc);
   res.json({
     ok: true,
     account: {
       ...acc,
-      debtStatus: debtStatusFromBalance(acc.bal),
-      summary: balanceSummaryLabel(acc.bal)
+      bal: net,
+      edariBal: acc.bal,
+      debtAmount: resolveDebtFromAccount(acc),
+      debtStatus: debtStatusFromBalance(net),
+      summary: balanceSummaryLabel(net)
     }
   });
 });
@@ -244,12 +255,17 @@ router.get('/search', authAgent, (req, res) => {
     return hayText.includes(q.toLowerCase());
   });
 
-  const posted = rows.slice(0, 50).map((r) => ({
-    ...r,
-    debtAmount: resolveDebtFromAccount(r),
-    debtStatus: debtStatusFromBalance(r.bal),
-    summary: balanceSummaryLabel(r.bal)
-  }));
+  const posted = rows.slice(0, 50).map((r) => {
+    const net = resolveOfficialNet(r);
+    return {
+      ...r,
+      bal: net,
+      edariBal: r.bal,
+      debtAmount: resolveDebtFromAccount(r),
+      debtStatus: debtStatusFromBalance(net),
+      summary: balanceSummaryLabel(net)
+    };
+  });
   const pending = searchPendingPickableForAgent(req.agent.id, q).slice(0, 20);
   const seenRequestIds = new Set();
   const merged = [...posted];

@@ -478,14 +478,9 @@ function resolveDebtDisplayAmount(data = {}) {
   return 0;
 }
 
-/** مبلغ الديون من حقول الحساب (Tot1/Tot2/Bal) — للقوائم بدون بناء كشف كامل */
+/** مبلغ الديون من حقول الحساب — نفس الرصيد الذي ينتهي إليه الكشف */
 function resolveDebtFromAccount(account = {}) {
-  return resolveDebtDisplayAmount({
-    totalDebit: account.tot1 ?? account.Tot1,
-    totalCredit: account.tot2 ?? account.Tot2,
-    finalBalance: account.bal ?? account.Bal,
-    account: { bal: account.bal ?? account.Bal }
-  });
+  return Math.max(0, -resolveOfficialNet(account));
 }
 
 function rowsInDateRange(rows, dateFrom, dateTo) {
@@ -611,19 +606,15 @@ function resolvePeriodOpeningBalance(account, allRows, dateFrom, dateTo) {
 }
 
 /**
- * نافذة الكشف التراكمي — تطابق النظام الإداري (Edari) تماماً:
- *
- * في Edari قد يحمل الحساب رصيداً افتتاحياً مُسجَّلاً ضمن Tot1/Tot2 (الإجمالي
- * التراكمي مدين/دائن) دون أن يأتي كسطر حركة في File12n. لذلك الرصيد الافتتاحي
- * الصحيح = (الإجمالي التراكمي) − (مجموع الحركات المزامَنة) لكل جانب.
- *
- * مصدر الحقيقة بالترتيب:
- *   1) Tot1/Tot2 (الأدق — يطابق ترويسة Edari)
- *   2) Bal (احتياطي إذا غابت Tot1/Tot2)
- *
- * هذا يضمن أن: المجموع النهائي للكشف = Tot2 − Tot1 = الرصيد الحقيقي،
- * وأن إجمالي المدين/الدائن في التذييل يطابق Edari بالضبط.
+ * الرصيد الرسمي للحساب (دائن موجب، مدين سالب).
+ * Tot2 − Tot1 هو المرجع. Bal يُستخدم فقط إذا لم يُزامَن Tot1/Tot2.
  */
+function resolveOfficialNet(account = {}) {
+  const tot1 = parseAmount(account?.tot1 ?? account?.Tot1);
+  const tot2 = parseAmount(account?.tot2 ?? account?.Tot2);
+  if (tot1 !== 0 || tot2 !== 0) return tot2 - tot1;
+  return parseAmount(account?.bal ?? account?.Bal);
+}
 /**
  * ملخص الكشف من الأسطر المعروضة نفسها.
  * المجموع = مجموع عمود المدين/الدائن (مع الرصيد المدور إن وُجد).
@@ -658,33 +649,28 @@ function reconcileStatementSummary(account, stmt = {}) {
   };
 }
 
+/**
+ * نافذة الكشف التراكمي.
+ * الرصيد المدور = الرصيد الرسمي − صافي الحركات الظاهرة.
+ * بهذا ينتهي الكشف دائماً على نفس مبلغ الديون الظاهر في البطاقة،
+ * سواء نقصت حركات مزامَنة أو زادت (سنة سابقة، حركات أزيد من Tot).
+ * إذا لم يوجد Tot ولا Bal، تُعتمد الحركات كما هي دون رصيد مدور.
+ */
 function resolveCumulativeStatementWindow(account, rows = []) {
-  const movementRows = rows;
+  const movementRows = rows || [];
+  const tot1 = parseAmount(account?.tot1 ?? account?.Tot1);
+  const tot2 = parseAmount(account?.tot2 ?? account?.Tot2);
+  const bal = parseAmount(account?.bal ?? account?.Bal);
+  const hasOfficial = tot1 !== 0 || tot2 !== 0 || bal !== 0;
 
-  const tot1 = parseAmount(account?.tot1 ?? account?.Tot1); // إجمالي مدين تراكمي
-  const tot2 = parseAmount(account?.tot2 ?? account?.Tot2); // إجمالي دائن تراكمي
-
-  const movDebit = sumMovementAmount(movementRows, 'debit');
-  const movCredit = sumMovementAmount(movementRows, 'credit');
-
-  let openingBalance;
-
-  if (tot1 > 0 || tot2 > 0) {
-    // رصيد افتتاحي مدين = ما في Tot1 زيادةً عن حركات المدين المزامَنة
-    const openingDebit = Math.max(0, tot1 - movDebit);
-    const openingCredit = Math.max(0, tot2 - movCredit);
-    // الافتتاح كرصيد: دائن موجب، مدين سالب
-    openingBalance = openingCredit - openingDebit;
-  } else {
-    // احتياطي: الرصيد الحالي ناقص صافي الحركات
-    const accBal = resolveAccountNetBalance(account);
-    openingBalance = accBal - netMovementAmount(movementRows);
+  let openingBalance = 0;
+  if (hasOfficial) {
+    openingBalance = resolveOfficialNet(account) - netMovementAmount(movementRows);
+    if (Math.abs(openingBalance) < 1) openingBalance = 0;
   }
 
   let openingNote = '';
-  if (Math.abs(openingBalance) >= 1) {
-    openingNote = 'رصيد مدور · أرصدة سابقة';
-  }
+  if (openingBalance !== 0) openingNote = 'رصيد مدور · أرصدة سابقة';
 
   return { openingBalance, movementRows, periodCutoff: null, openingNote };
 }
@@ -698,6 +684,7 @@ module.exports = {
   debtStatusFromBalance,
   resolveDebtDisplayAmount,
   resolveDebtFromAccount,
+  resolveOfficialNet,
   reconcileStatementSummary,
   resolveStatementTotals,
   resolveFinalBalance,

@@ -5,7 +5,12 @@ const {
   getStatementForAccount,
   getAssignableTrees
 } = require('../lib/accounts');
-const { debtStatusFromBalance, balanceSummaryLabel, resolveDebtFromAccount } = require('../lib/statement-utils');
+const {
+  debtStatusFromBalance,
+  balanceSummaryLabel,
+  resolveDebtFromAccount,
+  resolveOfficialNet
+} = require('../lib/statement-utils');
 const { getInvoiceForExport } = require('../lib/invoices');
 
 const router = express.Router();
@@ -63,20 +68,24 @@ router.get('/accounts/:seq/children', (req, res) => {
   if (!isAllowed(req.params.seq)) {
     return res.status(403).json({ ok: false, error: 'الحساب غير متاح' });
   }
-  const children = getChildren(req.params.seq).map((c) => ({
-    seq: c.seq,
-    num: c.num,
-    name1: c.name1,
-    name2: c.name2,
-    address: c.address,
-    bal: c.bal,
-    tot1: c.tot1,
-    tot2: c.tot2,
-    subCount: c.sub_count,
-    debtAmount: resolveDebtFromAccount(c),
-    debtStatus: debtStatusFromBalance(c.bal),
-    summary: balanceSummaryLabel(c.bal)
-  }));
+  const children = getChildren(req.params.seq).map((c) => {
+    const net = resolveOfficialNet(c);
+    return {
+      seq: c.seq,
+      num: c.num,
+      name1: c.name1,
+      name2: c.name2,
+      address: c.address,
+      bal: net,
+      edariBal: c.bal,
+      tot1: c.tot1,
+      tot2: c.tot2,
+      subCount: c.sub_count,
+      debtAmount: resolveDebtFromAccount(c),
+      debtStatus: debtStatusFromBalance(net),
+      summary: balanceSummaryLabel(net)
+    };
+  });
   res.json({ ok: true, children });
 });
 
@@ -108,14 +117,24 @@ router.get('/search', (req, res) => {
   if (!q) return res.json({ ok: true, results: [] });
 
   const rows = db.prepare(`
-    SELECT seq, num, name1, bal FROM accounts
+    SELECT seq, num, name1, bal, tot1, tot2 FROM accounts
     WHERE num LIKE ? OR name1 LIKE ?
     ORDER BY num LIMIT 80
   `).all(`%${q}%`, `%${q}%`).filter((r) => isAllowed(r.seq));
 
   res.json({
     ok: true,
-    results: rows.map((r) => ({ ...r, debtStatus: debtStatusFromBalance(r.bal) }))
+    results: rows.map((r) => {
+      const net = resolveOfficialNet(r);
+      return {
+        ...r,
+        bal: net,
+        edariBal: r.bal,
+        debtAmount: resolveDebtFromAccount(r),
+        debtStatus: debtStatusFromBalance(net),
+        summary: balanceSummaryLabel(net)
+      };
+    })
   });
 });
 

@@ -24,6 +24,7 @@ const {
   parseEdariDate,
   journalSortKey,
   resolvePeriodOpeningBalance,
+  resolveCumulativeStatementWindow,
   rowsInDateRange,
   isValidFixDate,
   normalizeCarriedBalance
@@ -291,8 +292,13 @@ function filterRowsInDateRange(rows, dateFrom, dateTo) {
  */
 function buildStatement(account, allRows, period = {}) {
   const { dateFrom, dateTo } = period;
-  const movementRows = filterRowsInDateRange(allRows, dateFrom, dateTo);
-  const openingBalance = resolvePeriodOpeningBalance(account, allRows, dateFrom, dateTo);
+  const fullLedger = period.fullLedger === true;
+  const movementRows = fullLedger
+    ? (allRows || [])
+    : filterRowsInDateRange(allRows, dateFrom, dateTo);
+  const openingBalance = fullLedger
+    ? resolveCumulativeStatementWindow(account, movementRows).openingBalance
+    : resolvePeriodOpeningBalance(account, allRows, dateFrom, dateTo);
 
   const stmt = buildLines(movementRows, openingBalance);
 
@@ -505,6 +511,7 @@ async function queryEdariFullAccountStatement(ref) {
   await mergePreviousYearJournals(accounts, journalByAcc, { includeAllPrevious: true });
   const acc = accounts[0];
   return buildStatement(acc, journalByAcc.get(acc.seq) || [], {
+    fullLedger: true,
     dateFrom: '1990-01-01',
     dateTo: '2099-12-31'
   });

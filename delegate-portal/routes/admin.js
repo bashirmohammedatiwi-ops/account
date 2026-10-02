@@ -68,6 +68,12 @@ const {
   listEdariDatabases,
   runPriceAppSync
 } = require('../lib/edari-server-handlers');
+const {
+  balanceSummaryLabel,
+  debtStatusFromBalance,
+  resolveDebtFromAccount,
+  resolveOfficialNet
+} = require('../lib/statement-utils');
 
 const router = express.Router();
 const HOST_BIND = process.env.HOST || '0.0.0.0';
@@ -531,19 +537,24 @@ router.delete('/agents/:id', (req, res) => {
 });
 
 router.get('/accounts/:seq/children', (req, res) => {
-  const children = getChildren(req.params.seq).map((c) => ({
-    seq: c.seq,
-    num: c.num,
-    name1: c.name1,
-    name2: c.name2,
-    address: c.address,
-    bal: c.bal,
-    tot1: c.tot1,
-    tot2: c.tot2,
-    subCount: c.sub_count,
-    debtStatus: debtStatusFromBalance(c.bal),
-    summary: balanceSummaryLabel(c.bal)
-  }));
+  const children = getChildren(req.params.seq).map((c) => {
+    const net = resolveOfficialNet(c);
+    return {
+      seq: c.seq,
+      num: c.num,
+      name1: c.name1,
+      name2: c.name2,
+      address: c.address,
+      bal: net,
+      edariBal: c.bal,
+      tot1: c.tot1,
+      tot2: c.tot2,
+      subCount: c.sub_count,
+      debtAmount: resolveDebtFromAccount(c),
+      debtStatus: debtStatusFromBalance(net),
+      summary: balanceSummaryLabel(net)
+    };
+  });
   res.json({ ok: true, children });
 });
 
@@ -564,14 +575,23 @@ router.get('/search', (req, res) => {
   if (!q) return res.json({ ok: true, results: [] });
 
   const rows = db.prepare(`
-    SELECT seq, num, name1, bal FROM accounts
+    SELECT seq, num, name1, bal, tot1, tot2 FROM accounts
     WHERE num LIKE ? OR name1 LIKE ?
     ORDER BY num LIMIT 80
   `).all(`%${q}%`, `%${q}%`);
 
   res.json({
     ok: true,
-    results: rows.map((r) => ({ ...r, debtStatus: debtStatusFromBalance(r.bal) }))
+    results: rows.map((r) => {
+      const net = resolveOfficialNet(r);
+      return {
+        ...r,
+        bal: net,
+        edariBal: r.bal,
+        debtAmount: resolveDebtFromAccount(r),
+        debtStatus: debtStatusFromBalance(net)
+      };
+    })
   });
 });
 
