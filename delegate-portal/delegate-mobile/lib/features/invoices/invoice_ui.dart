@@ -95,7 +95,7 @@ class EdInvoiceDocPanel extends StatelessWidget {
                         style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, height: 1.35, color: AppColors.navy),
                       ),
                       Text(
-                        'رقم ${inv['num'] ?? '—'} · ${fmtDate(inv['date']?.toString())}',
+                        'رقم ${inv['num'] ?? '—'} · ${fmtDate(inv['date']?.toString())}${((inv['year'] ?? '').toString().trim().isEmpty) ? '' : ' · سنة ${inv['year']}'}',
                         style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary, height: 1.45),
                       ),
                       if (remarks.isNotEmpty)

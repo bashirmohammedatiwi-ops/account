@@ -400,7 +400,8 @@ function buildStatementLines(rows, options = {}) {
     isSalesInvoiceMovement,
     isSalesReturnMovement,
     resolveBillSeq,
-    resolveBillNum
+    resolveBillNum,
+    journalYearScope
   } = require('./invoices');
   const { isReconciliationMovement } = require('./reconciliation-utils');
   let balance = parseAmount(options.openingBalance);
@@ -411,11 +412,12 @@ function buildStatementLines(rows, options = {}) {
     balance = balance - debit + credit;
     const billNum = resolveBillNum(row);
     const billSeq = resolveBillSeq(row) || null;
+    const sourceYear = (journalYearScope(row).match(/^PY(20\d{2})$/i) || [])[1] || '';
     const isRecon = isReconciliationMovement(row);
     const isReturnInvoice = !isRecon && isSalesReturnMovement(row);
     const isSalesInvoice = !isRecon && isSalesInvoiceMovement(row);
     const hasInvoice = !isRecon && (isSalesInvoice || isReturnInvoice);
-    const invoiceRef = billSeq || billNum || null;
+    const invoiceRef = billSeq || (sourceYear ? null : billNum) || null;
     const description = buildJournalDescription(row);
     const branch2 = String(row.exp2 || row.Exp2 || '').trim() || null;
     return {
@@ -427,6 +429,7 @@ function buildStatementLines(rows, options = {}) {
       date: row.tx_date || row.Date || row.DtCreated,
       billNum: billNum || null,
       billSeq,
+      sourceYear: sourceYear || null,
       billKind: row.bill_kind ?? row.BillKind ?? null,
       invoiceRef: hasInvoice ? invoiceRef : null,
       hasInvoice,

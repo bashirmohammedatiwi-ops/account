@@ -1185,7 +1185,7 @@ async function openInvoice(ref, by = 'auto', acc = '') {
           <div class="doc-head-main">
             <span class="doc-label">شركة ديما الحياة</span>
             <strong class="doc-title">${esc(inv.kindLabel || 'فاتورة مبيعات')}</strong>
-            <span class="doc-meta-line">رقم ${esc(inv.num || ref)} · ${fmtDate(inv.date)}</span>
+            <span class="doc-meta-line">رقم ${esc(inv.num || ref)} · ${fmtDate(inv.date)}${inv.year ? ` · سنة ${esc(inv.year)}` : ''}</span>
             ${inv.remarks ? `<span class="doc-meta-line doc-meta-note">${esc(inv.remarks)}</span>` : ''}
           </div>
           <div class="doc-head-side">

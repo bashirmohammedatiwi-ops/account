@@ -47,38 +47,37 @@ function looksLikeGluedPrevYearRef(value) {
   return Boolean(glued && glued[2]);
 }
 
+function journalYearScope(row) {
+  const seq = String(row?.seq ?? row?.Seq ?? '').trim();
+  const match = seq.match(/^(PY[0-9A-Za-z]+):/i);
+  return match ? match[1] : '';
+}
+
+function yearScopeFromRef(ref) {
+  const match = String(ref ?? '').trim().match(/^(PY[0-9A-Za-z]+):/i);
+  return match ? match[1] : '';
+}
+
 function findInvoiceRowByRef(billSeq) {
   const raw = String(billSeq ?? '').trim();
   if (!raw) return null;
-  for (const seq of invoiceSeqCandidates(raw)) {
-    const row = db.prepare('SELECT * FROM invoices WHERE seq = ?').get(seq);
-    if (row) return row;
+  if (/^PY[0-9A-Za-z]+:/i.test(raw)) {
+    const exact = db.prepare('SELECT * FROM invoices WHERE seq = ?').get(raw);
+    if (exact) return exact;
+    const scope = yearScopeFromRef(raw);
+    const suffix = pySeqSuffix(raw);
+    if (!scope || !suffix) return null;
+    return db.prepare('SELECT * FROM invoices WHERE seq = ?').get(`${scope}:${suffix}`) || null;
   }
-  const suffix = pySeqSuffix(raw);
-  if (!suffix) return null;
-  const preferPy = /^PY/i.test(raw) || looksLikeGluedPrevYearRef(raw);
-  const rows = db.prepare(`
-    SELECT * FROM invoices
-    WHERE seq = ? OR seq LIKE 'PY%:' || ?
-    ORDER BY CASE WHEN seq LIKE 'PY%' THEN 0 ELSE 1 END, seq DESC
-  `).all(suffix, suffix);
-  if (!rows.length) return null;
-  if (preferPy) return rows.find((r) => String(r.seq).startsWith('PY')) || rows[0];
-  return rows.find((r) => !String(r.seq).startsWith('PY')) || rows[0];
-}
-
-function findInvoiceSibling(invoice) {
-  if (!invoice?.seq) return null;
-  const suffix = pySeqSuffix(invoice.seq);
-  if (!suffix) return null;
-  if (String(invoice.seq).startsWith('PY')) {
-    return db.prepare('SELECT * FROM invoices WHERE seq = ?').get(suffix) || null;
-  }
-  return db.prepare(`
-    SELECT * FROM invoices
-    WHERE seq LIKE 'PY%:' || ? AND seq != ?
-    ORDER BY seq DESC LIMIT 1
-  `).get(suffix, String(invoice.seq)) || null;
+  const digits = raw.replace(/[^0-9]/g, '');
+  if (!digits) return null;
+  const current = db.prepare(`
+    SELECT * FROM invoices WHERE seq = ? AND IFNULL(seq, '') NOT LIKE 'PY%'
+  `).get(digits);
+  if (current) return current;
+  const glued = digits.match(/^(20\d{2})(\d+)$/);
+  if (!glued) return null;
+  return db.prepare('SELECT * FROM invoices WHERE seq = ?').get(`PY${glued[1]}:${glued[2]}`) || null;
 }
 
 function normalizeBillNum(value) {
@@ -130,26 +129,23 @@ function normalizeAccSeq(value) {
   return seq && seq !== '0' ? seq : '';
 }
 
-function lookupBillSeqByNum(billNum, accSeq) {
+function lookupBillSeqByNum(billNum, accSeq, scopePrefix = '') {
   const num = normalizeBillNum(billNum);
   if (!num) return '';
   const acc = normalizeAccSeq(accSeq);
+  const yearSql = scopePrefix
+    ? `seq LIKE ?`
+    : `IFNULL(seq, '') NOT LIKE 'PY%'`;
   const pick = (row) => (row ? String(row.seq) : '');
   if (acc) {
-    const scoped = db.prepare(`
-      SELECT seq FROM invoices
-      WHERE num = ? AND acc_seq = ?
-      ORDER BY CASE WHEN seq LIKE 'PY%' THEN 1 ELSE 0 END
-      LIMIT 1
-    `).get(num, acc);
+    const scoped = scopePrefix
+      ? db.prepare(`SELECT seq FROM invoices WHERE num = ? AND acc_seq = ? AND ${yearSql} LIMIT 1`).get(num, acc, `${scopePrefix}:%`)
+      : db.prepare(`SELECT seq FROM invoices WHERE num = ? AND acc_seq = ? AND ${yearSql} LIMIT 1`).get(num, acc);
     if (scoped) return pick(scoped);
   }
-  const hit = db.prepare(`
-    SELECT seq FROM invoices
-    WHERE num = ?
-    ORDER BY CASE WHEN seq LIKE 'PY%' THEN 1 ELSE 0 END
-    LIMIT 1
-  `).get(num);
+  const hit = scopePrefix
+    ? db.prepare(`SELECT seq FROM invoices WHERE num = ? AND ${yearSql} LIMIT 1`).get(num, `${scopePrefix}:%`)
+    : db.prepare(`SELECT seq FROM invoices WHERE num = ? AND ${yearSql} LIMIT 1`).get(num);
   return pick(hit);
 }
 
@@ -200,7 +196,7 @@ function isSalesReturnMovement(row) {
   const billKind = row.bill_kind ?? row.BillKind;
   if (isReturnInvoiceKind(billKind) && isSalesReturnText(text)) return true;
 
-  const billSeq = normalizeBillSeq(row.bill_seq ?? row.billSeq);
+  const billSeq = resolveBillSeq(row);
   if (billSeq && isSalesReturnText(text)) {
     const invKind = lookupInvoiceKind(billSeq);
     if (isReturnInvoiceKind(invKind)) return true;
@@ -214,10 +210,20 @@ function isSalesInvoiceMovement(row) {
 }
 
 function resolveBillSeq(row) {
-  const direct = normalizeBillSeq(row.bill_seq ?? row.billSeq);
-  if (direct) return direct;
+  const scope = journalYearScope(row);
+  let direct = normalizeBillSeq(row.bill_seq ?? row.billSeq);
+  if (scope) {
+    if (direct && !/^PY/i.test(direct)) {
+      const suffix = pySeqSuffix(direct);
+      direct = suffix ? `${scope}:${suffix}` : '';
+    }
+    if (direct) return direct;
+    const accSeq = normalizeAccSeq(row.acc_seq ?? row.Acc ?? row.accSeq);
+    return lookupBillSeqByNum(resolveBillNum(row), accSeq, scope);
+  }
+  if (direct && !/^PY/i.test(direct)) return direct;
   const accSeq = normalizeAccSeq(row.acc_seq ?? row.Acc ?? row.accSeq);
-  return lookupBillSeqByNum(resolveBillNum(row), accSeq);
+  return lookupBillSeqByNum(resolveBillNum(row), accSeq, '');
 }
 
 function roundAmount(n) {
@@ -299,6 +305,7 @@ function mapInvoiceRow(row, account, totals) {
   const t = totals || resolveInvoiceTotals(row, []);
   return {
     seq: row.seq,
+    year: (String(row.seq || '').match(/^PY(20\d{2}):/i) || [])[1] || '',
     num: row.num,
     kind: row.kind,
     kindLabel: invoiceKindLabel(row.kind),
@@ -385,39 +392,28 @@ function loadInvoiceDetail(invoice) {
 }
 
 function getInvoiceByBillSeq(billSeq) {
-  let invoice = findInvoiceRowByRef(billSeq);
+  const invoice = findInvoiceRowByRef(billSeq);
   if (!invoice) return null;
-  let detail = loadInvoiceDetail(invoice);
-  if (detail?.lines?.length) return detail;
-  const sibling = findInvoiceSibling(invoice);
-  if (sibling) {
-    const alt = loadInvoiceDetail(sibling);
-    if (alt?.lines?.length) return alt;
-  }
-  return detail;
+  return loadInvoiceDetail(invoice);
 }
 
-function getInvoiceByNum(billNum, accSeq) {
+function getInvoiceByNum(billNum, accSeq, scopePrefix = '') {
   const num = normalizeBillNum(billNum);
   if (!num) return null;
   const acc = normalizeAccSeq(accSeq);
-  const rows = acc
-    ? db.prepare(`
-        SELECT * FROM invoices
-        WHERE num = ? AND acc_seq = ?
-        ORDER BY CASE WHEN seq LIKE 'PY%' THEN 1 ELSE 0 END, seq DESC
-      `).all(num, acc)
-    : db.prepare(`
-        SELECT * FROM invoices
-        WHERE num = ?
-        ORDER BY CASE WHEN seq LIKE 'PY%' THEN 1 ELSE 0 END, seq DESC
-      `).all(num);
-  if (!rows.length && acc) {
-    rows.push(...db.prepare(`
-      SELECT * FROM invoices
-      WHERE num = ?
-      ORDER BY CASE WHEN seq LIKE 'PY%' THEN 1 ELSE 0 END, seq DESC
-    `).all(num));
+  const yearSql = scopePrefix
+    ? `seq LIKE ?`
+    : `IFNULL(seq, '') NOT LIKE 'PY%'`;
+  const rows = [];
+  if (acc) {
+    rows.push(...(scopePrefix
+      ? db.prepare(`SELECT * FROM invoices WHERE num = ? AND acc_seq = ? AND ${yearSql}`).all(num, acc, `${scopePrefix}:%`)
+      : db.prepare(`SELECT * FROM invoices WHERE num = ? AND acc_seq = ? AND ${yearSql}`).all(num, acc)));
+  }
+  if (!rows.length) {
+    rows.push(...(scopePrefix
+      ? db.prepare(`SELECT * FROM invoices WHERE num = ? AND ${yearSql}`).all(num, `${scopePrefix}:%`)
+      : db.prepare(`SELECT * FROM invoices WHERE num = ? AND ${yearSql}`).all(num)));
   }
   if (!rows.length) return null;
   let fallback = null;
@@ -437,12 +433,12 @@ function getInvoiceForExport(ref, mode = 'auto', accSeq) {
   const raw = String(ref ?? '').trim();
   if (!raw) return null;
   if (mode === 'seq') return getInvoiceByBillSeq(raw);
-  if (mode === 'num') return getInvoiceByNum(raw, accSeq);
+  if (mode === 'num') return getInvoiceByNum(raw, accSeq, yearScopeFromRef(raw));
 
   if (findInvoiceRowByRef(raw)) {
     return getInvoiceByBillSeq(raw);
   }
-  const byNum = getInvoiceByNum(raw, accSeq);
+  const byNum = getInvoiceByNum(raw, accSeq, yearScopeFromRef(raw));
   if (byNum) return byNum;
   return getInvoiceByBillSeq(raw);
 }
@@ -513,6 +509,8 @@ module.exports = {
   invoiceKindLabel,
   normalizeBillSeq,
   invoiceSeqCandidates,
+  journalYearScope,
+  yearScopeFromRef,
   normalizeBillNum,
   normalizeAccSeq,
   extractBillNumFromText,
