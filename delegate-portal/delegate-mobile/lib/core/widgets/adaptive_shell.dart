@@ -96,6 +96,7 @@ void showMoreNavSheet(BuildContext context, WidgetRef ref) {
   final items = [..._navItems(ref).where((i) => !_phoneDockPaths.contains(i.path)), _settingsItem];
   showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
     useSafeArea: true,
     isScrollControlled: true,
     builder: (ctx) => Directionality(

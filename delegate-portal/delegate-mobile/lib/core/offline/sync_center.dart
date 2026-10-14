@@ -232,6 +232,7 @@ Future<void> showSyncCenter(BuildContext context) {
   }
   return showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
     useSafeArea: true,
     builder: (ctx) => ConstrainedBox(

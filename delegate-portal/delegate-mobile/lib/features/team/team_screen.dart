@@ -99,6 +99,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
   void _openSecondary(SecondaryAgentSummary summary) {
     showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,

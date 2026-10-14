@@ -183,6 +183,8 @@ class StatementLine {
     this.billNum,
     this.invoiceRef,
     this.branch2,
+    this.sourceYear,
+    this.clickable,
   });
 
   final String description;
@@ -198,6 +200,10 @@ class StatementLine {
   final String? billNum;
   final String? invoiceRef;
   final String? branch2;
+  /// سنة الحركة إن كانت من سنة سابقة (مثلاً 2025) — أرقام الفواتير تتكرر بين السنوات.
+  final String? sourceYear;
+  /// قرار الخادم: هل للسطر فاتورة يمكن فتحها (null في الخوادم القديمة).
+  final bool? clickable;
 
   bool get isInvoiceLine {
     if (isOpening || isReconciliation || !hasInvoice) return false;
@@ -207,8 +213,12 @@ class StatementLine {
 
   InvoiceLookup? get invoiceLookup {
     if (!isInvoiceLine) return null;
+    // الخادم يعرف إن لم تُزامَن فاتورة هذا السطر — لا نخمّن فنفتح فاتورة أخرى.
+    if (clickable == false) return null;
     final seq = _invoiceKey(billSeq);
     if (seq != null) return InvoiceLookup(ref: seq, by: 'seq');
+    // سطر من سنة سابقة دون رقم تسلسلي: البحث بالرقم وحده يفتح فاتورة السنة الحالية بنفس الرقم.
+    if ((sourceYear ?? '').trim().isNotEmpty) return null;
     final num = _invoiceKey(billNum);
     if (num != null) return InvoiceLookup(ref: num, by: 'num');
     final fallback = _invoiceKey(invoiceRef);
@@ -238,6 +248,8 @@ class StatementLine {
         billNum: json['billNum']?.toString(),
         invoiceRef: json['invoiceRef']?.toString(),
         branch2: json['branch2'] as String?,
+        sourceYear: json['sourceYear']?.toString(),
+        clickable: json['clickable'] is bool ? json['clickable'] as bool : null,
       );
 }
 

@@ -1,5 +1,5 @@
 /// إصدار التطبيق المعروض للمندوب — يُحدَّث مع pubspec.yaml.
-const appVersion = '1.3.0';
+const appVersion = '1.3.1';
 
 /// عنوان الخادم الافتراضي — يمكن تجاوزه للتطوير عبر
 /// `--dart-define=EDARI_SERVER_URL=http://localhost:5005`.

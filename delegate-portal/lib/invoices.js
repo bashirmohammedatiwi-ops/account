@@ -433,12 +433,15 @@ function getInvoiceForExport(ref, mode = 'auto', accSeq) {
   const raw = String(ref ?? '').trim();
   if (!raw) return null;
   if (mode === 'seq') return getInvoiceByBillSeq(raw);
-  if (mode === 'num') return getInvoiceByNum(raw, accSeq, yearScopeFromRef(raw));
+  // «PY2025:5000» = الرقم 5000 ضمن سنة 2025 — لا نضم أرقام السنة إلى رقم الفاتورة.
+  const scope = yearScopeFromRef(raw);
+  const numRef = scope ? pySeqSuffix(raw) : raw;
+  if (mode === 'num') return getInvoiceByNum(numRef, accSeq, scope);
 
   if (findInvoiceRowByRef(raw)) {
     return getInvoiceByBillSeq(raw);
   }
-  const byNum = getInvoiceByNum(raw, accSeq, yearScopeFromRef(raw));
+  const byNum = getInvoiceByNum(numRef, accSeq, scope);
   if (byNum) return byNum;
   return getInvoiceByBillSeq(raw);
 }
@@ -473,7 +476,8 @@ function canAgentAccessInvoice(agentId, ref, options = {}) {
     if (invoice?.acc_seq && canAgentAccess(agentId, invoice.acc_seq)) return true;
   }
 
-  const num = normalizeBillNum(raw);
+  // «PY2025:5000»: الرقم بعد البادئة فقط.
+  const num = yearScopeFromRef(raw) ? pySeqSuffix(raw) : normalizeBillNum(raw);
   if (num) {
     if (accHint) {
       const journalScoped = db.prepare(

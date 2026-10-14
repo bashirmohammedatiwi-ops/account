@@ -35,6 +35,7 @@ Future<PickedCustomer?> showCustomerPicker(
   }
   return showModalBottomSheet<PickedCustomer>(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.transparent,

@@ -432,20 +432,24 @@ class EdShopProductDetailPanel extends StatelessWidget {
           Expanded(
             child: SingleChildScrollView(
               controller: scrollController,
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.paddingOf(context).bottom),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  AspectRatio(
-                    aspectRatio: 1.1,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: EdCommerceTheme.accentSoft.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: EdCommerceTheme.line),
+                  // في لوح الهاتف: صورة مختصرة حتى تبقى أزرار الكمية ظاهرة.
+                  SizedBox(
+                    height: scrollController != null ? 150 : null,
+                    child: AspectRatio(
+                      aspectRatio: scrollController != null ? 2.2 : 1.1,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: EdCommerceTheme.accentSoft.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: EdCommerceTheme.line),
+                        ),
+                        padding: const EdgeInsets.all(14),
+                        child: _productImage(product),
                       ),
-                      padding: const EdgeInsets.all(14),
-                      child: _productImage(product),
                     ),
                   ),
                   const SizedBox(height: 16),

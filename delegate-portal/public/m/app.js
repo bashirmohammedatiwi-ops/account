@@ -67,8 +67,12 @@ function invoiceKey(value) {
 }
 
 function invoiceLookupFor(line, accSeq) {
+  // الخادم يقرّر إن كان للسطر فاتورة مُزامَنة — لا نخمّن فنفتح فاتورة أخرى.
+  if (line?.clickable === false) return null;
   const billSeq = invoiceKey(line?.billSeq);
   if (billSeq) return { ref: billSeq, by: 'seq', acc: accSeq || '' };
+  // سطر من سنة سابقة دون تسلسل: الرقم وحده يفتح فاتورة السنة الحالية بنفس الرقم.
+  if (String(line?.sourceYear || '').trim()) return null;
   const billNum = invoiceKey(line?.billNum);
   if (billNum) return { ref: billNum, by: 'num', acc: accSeq || '' };
   const fallback = invoiceKey(line?.invoiceRef);

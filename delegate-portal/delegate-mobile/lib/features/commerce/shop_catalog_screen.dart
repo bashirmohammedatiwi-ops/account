@@ -194,20 +194,21 @@ class _ShopCatalogScreenState extends ConsumerState<ShopCatalogScreen> {
     setState(() => _selectedProductId = id);
     if (!EdLayout.of(context).isTablet) {
       final product = products.firstWhere((p) => p.id == id);
-      final line = ref.read(invoiceDraftProvider)[id] ?? emptyDraftLine();
       final sectionName = ref.read(invoiceDraftProvider.notifier).sectionName ?? '';
-      _openProductSheet(product, sectionName, line);
+      _openProductSheet(product, sectionName);
     }
   }
 
-  Future<void> _openProductSheet(Product product, String sectionName, DraftLine line) async {
+  Future<void> _openProductSheet(Product product, String sectionName) async {
     await showModalBottomSheet<void>(
       context: context,
+      // فوق الشريط السفلي — وإلا تختفي أزرار الكمية خلفه.
+      useRootNavigator: true,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.72,
+        initialChildSize: 0.85,
         minChildSize: 0.45,
         maxChildSize: 0.92,
         expand: false,
@@ -217,12 +218,16 @@ class _ShopCatalogScreenState extends ConsumerState<ShopCatalogScreen> {
             borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
             boxShadow: AppColors.elevatedShadow,
           ),
-          child: EdShopProductDetailPanel(
+          // اللوح مسار منفصل: نراقب المسودة هنا ليتحدث العدد فور الضغط على + / −.
+          child: Consumer(
+            builder: (context, sheetRef, _) {
+              final current = sheetRef.watch(invoiceDraftProvider.select((d) => d[product.id])) ?? emptyDraftLine();
+              return EdShopProductDetailPanel(
             product: product,
             sectionName: sectionName,
-            quant: line.quant,
-            bonus: line.bonus,
-            tester: line.tester,
+            quant: current.quant,
+            bonus: current.bonus,
+            tester: current.tester,
             scrollController: scrollCtrl,
             onDecQuant: () => _adjust(product, 'quant', -1),
             onIncQuant: () => _adjust(product, 'quant', 1),
@@ -233,6 +238,8 @@ class _ShopCatalogScreenState extends ConsumerState<ShopCatalogScreen> {
             onSetQuant: (v) => _setField(product, 'quant', v),
             onSetBonus: (v) => _setField(product, 'bonus', v),
             onSetTester: (v) => _setField(product, 'tester', v),
+              );
+            },
           ),
         ),
       ),
@@ -254,6 +261,7 @@ class _ShopCatalogScreenState extends ConsumerState<ShopCatalogScreen> {
     if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       useSafeArea: true,
       builder: (_) => EdOrderInvoiceSheet(branchId: _branchId!),
