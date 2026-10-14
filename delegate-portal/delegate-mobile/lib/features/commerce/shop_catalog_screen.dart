@@ -713,7 +713,7 @@ class EdShopBranchStrip extends StatelessWidget {
             label: const Text('تغيير القسم'),
             style: TextButton.styleFrom(
               foregroundColor: EdCommerceTheme.accent,
-              textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+              textStyle: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w800, fontSize: 12),
             ),
           ),
         ],

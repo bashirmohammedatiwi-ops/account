@@ -991,7 +991,7 @@ class EdShopOrderDock extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('$lineCount أصناف في الفاتورة', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF1E293B))),
+                  Text(lineCount == 1 ? 'صنف واحد في الفاتورة' : lineCount == 2 ? 'صنفان في الفاتورة' : lineCount <= 10 ? '$lineCount أصناف في الفاتورة' : '$lineCount صنفاً في الفاتورة', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF1E293B))),
                   Text(totalLabel, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: EdCommerceTheme.accent)),
                 ],
               ),

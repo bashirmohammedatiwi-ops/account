@@ -325,7 +325,81 @@ class EdOrderInvoiceDocPanel extends StatelessWidget {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-            child: Table(
+            child: LayoutBuilder(
+              builder: (context, c) {
+                // الشاشات الضيقة: بطاقات صغيرة بدل جدول من عشرة أعمدة.
+                if (c.maxWidth < 560) {
+                  return _metaGrid(c.maxWidth);
+                }
+                return _metaTable();
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _metaGrid(double width) {
+    final items = [
+      ('عدد البنود', '$lineCount', false),
+      ('الكمية', fmtInvInt(qtySum), false),
+      ('الهدايا', fmtInvInt(bonusSum), false),
+      ('التيستر', fmtInvInt(testerSum), false),
+    ];
+    final cellW = (width - 8 * 3) / 4;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final it in items)
+              Container(
+                width: cellW,
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                decoration: BoxDecoration(
+                  color: EdCommerceTheme.cardTint,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: EdCommerceTheme.line),
+                ),
+                child: Column(
+                  children: [
+                    Text(it.$1, maxLines: 1, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                    const SizedBox(height: 2),
+                    Text(it.$2, textDirection: TextDirection.ltr, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.text)),
+                  ],
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+          decoration: BoxDecoration(
+            color: EdCommerceTheme.accentSoft,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: EdCommerceTheme.accent.withValues(alpha: 0.2)),
+          ),
+          child: Row(
+            children: [
+              const Text('إجمالي الفاتورة', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textSecondary)),
+              const Spacer(),
+              Text(
+                fmtInvInt(total),
+                textDirection: TextDirection.ltr,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: EdCommerceTheme.accent),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _metaTable() {
+    return Table(
               border: TableBorder.all(color: EdCommerceTheme.line),
               defaultVerticalAlignment: TableCellVerticalAlignment.middle,
               columnWidths: const {
@@ -356,10 +430,6 @@ class EdOrderInvoiceDocPanel extends StatelessWidget {
                   ],
                 ),
               ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -448,6 +518,110 @@ class EdOrderInvoiceLinesTable extends StatelessWidget {
   Widget build(BuildContext context) {
     final total = lines.fold<num>(0, (s, l) => s + l.lineTotal);
 
+    return LayoutBuilder(builder: (context, c) {
+      if (c.maxWidth < 600) return _phoneCards(total);
+      return _table(total);
+    });
+  }
+
+  /// الهاتف: بطاقة لكل بند — الاسم، والكميات بأزرار واضحة، والمبلغ.
+  Widget _phoneCards(num total) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < lines.length; i++) _phoneLine(i, lines[i]),
+        Container(
+          margin: const EdgeInsets.only(top: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFECFDF3),
+            borderRadius: BorderRadius.circular(AppColors.radiusSm),
+            border: Border.all(color: AppColors.success.withValues(alpha: 0.25)),
+          ),
+          child: Row(
+            children: [
+              const Text('الصافي للدفع', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.text)),
+              const Spacer(),
+              Text(fmtInvInt(total), textDirection: TextDirection.ltr, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: EdCommerceTheme.accent)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _phoneLine(int index, OrderInvoiceLineData line) {
+    Widget qty(String label, num value, String field) {
+      if (!editable) {
+        return Column(
+          children: [
+            Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
+            Text(fmtQty(value), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+          ],
+        );
+      }
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
+          const SizedBox(height: 2),
+          _qtyStepperCell(line.productId, value, field: field),
+        ],
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: EdCommerceTheme.card,
+        borderRadius: BorderRadius.circular(AppColors.radiusSm),
+        border: Border.all(color: EdCommerceTheme.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${index + 1}. ${line.matName}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, height: 1.3)),
+                    if (line.barcode.isNotEmpty)
+                      Text(line.barcode, textDirection: TextDirection.ltr, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.muted)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(fmtInvInt(line.lineTotal), textDirection: TextDirection.ltr, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: EdCommerceTheme.accent)),
+                  Text('${fmtQty(line.quant)} × ${fmtInvInt(line.unitPrice)}', textDirection: TextDirection.ltr, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.muted)),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: qty('الكمية', line.quant, 'quant')),
+              const SizedBox(width: 6),
+              Expanded(child: qty('هدية', line.bonus, 'bonus')),
+              const SizedBox(width: 6),
+              Expanded(child: qty('تيستر', line.tester, 'tester')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _table(num total) {
+    // أعمدة الكمية أعرض عند التعديل لتتسع أزرار + / −.
+    final qtyW = editable ? 104.0 : 64.0;
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -457,19 +631,19 @@ class EdOrderInvoiceLinesTable extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: EdFullWidthTable(
-        minWidth: 700,
+        minWidth: editable ? 820 : 700,
         builder: (_) => Table(
           border: TableBorder.all(color: EdCommerceTheme.line),
           defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-          columnWidths: const {
-            0: FixedColumnWidth(32),
-            1: FixedColumnWidth(84),
-            2: FlexColumnWidth(3),
-            3: FixedColumnWidth(64),
-            4: FixedColumnWidth(64),
-            5: FixedColumnWidth(64),
-            6: FlexColumnWidth(1.1),
-            7: FlexColumnWidth(1.1),
+          columnWidths: {
+            0: const FixedColumnWidth(32),
+            1: const FixedColumnWidth(84),
+            2: const FlexColumnWidth(3),
+            3: FixedColumnWidth(qtyW),
+            4: FixedColumnWidth(qtyW),
+            5: FixedColumnWidth(qtyW),
+            6: const FlexColumnWidth(1.1),
+            7: const FlexColumnWidth(1.1),
           },
           children: [
             TableRow(
