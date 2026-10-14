@@ -58,7 +58,55 @@ function yearScopeFromRef(ref) {
   return match ? match[1] : '';
 }
 
-function findInvoiceRowByRef(billSeq) {
+/**
+ * هل الفاتورة تخص حساب الكشف (نفسه أو أحد فروعه)؟
+ * أرقام الفواتير وتسلسلاتها تتكرر بين السنوات والزبائن — هذا يمنع فتح فاتورة زبون آخر.
+ */
+function invoiceBelongsToAccount(invoiceRow, accSeq) {
+  const acc = normalizeAccSeq(accSeq);
+  if (!acc) return true;
+  let cur = normalizeAccSeq(invoiceRow?.acc_seq);
+  if (!cur) return true;
+  const parentStmt = db.prepare('SELECT master_seq FROM accounts WHERE seq = ?');
+  for (let depth = 0; depth < 12 && cur; depth += 1) {
+    if (cur === acc) return true;
+    cur = normalizeAccSeq(parentStmt.get(cur)?.master_seq);
+  }
+  return false;
+}
+
+/** كل الصفوف المحتملة لمرجع تسلسلي، بالترتيب: المطابق تماماً أولاً ثم صيغة «سنة+رقم» القديمة. */
+function invoiceRowCandidatesByRef(billSeq) {
+  const raw = String(billSeq ?? '').trim();
+  if (!raw) return [];
+  const out = [];
+  const push = (row) => {
+    if (row && !out.some((r) => String(r.seq) === String(row.seq))) out.push(row);
+  };
+  if (/^PY[0-9A-Za-z]+:/i.test(raw)) {
+    push(db.prepare('SELECT * FROM invoices WHERE seq = ?').get(raw));
+    const scope = yearScopeFromRef(raw);
+    const suffix = pySeqSuffix(raw);
+    if (scope && suffix) push(db.prepare('SELECT * FROM invoices WHERE seq = ?').get(`${scope}:${suffix}`));
+    return out;
+  }
+  const digits = raw.replace(/[^0-9]/g, '');
+  if (!digits) return out;
+  push(db.prepare(`SELECT * FROM invoices WHERE seq = ? AND IFNULL(seq, '') NOT LIKE 'PY%'`).get(digits));
+  // «2025123» من نسخ قديمة = PY2025:123 — إلا إن كان تسلسلاً حقيقياً لفاتورة في السنة الحالية
+  // (تسلسلات السنة الحالية تكبر مع الوقت فتشبه صيغة السنة+الرقم).
+  const glued = digits.match(/^(20\d{2})(\d+)$/);
+  const isCurrentYearSeq = Boolean(db.prepare(
+    `SELECT 1 FROM journal WHERE bill_seq = ? AND IFNULL(seq, '') NOT LIKE 'PY%' LIMIT 1`
+  ).get(digits));
+  if (glued && !isCurrentYearSeq) push(db.prepare('SELECT * FROM invoices WHERE seq = ?').get(`PY${glued[1]}:${glued[2]}`));
+  return out;
+}
+
+function findInvoiceRowByRef(billSeq, accSeq = '') {
+  if (normalizeAccSeq(accSeq)) {
+    return invoiceRowCandidatesByRef(billSeq).find((row) => invoiceBelongsToAccount(row, accSeq)) || null;
+  }
   const raw = String(billSeq ?? '').trim();
   if (!raw) return null;
   if (/^PY[0-9A-Za-z]+:/i.test(raw)) {
@@ -77,6 +125,10 @@ function findInvoiceRowByRef(billSeq) {
   if (current) return current;
   const glued = digits.match(/^(20\d{2})(\d+)$/);
   if (!glued) return null;
+  const isCurrentYearSeq = Boolean(db.prepare(
+    `SELECT 1 FROM journal WHERE bill_seq = ? AND IFNULL(seq, '') NOT LIKE 'PY%' LIMIT 1`
+  ).get(digits));
+  if (isCurrentYearSeq) return null;
   return db.prepare('SELECT * FROM invoices WHERE seq = ?').get(`PY${glued[1]}:${glued[2]}`) || null;
 }
 
@@ -391,8 +443,8 @@ function loadInvoiceDetail(invoice) {
   };
 }
 
-function getInvoiceByBillSeq(billSeq) {
-  const invoice = findInvoiceRowByRef(billSeq);
+function getInvoiceByBillSeq(billSeq, accSeq = '') {
+  const invoice = findInvoiceRowByRef(billSeq, accSeq);
   if (!invoice) return null;
   return loadInvoiceDetail(invoice);
 }
@@ -411,9 +463,11 @@ function getInvoiceByNum(billNum, accSeq, scopePrefix = '') {
       : db.prepare(`SELECT * FROM invoices WHERE num = ? AND acc_seq = ? AND ${yearSql}`).all(num, acc)));
   }
   if (!rows.length) {
-    rows.push(...(scopePrefix
+    const any = scopePrefix
       ? db.prepare(`SELECT * FROM invoices WHERE num = ? AND ${yearSql}`).all(num, `${scopePrefix}:%`)
-      : db.prepare(`SELECT * FROM invoices WHERE num = ? AND ${yearSql}`).all(num)));
+      : db.prepare(`SELECT * FROM invoices WHERE num = ? AND ${yearSql}`).all(num);
+    // مع حساب محدد: فقط فواتير الحساب أو فروعه — لا نفتح فاتورة زبون آخر بنفس الرقم.
+    rows.push(...(acc ? any.filter((row) => invoiceBelongsToAccount(row, acc)) : any));
   }
   if (!rows.length) return null;
   let fallback = null;
@@ -432,18 +486,18 @@ function getInvoiceByRef(ref) {
 function getInvoiceForExport(ref, mode = 'auto', accSeq) {
   const raw = String(ref ?? '').trim();
   if (!raw) return null;
-  if (mode === 'seq') return getInvoiceByBillSeq(raw);
+  if (mode === 'seq') return getInvoiceByBillSeq(raw, accSeq);
   // «PY2025:5000» = الرقم 5000 ضمن سنة 2025 — لا نضم أرقام السنة إلى رقم الفاتورة.
   const scope = yearScopeFromRef(raw);
   const numRef = scope ? pySeqSuffix(raw) : raw;
   if (mode === 'num') return getInvoiceByNum(numRef, accSeq, scope);
 
-  if (findInvoiceRowByRef(raw)) {
-    return getInvoiceByBillSeq(raw);
+  if (findInvoiceRowByRef(raw, accSeq)) {
+    return getInvoiceByBillSeq(raw, accSeq);
   }
   const byNum = getInvoiceByNum(numRef, accSeq, scope);
   if (byNum) return byNum;
-  return getInvoiceByBillSeq(raw);
+  return getInvoiceByBillSeq(raw, accSeq);
 }
 
 function canAgentAccessInvoice(agentId, ref, options = {}) {
