@@ -17,9 +17,10 @@ import 'accounts_theme.dart';
 import 'branches_ui.dart';
 import 'trees_ui.dart';
 
-final childrenProvider = FutureProvider.family<List<BranchAccount>, String>((ref, seq) {
+final childrenProvider = StreamProvider.family<List<BranchAccount>, String>((ref, seq) {
   ref.keepAlive();
-  return withAuth(ref, () => ref.read(apiClientProvider).getChildren(seq));
+  final api = ref.read(apiClientProvider);
+  return withAuthStream(ref, () => api.cacheThenNetwork(() => api.getChildren(seq)));
 });
 
 class TreesScreen extends ConsumerWidget {
@@ -32,7 +33,6 @@ class TreesScreen extends ConsumerWidget {
 
     return AppPage(
       title: 'كشوف الحساب',
-      kicker: 'Edari',
       subtitle: 'اختر شجرة للمتابعة',
       showBack: true,
       onBack: () => context.go('/home'),
@@ -46,7 +46,7 @@ class TreesScreen extends ConsumerWidget {
           loading: () => const LoadingView(message: 'جاري تحميل الأشجار...'),
           error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(treesProvider)),
           data: (trees) => RefreshIndicator(
-            color: AppColors.navy,
+            color: AppColors.primary,
             onRefresh: () async => ref.invalidate(treesProvider),
             child: EdTreesPage(
               trees: trees,
@@ -141,7 +141,8 @@ class _BranchesScreenState extends ConsumerState<BranchesScreen> {
   }
 }
 
-final statementProvider = FutureProvider.family<AccountStatement, String>((ref, seq) {
+final statementProvider = StreamProvider.family<AccountStatement, String>((ref, seq) {
   ref.keepAlive();
-  return withAuth(ref, () => ref.read(apiClientProvider).getStatement(seq));
+  final api = ref.read(apiClientProvider);
+  return withAuthStream(ref, () => api.cacheThenNetwork(() => api.getStatement(seq)));
 });

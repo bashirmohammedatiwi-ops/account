@@ -46,7 +46,7 @@ class TeamOverviewHeader extends StatelessWidget {
                 ),
                 Text('${fmtNumAlways(overview.totalSecondaries)} مندوب ثانوي',
                     style: TextStyle(
-                        fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white.withValues(alpha: 0.7))),
+                        fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white.withValues(alpha: 0.7))),
                 if (periodLabel != null && periodLabel!.trim().isNotEmpty) ...[
                   const SizedBox(width: 8),
                   Container(
@@ -57,7 +57,7 @@ class TeamOverviewHeader extends StatelessWidget {
                       border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
                     ),
                     child: Text(periodLabel!,
-                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white)),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white)),
                   ),
                 ],
               ],
@@ -150,10 +150,10 @@ class _TeamStatBox extends StatelessWidget {
         children: [
           Text(value, style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: c)),
           const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
+          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.muted)),
           if (hint != null) ...[
             const SizedBox(height: 3),
-            Text(hint!, style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: AppColors.mutedLight)),
+            Text(hint!, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.mutedLight)),
           ],
         ],
       ),
@@ -224,7 +224,7 @@ class SecondaryAgentCard extends StatelessWidget {
                           Text(
                             '${fmtNumAlways(summary.deliveryCount)} وصل · إجمالي ${fmtMoney(summary.totalAmount)} د.ع',
                             style: const TextStyle(
-                                fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted),
+                                fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
                           ),
                         ],
                       ),
@@ -333,7 +333,7 @@ class _MiniStat extends StatelessWidget {
                 child: Text(label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
               ),
             ],
           ),
@@ -423,14 +423,14 @@ class TeamDateRangeFilter extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 14),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: active ? AppColors.navy : AppColors.surfaceAlt,
+                      color: active ? AppColors.primary : AppColors.surfaceAlt,
                       borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: active ? AppColors.navy : AppColors.borderLight),
+                      border: Border.all(color: active ? AppColors.primary : AppColors.borderLight),
                     ),
                     child: Text(
                       value.label,
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 12,
                         fontWeight: FontWeight.w800,
                         color: active ? Colors.white : AppColors.muted,
                       ),
@@ -502,7 +502,7 @@ class _TeamDateChip extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppColors.muted)),
+              Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.muted)),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(text,

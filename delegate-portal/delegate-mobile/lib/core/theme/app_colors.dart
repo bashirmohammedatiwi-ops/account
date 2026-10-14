@@ -1,93 +1,97 @@
 import 'package:flutter/material.dart';
 
 /// نظام ألوان Edari — فاخر وحديث
+/// نظام ألوان Edari — هادئ واحترافي، مبني على أزرق الشعار.
 abstract final class AppColors {
   // الخلفيات
-  static const bg = Color(0xFFEEF2F9);
-  static const bgWarm = Color(0xFFF5F7FC);
+  static const bg = Color(0xFFF4F6FA);
+  static const bgWarm = Color(0xFFF7F8FB);
   static const surface = Color(0xFFFFFFFF);
-  static const surfaceMuted = Color(0xFFF8FAFD);
-  static const surfaceAlt = Color(0xFFF1F5FA);
-  static const surfaceElevated = Color(0xFFFAFBFE);
-  static const inputFill = Color(0xFFF4F7FB);
-  static const surfaceGlass = Color(0xF2FFFFFF);
+  static const surfaceMuted = Color(0xFFF9FAFB);
+  static const surfaceAlt = Color(0xFFF2F4F7);
+  static const surfaceElevated = Color(0xFFFFFFFF);
+  static const inputFill = Color(0xFFF9FAFB);
+  static const surfaceGlass = Color(0xFAFFFFFF);
 
   // الحدود
-  static const border = Color(0xFFDCE4EF);
-  static const borderLight = Color(0xFFE8EEF5);
-  static const borderStrong = Color(0xFFC5D0DE);
-  static const borderFocus = Color(0xFF0D9488);
+  static const border = Color(0xFFE4E7EC);
+  static const borderLight = Color(0xFFEAECF0);
+  static const borderStrong = Color(0xFFD0D5DD);
+  static const borderFocus = Color(0xFF1A5FD8);
   static const borderGlass = Color(0x66FFFFFF);
 
   // النص
-  static const text = Color(0xFF0A1020);
-  static const textSecondary = Color(0xFF445066);
-  static const muted = Color(0xFF64748B);
-  static const mutedLight = Color(0xFF94A3B8);
+  static const text = Color(0xFF101828);
+  static const textSecondary = Color(0xFF475467);
+  static const muted = Color(0xFF667085);
+  static const mutedLight = Color(0xFF98A2B3);
 
   // العلامة التجارية
-  static const navy = Color(0xFF0A1020);
-  static const navySoft = Color(0xFF151D2E);
-  static const navyMid = Color(0xFF1A3352);
-  static const accent = Color(0xFF0F4C81);
-  static const accentSoft = Color(0xFFE8F4F3);
-  static const accentTeal = Color(0xFF0D9488);
-  static const accentTealLight = Color(0xFF14B8A6);
-  static const accentBlue = Color(0xFF2563EB);
-  static const accentViolet = Color(0xFF6366F1);
-  static const gold = Color(0xFFD4AF6A);
-  static const goldLine = Color(0xFFE8D5A8);
-  static const goldSoft = Color(0xFFFDF8EE);
+  static const navy = Color(0xFF101828);
+  static const navySoft = Color(0xFF1D2939);
+  static const navyMid = Color(0xFF243B63);
+  static const accent = Color(0xFF1A5FD8);
+  /// اللون الأساسي للتطبيق (الاسم القديم محفوظ للتوافق).
+  static const accentTeal = Color(0xFF1A5FD8);
+  static const accentTealLight = Color(0xFF528BFF);
+  static const accentSoft = Color(0xFFEEF4FF);
+  static const primary = accentTeal;
+  static const primarySoft = accentSoft;
+  static const primaryDark = Color(0xFF123F99);
+  static const accentBlue = Color(0xFF1A5FD8);
+  static const accentViolet = Color(0xFF6941C6);
+  static const gold = Color(0xFFB54708);
+  static const goldLine = Color(0xFFFEDF89);
+  static const goldSoft = Color(0xFFFFFAEB);
 
   // الحالات
-  static const danger = Color(0xFFDC2626);
-  static const dangerSoft = Color(0xFFFEF2F2);
-  static const success = Color(0xFF059669);
-  static const successSoft = Color(0xFFECFDF5);
-  static const warning = Color(0xFFD97706);
-  static const warningSoft = Color(0xFFFFFBEB);
-  static const info = Color(0xFF0284C7);
+  static const danger = Color(0xFFD92D20);
+  static const dangerSoft = Color(0xFFFEF3F2);
+  static const success = Color(0xFF079455);
+  static const successSoft = Color(0xFFECFDF3);
+  static const warning = Color(0xFFDC6803);
+  static const warningSoft = Color(0xFFFFFAEB);
+  static const info = Color(0xFF0086C9);
   static const infoSoft = Color(0xFFF0F9FF);
 
   // الزوايا
-  static const radiusXs = 8.0;
-  static const radiusSm = 12.0;
-  static const radius = 16.0;
-  static const radiusLg = 22.0;
-  static const radiusXl = 28.0;
-  static const radius2xl = 32.0;
+  static const radiusXs = 6.0;
+  static const radiusSm = 10.0;
+  static const radius = 12.0;
+  static const radiusLg = 16.0;
+  static const radiusXl = 18.0;
+  static const radius2xl = 22.0;
 
   // الوحدات
   static const modules = (
-    accounts: Color(0xFF0D9488),
-    shop: Color(0xFF2563EB),
-    orders: Color(0xFF7C3AED),
-    reports: Color(0xFFD97706),
-    receipts: Color(0xFF059669),
-    customers: Color(0xFFE11D48),
+    accounts: moduleAccounts,
+    shop: moduleShop,
+    orders: moduleOrders,
+    reports: moduleReports,
+    receipts: moduleReceipts,
+    customers: moduleCustomers,
   );
 
-  static const moduleAccounts = Color(0xFF0D9488);
-  static const moduleShop = Color(0xFF2563EB);
-  static const moduleOrders = Color(0xFF7C3AED);
-  static const moduleReports = Color(0xFFD97706);
-  static const moduleReceipts = Color(0xFF059669);
-  static const moduleCustomers = Color(0xFFE11D48);
-  static const modulePromo = Color(0xFFDB2777);
+  static const moduleAccounts = Color(0xFF0E7490);
+  static const moduleShop = Color(0xFF1A5FD8);
+  static const moduleOrders = Color(0xFF6941C6);
+  static const moduleReports = Color(0xFFB54708);
+  static const moduleReceipts = Color(0xFF067647);
+  static const moduleCustomers = Color(0xFFC01048);
+  static const modulePromo = Color(0xFFC11574);
 
   // التدرجات
   static const pageGradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [Color(0xFFF0F4FA), Color(0xFFEEF2F9), Color(0xFFE8EDF6)],
-    stops: [0.0, 0.45, 1.0],
+    colors: [bg, bg],
   );
 
   static const brandGradient = LinearGradient(
     begin: Alignment.topRight,
     end: Alignment.bottomLeft,
-    colors: [Color(0xFF0A0F1C), Color(0xFF152238), Color(0xFF1A3A5C), Color(0xFF0D9488)],
-    stops: [0.0, 0.35, 0.72, 1.0],
+    colors: [Color(0xFF0B1B3F), Color(0xFF123F99), Color(0xFF1A5FD8)],
+    stops: [0.0, 0.6, 1.0],
   );
 
   static const heroGradient = brandGradient;
@@ -95,40 +99,38 @@ abstract final class AppColors {
   static const buttonGradient = LinearGradient(
     begin: Alignment.centerRight,
     end: Alignment.centerLeft,
-    colors: [Color(0xFF0A1020), Color(0xFF1A3352), Color(0xFF0D9488)],
+    colors: [Color(0xFF123F99), Color(0xFF1A5FD8)],
   );
 
   static const avatarRingGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF2DD4BF), Color(0xFF60A5FA), Color(0xFFA78BFA)],
+    colors: [Color(0xFF528BFF), Color(0xFF1A5FD8)],
   );
 
   static const accentGradient = LinearGradient(
     begin: Alignment.topRight,
     end: Alignment.bottomLeft,
-    colors: [Color(0xFF0D9488), Color(0xFF2563EB)],
+    colors: [Color(0xFF1A5FD8), Color(0xFF123F99)],
   );
 
   /// تدرجات فاتحة للصفحة الرئيسية — بدون ألوان غامقة
   static const homeSkyGradient = LinearGradient(
     begin: Alignment.topRight,
     end: Alignment.bottomLeft,
-    colors: [Color(0xFFF8FBFF), Color(0xFFEFF6FF), Color(0xFFECFDF5)],
-    stops: [0.0, 0.55, 1.0],
+    colors: [Color(0xFFFFFFFF), Color(0xFFF8FAFF)],
   );
 
   static const homeAuroraGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFFDBEAFE), Color(0xFFE0F2FE), Color(0xFFCCFBF1), Color(0xFFF5F3FF)],
-    stops: [0.0, 0.3, 0.65, 1.0],
+    colors: [Color(0xFFEEF4FF), Color(0xFFF5F8FF)],
   );
 
   static const homeSunGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFFCCFBF1), Color(0xFFBAE6FD), Color(0xFFE0E7FF)],
+    colors: [Color(0xFFEEF4FF), Color(0xFFE0EAFF)],
   );
 
   static const homeCardWash = LinearGradient(
@@ -155,38 +157,45 @@ abstract final class AppColors {
         colors: [color.withValues(alpha: 0.16), color.withValues(alpha: 0.06)],
       );
 
-  static List<BoxShadow> get cardShadow => [
-        BoxShadow(color: navy.withValues(alpha: 0.07), blurRadius: 24, offset: const Offset(0, 10)),
-        BoxShadow(color: accentTeal.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2)),
+  static List<BoxShadow> get cardShadow => const [
+        BoxShadow(color: Color(0x0A101828), blurRadius: 3, offset: Offset(0, 1)),
+        BoxShadow(color: Color(0x08101828), blurRadius: 12, offset: Offset(0, 4)),
       ];
 
-  static List<BoxShadow> get elevatedShadow => [
-        BoxShadow(color: navy.withValues(alpha: 0.1), blurRadius: 32, offset: const Offset(0, 14)),
-        BoxShadow(color: accentViolet.withValues(alpha: 0.06), blurRadius: 12, offset: const Offset(0, 4)),
+  static List<BoxShadow> get elevatedShadow => const [
+        BoxShadow(color: Color(0x14101828), blurRadius: 24, offset: Offset(0, 12)),
+        BoxShadow(color: Color(0x08101828), blurRadius: 6, offset: Offset(0, 2)),
       ];
 
-  static List<BoxShadow> get softShadow => [
-        BoxShadow(color: navy.withValues(alpha: 0.05), blurRadius: 16, offset: const Offset(0, 6)),
+  static List<BoxShadow> get softShadow => const [
+        BoxShadow(color: Color(0x0A101828), blurRadius: 2, offset: Offset(0, 1)),
       ];
 
-  static List<BoxShadow> get buttonShadow => [
-        BoxShadow(color: accentTeal.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 8)),
+  static List<BoxShadow> get buttonShadow => const [
+        BoxShadow(color: Color(0x261A5FD8), blurRadius: 12, offset: Offset(0, 4)),
       ];
 
-  static List<BoxShadow> get dockShadow => [
-        BoxShadow(color: navy.withValues(alpha: 0.1), blurRadius: 28, offset: const Offset(0, 10)),
-        BoxShadow(color: accentTeal.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, 4)),
+  static List<BoxShadow> get dockShadow => const [
+        BoxShadow(color: Color(0x14101828), blurRadius: 20, offset: Offset(0, -2)),
       ];
 
-  static List<BoxShadow> get headerShadow => [
-        BoxShadow(color: navy.withValues(alpha: 0.04), blurRadius: 12, offset: const Offset(0, 4)),
+  static List<BoxShadow> get headerShadow => const [
+        BoxShadow(color: Color(0x08101828), blurRadius: 4, offset: Offset(0, 1)),
       ];
 
   static BoxDecoration glassCard({Color? color, double radius = radiusLg, Color? borderColor}) => BoxDecoration(
-        color: color ?? surfaceGlass,
+        color: color ?? surface,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: borderColor ?? borderLight.withValues(alpha: 0.9)),
+        border: Border.all(color: borderColor ?? borderLight),
         boxShadow: cardShadow,
+      );
+
+  /// بطاقة قياسية: سطح أبيض بحد رفيع وظل خفيف.
+  static BoxDecoration card({double radius = radiusLg, Color? color, Color? borderColor}) => BoxDecoration(
+        color: color ?? surface,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: borderColor ?? border),
+        boxShadow: softShadow,
       );
 }
 

@@ -23,19 +23,22 @@ import 'commerce_draft.dart';
 import 'commerce_theme.dart';
 import 'order_invoice_ui.dart';
 
-final catalogBranchesProvider = FutureProvider((ref) {
+final catalogBranchesProvider = StreamProvider<List<CatalogBranch>>((ref) {
   ref.keepAlive();
-  return withAuth(ref, () => ref.read(apiClientProvider).getCatalogBranches());
+  final api = ref.read(apiClientProvider);
+  return withAuthStream(ref, () => api.cacheThenNetwork(() => api.getCatalogBranches()));
 });
 
-final catalogSectionsProvider = FutureProvider.family<List<CatalogSection>, int>((ref, branchId) {
+final catalogSectionsProvider = StreamProvider.family<List<CatalogSection>, int>((ref, branchId) {
   ref.keepAlive();
-  return withAuth(ref, () => ref.read(apiClientProvider).getCatalogSections(branchId));
+  final api = ref.read(apiClientProvider);
+  return withAuthStream(ref, () => api.cacheThenNetwork(() => api.getCatalogSections(branchId)));
 });
 
-final catalogProductsProvider = FutureProvider.family<List<Product>, int>((ref, sectionId) {
+final catalogProductsProvider = StreamProvider.family<List<Product>, int>((ref, sectionId) {
   ref.keepAlive();
-  return withAuth(ref, () => ref.read(apiClientProvider).getProducts(sectionId));
+  final api = ref.read(apiClientProvider);
+  return withAuthStream(ref, () => api.cacheThenNetwork(() => api.getProducts(sectionId)));
 });
 
 const _draftUuid = Uuid();
@@ -163,7 +166,7 @@ class InvoiceDraftNotifier extends Notifier<Map<int, DraftLine>> {
       return;
     }
     state = {...state, productId: (quant: q, bonus: b, tester: t)};
-    if (pendingClientRequestId == null) pendingClientRequestId = _draftUuid.v4();
+    pendingClientRequestId ??= _draftUuid.v4();
   }
 
   void adjustLine(int productId, {required String field, required int delta}) {
@@ -295,7 +298,7 @@ class _EdOrderInvoiceSheetState extends ConsumerState<EdOrderInvoiceSheet> {
       final clientRequestId = draftNotifier.clientRequestIdForSubmit();
       await _persist();
 
-      await ref.read(apiClientProvider).submitOrder(
+      final order = await ref.read(apiClientProvider).submitOrder(
             customerAccSeq: customer.hasPostedAccount ? customer.seq : null,
             customerRequestId: customer.requestId,
             catalogBranchId: widget.branchId,
@@ -312,7 +315,9 @@ class _EdOrderInvoiceSheetState extends ConsumerState<EdOrderInvoiceSheet> {
       ref.invalidate(ordersProvider);
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرسال الطلب')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(order.id < 0 ? 'حُفظ الطلب على الجهاز — سيُرسل تلقائياً عند عودة الاتصال' : 'تم إرسال الطلب'),
+        ));
         context.go('/orders');
       }
     } catch (e) {
@@ -402,9 +407,10 @@ class _EdOrderInvoiceSheetState extends ConsumerState<EdOrderInvoiceSheet> {
   }
 }
 
-final orderDetailProvider = FutureProvider.family<Order, int>((ref, id) {
+final orderDetailProvider = StreamProvider.family<Order, int>((ref, id) {
   ref.keepAlive();
-  return withAuth(ref, () => ref.read(apiClientProvider).getOrder(id));
+  final api = ref.read(apiClientProvider);
+  return withAuthStream(ref, () => api.cacheThenNetwork(() => api.getOrder(id)));
 });
 
 class OrdersScreen extends ConsumerStatefulWidget {
@@ -466,14 +472,14 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
               return EmptyState(message: orders.isEmpty ? 'لا توجد طلبات' : 'لا توجد طلبات بهذا التصفية', icon: Icons.receipt_long_outlined);
             }
             return RefreshIndicator(
-              color: AppColors.navy,
+              color: AppColors.primary,
               onRefresh: () async => ref.invalidate(ordersProvider),
               child: ListView.separated(
                 primary: false,
                 physics: edPageScrollPhysics,
                 padding: EdgeInsets.fromLTRB(16, 8, 16, EdPageInsets.bottom(context)),
                 itemCount: filtered.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
                 itemBuilder: (_, i) {
                   final o = filtered[i];
                   return EdOrderCard(
@@ -506,9 +512,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
           borderRadius: BorderRadius.circular(999),
           child: Ink(
             decoration: BoxDecoration(
-              color: active ? AppColors.navy : AppColors.surface,
+              color: active ? AppColors.primary : AppColors.surface,
               borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: active ? AppColors.navy : AppColors.borderLight),
+              border: Border.all(color: active ? AppColors.primary : AppColors.borderLight),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Text(

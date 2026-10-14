@@ -14,6 +14,7 @@ import '../../core/widgets/ed_form.dart';
 import '../../core/widgets/ed_page_scroll.dart';
 import '../../core/utils/delivery_viewer.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/utils/numeric_input.dart';
 import '../../models/models.dart';
 import '../team/team_hub.dart';
 
@@ -234,7 +235,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
       _snack('اختر شجرة ثم زبوناً');
       return;
     }
-    final amount = num.tryParse(_drAmountCtrl.text.trim()) ?? 0;
+    final amount = parseAmount(_drAmountCtrl.text) ?? 0;
     if (amount <= 0) {
       _snack('أدخل مبلغ وصل القبض');
       return;
@@ -264,7 +265,10 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
         _drFormOpen = false;
       });
 
-      _snack('تم إصدار وصل القبض', success: true);
+      _snack(
+        receipt.id < 0 ? 'حُفظ الوصل على الجهاز — سيُرسل تلقائياً عند عودة الاتصال' : 'تم إصدار وصل القبض',
+        success: true,
+      );
 
       if (tryPrint && !kIsWeb) {
         setState(() => _drPrinting = true);
@@ -297,7 +301,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
       _linkedDelivery = item;
       _linkedDeliveryId = item.id;
       _linkedDeliveryNo = item.deliveryNo;
-      _amountCtrl.text = '${item.amount}';
+      _amountCtrl.text = formatAmountInput(item.amount);
       _notesCtrl.text = item.notes ?? '';
       _picked = null;
       _rFormOpen = true;
@@ -325,7 +329,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
       _snack('اختر زبوناً أو اربط بوصل قبض');
       return;
     }
-    final amount = num.tryParse(_amountCtrl.text.trim()) ?? 0;
+    final amount = parseAmount(_amountCtrl.text) ?? 0;
     if (amount <= 0) {
       _snack('أدخل مبلغ سند القبض');
       return;
@@ -337,8 +341,8 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
             treeAccSeq: treeSeq,
             treeName: treeName,
             amount: amount,
-            commission: num.tryParse(_commissionCtrl.text.trim()) ?? 0,
-            discount: num.tryParse(_discountCtrl.text.trim()) ?? 0,
+            commission: parseAmount(_commissionCtrl.text) ?? 0,
+            discount: parseAmount(_discountCtrl.text) ?? 0,
             notes: _notesCtrl.text.trim(),
             deliveryReceiptId: _linkedDeliveryId,
           );
@@ -356,7 +360,10 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
         _linkedDelivery = null;
         _rFormOpen = false;
       });
-      _snack('أُرسل السند للوحة التحكم للمراجعة', success: true);
+      _snack(
+        created.id < 0 ? 'حُفظ السند على الجهاز — سيُرسل تلقائياً عند عودة الاتصال' : 'أُرسل السند للوحة التحكم للمراجعة',
+        success: true,
+      );
     } catch (e) {
       _snack(e is ApiException ? e.message : '$e');
     } finally {
@@ -499,17 +506,98 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
     required int pendingR,
     required bool hasTeam,
   }) {
-    return _receiptsPhoneScroll(
-      context: context,
-      agent: agent,
-      deliveries: deliveries,
-      receipts: receipts,
-      isSecondary: isSecondary,
-      pendingDr: pendingDr,
-      pendingR: pendingR,
-      tabIndex: _tabs.index,
-      isWide: true,
-      hasTeam: hasTeam,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // آيباد بالعرض: النموذج ثابت في جهة، والسجل في الجهة الأخرى.
+        if (constraints.maxWidth < 900) {
+          return _receiptsPhoneScroll(
+            context: context,
+            agent: agent,
+            deliveries: deliveries,
+            receipts: receipts,
+            isSecondary: isSecondary,
+            pendingDr: pendingDr,
+            pendingR: pendingR,
+            tabIndex: _tabs.index,
+            isWide: true,
+            hasTeam: hasTeam,
+          );
+        }
+        final tabIndex = _tabs.index;
+        final onDeliveryTab = isSecondary || tabIndex == 0;
+        final awaiting = deliveries.where((d) => d.canCreateReceipt).toList();
+        final formPane = ListView(
+          padding: EdgeInsets.fromLTRB(24, 20, 12, EdPageInsets.bottom(context)),
+          children: [
+            if (!isSecondary) ...[
+              _pillTabBar(),
+              const SizedBox(height: 14),
+            ],
+            if (onDeliveryTab)
+              _deliveryFormCard()
+            else ...[
+              if (awaiting.isNotEmpty)
+                PendingDeliveriesPanel(items: awaiting, onTap: (d) => _startReceiptFromDelivery(d)),
+              _receiptFormCard(),
+            ],
+          ],
+        );
+        final listPane = CustomScrollView(
+          primary: false,
+          physics: edPageScrollPhysics,
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(12, 20, 24, 0),
+              sliver: SliverToBoxAdapter(
+                child: _statsHeader(deliveries, receipts, isSecondary, pendingDr, pendingR, minItemWidth: 210),
+              ),
+            ),
+            if (agent != null)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 24, 0),
+                sliver: SliverToBoxAdapter(
+                  child: AgentRoleBanner(
+                    agent: agent,
+                    hasTeam: hasTeam,
+                    onOpenTeam: hasTeam ? () => context.go('/team') : null,
+                  ),
+                ),
+              ),
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            if (onDeliveryTab)
+              ..._deliveryPhoneSlivers(context, deliveries, agent?.id, includeForm: false, hPad: const EdgeInsets.fromLTRB(12, 0, 24, 0))
+            else
+              ..._receiptPhoneSlivers(context, deliveries, receipts, includeForm: false, hPad: const EdgeInsets.fromLTRB(12, 0, 24, 0)),
+          ],
+        );
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(width: constraints.maxWidth >= 1150 ? 460 : 400, child: formPane),
+            Expanded(child: listPane),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _statsHeader(List<DeliveryReceipt> deliveries, List<Receipt> receipts, bool isSecondary, int pendingDr, int pendingR, {double minItemWidth = 150}) {
+    final today = deliveries.where((d) {
+      final raw = d.receiptDate ?? d.createdAt ?? '';
+      final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(raw);
+      if (m == null) return false;
+      final n = DateTime.now();
+      return int.parse(m.group(1)!) == n.year && int.parse(m.group(2)!) == n.month && int.parse(m.group(3)!) == n.day;
+    });
+    return ReceiptsStatsHeader(
+      deliveryCount: deliveries.length,
+      pendingDeliveryReceipt: pendingDr,
+      receiptCount: receipts.length,
+      pendingReceipts: pendingR,
+      todayAmount: today.fold<num>(0, (s, d) => s + d.amount),
+      pendingAmount: deliveries.where((d) => d.canCreateReceipt).fold<num>(0, (s, d) => s + d.amount),
+      showReceipts: !isSecondary,
+      minItemWidth: minItemWidth,
     );
   }
 
@@ -533,13 +621,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
         SliverPadding(
           padding: EdgeInsets.fromLTRB(EdSpacing.page, EdSpacing.md, EdSpacing.page, 0),
           sliver: SliverToBoxAdapter(
-            child: ReceiptsStatsHeader(
-              deliveryCount: deliveries.length,
-              pendingDeliveryReceipt: pendingDr,
-              receiptCount: receipts.length,
-              pendingReceipts: pendingR,
-              large: isWide,
-            ),
+            child: _statsHeader(deliveries, receipts, isSecondary, pendingDr, pendingR),
           ),
         ),
         if (agent != null)
@@ -557,11 +639,6 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
         if (!isSecondary) ...[
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: EdSpacing.page),
-            sliver: SliverToBoxAdapter(child: ReceiptsFlowBanner(step: tabIndex)),
-          ),
-          const SliverToBoxAdapter(child: SizedBox(height: 8)),
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: EdSpacing.page),
             sliver: SliverToBoxAdapter(child: _pillTabBar()),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 8)),
@@ -574,14 +651,21 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
     );
   }
 
-  List<Widget> _deliveryPhoneSlivers(BuildContext context, List<DeliveryReceipt> deliveries, int? viewerId) {
+  List<Widget> _deliveryPhoneSlivers(
+    BuildContext context,
+    List<DeliveryReceipt> deliveries,
+    int? viewerId, {
+    bool includeForm = true,
+    EdgeInsets hPad = const EdgeInsets.symmetric(horizontal: EdSpacing.page),
+  }) {
     final visible = _filterDeliveries(deliveries);
     final filtering = _drSearchCtrl.text.trim().isNotEmpty || _drPeriod != ReceiptsPeriod.all;
     final bottom = EdPageInsets.bottom(context);
 
     return [
+      if (includeForm)
       SliverPadding(
-        padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, EdSpacing.sm),
+        padding: hPad.copyWith(bottom: EdSpacing.sm),
         sliver: SliverToBoxAdapter(
           child: CollapsibleFormPanel(
             title: 'إصدار وصل قبض',
@@ -594,7 +678,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
         ),
       ),
       SliverPadding(
-        padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, EdSpacing.sm),
+        padding: hPad.copyWith(bottom: EdSpacing.sm),
         sliver: SliverToBoxAdapter(
           child: ReceiptsHistoryFilter(
             controller: _drSearchCtrl,
@@ -605,7 +689,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
         ),
       ),
       SliverPadding(
-        padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, EdSpacing.sm),
+        padding: hPad.copyWith(bottom: EdSpacing.sm),
         sliver: SliverToBoxAdapter(
           child: DeliveryFilterBar(
             statusFilter: _drStatusFilter,
@@ -617,7 +701,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
         ),
       ),
       SliverPadding(
-        padding: const EdgeInsets.symmetric(horizontal: EdSpacing.page),
+        padding: hPad,
         sliver: SliverToBoxAdapter(
           child: ReceiptsSectionHeader(
             title: 'سجل وصول القبض',
@@ -641,7 +725,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
         )
       else
         SliverPadding(
-          padding: EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, bottom),
+          padding: hPad.copyWith(bottom: bottom),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate(
               (context, index) => _deliveryCard(visible[index]),
@@ -652,7 +736,13 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
     ];
   }
 
-  List<Widget> _receiptPhoneSlivers(BuildContext context, List<DeliveryReceipt> deliveries, List<Receipt> receipts) {
+  List<Widget> _receiptPhoneSlivers(
+    BuildContext context,
+    List<DeliveryReceipt> deliveries,
+    List<Receipt> receipts, {
+    bool includeForm = true,
+    EdgeInsets hPad = const EdgeInsets.symmetric(horizontal: EdSpacing.page),
+  }) {
     final awaiting = deliveries.where((d) => d.canCreateReceipt).toList();
     final visible = _filterReceipts(receipts);
     final totals = ReceiptAmountTotals.fromReceipts(visible);
@@ -660,8 +750,9 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
     final bottom = EdPageInsets.bottom(context);
 
     return [
+      if (includeForm)
       SliverPadding(
-        padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, EdSpacing.sm),
+        padding: hPad.copyWith(bottom: EdSpacing.sm),
         sliver: SliverToBoxAdapter(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -682,7 +773,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
         ),
       ),
       SliverPadding(
-        padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, EdSpacing.sm),
+        padding: hPad.copyWith(bottom: EdSpacing.sm),
         sliver: SliverToBoxAdapter(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -701,7 +792,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
         ),
       ),
       SliverPadding(
-        padding: const EdgeInsets.symmetric(horizontal: EdSpacing.page),
+        padding: hPad,
         sliver: SliverToBoxAdapter(
           child: ReceiptsSectionHeader(
             title: 'سندات القبض',
@@ -725,7 +816,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
         )
       else
         SliverPadding(
-          padding: EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, bottom),
+          padding: hPad.copyWith(bottom: bottom),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate(
               (context, index) => InternalReceiptCard(receipt: visible[index]),
@@ -798,18 +889,17 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
           ],
           EdPickerField(
             label: 'الزبون',
-            value: c != null ? c.name1 : null,
-            subtitle: c != null ? c.accountNum : null,
+            value: c?.name1,
+            subtitle: c?.accountNum,
             placeholder: 'اختر شجرة ثم زبوناً',
             icon: Icons.person_outline_rounded,
             accentColor: AppColors.moduleReceipts,
             onTap: _pickDrCustomer,
           ),
           const SizedBox(height: EdSpacing.lg),
-          EdLabeledField.integer(
+          EdLabeledField.money(
             label: 'المبلغ المستلم',
             controller: _drAmountCtrl,
-            hint: '0',
             prefixIcon: Icons.payments_outlined,
           ),
           const SizedBox(height: EdSpacing.md),
@@ -873,8 +963,8 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
           if (_linkedDelivery == null)
             EdPickerField(
               label: 'الزبون',
-              value: c != null ? c.name1 : null,
-              subtitle: c != null ? c.accountNum : null,
+              value: c?.name1,
+              subtitle: c?.accountNum,
               placeholder: 'اختر شجرة ثم زبوناً',
               icon: Icons.person_outline_rounded,
               accentColor: AppColors.moduleReceipts,
@@ -896,7 +986,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('الزبون', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                        const Text('الزبون', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
                         Text(linkedCustomer, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.navy)),
                       ],
                     ),
@@ -905,28 +995,27 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> with SingleTick
               ),
             ),
           const SizedBox(height: EdSpacing.lg),
-          EdLabeledField.integer(
+          EdLabeledField.money(
             label: 'المبلغ',
             controller: _amountCtrl,
-            hint: '0',
             prefixIcon: Icons.payments_outlined,
           ),
           const SizedBox(height: EdSpacing.md),
           Row(
             children: [
               Expanded(
-                child: EdLabeledField.integer(
+                child: EdLabeledField.money(
                   label: 'العمولة',
                   controller: _commissionCtrl,
-                  hint: '0',
+                  showWords: false,
                 ),
               ),
               const SizedBox(width: EdSpacing.md),
               Expanded(
-                child: EdLabeledField.integer(
+                child: EdLabeledField.money(
                   label: 'الحسم',
                   controller: _discountCtrl,
-                  hint: '0',
+                  showWords: false,
                 ),
               ),
             ],

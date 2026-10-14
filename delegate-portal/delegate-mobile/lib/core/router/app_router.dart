@@ -60,78 +60,78 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         navigatorKey: _shellNavigatorKey,
         builder: (context, state, child) => AdaptiveShell(child: child),
         routes: [
-          GoRoute(path: '/home', builder: (_, _) => const HomeScreen()),
+          GoRoute(path: '/home', pageBuilder: (_, state) => edShellPage(state, const HomeScreen())),
           GoRoute(
             path: '/accounts',
-            builder: (_, _) => const AccountsHubScreen(),
+            pageBuilder: (_, state) => edShellPage(state, const AccountsHubScreen()),
             routes: [
               GoRoute(
                 path: ':treeSeq/branches',
-                builder: (context, state) => AccountsHubScreen(
+                pageBuilder: (context, state) => edShellPage(state, AccountsHubScreen(
                   treeSeq: state.pathParameters['treeSeq'],
-                ),
+                )),
               ),
               GoRoute(
                 path: ':treeSeq/statement/:accSeq',
-                builder: (context, state) => AccountsHubScreen(
+                pageBuilder: (context, state) => edShellPage(state, AccountsHubScreen(
                   treeSeq: state.pathParameters['treeSeq'],
                   accSeq: state.pathParameters['accSeq'],
-                ),
+                )),
               ),
             ],
           ),
           GoRoute(
             path: '/invoice/:ref',
-            builder: (context, state) {
+            pageBuilder: (context, state) {
               final q = state.uri.queryParameters;
-              return InvoiceScreen(
+              return edShellPage(state, InvoiceScreen(
                 ref: Uri.decodeComponent(state.pathParameters['ref']!),
                 by: q['by'] ?? 'auto',
                 accSeq: q['acc'],
-              );
+              ));
             },
           ),
           GoRoute(
             path: '/shop',
-            builder: (_, _) => const ShopHubScreen(),
+            pageBuilder: (_, state) => edShellPage(state, const ShopHubScreen()),
             routes: [
               GoRoute(
                 path: ':branchId/sections',
-                builder: (context, state) => ShopHubScreen(
+                pageBuilder: (context, state) => edShellPage(state, ShopHubScreen(
                   branchId: int.parse(state.pathParameters['branchId']!),
-                ),
+                )),
               ),
               GoRoute(
                 path: ':branchId/sections/:sectionId/products',
-                builder: (context, state) => ShopHubScreen(
+                pageBuilder: (context, state) => edShellPage(state, ShopHubScreen(
                   branchId: int.parse(state.pathParameters['branchId']!),
                   sectionId: int.parse(state.pathParameters['sectionId']!),
-                ),
+                )),
               ),
             ],
           ),
           GoRoute(
             path: '/orders',
-            builder: (_, _) => const OrdersHubScreen(),
+            pageBuilder: (_, state) => edShellPage(state, const OrdersHubScreen()),
             routes: [
               GoRoute(
                 path: ':id',
-                builder: (context, state) => OrdersHubScreen(
+                pageBuilder: (context, state) => edShellPage(state, OrdersHubScreen(
                   orderId: int.parse(state.pathParameters['id']!),
-                ),
+                )),
               ),
             ],
           ),
-          GoRoute(path: '/reports', builder: (_, _) => const ReportsScreen()),
-          GoRoute(path: '/receipts', builder: (_, _) => const ReceiptsScreen()),
-          GoRoute(path: '/team', builder: (_, _) => const TeamScreen()),
-          GoRoute(path: '/customers', builder: (_, _) => const CustomersScreen()),
-          GoRoute(path: '/promotional-visits', builder: (_, _) => const PromotionalVisitsScreen()),
+          GoRoute(path: '/reports', pageBuilder: (_, state) => edShellPage(state, const ReportsScreen())),
+          GoRoute(path: '/receipts', pageBuilder: (_, state) => edShellPage(state, const ReceiptsScreen())),
+          GoRoute(path: '/team', pageBuilder: (_, state) => edShellPage(state, const TeamScreen())),
+          GoRoute(path: '/customers', pageBuilder: (_, state) => edShellPage(state, const CustomersScreen())),
+          GoRoute(path: '/promotional-visits', pageBuilder: (_, state) => edShellPage(state, const PromotionalVisitsScreen())),
           GoRoute(
             path: '/settings',
-            builder: (_, _) => const SettingsScreen(),
+            pageBuilder: (_, state) => edShellPage(state, const SettingsScreen()),
             routes: [
-              GoRoute(path: 'printer', builder: (_, _) => const PrinterSettingsScreen()),
+              GoRoute(path: 'printer', pageBuilder: (_, state) => edShellPage(state, const PrinterSettingsScreen())),
             ],
           ),
         ],

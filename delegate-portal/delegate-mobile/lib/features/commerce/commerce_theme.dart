@@ -4,7 +4,7 @@ import '../../core/theme/app_colors.dart';
 
 /// ألوان قسم المنتجات — فاتحة وأنيقة
 abstract final class EdCommerceTheme {
-  static const pageBg = Colors.white;
+  static const pageBg = AppColors.bg;
   static const card = AppColors.surface;
   static const cardTint = AppColors.surfaceAlt;
   static const line = AppColors.border;

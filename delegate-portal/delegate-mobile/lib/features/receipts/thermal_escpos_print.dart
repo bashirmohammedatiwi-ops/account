@@ -4,7 +4,6 @@ import 'dart:ui' as ui;
 import 'package:dio/dio.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:image/image.dart' as img;
 
 import '../../models/models.dart';
@@ -21,20 +20,11 @@ const _kRasterScale = 2;
 
 CapabilityProfile? _profileCache;
 final _generators = <int, Generator>{};
-bool _fontsReady = false;
 
-Future<void> _ensurePrintFonts() async {
-  if (_fontsReady) return;
-  await GoogleFonts.pendingFonts([
-    GoogleFonts.cairo(fontWeight: FontWeight.w500),
-    GoogleFonts.cairo(fontWeight: FontWeight.w600),
-    GoogleFonts.cairo(fontWeight: FontWeight.w700),
-  ]);
-  _fontsReady = true;
-}
+// خط Cairo مضمَّن في التطبيق (assets/fonts) — الطباعة تعمل دون إنترنت.
 
 TextStyle _cairoStyle(double size, {bool bold = false, bool muted = false}) {
-  return GoogleFonts.cairo(
+  return TextStyle(fontFamily: 'Cairo', 
     fontSize: size,
     fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
     color: muted ? const Color(0xFF475569) : Colors.black,
@@ -89,10 +79,18 @@ img.Image _trimWhitespace(img.Image src, {int threshold = 248}) {
     return false;
   }
 
-  while (top < bottom && !rowHasInk(top)) top++;
-  while (bottom > top && !rowHasInk(bottom)) bottom--;
-  while (left < right && !colHasInk(left)) left++;
-  while (right > left && !colHasInk(right)) right--;
+  while (top < bottom && !rowHasInk(top)) {
+    top++;
+  }
+  while (bottom > top && !rowHasInk(bottom)) {
+    bottom--;
+  }
+  while (left < right && !colHasInk(left)) {
+    left++;
+  }
+  while (right > left && !colHasInk(right)) {
+    right--;
+  }
 
   if (right <= left || bottom <= top) return src;
   return img.copyCrop(src, x: left, y: top, width: right - left + 1, height: bottom - top + 1);
@@ -144,7 +142,6 @@ Future<img.Image?> _rasterText(
   required bool italic,
   required int paperWidthDots,
 }) async {
-  await _ensurePrintFonts();
   final trimmed = text.trim();
   if (trimmed.isEmpty) return null;
 
@@ -200,7 +197,6 @@ Future<img.Image?> _rasterPairRow(
   required double valueFont,
   required int paperWidthDots,
 }) async {
-  await _ensurePrintFonts();
   final labelPainter = TextPainter(
     text: TextSpan(text: label, style: _cairoStyle(labelFont, muted: true)),
     textDirection: TextDirection.rtl,
@@ -255,14 +251,13 @@ Future<img.Image?> _rasterBadge(
   required double fontSize,
   required int paperWidthDots,
 }) async {
-  await _ensurePrintFonts();
   final trimmed = text.trim();
   if (trimmed.isEmpty) return null;
 
   final painter = TextPainter(
     text: TextSpan(
       text: trimmed,
-      style: GoogleFonts.cairo(fontSize: fontSize, fontWeight: FontWeight.w700, color: Colors.white, height: 1.2),
+      style: TextStyle(fontFamily: 'Cairo', fontSize: fontSize, fontWeight: FontWeight.w700, color: Colors.white, height: 1.2),
     ),
     textDirection: _looksArabic(trimmed) ? TextDirection.rtl : TextDirection.ltr,
     textAlign: TextAlign.center,
@@ -309,14 +304,13 @@ Future<img.Image?> _rasterAmountBox(
   required double labelFont,
   required int paperWidthDots,
 }) async {
-  await _ensurePrintFonts();
   if (value.trim().isEmpty) return null;
 
   TextPainter build(String text, double size, FontWeight weight) {
     final p = TextPainter(
       text: TextSpan(
         text: text,
-        style: GoogleFonts.cairo(fontSize: size, fontWeight: weight, color: Colors.black, height: 1.2),
+        style: TextStyle(fontFamily: 'Cairo', fontSize: size, fontWeight: weight, color: Colors.black, height: 1.2),
       ),
       textDirection: _looksArabic(text) ? TextDirection.rtl : TextDirection.ltr,
       textAlign: TextAlign.center,
@@ -374,11 +368,10 @@ Future<img.Image?> _rasterAmountBox(
 
 /// سطر توقيع الزبون.
 Future<img.Image?> _rasterSignature(String label, int paperWidthDots) async {
-  await _ensurePrintFonts();
   final painter = TextPainter(
     text: TextSpan(
       text: label,
-      style: GoogleFonts.cairo(fontSize: 15, fontWeight: FontWeight.w600, color: const Color(0xFF334155), height: 1.2),
+      style: TextStyle(fontFamily: 'Cairo', fontSize: 15, fontWeight: FontWeight.w600, color: const Color(0xFF334155), height: 1.2),
     ),
     textDirection: TextDirection.rtl,
     maxLines: 1,
@@ -542,7 +535,6 @@ Future<List<int>> buildEscPosBytesFromPayload(
   DeliveryReceiptPrintPayload payload, {
   String? serverUrl,
 }) async {
-  await _ensurePrintFonts();
   final paperMm = _normalizePaperMm(payload.paperMm);
   final paperWidthDots = _paperWidthDotsFor(paperMm);
   final generator = await _generatorFor(paperMm);

@@ -3,9 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_provider.dart';
-import '../../core/layout/breakpoints.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/adaptive_shell.dart';
+import '../../core/widgets/ed_kit.dart';
+import '../../core/widgets/ed_page_scroll.dart';
 import '../../models/models.dart';
 import 'commerce_screens.dart';
 import 'commerce_theme.dart';
@@ -23,18 +24,10 @@ class ShopBranchPickerScreen extends ConsumerWidget {
     Icons.inventory_2_outlined,
   ];
 
-  static const _tints = [
-    Color(0xFFEFF6FF),
-    Color(0xFFECFDF5),
-    Color(0xFFFFF7ED),
-    Color(0xFFFDF2F8),
-    Color(0xFFF5F3FF),
-    Color(0xFFE0F2FE),
-  ];
 
   static const _colors = [
     AppColors.moduleShop,
-    AppColors.accentTeal,
+    AppColors.moduleAccounts,
     AppColors.warning,
     AppColors.modulePromo,
     AppColors.moduleOrders,
@@ -67,7 +60,6 @@ class ShopBranchPickerScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final branchesAsync = ref.watch(catalogBranchesProvider);
-    final layout = EdLayout.of(context);
 
     return AppPage(
       title: 'المنتجات',
@@ -85,177 +77,30 @@ class ShopBranchPickerScreen extends ConsumerWidget {
               return const EmptyState(message: 'لا توجد أقسام متاحة', icon: Icons.inventory_2_outlined);
             }
 
-            return CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-                    child: Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: AppColors.borderLight),
-                        boxShadow: AppColors.softShadow,
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 52,
-                            height: 52,
-                            decoration: BoxDecoration(
-                              color: AppColors.surface,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: EdCommerceTheme.accent.withValues(alpha: 0.15)),
-                            ),
-                            child: const Icon(Icons.category_rounded, color: EdCommerceTheme.accent, size: 28),
-                          ),
-                          const SizedBox(width: 14),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'ما القسم الذي تريد العمل عليه؟',
-                                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  'بعد الاختيار تظهر المنتجات والأقسام الفرعية',
-                                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.muted),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+            return ListView(
+              padding: EdgeInsets.fromLTRB(EdContent.hPad(context), 20, EdContent.hPad(context), EdPageInsets.bottom(context, extra: 20)),
+              children: [
+                const EdSectionTitle(
+                  title: 'اختر القسم الرئيسي',
+                  subtitle: 'بعد الاختيار تظهر الأقسام الفرعية والمنتجات',
                 ),
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(20, 0, 20, layout.isPhone ? 100 : 24),
-                  sliver: SliverGrid(
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: layout.isDesktop ? 3 : layout.isTablet ? 2 : 2,
-                      crossAxisSpacing: 14,
-                      mainAxisSpacing: 14,
-                      childAspectRatio: layout.isTablet ? 1.05 : 0.85,
-                    ),
-                    delegate: SliverChildBuilderDelegate(
-                      (context, i) {
-                        final b = branches[i];
-                        final color = _colors[i % _colors.length];
-                        final tint = _tints[i % _tints.length];
-                        final icon = _icons[i % _icons.length];
-                        return _BranchCard(
-                          branch: b,
-                          color: color,
-                          tint: tint,
-                          icon: icon,
-                          onTap: () => _openBranch(context, ref, b),
-                        );
-                      },
-                      childCount: branches.length,
-                    ),
-                  ),
+                EdResponsiveGrid(
+                  minItemWidth: 260,
+                  maxColumns: 3,
+                  children: [
+                    for (var i = 0; i < branches.length; i++)
+                      EdActionTile(
+                        icon: _icons[i % _icons.length],
+                        color: _colors[i % _colors.length],
+                        title: branches[i].name,
+                        subtitle: (branches[i].description ?? '').trim().isNotEmpty ? branches[i].description : 'فتح القسم',
+                        onTap: () => _openBranch(context, ref, branches[i]),
+                      ),
+                  ],
                 ),
               ],
             );
           },
-        ),
-      ),
-    );
-  }
-}
-
-class _BranchCard extends StatelessWidget {
-  const _BranchCard({
-    required this.branch,
-    required this.color,
-    required this.tint,
-    required this.icon,
-    required this.onTap,
-  });
-
-  final CatalogBranch branch;
-  final Color color;
-  final Color tint;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(24),
-        child: Ink(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.borderLight),
-            boxShadow: AppColors.softShadow,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                height: 4,
-                color: color,
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 56,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          color: tint,
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: color.withValues(alpha: 0.12)),
-                        ),
-                        child: Icon(icon, color: color, size: 28),
-                      ),
-                      const Spacer(),
-                      Text(
-                        branch.name,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Color(0xFF1E293B), height: 1.3),
-                      ),
-                      if (branch.description != null && branch.description!.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          branch.description!,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Text('دخول', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: color)),
-                          const Spacer(),
-                          Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(color: tint, borderRadius: BorderRadius.circular(10)),
-                            child: Icon(Icons.arrow_back_ios_new_rounded, size: 14, color: color),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );

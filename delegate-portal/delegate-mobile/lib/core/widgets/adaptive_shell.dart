@@ -5,180 +5,139 @@ import 'package:go_router/go_router.dart';
 
 import '../auth/auth_provider.dart';
 import '../layout/breakpoints.dart';
-import '../navigation/ed_page_transition.dart';
-import '../offline/offline_banner.dart';
+import '../offline/sync_center.dart';
 import '../theme/app_colors.dart';
+import '../../features/receipts/receipts_hub.dart';
 import '../../features/team/team_hub.dart';
 import 'ed_components.dart';
 import 'ed_page_background.dart';
 import 'ed_page_scroll.dart';
 import 'phone_ui.dart';
 
+/// عنصر تنقل في الشريط الجانبي / السفلي.
 class _NavItem {
-  const _NavItem({required this.icon, required this.label, required this.path, this.isReceipt = false});
+  const _NavItem({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    required this.path,
+    this.section = 0,
+    this.badge,
+  });
 
   final IconData icon;
+  final IconData activeIcon;
   final String label;
   final String path;
-  final bool isReceipt;
+  /// 0: العمل اليومي · 1: الميدان · 2: أخرى
+  final int section;
+  final String? badge;
 }
 
-const _tabletNavItemsBase = [
-  _NavItem(icon: Icons.home_rounded, label: 'الرئيسية', path: '/home'),
-  _NavItem(icon: Icons.menu_book_rounded, label: 'الحسابات', path: '/accounts'),
-  _NavItem(icon: Icons.inventory_2_outlined, label: 'المنتجات', path: '/shop'),
-  _NavItem(icon: Icons.shopping_bag_outlined, label: 'الطلبات', path: '/orders'),
-  _NavItem(icon: Icons.receipt_long_rounded, label: 'سند قبض', path: '/receipts', isReceipt: true),
-  _NavItem(icon: Icons.person_add_alt_1_rounded, label: 'زبون جديد', path: '/customers'),
-  _NavItem(icon: Icons.bar_chart_rounded, label: 'التقارير', path: '/reports'),
-  _NavItem(icon: Icons.settings_outlined, label: 'الإعدادات', path: '/settings'),
-];
+const _sectionTitles = ['العمل اليومي', 'الميدان والفريق', 'أخرى'];
 
-List<_NavItem> _tabletNavItems(WidgetRef ref) {
+String? _countBadge(int n) => n > 0 ? (n > 99 ? '99+' : '$n') : null;
+
+List<_NavItem> _navItems(WidgetRef ref) {
   final agent = ref.watch(authProvider.select((s) => s.agent));
   final secondary = agent?.isSecondary ?? false;
   final hasTeam = ref.watch(hasTeamProvider);
-  final items = <_NavItem>[];
-  for (final item in _tabletNavItemsBase) {
-    if (item.isReceipt) {
-      items.add(_NavItem(icon: item.icon, label: secondary ? 'وصل قبض' : 'سند قبض', path: item.path, isReceipt: true));
-      if (hasTeam) {
-        items.add(const _NavItem(icon: Icons.groups_rounded, label: 'الفريق', path: '/team'));
-      }
-    } else {
-      items.add(item);
-    }
-  }
-  return items;
+  final deliveries = ref.watch(deliveriesListNotifierProvider).valueOrNull ?? const [];
+  final receiptBadge = secondary
+      ? deliveries.where((d) => d.status == 'issued' && !d.handoverReceived).length
+      : deliveries.where((d) => d.canCreateReceipt).length;
+  final teamBadge = hasTeam
+      ? (ref.watch(teamOverviewProvider).valueOrNull?.totalPendingHandoverCount ?? 0)
+      : 0;
+
+  return [
+    const _NavItem(icon: Icons.space_dashboard_outlined, activeIcon: Icons.space_dashboard_rounded, label: 'الرئيسية', path: '/home'),
+    _NavItem(
+      icon: Icons.receipt_long_outlined,
+      activeIcon: Icons.receipt_long_rounded,
+      label: secondary ? 'وصل قبض' : 'سند قبض',
+      path: '/receipts',
+      badge: _countBadge(receiptBadge),
+    ),
+    const _NavItem(icon: Icons.menu_book_outlined, activeIcon: Icons.menu_book_rounded, label: 'الحسابات', path: '/accounts'),
+    const _NavItem(icon: Icons.inventory_2_outlined, activeIcon: Icons.inventory_2_rounded, label: 'المنتجات', path: '/shop'),
+    const _NavItem(icon: Icons.shopping_bag_outlined, activeIcon: Icons.shopping_bag_rounded, label: 'الطلبات', path: '/orders'),
+    if (hasTeam)
+      _NavItem(
+        icon: Icons.groups_outlined,
+        activeIcon: Icons.groups_rounded,
+        label: 'الفريق',
+        path: '/team',
+        section: 1,
+        badge: _countBadge(teamBadge),
+      ),
+    const _NavItem(icon: Icons.person_add_alt_outlined, activeIcon: Icons.person_add_alt_1_rounded, label: 'زبون جديد', path: '/customers', section: 1),
+    const _NavItem(icon: Icons.campaign_outlined, activeIcon: Icons.campaign_rounded, label: 'زيارات ترويجية', path: '/promotional-visits', section: 1),
+    const _NavItem(icon: Icons.insights_outlined, activeIcon: Icons.insights_rounded, label: 'التقارير', path: '/reports', section: 2),
+  ];
 }
 
-String _receiptNavLabel(WidgetRef ref) {
-  final secondary = ref.read(authProvider.select((s) => s.agent?.isSecondary ?? false));
-  return secondary ? 'وصل قبض' : 'سند قبض';
-}
+const _settingsItem = _NavItem(icon: Icons.settings_outlined, activeIcon: Icons.settings_rounded, label: 'الإعدادات', path: '/settings', section: 2);
 
-const _phoneNavItems = [
-  _NavItem(icon: Icons.home_rounded, label: 'الرئيسية', path: '/home'),
-  _NavItem(icon: Icons.menu_book_rounded, label: 'الحسابات', path: '/accounts'),
-  _NavItem(icon: Icons.inventory_2_outlined, label: 'المنتجات', path: '/shop'),
-  _NavItem(icon: Icons.shopping_bag_outlined, label: 'الطلبات', path: '/orders'),
-];
+bool _matches(String location, String path) => location == path || location.startsWith('$path/');
 
-const _moreRoutes = ['/receipts', '/team', '/customers', '/promotional-visits', '/reports', '/settings'];
-
-int _tabletSelectedIndex(String location, List<_NavItem> items) {
-  for (var i = items.length - 1; i >= 0; i--) {
-    final p = items[i].path;
-    if (location == p || location.startsWith('$p/')) return i;
-  }
-  return 0;
-}
+/// المسارات الظاهرة في الشريط السفلي للهاتف (الباقي تحت «المزيد»).
+const _phoneDockPaths = ['/home', '/accounts', '/receipts', '/shop'];
 
 int _phoneSelectedIndex(String location) {
-  for (var i = 0; i < _phoneNavItems.length; i++) {
-    final p = _phoneNavItems[i].path;
-    if (location == p || location.startsWith('$p/')) return i;
+  for (var i = 0; i < _phoneDockPaths.length; i++) {
+    if (_matches(location, _phoneDockPaths[i])) return i;
   }
-  for (final p in _moreRoutes) {
-    if (location == p || location.startsWith('$p/')) return _phoneNavItems.length;
-  }
-  if (location.startsWith('/invoice')) return _phoneNavItems.length;
-  return 0;
+  return _phoneDockPaths.length;
 }
 
 void showMoreNavSheet(BuildContext context, WidgetRef ref) {
-  final receiptLabel = _receiptNavLabel(ref);
-  final agent = ref.read(authProvider.select((s) => s.agent));
-  final showTeam = ref.watch(hasTeamProvider);
   HapticFeedback.selectionClick();
+  final items = [..._navItems(ref).where((i) => !_phoneDockPaths.contains(i.path)), _settingsItem];
   showModalBottomSheet<void>(
     context: context,
     useSafeArea: true,
     isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (ctx) => Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        boxShadow: AppColors.elevatedShadow,
-      ),
+    builder: (ctx) => Directionality(
+      textDirection: TextDirection.rtl,
       child: SafeArea(
         top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 10),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(99)),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 18, 24, 8),
-              child: Row(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 14),
+                  decoration: BoxDecoration(color: AppColors.borderStrong, borderRadius: BorderRadius.circular(99)),
+                ),
+              ),
+              const _SidebarAgentCard(compact: false),
+              const SizedBox(height: 12),
+              GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 3,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                childAspectRatio: 1.15,
                 children: [
-                  const Expanded(
-                    child: Text('المزيد', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.navy)),
-                  ),
-                  if ((agent?.delegateRoleLabel ?? '').isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: (agent!.isSecondary ? AppColors.warning : AppColors.accentTeal).withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        agent.delegateRoleLabel,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: agent.isSecondary ? AppColors.warning : AppColors.accentTeal,
-                        ),
-                      ),
+                  for (final item in items)
+                    _MoreNavCard(
+                      item: item,
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        context.go(item.path);
+                      },
                     ),
                 ],
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 1.42,
-                children: [
-                  _MoreNavCard(icon: Icons.receipt_long_rounded, label: receiptLabel, color: AppColors.moduleReceipts, onTap: () {
-                    Navigator.pop(ctx);
-                    context.go('/receipts');
-                  }),
-                  if (showTeam)
-                    _MoreNavCard(icon: Icons.groups_rounded, label: 'متابعة الفريق', color: AppColors.accentBlue, onTap: () {
-                      Navigator.pop(ctx);
-                      context.go('/team');
-                    }),
-                  _MoreNavCard(icon: Icons.person_add_alt_1_rounded, label: 'زبون جديد', color: AppColors.moduleCustomers, onTap: () {
-                    Navigator.pop(ctx);
-                    context.go('/customers');
-                  }),
-                  _MoreNavCard(icon: Icons.campaign_rounded, label: 'الزيادات الترويجية', color: AppColors.modulePromo, onTap: () {
-                    Navigator.pop(ctx);
-                    context.go('/promotional-visits');
-                  }),
-                  _MoreNavCard(icon: Icons.bar_chart_rounded, label: 'التقارير', color: AppColors.moduleReports, onTap: () {
-                    Navigator.pop(ctx);
-                    context.go('/reports');
-                  }),
-                  _MoreNavCard(icon: Icons.settings_outlined, label: 'الإعدادات', color: AppColors.navy, onTap: () {
-                    Navigator.pop(ctx);
-                    context.go('/settings');
-                  }),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
+            ],
+          ),
         ),
       ),
     ),
@@ -186,45 +145,50 @@ void showMoreNavSheet(BuildContext context, WidgetRef ref) {
 }
 
 class _MoreNavCard extends StatelessWidget {
-  const _MoreNavCard({required this.icon, required this.label, required this.color, required this.onTap});
+  const _MoreNavCard({required this.item, required this.onTap});
 
-  final IconData icon;
-  final String label;
-  final Color color;
+  final _NavItem item;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.surfaceAlt,
-      borderRadius: BorderRadius.circular(AppColors.radiusLg),
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(AppColors.radius),
       child: InkWell(
         onTap: () {
           HapticFeedback.selectionClick();
           onTap();
         },
-        borderRadius: BorderRadius.circular(AppColors.radiusLg),
+        borderRadius: BorderRadius.circular(AppColors.radius),
         child: Ink(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppColors.radiusLg),
-            border: Border.all(color: AppColors.borderLight),
-            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppColors.radius),
+            border: Border.all(color: AppColors.border),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Stack(
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.borderLight),
+              Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(color: AppColors.primarySoft, borderRadius: BorderRadius.circular(12)),
+                      child: Icon(item.activeIcon, color: AppColors.primary, size: 22),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      item.label,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.text, fontSize: 12.5),
+                    ),
+                  ],
                 ),
-                child: Icon(icon, color: color, size: 24),
               ),
-              const SizedBox(height: 10),
-              Text(label, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.navy, fontSize: 12)),
+              if (item.badge != null) PositionedDirectional(top: 8, end: 8, child: _NavBadge(text: item.badge!)),
             ],
           ),
         ),
@@ -233,7 +197,35 @@ class _MoreNavCard extends StatelessWidget {
   }
 }
 
-/// غلاف التطبيق — شريط جانبي على التابلت، شريط سفلي على الهاتف
+class _NavBadge extends StatelessWidget {
+  const _NavBadge({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: AppColors.danger,
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+          color: Colors.white,
+          height: 1.4,
+        ),
+      ),
+    );
+  }
+}
+
+/// غلاف التطبيق — شريط جانبي (يمين) على الآيباد، شريط سفلي على الهاتف.
 class AdaptiveShell extends ConsumerWidget {
   const AdaptiveShell({super.key, required this.child});
 
@@ -243,193 +235,133 @@ class AdaptiveShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final layout = EdLayout.of(context);
     final location = GoRouterState.of(context).matchedLocation;
-    final tabletItems = _tabletNavItems(ref);
+
+    if (layout.isWide) {
+      final expanded = layout.width >= EdLayout.sidebarExpandedMin;
+      return Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          backgroundColor: AppColors.bg,
+          body: Row(
+            children: [
+              _Sidebar(location: location, expanded: expanded),
+              Expanded(child: EdPageBackground(child: child)),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: EdPageBackground(
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              layout.isWide
-                  ? Row(
-                      children: [
-                        Expanded(
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 260),
-                            switchInCurve: Curves.easeOutCubic,
-                            switchOutCurve: Curves.easeIn,
-                            layoutBuilder: (current, previous) => Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                ...previous,
-                                if (current != null) current,
-                              ],
-                            ),
-                            transitionBuilder: edTabTransition,
-                            child: KeyedSubtree(
-                              key: ValueKey<String>(location),
-                              child: child,
-                            ),
-                          ),
-                        ),
-                        _TabletNavRail(selected: _tabletSelectedIndex(location, tabletItems), items: tabletItems),
-                      ],
-                    )
-                  : AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 260),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeIn,
-                      layoutBuilder: (current, previous) => Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          ...previous,
-                          if (current != null) current,
-                        ],
-                      ),
-                      transitionBuilder: edTabTransition,
-                      child: KeyedSubtree(
-                        key: ValueKey<String>(location),
-                        child: SizedBox.expand(child: child),
-                      ),
-                    ),
-              const Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: SafeArea(
-                  bottom: false,
-                  child: OfflineBanner(),
-                ),
-              ),
-            ],
-          ),
+        backgroundColor: AppColors.bg,
+        body: EdPageBackground(child: child),
+        bottomNavigationBar: EdPhoneDock(
+          selected: _phoneSelectedIndex(location),
+          moreBadge: _navItems(ref).where((i) => !_phoneDockPaths.contains(i.path) && i.badge != null).isNotEmpty,
+          receiptLabel: _navItems(ref).firstWhere((i) => i.path == '/receipts').label,
+          receiptBadge: _navItems(ref).firstWhere((i) => i.path == '/receipts').badge,
+          onSelect: (i) {
+            if (i == _phoneDockPaths.length) {
+              showMoreNavSheet(context, ref);
+            } else {
+              context.go(_phoneDockPaths[i]);
+            }
+          },
         ),
-        bottomNavigationBar: layout.isWide
-            ? null
-            : EdPhoneDock(
-                selected: _phoneSelectedIndex(location),
-                onSelect: (i) {
-                  if (i == _phoneNavItems.length) {
-                    showMoreNavSheet(context, ref);
-                  } else {
-                    context.go(_phoneNavItems[i].path);
-                  }
-                },
-              ),
       ),
     );
   }
 }
 
-class _TabletNavRail extends StatelessWidget {
-  const _TabletNavRail({required this.selected, required this.items});
+class _Sidebar extends ConsumerWidget {
+  const _Sidebar({required this.location, required this.expanded});
 
-  final int selected;
-  final List<_NavItem> items;
+  final String location;
+  final bool expanded;
 
   @override
-  Widget build(BuildContext context) {
-    final layout = EdLayout.of(context);
-    final railWidth = layout.isDesktop ? 108.0 : 96.0;
-    return Container(
-      width: railWidth,
-      decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.98),
-        border: Border(left: BorderSide(color: AppColors.borderLight)),
-        boxShadow: [
-          BoxShadow(color: AppColors.navy.withValues(alpha: 0.06), blurRadius: 20, offset: const Offset(-4, 0)),
-        ],
+  Widget build(BuildContext context, WidgetRef ref) {
+    final items = _navItems(ref);
+    final width = expanded ? 256.0 : 92.0;
+
+    final children = <Widget>[];
+    var lastSection = -1;
+    for (final item in items) {
+      if (item.section != lastSection) {
+        lastSection = item.section;
+        if (expanded) {
+          children.add(Padding(
+            padding: const EdgeInsets.fromLTRB(14, 16, 14, 6),
+            child: Text(
+              _sectionTitles[item.section],
+              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.mutedLight, letterSpacing: 0.2),
+            ),
+          ));
+        } else if (children.isNotEmpty) {
+          children.add(const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 22, vertical: 8),
+            child: Divider(height: 1),
+          ));
+        }
+      }
+      children.add(_SidebarItem(item: item, active: _matches(location, item.path), expanded: expanded));
+    }
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      width: width,
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: BorderDirectional(end: BorderSide(color: AppColors.border)),
       ),
       child: SafeArea(
+        right: false,
+        left: false,
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const SizedBox(height: 14),
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                gradient: AppColors.brandGradient,
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(color: AppColors.accentTeal.withValues(alpha: 0.25), blurRadius: 12, offset: const Offset(0, 4)),
-                ],
-              ),
-              alignment: Alignment.center,
-              child: const Text('E', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 20)),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                itemCount: items.length,
-                itemBuilder: (context, i) {
-                  final item = items[i];
-                  final active = i == selected;
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    child: Material(
-                      color: Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: () {
-                          HapticFeedback.selectionClick();
-                          context.go(item.path);
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: active ? AppColors.accentTeal.withValues(alpha: 0.1) : Colors.transparent,
-                            borderRadius: BorderRadius.circular(14),
-                            border: active ? Border.all(color: AppColors.accentTeal.withValues(alpha: 0.25)) : null,
-                          ),
-                          child: Stack(
+            Padding(
+              padding: EdgeInsets.fromLTRB(expanded ? 18 : 0, 14, expanded ? 18 : 0, 6),
+              child: expanded
+                  ? Row(
+                      children: [
+                        const _BrandMark(size: 38),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              if (active)
-                                Positioned(
-                                  right: 0,
-                                  top: 10,
-                                  bottom: 10,
-                                  child: Container(
-                                    width: 3,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.accentTeal,
-                                      borderRadius: BorderRadius.circular(99),
-                                    ),
-                                  ),
-                                ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 4),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(item.icon, size: 23, color: active ? AppColors.accentTeal : AppColors.muted),
-                                    const SizedBox(height: 5),
-                                    Text(
-                                      item.label,
-                                      textAlign: TextAlign.center,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 9.5,
-                                        fontWeight: FontWeight.w800,
-                                        height: 1.2,
-                                        color: active ? AppColors.navy : AppColors.muted,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                              Text('Edari', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.text, height: 1.1)),
+                              Text('بوابة المندوب', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted)),
                             ],
                           ),
                         ),
-                      ),
-                    ),
-                  );
-                },
+                      ],
+                    )
+                  : const Center(child: _BrandMark(size: 42)),
+            ),
+            if (expanded)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(12, 10, 12, 0),
+                child: _SidebarAgentCard(compact: false),
               ),
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(expanded ? 10 : 8, 4, expanded ? 10 : 8, 8),
+                children: children,
+              ),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: EdgeInsets.fromLTRB(expanded ? 10 : 8, 8, expanded ? 10 : 8, 4),
+              child: _SidebarItem(item: _settingsItem, active: _matches(location, '/settings'), expanded: expanded),
+            ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(expanded ? 12 : 8, 4, expanded ? 12 : 8, 12),
+              child: _SidebarSyncCard(expanded: expanded),
             ),
           ],
         ),
@@ -438,6 +370,157 @@ class _TabletNavRail extends StatelessWidget {
   }
 }
 
+class _BrandMark extends StatelessWidget {
+  const _BrandMark({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      padding: EdgeInsets.all(size * 0.16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(size * 0.28),
+        border: Border.all(color: AppColors.border),
+        boxShadow: AppColors.softShadow,
+      ),
+      child: Image.asset('assets/logo.png', fit: BoxFit.contain),
+    );
+  }
+}
+
+class _SidebarAgentCard extends ConsumerWidget {
+  const _SidebarAgentCard({required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final agent = ref.watch(authProvider.select((s) => s.agent));
+    final name = agent?.name ?? 'مندوب';
+    final role = agent?.delegateRoleLabel ?? '';
+    final initial = name.trim().isNotEmpty ? name.trim().characters.first : 'م';
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(AppColors.radius),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 18,
+            backgroundColor: AppColors.primarySoft,
+            child: Text(initial, style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.primary)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: AppColors.text)),
+                if (role.isNotEmpty)
+                  Text(role, maxLines: 1, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.muted)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SidebarItem extends StatelessWidget {
+  const _SidebarItem({required this.item, required this.active, required this.expanded});
+
+  final _NavItem item;
+  final bool active;
+  final bool expanded;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = active ? AppColors.primary : AppColors.textSecondary;
+    final content = expanded
+        ? Row(
+            children: [
+              Icon(active ? item.activeIcon : item.icon, size: 21, color: fg),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  item.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 14, fontWeight: active ? FontWeight.w800 : FontWeight.w600, color: active ? AppColors.text : AppColors.textSecondary),
+                ),
+              ),
+              if (item.badge != null) _NavBadge(text: item.badge!),
+            ],
+          )
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(active ? item.activeIcon : item.icon, size: 23, color: fg),
+                  if (item.badge != null)
+                    PositionedDirectional(top: -6, end: -14, child: _NavBadge(text: item.badge!)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                item.label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 10.5, height: 1.2, fontWeight: active ? FontWeight.w800 : FontWeight.w600, color: active ? AppColors.text : AppColors.muted),
+              ),
+            ],
+          );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Tooltip(
+        message: expanded ? '' : item.label,
+        child: Material(
+          color: active ? AppColors.primarySoft : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppColors.radiusSm),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(AppColors.radiusSm),
+            onTap: () {
+              HapticFeedback.selectionClick();
+              context.go(item.path);
+            },
+            child: Padding(
+              padding: expanded ? const EdgeInsets.symmetric(horizontal: 12, vertical: 10) : const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+              child: content,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SidebarSyncCard extends ConsumerWidget {
+  const _SidebarSyncCard({required this.expanded});
+
+  final bool expanded;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!expanded) {
+      return const Center(child: SyncStatusChip(iconOnly: true));
+    }
+    return const Align(alignment: AlignmentDirectional.centerStart, child: SyncStatusChip());
+  }
+}
+
+/// صفحة داخل الغلاف — رأس موحّد (يحترم شريط الحالة) + محتوى.
 class AppPage extends StatelessWidget {
   const AppPage({
     super.key,
@@ -473,14 +556,10 @@ class AppPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final router = GoRouter.of(context);
     final layout = EdLayout.of(context);
-    final canPop = showBack || router.canPop();
     final back = onBack ?? () => router.pop();
-    final hideBackOnTablet = layout.isWide && !showBack;
-    final phoneBack = shouldShowPhoneBack(context, showBack: showBack);
 
     if (layout.isPhone) {
-      final loc = GoRouterState.of(context).matchedLocation;
-      final tabRoot = isPhoneTabRoot(loc);
+      final phoneBack = shouldShowPhoneBack(context, showBack: showBack);
       final useFloatingHeader = unifiedScroll && showNavBar;
 
       Widget body;
@@ -494,44 +573,51 @@ class AppPage extends StatelessWidget {
               snap: true,
               pinned: false,
               automaticallyImplyLeading: false,
-              backgroundColor: AppColors.surface.withValues(alpha: 0.92),
+              backgroundColor: AppColors.surface,
               surfaceTintColor: Colors.transparent,
-              shadowColor: AppColors.borderLight,
-              scrolledUnderElevation: 0.6,
+              shadowColor: AppColors.border,
+              scrolledUnderElevation: 0.5,
               elevation: 0,
-              toolbarHeight: tabRoot && !showBack ? 52 : 56,
-              title: Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.navy),
+              toolbarHeight: 56,
+              titleSpacing: phoneBack ? 0 : 16,
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.text),
+                  ),
+                  if ((subtitle ?? '').trim().isNotEmpty)
+                    Text(
+                      subtitle!.trim(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
+                    ),
+                ],
               ),
               leading: phoneBack
                   ? IconButton(
-                      icon: const Icon(Icons.arrow_forward_rounded, color: AppColors.navy),
+                      icon: const Icon(Icons.arrow_forward_rounded, color: AppColors.text),
                       onPressed: back,
                     )
                   : null,
-              actions: actions,
-              bottom: toolbar != null
-                  ? PreferredSize(
-                      preferredSize: const Size.fromHeight(52),
-                      child: Material(
-                        color: AppColors.surface.withValues(alpha: 0.92),
-                        child: toolbar!,
-                      ),
-                    )
-                  : null,
+              actions: [
+                ...?actions,
+                const SizedBox(width: 8),
+              ],
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(1),
+                child: Container(height: 1, color: AppColors.borderLight),
+              ),
             ),
-            if (subtitle != null && subtitle!.trim().isNotEmpty)
+            const SliverToBoxAdapter(child: OfflineStrip()),
+            if (toolbar != null)
               SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(EdSpacing.page, 0, EdSpacing.page, 8),
-                  child: Text(
-                    subtitle!,
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
-                  ),
-                ),
+                child: Material(color: AppColors.surface, child: toolbar!),
               ),
           ],
           body: child,
@@ -550,7 +636,8 @@ class AppPage extends StatelessWidget {
                 actions: actions,
                 compact: true,
               ),
-            if (toolbar != null) toolbar!,
+            const OfflineStrip(),
+            ?toolbar,
             Expanded(child: child),
           ],
         );
@@ -566,36 +653,32 @@ class AppPage extends StatelessWidget {
       );
     }
 
+    final canPop = showBack || router.canPop();
+    // على الآيباد: الشريط الجانبي يغني عن زر الرجوع في الصفحات الرئيسية.
+    final isRoot = isPhoneTabRoot(GoRouterState.of(context).matchedLocation);
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        appBar: useHeader
-            ? EdAppHeader(
-                title: title,
-                kicker: kicker,
-                subtitle: subtitle,
-                showBack: canPop && !hideBackOnTablet,
-                onBack: canPop ? back : null,
-                actions: actions,
-              )
-            : null,
         floatingActionButton: floatingActionButton,
         body: EdPageBackground(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (!useHeader && showNavBar)
+              if (showNavBar)
                 EdTabletPageChrome(
                   title: title,
                   subtitle: subtitle,
                   kicker: kicker,
-                  showBack: canPop && !hideBackOnTablet,
+                  showBack: canPop && showBack && !isRoot,
                   onBack: canPop ? back : null,
                   actions: actions,
                   large: layout.isDesktop,
-                ),
-              if (toolbar != null) toolbar!,
+                )
+              else
+                SizedBox(height: MediaQuery.paddingOf(context).top),
+              const OfflineStrip(),
+              ?toolbar,
               Expanded(child: child),
             ],
           ),
@@ -605,7 +688,7 @@ class AppPage extends StatelessWidget {
   }
 }
 
-/// رأس موحّد للآيباد والتابلت — عنوان واضح مع إجراءات.
+/// رأس موحّد للآيباد — يحترم شريط الحالة، عنوان واضح مع إجراءات.
 class EdTabletPageChrome extends StatelessWidget {
   const EdTabletPageChrome({
     super.key,
@@ -628,11 +711,12 @@ class EdTabletPageChrome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final top = MediaQuery.paddingOf(context).top;
     return Container(
-      padding: EdgeInsets.fromLTRB(large ? 28 : 20, 14, large ? 28 : 20, 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.85),
-        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+      padding: EdgeInsets.fromLTRB(large ? 28 : 24, top + 12, large ? 28 : 24, 14),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(bottom: BorderSide(color: AppColors.border)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -643,42 +727,52 @@ class EdTabletPageChrome extends StatelessWidget {
               tooltip: 'رجوع',
               onPressed: onBack!,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 14),
           ],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 if ((kicker ?? '').trim().isNotEmpty)
-                  Text(
-                    kicker!.trim(),
-                    style: TextStyle(fontSize: large ? 12 : 11, fontWeight: FontWeight.w700, color: AppColors.accentTeal),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Text(
+                      kicker!.trim(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary),
+                    ),
                   ),
                 Text(
                   title,
-                  maxLines: 2,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: large ? 26 : 22,
+                    fontSize: large ? 24 : 22,
                     fontWeight: FontWeight.w800,
-                    color: AppColors.navy,
-                    letterSpacing: -0.4,
-                    height: 1.1,
+                    color: AppColors.text,
+                    height: 1.2,
                   ),
                 ),
-                if ((subtitle ?? '').trim().isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle!.trim(),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: large ? 13 : 12, fontWeight: FontWeight.w600, color: AppColors.muted),
+                if ((subtitle ?? '').trim().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      subtitle!.trim(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.muted),
+                    ),
                   ),
-                ],
               ],
             ),
           ),
-          if (actions != null) ...actions!,
+          if (actions != null)
+            for (var i = 0; i < actions!.length; i++) ...[
+              if (i > 0) const SizedBox(width: 8),
+              actions![i],
+            ],
         ],
       ),
     );
@@ -695,28 +789,9 @@ class LoadingView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 64,
-            height: 64,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(AppColors.radiusLg),
-              border: Border.all(color: AppColors.borderLight),
-              boxShadow: AppColors.cardShadow,
-            ),
-            child: const CircularProgressIndicator(strokeWidth: 3, color: AppColors.accentTeal),
-          ),
-          const SizedBox(height: EdSpacing.lg),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppColors.surface.withValues(alpha: 0.8),
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: AppColors.borderLight),
-            ),
-            child: Text(message, style: const TextStyle(color: AppColors.muted, fontWeight: FontWeight.w700, fontSize: 13)),
-          ),
+          const SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 2.6)),
+          const SizedBox(height: 14),
+          Text(message, style: const TextStyle(color: AppColors.muted, fontWeight: FontWeight.w600, fontSize: 13)),
         ],
       ),
     );
@@ -729,37 +804,44 @@ class ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback? onRetry;
 
+  bool get _isOffline =>
+      message.contains('اتصال') || message.contains('الشبكة') || message.contains('نسخة محلية');
+
   @override
   Widget build(BuildContext context) {
+    final color = _isOffline ? AppColors.warning : AppColors.danger;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppColors.radiusXl),
-            border: Border.all(color: AppColors.borderLight),
-            boxShadow: AppColors.cardShadow,
-          ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: AppColors.dangerSoft,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.danger.withValues(alpha: 0.15)),
-                ),
-                child: const Icon(Icons.error_outline_rounded, size: 32, color: AppColors.danger),
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
+                child: Icon(_isOffline ? Icons.cloud_off_rounded : Icons.error_outline_rounded, size: 28, color: color),
               ),
-              const SizedBox(height: 16),
-              Text(message, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.navy)),
+              const SizedBox(height: 14),
+              Text(
+                _isOffline ? 'لا يوجد اتصال' : 'تعذّر التحميل',
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: AppColors.text),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.muted, height: 1.5),
+              ),
               if (onRetry != null) ...[
                 const SizedBox(height: 18),
-                EdPrimaryButton(label: 'إعادة المحاولة', onPressed: onRetry, fullWidth: false, gradient: false, icon: Icons.refresh_rounded),
+                OutlinedButton.icon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh_rounded, size: 19),
+                  label: const Text('إعادة المحاولة'),
+                ),
               ],
             ],
           ),
@@ -778,34 +860,19 @@ class StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? AppColors.accentTeal;
+    final c = color ?? AppColors.text;
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppColors.radius),
-        border: Border.all(color: AppColors.borderLight),
-        boxShadow: AppColors.softShadow,
-      ),
-      clipBehavior: Clip.antiAlias,
+      padding: const EdgeInsets.all(14),
+      decoration: AppColors.card(radius: AppColors.radius),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 28,
-            height: 4,
-            margin: const EdgeInsets.only(bottom: 10),
-            decoration: BoxDecoration(
-              color: c,
-              borderRadius: BorderRadius.circular(99),
-            ),
-          ),
-          Text(label, style: const TextStyle(fontSize: 11, color: AppColors.muted, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
+          Text(label, style: const TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
           Text(
             value,
             textDirection: TextDirection.ltr,
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: c),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: c, fontFeatures: const [FontFeature.tabularFigures()]),
           ),
         ],
       ),
@@ -814,43 +881,42 @@ class StatCard extends StatelessWidget {
 }
 
 class EmptyState extends StatelessWidget {
-  const EmptyState({super.key, required this.message, this.icon = Icons.inbox_outlined, this.subtitle});
+  const EmptyState({super.key, required this.message, this.icon = Icons.inbox_outlined, this.subtitle, this.action});
 
   final String message;
   final String? subtitle;
   final IconData icon;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(EdSpacing.xxl),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppColors.radiusXl),
-            border: Border.all(color: AppColors.borderLight),
-            boxShadow: AppColors.cardShadow,
-          ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 80,
-                height: 80,
+                width: 64,
+                height: 64,
                 decoration: BoxDecoration(
-                  color: AppColors.surfaceAlt,
-                  borderRadius: BorderRadius.circular(AppColors.radiusLg),
-                  border: Border.all(color: AppColors.borderLight),
+                  color: AppColors.surface,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.border),
                 ),
-                child: Icon(icon, size: 36, color: AppColors.muted),
+                child: Icon(icon, size: 28, color: AppColors.mutedLight),
               ),
-              const SizedBox(height: EdSpacing.lg),
-              Text(message, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: AppColors.navy)),
+              const SizedBox(height: 14),
+              Text(message, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: AppColors.text)),
               if (subtitle != null) ...[
-                const SizedBox(height: 8),
-                Text(subtitle!, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.muted, height: 1.4)),
+                const SizedBox(height: 6),
+                Text(subtitle!, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.muted, height: 1.5)),
+              ],
+              if (action != null) ...[
+                const SizedBox(height: 16),
+                action!,
               ],
             ],
           ),

@@ -7,7 +7,7 @@ String _branchSearchHaystack(BranchAccount branch) {
     branch.accountNum,
     branch.address,
     branch.pendingLabel,
-  ].where((part) => part != null && '$part'.trim().isNotEmpty).join(' ').toLowerCase();
+  ].where((part) => part != null && part.trim().isNotEmpty).join(' ').toLowerCase();
 }
 
 bool branchMatchesSearch(BranchAccount branch, String query) {

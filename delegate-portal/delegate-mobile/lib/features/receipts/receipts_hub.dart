@@ -73,12 +73,22 @@ class DeliveriesListNotifier extends AsyncNotifier<List<DeliveryReceipt>> {
   @override
   Future<List<DeliveryReceipt>> build() async {
     ref.watch(authProvider.select((s) => '${s.token ?? ''}:${s.agent?.id ?? ''}'));
+    // المحلي أولاً: يظهر فوراً ثم يُحدَّث من الخادم في الخلفية.
+    final cached = await withAuth(ref, () => ref.read(apiClientProvider).cacheOnly(
+          () => ref.read(apiClientProvider).getDeliveryReceipts(),
+        ));
+    if (cached != null && cached.isNotEmpty) {
+      Future.microtask(refresh);
+      return enrichDeliveriesForViewer(cached, ref.read(authProvider).agent);
+    }
     return _load();
   }
 
+  /// تحديث من الخادم — يُبقي البيانات الحالية معروضة، ولا يستبدلها بخطأ.
   Future<void> refresh() async {
     state = const AsyncLoading<List<DeliveryReceipt>>().copyWithPrevious(state);
-    state = await AsyncValue.guard(_load);
+    final next = await AsyncValue.guard(_load);
+    state = next.hasError && state.hasValue ? AsyncData(state.requireValue) : next;
   }
 
   void upsert(DeliveryReceipt receipt) {
@@ -108,12 +118,20 @@ class ReceiptsListNotifier extends AsyncNotifier<List<Receipt>> {
   @override
   Future<List<Receipt>> build() async {
     ref.watch(authProvider.select((s) => '${s.token ?? ''}:${s.agent?.id ?? ''}'));
+    final cached = await withAuth(ref, () => ref.read(apiClientProvider).cacheOnly(
+          () => ref.read(apiClientProvider).getReceipts(),
+        ));
+    if (cached != null && cached.isNotEmpty) {
+      Future.microtask(refresh);
+      return cached;
+    }
     return withAuth(ref, () => ref.read(apiClientProvider).getReceipts());
   }
 
   Future<void> refresh() async {
     state = const AsyncLoading<List<Receipt>>().copyWithPrevious(state);
-    state = await AsyncValue.guard(() => ref.read(apiClientProvider).getReceipts());
+    final next = await AsyncValue.guard(() => ref.read(apiClientProvider).getReceipts());
+    state = next.hasError && state.hasValue ? AsyncData(state.requireValue) : next;
   }
 
   void upsert(Receipt receipt) {

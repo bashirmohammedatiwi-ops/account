@@ -6,6 +6,7 @@ import '../theme/app_colors.dart';
 import '../utils/debounce.dart';
 import '../utils/branch_search.dart';
 import '../../models/models.dart';
+import '../layout/breakpoints.dart';
 import 'adaptive_shell.dart';
 
 /// اختيار شجرة ثم زبون — واجهة مميزة للهاتف والتابلت
@@ -14,6 +15,24 @@ Future<PickedCustomer?> showCustomerPicker(
   WidgetRef ref, {
   bool includePending = true,
 }) {
+  // آيباد: نافذة وسط الشاشة بدل لوح بطول الشاشة.
+  if (EdLayout.of(context).isWide) {
+    final h = MediaQuery.sizeOf(context).height;
+    return showDialog<PickedCustomer>(
+      context: context,
+      builder: (_) => Dialog(
+        insetPadding: const EdgeInsets.all(32),
+        clipBehavior: Clip.antiAlias,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: 560, maxHeight: h * 0.8, minHeight: h * 0.5),
+          child: Directionality(
+            textDirection: TextDirection.rtl,
+            child: _CustomerPickerSheet(ref: ref, includePending: includePending, inDialog: true),
+          ),
+        ),
+      ),
+    );
+  }
   return showModalBottomSheet<PickedCustomer>(
     context: context,
     isScrollControlled: true,
@@ -34,10 +53,11 @@ Future<BranchAccount?> pickBranchCustomer(
 }
 
 class _CustomerPickerSheet extends ConsumerStatefulWidget {
-  const _CustomerPickerSheet({required this.ref, required this.includePending});
+  const _CustomerPickerSheet({required this.ref, required this.includePending, this.inDialog = false});
 
   final WidgetRef ref;
   final bool includePending;
+  final bool inDialog;
 
   @override
   ConsumerState<_CustomerPickerSheet> createState() => _CustomerPickerSheetState();
@@ -74,12 +94,18 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
       _error = null;
     });
     try {
-      final trees = await ref.read(apiClientProvider).getTrees();
+      // المحلي أولاً — فوري حتى مع شبكة ضعيفة.
+      final api = ref.read(apiClientProvider);
+      final trees = await api.cacheOnly(() => api.getTrees()) ?? await api.getTrees();
       if (!mounted) return;
       setState(() {
         _trees = trees;
         _loading = false;
       });
+      // شجرة واحدة فقط: ننتقل مباشرة لاختيار الزبون.
+      if (trees.length == 1 && _tree == null) {
+        await _selectTree(trees.first);
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -98,9 +124,11 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
     });
     try {
       final api = ref.read(apiClientProvider);
-      final branches = widget.includePending
-          ? await api.getPickableCustomers(tree.seq)
-          : await api.getChildren(tree.seq);
+      Future<List<BranchAccount>> fetch() => widget.includePending
+          ? api.getPickableCustomers(tree.seq)
+          : api.getChildren(tree.seq);
+      final cached = await api.cacheOnly(fetch);
+      final branches = cached ?? await fetch();
       if (!mounted) return;
       setState(() {
         _branches = branches;
@@ -108,6 +136,13 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
         _remoteSearchActive = false;
         _pickableSearchActive = false;
       });
+      if (cached != null) {
+        // تحديث صامت من الخادم إن كان متاحاً.
+        fetch().then((fresh) {
+          if (!mounted || _tree?.seq != tree.seq || _search.trim().isNotEmpty) return;
+          setState(() => _branches = fresh);
+        }).catchError((_) {});
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -194,22 +229,24 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
     final maxH = MediaQuery.sizeOf(context).height * 0.92;
 
     return Padding(
-      padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top > 0 ? 8 : 24),
+      padding: EdgeInsets.only(top: widget.inDialog ? 0 : (MediaQuery.paddingOf(context).top > 0 ? 8 : 24)),
       child: Container(
         constraints: BoxConstraints(maxHeight: maxH),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: widget.inDialog ? null : const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 10),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(99)),
-            ),
+            if (!widget.inDialog) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(99)),
+              ),
+            ],
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
               child: Row(
@@ -292,7 +329,7 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
       itemCount: trees.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (context, i) {
         final t = trees[i];
         return Material(
@@ -348,7 +385,7 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
       itemCount: branches.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      separatorBuilder: (_, _) => const SizedBox(height: 6),
       itemBuilder: (context, i) {
         final b = branches[i];
         return Material(
@@ -361,15 +398,15 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
               Navigator.pop(context, PickedCustomer(customer: b, tree: _tree!));
             },
             child: Container(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: AppColors.border),
               ),
               child: Row(
                 children: [
                   CircleAvatar(
-                    radius: 22,
+                    radius: 19,
                     backgroundColor: AppColors.accentSoft,
                     child: Text(
                       b.name1.isNotEmpty ? b.name1.characters.first : 'ز',
@@ -385,11 +422,14 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
                         if (b.isPending)
                           Text(
                             'بانتظار الترحيل${b.pendingLabel != null ? ' · ${b.pendingLabel}' : ''}',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.warning),
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.warning),
                           ),
-                        if (b.address != null && b.address!.isNotEmpty)
-                          Text(b.address!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
-                        Text(b.accountNum, textDirection: TextDirection.ltr, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.moduleAccounts)),
+                        Text(
+                          [b.accountNum, if ((b.address ?? '').trim().isNotEmpty) b.address!.trim()].join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
+                        ),
                       ],
                     ),
                   ),

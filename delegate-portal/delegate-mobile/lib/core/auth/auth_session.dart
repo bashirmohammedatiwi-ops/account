@@ -14,3 +14,15 @@ Future<T> withAuth<T>(Ref ref, Future<T> Function() request) async {
   }
   return request();
 }
+
+/// نسخة Stream من [withAuth] — تُستخدم مع القراءة «المحلي أولاً ثم الخادم».
+Stream<T> withAuthStream<T>(Ref ref, Stream<T> Function() request) async* {
+  ref.watch(authProvider.select((s) => '${s.loading}:${s.token ?? ''}:${s.agent?.id ?? ''}'));
+
+  await ref.read(authProvider.notifier).waitUntilReady();
+  final auth = ref.read(authProvider);
+  if (!auth.isAuthenticated) {
+    throw ApiException('يرجى تسجيل الدخول', statusCode: 401);
+  }
+  yield* request();
+}

@@ -73,7 +73,7 @@ class StatementScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return AppPage(
       title: 'كشف الحساب',
-      kicker: 'Edari · الكشف',
+      kicker: 'كشوف الحساب',
       subtitle: treeName != null ? 'شجرة $treeName' : '',
       showBack: true,
       onBack: () => context.go('/accounts/$treeSeq/branches'),

@@ -160,6 +160,68 @@ class OfflineDb {
     return rows;
   }
 
+  /// كل عناصر قائمة الإرسال (المعلّقة والمرفوضة) — لعرضها للمندوب.
+  Future<List<Map<String, Object?>>> queryAllOutbox() async {
+    if (kIsWeb) {
+      final sp = await prefs;
+      final raw = sp.getString('outbox') ?? '[]';
+      final list = (jsonDecode(raw) as List).cast<Map>();
+      return list.map((e) => Map<String, Object?>.from(e)).toList()
+        ..sort((a, b) => (a['created_at'] as int).compareTo(b['created_at'] as int));
+    }
+    final db = await database;
+    return db.query('outbox', orderBy: 'created_at ASC');
+  }
+
+  Future<void> setOutboxStatus(String id, String status, {bool resetRetries = false}) async {
+    if (kIsWeb) {
+      final sp = await prefs;
+      final raw = sp.getString('outbox') ?? '[]';
+      final list = (jsonDecode(raw) as List).cast<Map>();
+      for (final e in list) {
+        if (e['id'] == id) {
+          e['status'] = status;
+          if (resetRetries) {
+            e['retries'] = 0;
+            e['error'] = null;
+          }
+        }
+      }
+      await sp.setString('outbox', jsonEncode(list));
+      return;
+    }
+    final db = await database;
+    await db.update(
+      'outbox',
+      {'status': status, if (resetRetries) 'retries': 0, if (resetRetries) 'error': null},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> failedOutboxCount() async {
+    if (kIsWeb) {
+      return (await queryAllOutbox()).where((e) => e['status'] == 'failed').length;
+    }
+    final db = await database;
+    final r = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM outbox WHERE status = ?', ['failed']));
+    return r ?? 0;
+  }
+
+  /// يحذف كل النسخ المحلية (دون قائمة الإرسال) — عند دخول مندوب آخر على الجهاز.
+  Future<void> clearCacheEntries() async {
+    if (kIsWeb) {
+      final sp = await prefs;
+      final keys = sp.getKeys().where((k) => k.startsWith('oc:') || k.startsWith('oc_t:')).toList();
+      for (final k in keys) {
+        await sp.remove(k);
+      }
+      return;
+    }
+    final db = await database;
+    await db.delete('cache_entries');
+  }
+
   Future<int> pendingOutboxCount() async {
     if (kIsWeb) {
       return (await queryPendingOutbox()).length;
@@ -182,15 +244,17 @@ class OfflineDb {
     await db.delete('outbox', where: 'id = ?', whereArgs: [id]);
   }
 
-  Future<void> bumpOutboxRetry(String id, String error) async {
+  Future<void> bumpOutboxRetry(String id, String error, {int failAfter = 0}) async {
     if (kIsWeb) {
       final sp = await prefs;
       final raw = sp.getString('outbox') ?? '[]';
       final list = (jsonDecode(raw) as List).cast<Map>();
       for (final e in list) {
         if (e['id'] == id) {
-          e['retries'] = (e['retries'] as int? ?? 0) + 1;
+          final retries = (e['retries'] as int? ?? 0) + 1;
+          e['retries'] = retries;
           e['error'] = error;
+          if (failAfter > 0 && retries >= failAfter) e['status'] = 'failed';
         }
       }
       await sp.setString('outbox', jsonEncode(list));
@@ -200,7 +264,11 @@ class OfflineDb {
     final retries = Sqflite.firstIntValue(await db.rawQuery('SELECT retries FROM outbox WHERE id = ?', [id])) ?? 0;
     await db.update(
       'outbox',
-      {'retries': retries + 1, 'error': error},
+      {
+        'retries': retries + 1,
+        'error': error,
+        if (failAfter > 0 && retries + 1 >= failAfter) 'status': 'failed',
+      },
       where: 'id = ?',
       whereArgs: [id],
     );

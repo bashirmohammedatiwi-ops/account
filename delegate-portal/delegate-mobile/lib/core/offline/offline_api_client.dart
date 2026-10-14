@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -20,6 +21,11 @@ import 'outbox_store.dart';
 import 'sync_engine.dart';
 
 const _uuid = Uuid();
+
+/// مفتاح Zone: عند تفعيله تُقرأ البيانات من النسخة المحلية فقط دون شبكة.
+const _cacheOnlyZoneKey = #edariCacheOnly;
+
+bool get _inCacheOnlyZone => Zone.current[_cacheOnlyZoneKey] == true;
 int _localId() => -DateTime.now().millisecondsSinceEpoch;
 String _clientRequestId() => _uuid.v4();
 
@@ -70,13 +76,6 @@ int _rowInt(dynamic value) {
   return int.tryParse('$value') ?? 0;
 }
 
-String _receiptFingerprint(Map<String, dynamic> row) {
-  final amount = _rowInt(row['amount']);
-  final tree = '${row['treeName'] ?? row['tree_name'] ?? ''}'.trim();
-  final customer = '${row['customerAccSeq'] ?? row['customer_acc_seq'] ?? ''}'.trim();
-  return '$customer|$tree|$amount';
-}
-
 /// يزيل سندات محلية قديمة/محذوفة — السيرفر مصدر الحقيقة عند الاتصال.
 List<Map<String, dynamic>> _syncReceiptsWithServer(
   List<Map<String, dynamic>> online,
@@ -88,7 +87,6 @@ List<Map<String, dynamic>> _syncReceiptsWithServer(
       .map((r) => _rowInt(r['deliveryReceiptId'] ?? r['delivery_receipt_id']))
       .where((id) => id > 0)
       .toSet();
-  final onlineFingerprints = online.map(_receiptFingerprint).toSet();
 
   bool isStaleLocalRow(Map<String, dynamic> row) {
     final id = _rowId(row['id']);
@@ -103,7 +101,6 @@ List<Map<String, dynamic>> _syncReceiptsWithServer(
 
     final drId = _rowInt(row['deliveryReceiptId'] ?? row['delivery_receipt_id']);
     if (drId > 0 && onlineDeliveryIds.contains(drId)) return true;
-    if (onlineFingerprints.contains(_receiptFingerprint(row))) return true;
     return false;
   }
 
@@ -245,20 +242,45 @@ class OfflineApiClient {
 
   Future<void> _bumpPendingCount() => _ref.read(syncStatusProvider.notifier).refreshPendingCount();
 
+  /// يحفظ عملية في قائمة الإرسال ويحدّث عدّاد المعلّق فوراً (ليراه المندوب).
+  Future<void> _enqueue({
+    required String method,
+    required String path,
+    required String entityType,
+    Map<String, dynamic>? body,
+    Map<String, dynamic>? optimisticJson,
+    String? listCacheKey,
+  }) async {
+    await _outbox.enqueue(
+      method: method,
+      path: path,
+      entityType: entityType,
+      body: body,
+      optimisticJson: optimisticJson,
+      listCacheKey: listCacheKey,
+    );
+    await _bumpPendingCount();
+  }
+
   Future<T> _withCache<T>({
     required String cacheKey,
     required Future<T> Function() onlineFetch,
     required Future<T?> Function() offlineRead,
     String offlineMessage = 'لا توجد نسخة محلية — اتصل بالشبكة لأول مرة',
   }) async {
+    if (_inCacheOnlyZone) {
+      final cached = await offlineRead();
+      if (cached != null) return cached;
+      throw ApiException(offlineMessage);
+    }
     if (_online) {
       try {
         return await onlineFetch();
       } on ApiException catch (e) {
-        if (e.statusCode == 401) throw e;
+        if (e.statusCode == 401) rethrow;
         final cached = await offlineRead();
         if (cached != null) return cached;
-        throw e;
+        rethrow;
       } on DioException catch (e) {
         if (e.response?.statusCode == 401) {
           throw ApiException('انتهت الجلسة — سجّل الدخول مجدداً', statusCode: 401);
@@ -271,6 +293,34 @@ class OfflineApiClient {
     final cached = await offlineRead();
     if (cached != null) return cached;
     throw ApiException(offlineMessage);
+  }
+
+  /// يقرأ نتيجة [request] من النسخة المحلية فقط (null إن لم توجد).
+  Future<T?> cacheOnly<T>(Future<T> Function() request) async {
+    try {
+      return await runZoned(request, zoneValues: {_cacheOnlyZoneKey: true});
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// يعرض النسخة المحلية فوراً ثم يحدّثها من الخادم في الخلفية.
+  ///
+  /// إن فشل الخادم وكانت هناك نسخة محلية تبقى معروضة بلا رسالة خطأ.
+  Stream<T> cacheThenNetwork<T>(Future<T> Function() request) async* {
+    final cached = await cacheOnly(request);
+    if (cached != null) yield cached;
+    if (cached != null && !_online) return;
+    try {
+      yield await request();
+    } on ApiException catch (e) {
+      if (cached == null || e.statusCode == 401) rethrow;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        throw ApiException('انتهت الجلسة — سجّل الدخول مجدداً', statusCode: 401);
+      }
+      if (cached == null) throw ApiException(_apiNetworkMessage(e));
+    }
   }
 
   String _apiNetworkMessage(DioException e) {
@@ -340,7 +390,7 @@ class OfflineApiClient {
       if (code.isEmpty) continue;
       codes[code] = {
         'code': m['barcode'],
-        if (branchId != null) 'branchId': branchId,
+        'branchId': ?branchId,
         'product': m,
       };
     }
@@ -402,7 +452,7 @@ class OfflineApiClient {
       try {
         return await _api.me();
       } on ApiException catch (e) {
-        if (e.statusCode == 401) throw e;
+        if (e.statusCode == 401) rethrow;
       } catch (_) {}
     }
     final agent = _ref.read(authProvider).agent;
@@ -544,7 +594,7 @@ class OfflineApiClient {
           await _indexAccounts(accounts);
           return accounts;
         } on ApiException catch (e) {
-          if (e.statusCode == 401) throw e;
+          if (e.statusCode == 401) rethrow;
         } on DioException catch (e) {
           if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
         }
@@ -730,7 +780,7 @@ class OfflineApiClient {
     final id = (clientRequestId != null && clientRequestId.isNotEmpty) ? clientRequestId : _clientRequestId();
     final body = {
       if (customerAccSeq != null && customerAccSeq.isNotEmpty) 'customerAccSeq': customerAccSeq,
-      if (customerRequestId != null) 'customerRequestId': customerRequestId,
+      'customerRequestId': ?customerRequestId,
       'catalogBranchId': catalogBranchId,
       'notes': notes,
       'lines': lines.map((l) => l.toJson()).toList(),
@@ -752,7 +802,7 @@ class OfflineApiClient {
     };
 
     Future<Order> queueLocal() async {
-      await _outbox.enqueue(
+      await _enqueue(
         method: 'POST',
         path: '/orders',
         entityType: 'order',
@@ -778,9 +828,9 @@ class OfflineApiClient {
       await applyServerOrderAfterSubmit(order, id);
       return order;
     } on ApiException catch (e) {
-      if (e.statusCode == 401) throw e;
+      if (e.statusCode == 401) rethrow;
       // Server responded — do not create a second invoice via outbox.
-      if (e.statusCode != null) throw e;
+      if (e.statusCode != null) rethrow;
       return queueLocal();
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
@@ -803,7 +853,7 @@ class OfflineApiClient {
         await _indexAccounts(accounts);
         return accounts;
       } on ApiException catch (e) {
-        if (e.statusCode == 401) throw e;
+        if (e.statusCode == 401) rethrow;
       } on DioException catch (e) {
         if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
       }
@@ -839,7 +889,7 @@ class OfflineApiClient {
         );
         return product;
       } on ApiException catch (e) {
-        if (e.statusCode == 401) throw e;
+        if (e.statusCode == 401) rethrow;
       } on DioException catch (e) {
         if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
       }
@@ -910,8 +960,6 @@ class OfflineApiClient {
         .map((r) => _rowInt(r['deliveryReceiptId'] ?? r['delivery_receipt_id']))
         .where((id) => id > 0)
         .toSet();
-    final onlineFingerprints = online.map(_receiptFingerprint).toSet();
-
     final entries = await _outbox.pending();
     final keepLocalIds = <int>{};
 
@@ -923,17 +971,10 @@ class OfflineApiClient {
       bool shouldDrop = false;
       if (entry.entityType == 'receipt') {
         final drId = _rowInt(body?['deliveryReceiptId']);
+        // وصل مرتبط بسند على الخادم مسبقاً — السند وصل فعلاً.
+        // (لا نقارن بالمبلغ/الزبون: قسطان متطابقان دون اتصال سندان مختلفان،
+        // والخادم يمنع التكرار عبر clientRequestId.)
         if (drId > 0 && onlineDeliveryIds.contains(drId)) shouldDrop = true;
-        if (body != null) {
-          final fp = _receiptFingerprint({
-            'amount': body['amount'],
-            'treeName': body['treeName'],
-            'customerAccSeq': body['customerAccSeq'],
-          });
-          if (onlineFingerprints.contains(fp)) shouldDrop = true;
-        }
-      } else if (entry.retries >= 5) {
-        shouldDrop = true;
       }
 
       if (shouldDrop) {
@@ -1055,7 +1096,7 @@ class OfflineApiClient {
       'commission': commission,
       'discount': discount,
       'notes': notes ?? '',
-      if (deliveryReceiptId != null) 'deliveryReceiptId': deliveryReceiptId,
+      'deliveryReceiptId': ?deliveryReceiptId,
       'clientRequestId': clientRequestId,
     };
     final localId = _localId();
@@ -1073,14 +1114,15 @@ class OfflineApiClient {
       'customerAccSeq': customerAccSeq,
       'notes': notes,
       'createdAt': DateTime.now().toIso8601String(),
+      'receiptDate': isoToday(),
       'localPending': true,
       if (_agentId != null) 'agentId': _agentId,
-      if (deliveryReceiptId != null) 'deliveryReceiptId': deliveryReceiptId,
+      'deliveryReceiptId': ?deliveryReceiptId,
       'clientRequestId': clientRequestId,
     };
 
     Future<Receipt> queueLocal() async {
-      await _outbox.enqueue(
+      await _enqueue(
         method: 'POST',
         path: '/receipts',
         entityType: 'receipt',
@@ -1123,8 +1165,8 @@ class OfflineApiClient {
       }));
       return receipt;
     } on ApiException catch (e) {
-      if (e.statusCode == 401) throw e;
-      if (e.statusCode != null) throw e;
+      if (e.statusCode == 401) rethrow;
+      if (e.statusCode != null) rethrow;
       return queueLocal();
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
@@ -1219,13 +1261,14 @@ class OfflineApiClient {
       'customerNum': displayCustomerNum ?? '',
       'notes': notes,
       'createdAt': DateTime.now().toIso8601String(),
+      'receiptDate': isoToday(),
       'localPending': true,
       'clientRequestId': clientRequestId,
       if (_agentId != null) 'agentId': _agentId,
     };
 
     Future<DeliveryReceipt> queueLocal() async {
-      await _outbox.enqueue(
+      await _enqueue(
         method: 'POST',
         path: '/delivery-receipts',
         entityType: 'delivery_receipt',
@@ -1273,9 +1316,9 @@ class OfflineApiClient {
       })));
       return receipt;
     } on ApiException catch (e) {
-      if (e.statusCode == 401) throw e;
+      if (e.statusCode == 401) rethrow;
       // Server responded — do not create a second delivery receipt via outbox.
-      if (e.statusCode != null) throw e;
+      if (e.statusCode != null) rethrow;
       return queueLocal();
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
@@ -1290,17 +1333,17 @@ class OfflineApiClient {
   Future<void> markDeliveryReceiptPrinted(int id) async {
     if (id < 0) return;
     if (!_online) {
-      await _outbox.enqueue(method: 'POST', path: '/delivery-receipts/$id/printed', entityType: 'delivery_printed');
+      await _enqueue(method: 'POST', path: '/delivery-receipts/$id/printed', entityType: 'delivery_printed');
       return;
     }
     try {
       await _api.markDeliveryReceiptPrinted(id);
     } on ApiException catch (e) {
-      if (e.statusCode == 401) throw e;
-      await _outbox.enqueue(method: 'POST', path: '/delivery-receipts/$id/printed', entityType: 'delivery_printed');
+      if (e.statusCode == 401) rethrow;
+      await _enqueue(method: 'POST', path: '/delivery-receipts/$id/printed', entityType: 'delivery_printed');
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
-      await _outbox.enqueue(method: 'POST', path: '/delivery-receipts/$id/printed', entityType: 'delivery_printed');
+      await _enqueue(method: 'POST', path: '/delivery-receipts/$id/printed', entityType: 'delivery_printed');
     }
   }
 
@@ -1321,7 +1364,7 @@ class OfflineApiClient {
 
   Future<DeliveryReceipt> markDeliveryHandoverReceived(int id, {String? note}) async {
     Future<DeliveryReceipt> queueLocal() async {
-      await _outbox.enqueue(
+      await _enqueue(
         method: 'POST',
         path: '/delivery-receipts/$id/handover',
         entityType: 'delivery_handover',
@@ -1376,9 +1419,9 @@ class OfflineApiClient {
       }));
       return receipt;
     } on ApiException catch (e) {
-      if (e.statusCode == 401) throw e;
+      if (e.statusCode == 401) rethrow;
       // Handover is idempotent on server — don't invent a local success after rejection.
-      if (e.statusCode != null) throw e;
+      if (e.statusCode != null) rethrow;
       return queueLocal();
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
@@ -1397,7 +1440,7 @@ class OfflineApiClient {
       return;
     }
     if (!_online) {
-      await _outbox.enqueue(method: 'DELETE', path: '/delivery-receipts/$id', entityType: 'delivery_delete', listCacheKey: cacheKey);
+      await _enqueue(method: 'DELETE', path: '/delivery-receipts/$id', entityType: 'delivery_delete', listCacheKey: cacheKey);
       await _cache.removeListItem(cacheKey, id);
       return;
     }
@@ -1405,12 +1448,12 @@ class OfflineApiClient {
       await _api.deleteDeliveryReceipt(id);
       await _cache.removeListItem(cacheKey, id);
     } on ApiException catch (e) {
-      if (e.statusCode == 401) throw e;
-      await _outbox.enqueue(method: 'DELETE', path: '/delivery-receipts/$id', entityType: 'delivery_delete', listCacheKey: cacheKey);
+      if (e.statusCode == 401) rethrow;
+      await _enqueue(method: 'DELETE', path: '/delivery-receipts/$id', entityType: 'delivery_delete', listCacheKey: cacheKey);
       await _cache.removeListItem(cacheKey, id);
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
-      await _outbox.enqueue(method: 'DELETE', path: '/delivery-receipts/$id', entityType: 'delivery_delete', listCacheKey: cacheKey);
+      await _enqueue(method: 'DELETE', path: '/delivery-receipts/$id', entityType: 'delivery_delete', listCacheKey: cacheKey);
       await _cache.removeListItem(cacheKey, id);
     }
   }
@@ -1422,7 +1465,7 @@ class OfflineApiClient {
       return;
     }
     if (!_online) {
-      await _outbox.enqueue(method: 'DELETE', path: '/receipts/$id', entityType: 'receipt_delete', listCacheKey: cacheKey);
+      await _enqueue(method: 'DELETE', path: '/receipts/$id', entityType: 'receipt_delete', listCacheKey: cacheKey);
       await _cache.removeListItem(cacheKey, id);
       return;
     }
@@ -1430,12 +1473,12 @@ class OfflineApiClient {
       await _api.deleteReceipt(id);
       await _cache.removeListItem(cacheKey, id);
     } on ApiException catch (e) {
-      if (e.statusCode == 401) throw e;
-      await _outbox.enqueue(method: 'DELETE', path: '/receipts/$id', entityType: 'receipt_delete', listCacheKey: cacheKey);
+      if (e.statusCode == 401) rethrow;
+      await _enqueue(method: 'DELETE', path: '/receipts/$id', entityType: 'receipt_delete', listCacheKey: cacheKey);
       await _cache.removeListItem(cacheKey, id);
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
-      await _outbox.enqueue(method: 'DELETE', path: '/receipts/$id', entityType: 'receipt_delete', listCacheKey: cacheKey);
+      await _enqueue(method: 'DELETE', path: '/receipts/$id', entityType: 'receipt_delete', listCacheKey: cacheKey);
       await _cache.removeListItem(cacheKey, id);
     }
   }
@@ -1501,7 +1544,7 @@ class OfflineApiClient {
     }
 
     Future<CustomerRequest> queueLocal() async {
-      await _outbox.enqueue(
+      await _enqueue(
         method: 'POST',
         path: '/customer-requests',
         entityType: 'customer_request',
@@ -1538,8 +1581,8 @@ class OfflineApiClient {
       }));
       return finalize(request);
     } on ApiException catch (e) {
-      if (e.statusCode == 401) throw e;
-      if (e.statusCode != null) throw e;
+      if (e.statusCode == 401) rethrow;
+      if (e.statusCode != null) rethrow;
       return queueLocal();
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
@@ -1557,7 +1600,7 @@ class OfflineApiClient {
       return;
     }
     if (!_online) {
-      await _outbox.enqueue(method: 'DELETE', path: '/customer-requests/$id', entityType: 'customer_request_delete', listCacheKey: OfflineKeys.customerRequests);
+      await _enqueue(method: 'DELETE', path: '/customer-requests/$id', entityType: 'customer_request_delete', listCacheKey: OfflineKeys.customerRequests);
       await _cache.removeListItem(OfflineKeys.customerRequests, id);
       return;
     }
@@ -1565,12 +1608,12 @@ class OfflineApiClient {
       await _api.deleteCustomerRequest(id);
       await _cache.removeListItem(OfflineKeys.customerRequests, id);
     } on ApiException catch (e) {
-      if (e.statusCode == 401) throw e;
-      await _outbox.enqueue(method: 'DELETE', path: '/customer-requests/$id', entityType: 'customer_request_delete', listCacheKey: OfflineKeys.customerRequests);
+      if (e.statusCode == 401) rethrow;
+      await _enqueue(method: 'DELETE', path: '/customer-requests/$id', entityType: 'customer_request_delete', listCacheKey: OfflineKeys.customerRequests);
       await _cache.removeListItem(OfflineKeys.customerRequests, id);
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
-      await _outbox.enqueue(method: 'DELETE', path: '/customer-requests/$id', entityType: 'customer_request_delete', listCacheKey: OfflineKeys.customerRequests);
+      await _enqueue(method: 'DELETE', path: '/customer-requests/$id', entityType: 'customer_request_delete', listCacheKey: OfflineKeys.customerRequests);
       await _cache.removeListItem(OfflineKeys.customerRequests, id);
     }
   }
@@ -1660,7 +1703,7 @@ class OfflineApiClient {
     };
 
     Future<PromotionalVisit> queueLocal() async {
-      await _outbox.enqueue(
+      await _enqueue(
         method: 'POST',
         path: '/promotional-visits',
         entityType: 'promo_visit',
@@ -1699,8 +1742,8 @@ class OfflineApiClient {
       }));
       return visit;
     } on ApiException catch (e) {
-      if (e.statusCode == 401) throw e;
-      if (e.statusCode != null) throw e;
+      if (e.statusCode == 401) rethrow;
+      if (e.statusCode != null) rethrow;
       return queueLocal();
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
@@ -1718,7 +1761,7 @@ class OfflineApiClient {
       return;
     }
     if (!_online) {
-      await _outbox.enqueue(method: 'DELETE', path: '/promotional-visits/$id', entityType: 'promo_delete', listCacheKey: OfflineKeys.promoVisits);
+      await _enqueue(method: 'DELETE', path: '/promotional-visits/$id', entityType: 'promo_delete', listCacheKey: OfflineKeys.promoVisits);
       await _cache.removeListItem(OfflineKeys.promoVisits, id);
       return;
     }
@@ -1726,12 +1769,12 @@ class OfflineApiClient {
       await _api.deletePromotionalVisit(id);
       await _cache.removeListItem(OfflineKeys.promoVisits, id);
     } on ApiException catch (e) {
-      if (e.statusCode == 401) throw e;
-      await _outbox.enqueue(method: 'DELETE', path: '/promotional-visits/$id', entityType: 'promo_delete', listCacheKey: OfflineKeys.promoVisits);
+      if (e.statusCode == 401) rethrow;
+      await _enqueue(method: 'DELETE', path: '/promotional-visits/$id', entityType: 'promo_delete', listCacheKey: OfflineKeys.promoVisits);
       await _cache.removeListItem(OfflineKeys.promoVisits, id);
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
-      await _outbox.enqueue(method: 'DELETE', path: '/promotional-visits/$id', entityType: 'promo_delete', listCacheKey: OfflineKeys.promoVisits);
+      await _enqueue(method: 'DELETE', path: '/promotional-visits/$id', entityType: 'promo_delete', listCacheKey: OfflineKeys.promoVisits);
       await _cache.removeListItem(OfflineKeys.promoVisits, id);
     }
   }
@@ -1742,7 +1785,7 @@ class OfflineApiClient {
       return;
     }
     if (!_online) {
-      await _outbox.enqueue(method: 'DELETE', path: '/orders/$id', entityType: 'order_delete', listCacheKey: OfflineKeys.orders);
+      await _enqueue(method: 'DELETE', path: '/orders/$id', entityType: 'order_delete', listCacheKey: OfflineKeys.orders);
       await _cache.removeListItem(OfflineKeys.orders, id);
       return;
     }
@@ -1750,12 +1793,12 @@ class OfflineApiClient {
       await _api.deleteOrder(id);
       await _cache.removeListItem(OfflineKeys.orders, id);
     } on ApiException catch (e) {
-      if (e.statusCode == 401) throw e;
-      await _outbox.enqueue(method: 'DELETE', path: '/orders/$id', entityType: 'order_delete', listCacheKey: OfflineKeys.orders);
+      if (e.statusCode == 401) rethrow;
+      await _enqueue(method: 'DELETE', path: '/orders/$id', entityType: 'order_delete', listCacheKey: OfflineKeys.orders);
       await _cache.removeListItem(OfflineKeys.orders, id);
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
-      await _outbox.enqueue(method: 'DELETE', path: '/orders/$id', entityType: 'order_delete', listCacheKey: OfflineKeys.orders);
+      await _enqueue(method: 'DELETE', path: '/orders/$id', entityType: 'order_delete', listCacheKey: OfflineKeys.orders);
       await _cache.removeListItem(OfflineKeys.orders, id);
     }
   }

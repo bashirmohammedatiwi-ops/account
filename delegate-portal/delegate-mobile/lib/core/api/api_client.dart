@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/app_config_notifier.dart';
 import '../../models/models.dart';
 import '../auth/auth_provider.dart';
+import '../offline/connectivity_service.dart';
 import 'api_exception.dart';
 import 'login_api.dart';
 
@@ -176,7 +177,7 @@ class ApiClient {
   }) async {
     final data = await _json('POST', '/orders', body: {
       if (customerAccSeq != null && customerAccSeq.isNotEmpty) 'customerAccSeq': customerAccSeq,
-      if (customerRequestId != null) 'customerRequestId': customerRequestId,
+      'customerRequestId': ?customerRequestId,
       'catalogBranchId': catalogBranchId,
       'notes': notes,
       'lines': lines.map((l) => l.toJson()).toList(),
@@ -196,7 +197,7 @@ class ApiClient {
   Future<Product> lookupProduct(String code, {int? branchId}) async {
     final data = await _json('GET', '/products/lookup', query: {
       'code': code,
-      if (branchId != null) 'branchId': branchId,
+      'branchId': ?branchId,
     });
     return Product.fromJson(Map<String, dynamic>.from(data['product'] as Map), serverUrl: serverUrl);
   }
@@ -249,7 +250,7 @@ class ApiClient {
       'commission': commission,
       'discount': discount,
       'notes': notes ?? '',
-      if (deliveryReceiptId != null) 'deliveryReceiptId': deliveryReceiptId,
+      'deliveryReceiptId': ?deliveryReceiptId,
       if (clientRequestId != null && clientRequestId.isNotEmpty) 'clientRequestId': clientRequestId,
     });
     return Receipt.fromJson(Map<String, dynamic>.from(data['receipt'] as Map));
@@ -388,9 +389,11 @@ class ApiClient {
 }
 
 final dioProvider = Provider<Dio>((ref) {
+  // مهلات قصيرة للاتصال: الشبكة الضعيفة تُكتشف بسرعة ويُعرض المخزّن محلياً بدل الانتظار.
   final dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 30),
-    receiveTimeout: const Duration(seconds: 120),
+    connectTimeout: const Duration(seconds: 10),
+    sendTimeout: const Duration(seconds: 30),
+    receiveTimeout: const Duration(seconds: 60),
     headers: {'Accept': 'application/json'},
   ));
 
@@ -402,7 +405,17 @@ final dioProvider = Provider<Dio>((ref) {
       }
       handler.next(options);
     },
+    onResponse: (response, handler) {
+      ref.read(connectivityProvider.notifier).reportServerContact();
+      handler.next(response);
+    },
     onError: (error, handler) async {
+      if (error.response != null) {
+        ref.read(connectivityProvider.notifier).reportServerContact();
+      } else if (error.type == DioExceptionType.connectionError ||
+          error.type == DioExceptionType.connectionTimeout) {
+        ref.read(connectivityProvider.notifier).reportServerUnreachable();
+      }
       if (error.response?.statusCode == 401) {
         final sent = error.requestOptions.headers['Authorization']?.toString();
         final auth = ref.read(authProvider);

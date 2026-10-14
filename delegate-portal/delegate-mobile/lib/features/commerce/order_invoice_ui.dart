@@ -153,7 +153,7 @@ class EdOrderInvoiceDetailView extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('ملاحظات', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                const Text('ملاحظات', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.muted)),
                 const SizedBox(height: 6),
                 Text(order.notes!, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.text, height: 1.45)),
               ],
@@ -186,7 +186,7 @@ class EdOrderInvoiceSheetHeader extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('فاتورة حية', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: EdCommerceTheme.accent)),
+                  Text('فاتورة حية', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: EdCommerceTheme.accent)),
                   const SizedBox(height: 2),
                   const Text('فاتورة الطلب — للعرض على الزبون', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.navy)),
                 ],
@@ -229,7 +229,7 @@ class EdOrderInvoiceCustomerBar extends StatelessWidget {
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: hasCustomer ? AppColors.navy : AppColors.textSecondary),
                 ),
                 if (hasCustomer && customer!.accountNum.isNotEmpty)
-                  Text(customer!.accountNum, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted)),
+                  Text(customer!.accountNum, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted)),
               ],
             ),
           ),
@@ -299,13 +299,13 @@ class EdOrderInvoiceDocPanel extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('شركة ديما الحياة', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: EdCommerceTheme.accent)),
+                      const Text('شركة ديما الحياة', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: EdCommerceTheme.accent)),
                       Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, height: 1.35, color: AppColors.navy)),
-                      Text('رقم $docNum · $dateLabel', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                      Text('رقم $docNum · $dateLabel', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
                       if (branchName != null && branchName!.isNotEmpty)
-                        Text(branchName!, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted)),
+                        Text(branchName!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted)),
                       if (remarks.isNotEmpty)
-                        Text(remarks, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted, height: 1.4)),
+                        Text(remarks, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted, height: 1.4)),
                     ],
                   ),
                 ),
@@ -316,7 +316,7 @@ class EdOrderInvoiceDocPanel extends StatelessWidget {
                     children: [
                       Text(customerName, textAlign: TextAlign.left, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.text)),
                       if (customerNum != null && customerNum!.isNotEmpty)
-                        Text(customerNum!, textDirection: TextDirection.ltr, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted)),
+                        Text(customerNum!, textDirection: TextDirection.ltr, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted)),
                     ],
                   ),
                 ),
@@ -408,7 +408,7 @@ class EdOrderInvoiceLinesSection extends StatelessWidget {
                 borderRadius: BorderRadius.circular(999),
                 border: Border.all(color: EdCommerceTheme.line),
               ),
-              child: Text('${lines.length} بند', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: EdCommerceTheme.accent)),
+              child: Text('${lines.length} بند', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: EdCommerceTheme.accent)),
             ),
           ],
         ),
@@ -501,7 +501,7 @@ class EdOrderInvoiceLinesTable extends StatelessWidget {
         _cell(line.barcode, align: TextAlign.center, mono: true, size: 10),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
-          child: Text(line.matName, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, height: 1.3)),
+          child: Text(line.matName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, height: 1.3)),
         ),
         editable
             ? _qtyStepperCell(line.productId, line.quant, field: 'quant')
@@ -526,7 +526,7 @@ class EdOrderInvoiceLinesTable extends StatelessWidget {
         _cell(''),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-          child: Text(label, textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: highlight ? AppColors.navy : AppColors.textSecondary)),
+          child: Text(label, textAlign: TextAlign.right, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: highlight ? AppColors.navy : AppColors.textSecondary)),
         ),
         _cell(''),
         _cell(''),
@@ -544,7 +544,7 @@ class EdOrderInvoiceLinesTable extends StatelessWidget {
     return Container(
       color: EdCommerceTheme.cardTint,
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-      child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.navy, fontSize: 10, fontWeight: FontWeight.w800)),
+      child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.navy, fontSize: 11, fontWeight: FontWeight.w800)),
     );
   }
 

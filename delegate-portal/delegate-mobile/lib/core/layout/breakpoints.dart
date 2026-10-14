@@ -6,6 +6,8 @@ abstract final class EdLayout {
   static const tabletMin = 768.0;
   static const wideMin = 900.0;
   static const desktopMin = 1200.0;
+  /// شريط جانبي موسّع (أيقونة + نص) — آيباد بالعرض وما فوق.
+  static const sidebarExpandedMin = 1100.0;
 
   static EdLayoutData of(BuildContext context) {
     final size = MediaQuery.sizeOf(context);

@@ -25,8 +25,11 @@ bool canMarkHandoverFor(DeliveryReceipt d, Agent viewer) {
 DeliveryReceipt enrichDeliveryForViewer(DeliveryReceipt d, Agent viewer) {
   final agentId = d.agentId;
   final isTeam = isTeamDeliveryFor(d, viewer.id);
-  final canMark = canMarkHandoverFor(d, viewer);
-  final canCreate = d.status == 'issued' &&
+  // وصل محفوظ محلياً لم يصل الخادم بعد: لا يُربط بسند ولا يُؤكَّد استلامه حتى يُرسل.
+  final isLocal = d.id < 0;
+  final canMark = !isLocal && canMarkHandoverFor(d, viewer);
+  final canCreate = !isLocal &&
+      d.status == 'issued' &&
       d.receiptId == null &&
       viewer.isPrimary &&
       (agentId == viewer.id || isTeam);

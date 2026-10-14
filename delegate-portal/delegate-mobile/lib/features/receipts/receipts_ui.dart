@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/ed_kit.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/models.dart';
 import 'receipts_hub.dart';
@@ -232,14 +233,14 @@ class ReceiptsHistoryFilter extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: active ? AppColors.navy : AppColors.surface,
+                    color: active ? AppColors.primary : AppColors.surface,
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: active ? AppColors.navy : AppColors.borderLight),
+                    border: Border.all(color: active ? AppColors.primary : AppColors.borderLight),
                   ),
                   child: Text(
                     value.label,
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: FontWeight.w800,
                       color: active ? Colors.white : AppColors.muted,
                     ),
@@ -353,14 +354,14 @@ class ReceiptsDateRangeFilter extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: active ? AppColors.navy : AppColors.surface,
+                    color: active ? AppColors.primary : AppColors.surface,
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: active ? AppColors.navy : AppColors.borderLight),
+                    border: Border.all(color: active ? AppColors.primary : AppColors.borderLight),
                   ),
                   child: Text(
                     value.label,
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: FontWeight.w800,
                       color: active ? Colors.white : AppColors.muted,
                     ),
@@ -433,7 +434,7 @@ class _ReceiptDateChip extends StatelessWidget {
             children: [
               Icon(Icons.calendar_today_rounded, size: 14, color: AppColors.muted.withValues(alpha: 0.9)),
               const SizedBox(width: 6),
-              Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppColors.muted)),
+              Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.muted)),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -495,7 +496,7 @@ class ReceiptAmountSummaryPanel extends StatelessWidget {
                   ),
                   child: Text(
                     periodLabel,
-                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.navy),
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.navy),
                   ),
                 ),
               ],
@@ -571,7 +572,7 @@ class _AmountSummaryTile extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: color),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: color),
                 ),
               ),
             ],
@@ -581,13 +582,13 @@ class _AmountSummaryTile extends StatelessWidget {
             fmtMoney(amount),
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.1),
           ),
-          const Text('د.ع', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted)),
+          const Text('د.ع', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
           const SizedBox(height: 6),
           Text(hint, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: AppColors.muted, height: 1.3)),
           const SizedBox(height: 4),
           Text(
             '$count ${count == 1 ? 'سند' : 'سندات'}',
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: color.withValues(alpha: 0.95)),
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: color.withValues(alpha: 0.95)),
           ),
         ],
       ),
@@ -605,7 +606,7 @@ class CollapsibleFormPanel extends StatelessWidget {
     required this.expanded,
     required this.onToggle,
     required this.child,
-    this.accent = AppColors.accentTeal,
+    this.accent = AppColors.primary,
   });
 
   final String title;
@@ -636,17 +637,16 @@ class CollapsibleFormPanel extends StatelessWidget {
     }
 
     return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(16),
+      color: accent,
+      borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onToggle,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: accent.withValues(alpha: 0.35)),
-            color: accent.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: AppColors.buttonShadow,
           ),
           child: Row(
             children: [
@@ -654,22 +654,22 @@ class CollapsibleFormPanel extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
+                  color: Colors.white.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(11),
                 ),
-                child: Icon(icon, color: accent, size: 20),
+                child: Icon(icon, color: Colors.white, size: 20),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.navy)),
-                    Text(subtitle, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted)),
+                    Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white)),
+                    Text(subtitle, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white70)),
                   ],
                 ),
               ),
-              Icon(Icons.add_circle_outline_rounded, color: accent, size: 22),
+              const Icon(Icons.add_rounded, color: Colors.white, size: 24),
             ],
           ),
         ),
@@ -705,7 +705,7 @@ class ReceiptsSectionHeader extends StatelessWidget {
               children: [
                 Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: color)),
                 if (subtitle != null)
-                  Text(subtitle!, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted)),
+                  Text(subtitle!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted)),
               ],
             ),
           ),
@@ -809,7 +809,7 @@ class PendingDeliveryTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(fmtMoney(item.amount), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.navy)),
-                  const Text('إنشاء سند', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppColors.accentTeal)),
+                  const Text('إنشاء سند', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.accentTeal)),
                 ],
               ),
               const SizedBox(width: 4),
@@ -829,88 +829,60 @@ class ReceiptsStatsHeader extends StatelessWidget {
     required this.pendingDeliveryReceipt,
     required this.receiptCount,
     required this.pendingReceipts,
+    this.pendingAmount = 0,
+    this.todayAmount = 0,
     this.large = false,
+    this.showReceipts = true,
+    this.minItemWidth = 150,
   });
 
+  final double minItemWidth;
   final int deliveryCount;
   final int pendingDeliveryReceipt;
   final int receiptCount;
   final int pendingReceipts;
+  final num pendingAmount;
+  final num todayAmount;
   final bool large;
+  final bool showReceipts;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.borderLight),
-        boxShadow: AppColors.cardShadow,
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(colors: [Color(0xFF0A1020), Color(0xFF1A3352)]),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.receipt_long_rounded, size: 16, color: Colors.white70),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text('سند قبض وتحصيل', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white)),
-                ),
-                Text('وصل → سند داخلي', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.white.withValues(alpha: 0.65))),
-              ],
-            ),
+    return EdResponsiveGrid(
+      minItemWidth: minItemWidth,
+      maxColumns: 4,
+      children: [
+        EdKpiCard(
+          label: 'تحصيل اليوم',
+          value: fmtMoney(todayAmount),
+          caption: 'دينار عراقي',
+          icon: Icons.payments_outlined,
+          color: AppColors.success,
+        ),
+        EdKpiCard(
+          label: 'وصولات القبض',
+          value: '$deliveryCount',
+          caption: pendingDeliveryReceipt > 0 ? '$pendingDeliveryReceipt بانتظار سند' : 'كلها مرتبطة',
+          icon: Icons.receipt_rounded,
+          color: AppColors.moduleReceipts,
+        ),
+        if (showReceipts) ...[
+          EdKpiCard(
+            label: 'بانتظار سند قبض',
+            value: fmtMoney(pendingAmount),
+            caption: '$pendingDeliveryReceipt وصل',
+            icon: Icons.pending_actions_outlined,
+            color: AppColors.warning,
           ),
-          Padding(
-            padding: EdgeInsets.all(large ? 16 : 14),
-            child: Row(
-              children: [
-                Expanded(child: _StatBox(value: '$deliveryCount', label: 'وصول قبض', hint: pendingDeliveryReceipt > 0 ? '$pendingDeliveryReceipt بانتظار سند' : null)),
-                const SizedBox(width: 10),
-                Expanded(child: _StatBox(value: '$receiptCount', label: 'سندات قبض', hint: pendingReceipts > 0 ? '$pendingReceipts قيد المراجعة' : null)),
-              ],
-            ),
+          EdKpiCard(
+            label: 'سندات القبض',
+            value: '$receiptCount',
+            caption: pendingReceipts > 0 ? '$pendingReceipts قيد المراجعة' : 'لا يوجد قيد المراجعة',
+            icon: Icons.fact_check_outlined,
+            color: AppColors.primary,
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _StatBox extends StatelessWidget {
-  const _StatBox({required this.value, required this.label, this.hint});
-
-  final String value;
-  final String label;
-  final String? hint;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceAlt,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.borderLight),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.navy)),
-          const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
-          if (hint != null) ...[
-            const SizedBox(height: 4),
-            Text(hint!, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.accentTeal)),
-          ],
-        ],
-      ),
+      ],
     );
   }
 }
@@ -961,7 +933,7 @@ class AgentRoleBanner extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(color: pillBg, borderRadius: BorderRadius.circular(999)),
-                child: Text(roleLabel, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: pillColor)),
+                child: Text(roleLabel, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: pillColor)),
               ),
               if (onOpenTeam != null)
                 TextButton.icon(
@@ -977,7 +949,7 @@ class AgentRoleBanner extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-          Text(message, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted, height: 1.35)),
+          Text(message, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted, height: 1.35)),
         ],
       ),
     );
@@ -1011,7 +983,7 @@ class ReceiptsFlowBanner extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             'يمكنك إصدار عدة وصول قبض ثم إنشاء سند قبض لاحقاً — أو إرسال سند بدون وصل',
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.muted.withValues(alpha: 0.95), height: 1.35),
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted.withValues(alpha: 0.95), height: 1.35),
           ),
         ],
       ),
@@ -1031,10 +1003,10 @@ class ReceiptsFlowBanner extends StatelessWidget {
             color: active ? AppColors.accentTeal.withValues(alpha: 0.12) : AppColors.surfaceAlt,
             border: Border.all(color: color, width: 2),
           ),
-          child: Text('$n', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: active ? AppColors.accentTeal : AppColors.muted)),
+          child: Text('$n', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: active ? AppColors.accentTeal : AppColors.muted)),
         ),
         const SizedBox(height: 4),
-        Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: active ? AppColors.navy : AppColors.muted)),
+        Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: active ? AppColors.navy : AppColors.muted)),
       ],
     );
   }
@@ -1076,9 +1048,9 @@ class ReceiptLinkedBanner extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('مرتبط بوصل قبض', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                const Text('مرتبط بوصل قبض', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.muted)),
                 Text(deliveryNo, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.navy)),
-                Text('$customerName · ${fmtMoney(amount)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                Text('$customerName · ${fmtMoney(amount)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
               ],
             ),
           ),
@@ -1116,17 +1088,12 @@ class DeliveryReceiptCard extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.borderLight),
-        boxShadow: AppColors.softShadow,
-      ),
+      decoration: AppColors.card(radius: 14),
       clipBehavior: Clip.antiAlias,
       child: Stack(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 18, 12),
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1154,7 +1121,7 @@ class DeliveryReceiptCard extends StatelessWidget {
                               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppColors.navy),
                             ),
                             const SizedBox(height: 3),
-                            Text(item.deliveryNo, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                            Text(item.deliveryNo, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.muted)),
                           ],
                         ),
                       ),
@@ -1162,8 +1129,8 @@ class DeliveryReceiptCard extends StatelessWidget {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text(fmtMoney(item.amount), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: AppColors.navy)),
-                          const Text('د.ع', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                          Text(fmtMoney(item.amount), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: AppColors.text, fontFeatures: [FontFeature.tabularFigures()])),
+                          const Text('د.ع', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
                         ],
                       ),
                     ],
@@ -1209,7 +1176,7 @@ class DeliveryReceiptCard extends StatelessWidget {
                       ),
                       child: Text(
                         item.notes!.trim(),
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.navy, height: 1.4),
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.navy, height: 1.4),
                       ),
                     ),
                   ],
@@ -1255,13 +1222,6 @@ class DeliveryReceiptCard extends StatelessWidget {
                 ],
               ),
             ),
-          Positioned(
-            top: 0,
-            bottom: 0,
-            right: 0,
-            width: 4,
-            child: ColoredBox(color: accent.withValues(alpha: 0.92)),
-          ),
         ],
       ),
     );
@@ -1326,7 +1286,7 @@ class _DeliveryCardActions extends StatelessWidget {
         FilledButton.icon(
           onPressed: onCreateReceipt,
           style: FilledButton.styleFrom(
-            backgroundColor: AppColors.navy,
+            backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
             minimumSize: const Size(0, _btnHeight),
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1408,7 +1368,7 @@ class _MetaChip extends StatelessWidget {
               label,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: c),
+              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: c),
             ),
           ),
         ],
@@ -1438,17 +1398,7 @@ class InternalReceiptCard extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border(
-          top: BorderSide(color: isPosted ? AppColors.success.withValues(alpha: 0.35) : AppColors.borderLight),
-          bottom: BorderSide(color: isPosted ? AppColors.success.withValues(alpha: 0.35) : AppColors.borderLight),
-          left: BorderSide(color: isPosted ? AppColors.success.withValues(alpha: 0.35) : AppColors.borderLight),
-          right: BorderSide(color: color.withValues(alpha: 0.9), width: 3.5),
-        ),
-        boxShadow: AppColors.softShadow,
-      ),
+      decoration: AppColors.card(radius: 14),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -1475,7 +1425,7 @@ class InternalReceiptCard extends StatelessWidget {
                         style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppColors.navy),
                       ),
                       const SizedBox(height: 3),
-                      Text(receipt.receiptNo, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                      Text(receipt.receiptNo, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.muted)),
                     ],
                   ),
                 ),
@@ -1483,8 +1433,8 @@ class InternalReceiptCard extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(fmtMoney(receipt.amount), style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: color)),
-                    const Text('د.ع', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                    Text(fmtMoney(receipt.amount), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: AppColors.text, fontFeatures: [FontFeature.tabularFigures()])),
+                    const Text('د.ع', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
                   ],
                 ),
               ],
@@ -1507,7 +1457,7 @@ class InternalReceiptCard extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 6),
                 child: Text(
                   'أُرسل المبلغ للشركة عبر الإدارة',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.success.withValues(alpha: 0.9)),
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.success.withValues(alpha: 0.9)),
                 ),
               ),
           ],

@@ -105,7 +105,7 @@ class EdFlowSteps extends StatelessWidget {
           child: Text('${i + 1}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: active || done ? color : AppColors.muted)),
         ),
         const SizedBox(height: 4),
-        Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: active ? EdAccountsTheme.accent : AppColors.muted)),
+        Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: active ? EdAccountsTheme.accent : AppColors.muted)),
       ],
     );
   }
@@ -245,7 +245,7 @@ class EdTreeContextBanner extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('شجرة ${tree.accountNum}', style: const TextStyle(color: AppColors.muted, fontWeight: FontWeight.w600, fontSize: 11)),
+                      Text('شجرة ${tree.accountNum}', style: const TextStyle(color: AppColors.muted, fontWeight: FontWeight.w600, fontSize: 12)),
                       Text(tree.name1, maxLines: 2, style: const TextStyle(color: AppColors.navy, fontWeight: FontWeight.w800, fontSize: 17)),
                       Text('${fmtNumAlways(s.total)} زبون · ${fmtNumAlways(s.withDebt)} مدين', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
                     ],
@@ -254,7 +254,7 @@ class EdTreeContextBanner extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    const Text('إجمالي الديون', style: TextStyle(color: AppColors.muted, fontSize: 10, fontWeight: FontWeight.w600)),
+                    const Text('إجمالي الديون', style: TextStyle(color: AppColors.muted, fontSize: 11, fontWeight: FontWeight.w600)),
                     Text(fmtNumAlways(s.totalDebt), textDirection: TextDirection.ltr, style: const TextStyle(color: AppColors.navy, fontWeight: FontWeight.w800, fontSize: 18)),
                   ],
                 ),
@@ -353,7 +353,7 @@ class EdBranchRowCard extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(color: accent.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(999)),
-                            child: Text(balLabel, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: accent)),
+                            child: Text(balLabel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: accent)),
                           ),
                         ],
                       ),
@@ -361,11 +361,11 @@ class EdBranchRowCard extends StatelessWidget {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        const Text('الديون', style: TextStyle(fontSize: 11, color: AppColors.muted, fontWeight: FontWeight.w700)),
+                        const Text('الديون', style: TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w700)),
                         Text(debt > 0 ? fmtNumAlways(debt) : '0', textDirection: TextDirection.ltr, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: accent)),
                         if (branch.bal != 0) ...[
                           const SizedBox(height: 4),
-                          Text('رصيد ${fmtBalance(branch.bal)}', textDirection: TextDirection.ltr, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: balanceColor(branch.bal))),
+                          Text('رصيد ${fmtBalance(branch.bal)}', textDirection: TextDirection.ltr, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: balanceColor(branch.bal))),
                         ],
                       ],
                     ),

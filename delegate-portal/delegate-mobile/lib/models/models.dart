@@ -102,6 +102,13 @@ class AccountTree {
         directChildren: json['directChildren'] as int? ?? 0,
         debtStatus: json['debtStatus'] as String?,
       );
+
+  // مساواة بالقيمة — تبقى العناصر المختارة صالحة بعد تحديث القوائم من الخادم.
+  @override
+  bool operator ==(Object other) => other is AccountTree && other.seq == seq;
+
+  @override
+  int get hashCode => seq.hashCode;
 }
 
 class BranchAccount {
@@ -311,6 +318,13 @@ class CatalogBranch {
         name: '${json['name'] ?? ''}',
         description: json['description'] as String?,
       );
+
+  // مساواة بالقيمة — تبقى العناصر المختارة صالحة بعد تحديث القوائم من الخادم.
+  @override
+  bool operator ==(Object other) => other is CatalogBranch && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
 }
 
 class CatalogSection {
@@ -325,6 +339,13 @@ class CatalogSection {
         name: '${json['name'] ?? ''}',
         description: json['description'] as String?,
       );
+
+  // مساواة بالقيمة — تبقى العناصر المختارة صالحة بعد تحديث القوائم من الخادم.
+  @override
+  bool operator ==(Object other) => other is CatalogSection && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
 }
 
 class Product {
@@ -760,6 +781,13 @@ class IraqGovernorate {
         code: '${json['code'] ?? ''}',
         name: '${json['name'] ?? ''}',
       );
+
+  // مساواة بالقيمة — تبقى العناصر المختارة صالحة بعد تحديث القوائم من الخادم.
+  @override
+  bool operator ==(Object other) => other is IraqGovernorate && other.code == code;
+
+  @override
+  int get hashCode => code.hashCode;
 }
 
 class VisitOutcome {
@@ -772,6 +800,13 @@ class VisitOutcome {
         code: '${json['code'] ?? ''}',
         label: '${json['label'] ?? ''}',
       );
+
+  // مساواة بالقيمة — تبقى العناصر المختارة صالحة بعد تحديث القوائم من الخادم.
+  @override
+  bool operator ==(Object other) => other is VisitOutcome && other.code == code;
+
+  @override
+  int get hashCode => code.hashCode;
 }
 
 class PromotionalVisit {

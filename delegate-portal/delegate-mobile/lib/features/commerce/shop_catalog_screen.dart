@@ -354,10 +354,12 @@ class _ShopCatalogScreenState extends ConsumerState<ShopCatalogScreen> {
                     onSearchChanged: (v) {
                       _filter = v.trim();
                       _debouncer.run(() {
-                        if (mounted) setState(() {
+                        if (mounted) {
+                          setState(() {
                           _filterApplied = _filter;
                           _selectedProductId = null;
                         });
+                        }
                       });
                     },
                     barcodeController: _barcodeCtrl,
@@ -510,10 +512,12 @@ class _ShopCatalogScreenState extends ConsumerState<ShopCatalogScreen> {
             onSearchChanged: (v) {
               _filter = v.trim();
               _debouncer.run(() {
-                if (mounted) setState(() {
+                if (mounted) {
+                  setState(() {
                   _filterApplied = _filter;
                   _selectedProductId = null;
                 });
+                }
               });
             },
             barcodeController: _barcodeCtrl,
@@ -571,7 +575,6 @@ class _ProductGrid extends StatelessWidget {
     required this.selectedId,
     required this.crossAxisCount,
     required this.onTap,
-    this.padding,
   });
 
   final List<Product> products;
@@ -579,12 +582,11 @@ class _ProductGrid extends StatelessWidget {
   final int? selectedId;
   final int crossAxisCount;
   final ValueChanged<Product> onTap;
-  final EdgeInsets? padding;
 
   @override
   Widget build(BuildContext context) {
     return GridView.builder(
-      padding: padding ?? const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: crossAxisCount,
         crossAxisSpacing: 12,
@@ -629,7 +631,7 @@ class EdShopSectionTabs extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('الأقسام الفرعية', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.muted)),
+          const Text('الأقسام الفرعية', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.muted)),
           const SizedBox(height: 10),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,

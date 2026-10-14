@@ -32,7 +32,16 @@ class EdariDelegateApp extends ConsumerWidget {
     ref.listen(authProvider, (prev, next) {
       if (prev?.isAuthenticated != true && next.isAuthenticated) {
         ref.read(delegateDataRefreshProvider)();
-        Future.microtask(() => ref.read(syncEngineProvider).fullSync(deepCatalog: false));
+        // إرسال ما حُفظ دون اتصال ثم تنزيل نسخة للعمل دون إنترنت (مرة كل بضع ساعات).
+        Future.microtask(() async {
+          final engine = ref.read(syncEngineProvider);
+          await engine.syncPending();
+          try {
+            await engine.prefetchForOffline();
+          } catch (_) {
+            // التنزيل التلقائي يُعاد لاحقاً — لا نزعج المندوب.
+          }
+        });
       }
     });
 

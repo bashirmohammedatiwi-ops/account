@@ -49,7 +49,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     }
     setState(() => _submitting = true);
     try {
-      await ref.read(apiClientProvider).createCustomerRequest(
+      final created = await ref.read(apiClientProvider).createCustomerRequest(
             treeAccSeq: _tree!.seq,
             treeName: _tree!.name1,
             name: name,
@@ -64,7 +64,10 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
       _addressCtrl.clear();
       _notesCtrl.clear();
       setState(() => _tree = null);
-      _snack('أُرسل الطلب للوحة التحكم للمراجعة', success: true);
+      _snack(
+        created.id < 0 ? 'حُفظ الطلب على الجهاز — سيُرسل تلقائياً عند عودة الاتصال' : 'أُرسل الطلب للوحة التحكم للمراجعة',
+        success: true,
+      );
     } catch (e) {
       _snack(e is ApiException ? e.message : '$e');
     } finally {
@@ -162,7 +165,9 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                   child: const Text('الشجرة', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textSecondary)),
                 ),
                 DropdownButtonFormField<AccountTree>(
-                  value: _tree,
+                  // المفتاح يعيد بناء الحقل عند تفريغ النموذج بعد الإرسال.
+                  key: ValueKey('tree-${_tree?.seq}'),
+                  initialValue: _tree,
                   decoration: const InputDecoration(hintText: 'اختر الشجرة'),
                   items: trees.map((t) => DropdownMenuItem(value: t, child: Text('${t.name1} · ${t.accountNum}'))).toList(),
                   onChanged: (v) => setState(() => _tree = v),

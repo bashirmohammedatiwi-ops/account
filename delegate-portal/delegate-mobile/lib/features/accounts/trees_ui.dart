@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../../core/layout/breakpoints.dart';
-import '../../core/layout/ed_table_wrap.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/widgets/ed_kit.dart';
 import '../../core/widgets/ed_page_decor.dart';
-import '../../core/widgets/phone_ui.dart';
+import '../../core/widgets/ed_page_scroll.dart';
 import '../../models/models.dart';
 import 'accounts_theme.dart';
 
@@ -38,13 +37,9 @@ class _EdTreesPageState extends State<EdTreesPage> {
 
   @override
   Widget build(BuildContext context) {
-    final layout = EdLayout.of(context);
-    final pad = edPageHorizontalPadding(context);
+    final pad = EdContent.hPad(context);
     final customers = widget.trees.fold<int>(0, (s, t) => s + t.directChildren);
-    final bottomPad = layout.isPhone ? kPhoneBottomInset : 28.0;
     final filtered = _filtered;
-    final cols = layout.isDesktop ? 3 : layout.isTablet ? 2 : 2;
-    final cardExtent = edFormalCardExtent(layout, phone: 156, tablet: 168);
 
     if (widget.trees.isEmpty) {
       return LayoutBuilder(
@@ -61,111 +56,70 @@ class _EdTreesPageState extends State<EdTreesPage> {
       );
     }
 
-    final gridSliver = SliverPadding(
-      padding: EdgeInsets.fromLTRB(pad, 0, pad, bottomPad),
-      sliver: filtered.isEmpty
-          ? SliverToBoxAdapter(
-              child: _TreesSearchEmpty(query: _query),
-            )
-          : SliverGrid(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: cols,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                mainAxisExtent: cardExtent,
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(pad, 18, pad, 0),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              EdResponsiveGrid(
+                minItemWidth: 150,
+                maxColumns: 3,
+                children: [
+                  EdKpiCard(
+                    label: 'الشجرات',
+                    value: '${widget.trees.length}',
+                    caption: widget.agentName,
+                    icon: Icons.account_tree_outlined,
+                    color: EdAccountsTheme.accent,
+                  ),
+                  EdKpiCard(
+                    label: 'الزبائن',
+                    value: fmtNumAlways(customers),
+                    caption: 'في كل الشجرات',
+                    icon: Icons.people_alt_outlined,
+                    color: AppColors.moduleAccounts,
+                  ),
+                ],
               ),
-              delegate: SliverChildBuilderDelegate(
-                (context, i) => _TileEntrance(
-                  index: i,
-                  child: EdTreeCard(
-                    index: widget.trees.indexOf(filtered[i]) + 1,
-                    tree: filtered[i],
-                    onTap: () => widget.onTreeTap(filtered[i]),
-                    large: layout.isTablet,
+              const SizedBox(height: 16),
+              EdModernSearchField(
+                hint: 'ابحث عن شجرة بالاسم أو الرقم...',
+                hasText: _query.isNotEmpty,
+                onChanged: (v) => setState(() => _query = v),
+                onClear: () => setState(() => _query = ''),
+              ),
+              const SizedBox(height: 18),
+              EdSectionTitle(
+                title: 'الشجرات المعيّنة',
+                count: filtered.length,
+                subtitle: 'اختر شجرة لعرض زبائنها وأرصدتهم',
+              ),
+            ]),
+          ),
+        ),
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(pad, 0, pad, EdPageInsets.bottom(context, extra: 20)),
+          sliver: filtered.isEmpty
+              ? SliverToBoxAdapter(child: _TreesSearchEmpty(query: _query))
+              : SliverToBoxAdapter(
+                  child: EdListCard(
+                    children: [
+                      for (final t in filtered)
+                        EdListRow(
+                          icon: Icons.account_tree_rounded,
+                          iconColor: EdAccountsTheme.accent,
+                          title: t.name1,
+                          subtitle: '${t.accountNum} · ${fmtNumAlways(t.directChildren)} زبون',
+                          trailingCaption: 'عرض الزبائن',
+                          onTap: () => widget.onTreeTap(t),
+                        ),
+                    ],
                   ),
                 ),
-                childCount: filtered.length,
-              ),
-            ),
-    );
-
-    return ColoredBox(
-      color: Colors.white,
-      child: Stack(
-        children: [
-          const EdModernBackdrop(variant: EdBackdropVariant.accounts),
-        CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(pad, layout.isTablet ? 16 : 10, pad, 0),
-              sliver: SliverToBoxAdapter(
-                child: layout.isTablet
-                    ? Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        textDirection: TextDirection.ltr,
-                        children: [
-                          SizedBox(
-                            width: layout.isDesktop ? 280 : 260,
-                            child: EdTreesSidePanel(
-                              agentName: widget.agentName,
-                              treeCount: widget.trees.length,
-                              customerCount: customers,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                EdSectionHeader(
-                                  title: 'الشجرات المعيّنة',
-                                  subtitle: _query.isNotEmpty
-                                      ? 'عرض ${filtered.length} من ${widget.trees.length} شجرة'
-                                      : '${widget.trees.length} شجرة · ${fmtNumAlways(customers)} زبون',
-                                  icon: Icons.account_tree_outlined,
-                                  iconColor: EdAccountsTheme.accent,
-                                ),
-                                const SizedBox(height: 12),
-                                EdModernSearchField(
-                                  hint: 'ابحث عن شجرة...',
-                                  hasText: _query.isNotEmpty,
-                                  onChanged: (v) => setState(() => _query = v),
-                                  onClear: () => setState(() => _query = ''),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          EdSectionHeader(
-                            title: 'الشجرات المعيّنة',
-                            subtitle: _query.isNotEmpty
-                                ? 'عرض ${filtered.length} من ${widget.trees.length} شجرة'
-                                : '${widget.trees.length} شجرة · ${fmtNumAlways(customers)} زبون',
-                            icon: Icons.account_tree_outlined,
-                            iconColor: EdAccountsTheme.accent,
-                          ),
-                          const SizedBox(height: 12),
-                          EdModernSearchField(
-                            hint: 'ابحث عن شجرة...',
-                            hasText: _query.isNotEmpty,
-                            onChanged: (v) => setState(() => _query = v),
-                            onClear: () => setState(() => _query = ''),
-                          ),
-                        ],
-                      ),
-              ),
-            ),
-            SliverPadding(padding: EdgeInsets.only(top: layout.isTablet ? 16 : 14)),
-            gridSliver,
-          ],
         ),
       ],
-      ),
     );
   }
 }
@@ -269,7 +223,7 @@ class EdTreesSidePanel extends StatelessWidget {
               children: [
                 Icon(Icons.account_tree_outlined, size: 16, color: Colors.white70),
                 SizedBox(width: 8),
-                Text('ملخص الشجرات', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white70)),
+                Text('ملخص الشجرات', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white70)),
               ],
             ),
           ),
@@ -319,7 +273,7 @@ class EdTreesSidePanel extends StatelessWidget {
         children: [
           Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.navy)),
           const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted)),
+          Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
         ],
       ),
     );
@@ -437,12 +391,12 @@ class _EdTreeCardState extends State<EdTreeCard> {
                                   children: [
                                     Text(
                                       widget.index.toString().padLeft(2, '0'),
-                                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.mutedLight),
+                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.mutedLight),
                                     ),
                                     const Spacer(),
                                     Text(
                                       widget.tree.accountNum.trim().isEmpty ? '—' : widget.tree.accountNum.trim(),
-                                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.muted),
+                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted),
                                     ),
                                   ],
                                 ),
@@ -473,7 +427,7 @@ class _EdTreeCardState extends State<EdTreeCard> {
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Text('عرض الفروع', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: EdAccountsTheme.accent)),
+                                    Text('عرض الفروع', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: EdAccountsTheme.accent)),
                                     const SizedBox(width: 4),
                                     Icon(Icons.arrow_forward_ios_rounded, size: 10, color: EdAccountsTheme.accent.withValues(alpha: 0.7)),
                                   ],

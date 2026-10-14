@@ -12,9 +12,10 @@ import '../../models/models.dart';
 import '../accounts/accounts_theme.dart';
 import 'invoice_ui.dart';
 
-final invoiceProvider = FutureProvider.family<InvoiceDetail, ({String ref, String by, String? accSeq})>((ref, p) {
+final invoiceProvider = StreamProvider.family<InvoiceDetail, ({String ref, String by, String? accSeq})>((ref, p) {
   ref.keepAlive();
-  return withAuth(ref, () => ref.read(apiClientProvider).getInvoice(p.ref, by: p.by, accSeq: p.accSeq));
+  final api = ref.read(apiClientProvider);
+  return withAuthStream(ref, () => api.cacheThenNetwork(() => api.getInvoice(p.ref, by: p.by, accSeq: p.accSeq)));
 });
 
 class InvoiceScreen extends ConsumerStatefulWidget {
@@ -49,7 +50,7 @@ class _InvoiceScreenState extends ConsumerState<InvoiceScreen> {
 
     return AppPage(
       title: 'تفاصيل الفاتورة',
-      kicker: 'Edari · الفاتورة',
+      kicker: 'الفاتورة',
       showBack: true,
       subtitle: invoiceAsync.maybeWhen(
         data: (d) => 'فاتورة ${d.invoice['num'] ?? widget.ref}',
@@ -63,7 +64,7 @@ class _InvoiceScreenState extends ConsumerState<InvoiceScreen> {
           data: (detail) {
             final num = detail.invoice['num'] ?? widget.ref;
             return RefreshIndicator(
-              color: AppColors.navy,
+              color: AppColors.primary,
               onRefresh: () async => ref.invalidate(invoiceProvider(params)),
               child: Builder(
                 builder: (context) {

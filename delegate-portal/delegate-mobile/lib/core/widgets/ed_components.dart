@@ -14,46 +14,71 @@ class EdBackButton extends StatelessWidget {
     return Tooltip(
       message: 'رجوع',
       child: Material(
-      color: AppColors.surface,
-      elevation: 0,
-      shadowColor: Colors.transparent,
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        onTap: onPressed,
+        color: AppColors.surface,
+        elevation: 0,
+        shadowColor: Colors.transparent,
         borderRadius: BorderRadius.circular(10),
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.border),
-            boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 1))],
-          ),
-          padding: EdgeInsets.symmetric(horizontal: label != null ? 12 : 0, vertical: 0),
-          child: SizedBox(
-            height: 40,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(width: 4),
-                const Icon(Icons.arrow_forward_rounded, size: 20, color: AppColors.navy),
-                if (label != null) ...[
-                  const SizedBox(width: 4),
-                  Text(label!, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.navy)),
-                  const SizedBox(width: 4),
-                ] else
-                  const SizedBox(width: 4),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(10),
+          child: Ink(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.navy.withValues(alpha: 0.04),
+                  blurRadius: 6,
+                  offset: const Offset(0, 1),
+                ),
               ],
+            ),
+            padding: EdgeInsets.symmetric(
+              horizontal: label != null ? 12 : 0,
+              vertical: 0,
+            ),
+            child: SizedBox(
+              height: 40,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(width: 4),
+                  const Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 20,
+                    color: AppColors.navy,
+                  ),
+                  if (label != null) ...[
+                    const SizedBox(width: 4),
+                    Text(
+                      label!,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.navy,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                  ] else
+                    const SizedBox(width: 4),
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),
     );
   }
 }
 
 /// شريط علوي خفيف — زر رجوع + إجراءات فقط (بدون عنوان)
 class EdPageNavBar extends StatelessWidget {
-  const EdPageNavBar({super.key, this.showBack = false, this.onBack, this.actions});
+  const EdPageNavBar({
+    super.key,
+    this.showBack = false,
+    this.onBack,
+    this.actions,
+  });
 
   final bool showBack;
   final VoidCallback? onBack;
@@ -122,7 +147,9 @@ class EdAppHeader extends StatelessWidget implements PreferredSizeWidget {
         bottom: false,
         child: Container(
           decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: AppColors.goldLine, width: 3)),
+            border: Border(
+              bottom: BorderSide(color: AppColors.goldLine, width: 3),
+            ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Row(
@@ -131,7 +158,10 @@ class EdAppHeader extends StatelessWidget implements PreferredSizeWidget {
                 IconButton(
                   tooltip: 'رجوع',
                   onPressed: onBack,
-                  icon: const Icon(Icons.arrow_forward_rounded, color: Colors.white),
+                  icon: const Icon(
+                    Icons.arrow_forward_rounded,
+                    color: Colors.white,
+                  ),
                 )
               else
                 const SizedBox(width: 8),
@@ -143,20 +173,32 @@ class EdAppHeader extends StatelessWidget implements PreferredSizeWidget {
                     if (kicker != null)
                       Text(
                         kicker!,
-                        style: const TextStyle(color: AppColors.goldLine, fontSize: 11, fontWeight: FontWeight.w700),
+                        style: const TextStyle(
+                          color: AppColors.goldLine,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     Text(
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     if (subtitle != null)
                       Text(
                         subtitle!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.75),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                   ],
                 ),
@@ -171,7 +213,13 @@ class EdAppHeader extends StatelessWidget implements PreferredSizeWidget {
 }
 
 class EdHeaderIconButton extends StatelessWidget {
-  const EdHeaderIconButton({super.key, required this.icon, required this.tooltip, required this.onPressed, this.danger = false});
+  const EdHeaderIconButton({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    this.danger = false,
+  });
 
   final IconData icon;
   final String tooltip;
@@ -193,7 +241,11 @@ class EdHeaderIconButton extends StatelessWidget {
           child: Ink(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppColors.radiusSm),
-              border: Border.all(color: danger ? AppColors.danger.withValues(alpha: 0.2) : AppColors.borderLight),
+              border: Border.all(
+                color: danger
+                    ? AppColors.danger.withValues(alpha: 0.2)
+                    : AppColors.borderLight,
+              ),
             ),
             child: SizedBox(
               width: 42,
@@ -239,17 +291,34 @@ class EdHeroCard extends StatelessWidget {
                   border: Border.all(color: AppColors.goldLine, width: 2),
                   color: Colors.white.withValues(alpha: 0.12),
                 ),
-                child: Text(initial, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
+                child: Text(
+                  initial,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('مرحباً', style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontWeight: FontWeight.w600)),
+                    Text(
+                      'مرحباً',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     Text(
                       agentName,
-                      style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ],
                 ),
@@ -259,7 +328,10 @@ class EdHeroCard extends StatelessWidget {
           const SizedBox(height: 14),
           Text(
             'اختر التطبيق للبدء',
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.88), fontWeight: FontWeight.w600),
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.88),
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -322,7 +394,13 @@ class EdModuleCard extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppColors.radiusLg),
             border: Border.all(color: AppColors.border),
-            boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.05), blurRadius: 16, offset: const Offset(0, 6))],
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.navy.withValues(alpha: 0.05),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(AppColors.radiusLg),
@@ -342,7 +420,9 @@ class EdModuleCard extends StatelessWidget {
                             decoration: BoxDecoration(
                               color: color.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: color.withValues(alpha: 0.2)),
+                              border: Border.all(
+                                color: color.withValues(alpha: 0.2),
+                              ),
                             ),
                             child: Icon(icon, color: color, size: 26),
                           ),
@@ -352,21 +432,52 @@ class EdModuleCard extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.text)),
+                                Text(
+                                  title,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.text,
+                                  ),
+                                ),
                                 const SizedBox(height: 4),
-                                Text(subtitle, style: const TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w600)),
+                                Text(
+                                  subtitle,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.muted,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
                           if (_showBadge)
                             Container(
                               margin: const EdgeInsets.only(left: 8),
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(999)),
-                              child: Text(badge!, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: color,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                badge!,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
                             ),
                           const SizedBox(width: 6),
-                          Icon(Icons.arrow_back_ios_new_rounded, size: 14, color: color.withValues(alpha: 0.85)),
+                          Icon(
+                            Icons.arrow_back_ios_new_rounded,
+                            size: 14,
+                            color: color.withValues(alpha: 0.85),
+                          ),
                         ],
                       ),
                     ),
@@ -425,9 +536,22 @@ class EdAppTile extends StatelessWidget {
                     top: -4,
                     left: -4,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(999)),
-                      child: Text(badge!, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: color,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        badge!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ),
                   ),
               ],
@@ -437,7 +561,11 @@ class EdAppTile extends StatelessWidget {
               label,
               textAlign: TextAlign.center,
               maxLines: 2,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.text),
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.text,
+              ),
             ),
           ],
         ),
@@ -467,11 +595,22 @@ class EdStatsBar extends StatelessWidget {
             Expanded(
               child: Column(
                 children: [
-                  Text(items[i].label, style: const TextStyle(fontSize: 11, color: AppColors.muted, fontWeight: FontWeight.w700)),
+                  Text(
+                    items[i].label,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.muted,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                   const SizedBox(height: 4),
                   Text(
                     items[i].value,
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: items[i].color ?? AppColors.text),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: items[i].color ?? AppColors.text,
+                    ),
                   ),
                 ],
               ),
@@ -484,7 +623,12 @@ class EdStatsBar extends StatelessWidget {
 }
 
 class EdSectionHeader extends StatelessWidget {
-  const EdSectionHeader({super.key, required this.title, this.subtitle, this.trailing});
+  const EdSectionHeader({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.trailing,
+  });
 
   final String title;
   final String? subtitle;
@@ -501,13 +645,27 @@ class EdSectionHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.text)),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.text,
+                  ),
+                ),
                 if (subtitle != null)
-                  Text(subtitle!, style: const TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w600)),
+                  Text(
+                    subtitle!,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.muted,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
               ],
             ),
           ),
-          if (trailing != null) trailing!,
+          ?trailing,
         ],
       ),
     );
@@ -546,7 +704,11 @@ class EdTreeCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: selected ? AppColors.accentSoft : AppColors.surface,
             borderRadius: BorderRadius.circular(AppColors.radiusLg),
-            border: Border.all(color: selected ? AppColors.accentTeal.withValues(alpha: 0.4) : AppColors.borderLight),
+            border: Border.all(
+              color: selected
+                  ? AppColors.accentTeal.withValues(alpha: 0.4)
+                  : AppColors.borderLight,
+            ),
             boxShadow: selected ? AppColors.softShadow : AppColors.cardShadow,
           ),
           child: Column(
@@ -554,7 +716,9 @@ class EdTreeCard extends StatelessWidget {
             children: [
               Container(
                 height: 4,
-                color: selected ? AppColors.accentTeal : AppColors.accentTeal.withValues(alpha: 0.25),
+                color: selected
+                    ? AppColors.accentTeal
+                    : AppColors.accentTeal.withValues(alpha: 0.25),
               ),
               Padding(
                 padding: const EdgeInsets.all(14),
@@ -564,28 +728,76 @@ class EdTreeCard extends StatelessWidget {
                     Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 9,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.accentTeal.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.accentTeal.withValues(alpha: 0.2)),
+                            border: Border.all(
+                              color: AppColors.accentTeal.withValues(
+                                alpha: 0.2,
+                              ),
+                            ),
                           ),
-                          child: Text('#$index', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.accentTeal)),
+                          child: Text(
+                            '#$index',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.accentTeal,
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 8),
-                        Text(accountNum, style: const TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w700)),
+                        Text(
+                          accountNum,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.muted,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 10),
-                    Text(name, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                    Text(
+                      name,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.navy,
+                      ),
+                    ),
                     const SizedBox(height: 6),
-                    Text(meta, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+                    Text(
+                      meta,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        Text('عرض الزبائن', style: TextStyle(color: AppColors.accentTeal, fontWeight: FontWeight.w800, fontSize: 13)),
+                        Text(
+                          'عرض الزبائن',
+                          style: TextStyle(
+                            color: AppColors.accentTeal,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                          ),
+                        ),
                         const SizedBox(width: 4),
-                        Icon(Icons.arrow_back_ios_new_rounded, size: 12, color: AppColors.accentTeal),
+                        Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          size: 12,
+                          color: AppColors.accentTeal,
+                        ),
                       ],
                     ),
                   ],
@@ -636,18 +848,21 @@ class EdBranchCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppColors.radiusLg),
         child: Ink(
           decoration: BoxDecoration(
-            color: selected ? accent.withValues(alpha: 0.05) : AppColors.surface,
+            color: selected
+                ? accent.withValues(alpha: 0.05)
+                : AppColors.surface,
             borderRadius: BorderRadius.circular(AppColors.radiusLg),
-            border: Border.all(color: selected ? accent.withValues(alpha: 0.35) : AppColors.borderLight),
+            border: Border.all(
+              color: selected
+                  ? accent.withValues(alpha: 0.35)
+                  : AppColors.borderLight,
+            ),
             boxShadow: AppColors.cardShadow,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                height: 4,
-                color: accent,
-              ),
+              Container(height: 4, color: accent),
               Padding(
                 padding: const EdgeInsets.all(14),
                 child: Column(
@@ -662,25 +877,55 @@ class EdBranchCard extends StatelessWidget {
                           decoration: BoxDecoration(
                             color: accent.withValues(alpha: 0.1),
                             shape: BoxShape.circle,
-                            border: Border.all(color: accent.withValues(alpha: 0.15)),
+                            border: Border.all(
+                              color: accent.withValues(alpha: 0.15),
+                            ),
                           ),
-                          child: Text(initial, style: TextStyle(color: accent, fontWeight: FontWeight.w800, fontSize: 16)),
+                          child: Text(
+                            initial,
+                            style: TextStyle(
+                              color: accent,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(name, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppColors.navy)),
+                              Text(
+                                name,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
+                                  color: AppColors.navy,
+                                ),
+                              ),
                               const SizedBox(height: 4),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
                                 decoration: BoxDecoration(
                                   color: accent.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(999),
-                                  border: Border.all(color: accent.withValues(alpha: 0.2)),
+                                  border: Border.all(
+                                    color: accent.withValues(alpha: 0.2),
+                                  ),
                                 ),
-                                child: Text(branchStatusLabel(variant), style: TextStyle(color: accent, fontSize: 10, fontWeight: FontWeight.w800)),
+                                child: Text(
+                                  branchStatusLabel(variant),
+                                  style: TextStyle(
+                                    color: accent,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
                               ),
                             ],
                           ),
@@ -693,16 +938,29 @@ class EdBranchCard extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: accent.withValues(alpha: 0.06),
                         borderRadius: BorderRadius.circular(AppColors.radiusSm),
-                        border: Border.all(color: accent.withValues(alpha: 0.12)),
+                        border: Border.all(
+                          color: accent.withValues(alpha: 0.12),
+                        ),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(debtLabel, style: const TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w700)),
+                          Text(
+                            debtLabel,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.muted,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                           Text(
                             debtAmount,
                             textDirection: TextDirection.ltr,
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: accent),
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: accent,
+                            ),
                           ),
                         ],
                       ),
@@ -711,12 +969,30 @@ class EdBranchCard extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(accountNum, style: const TextStyle(fontSize: 11, color: AppColors.muted, fontWeight: FontWeight.w600)),
+                        Text(
+                          accountNum,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.muted,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                         const Row(
                           children: [
-                            Text('كشف الحساب', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.w800, fontSize: 12)),
+                            Text(
+                              'كشف الحساب',
+                              style: TextStyle(
+                                color: AppColors.navy,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
+                              ),
+                            ),
                             SizedBox(width: 4),
-                            Icon(Icons.arrow_back_ios_new_rounded, size: 11, color: AppColors.navy),
+                            Icon(
+                              Icons.arrow_back_ios_new_rounded,
+                              size: 11,
+                              color: AppColors.navy,
+                            ),
                           ],
                         ),
                       ],
@@ -733,7 +1009,11 @@ class EdBranchCard extends StatelessWidget {
 }
 
 class EdFilterChips extends StatelessWidget {
-  const EdFilterChips({super.key, required this.selected, required this.onChanged});
+  const EdFilterChips({
+    super.key,
+    required this.selected,
+    required this.onChanged,
+  });
 
   final String selected;
   final ValueChanged<String> onChanged;
@@ -763,17 +1043,28 @@ class EdFilterChips extends StatelessWidget {
                   borderRadius: BorderRadius.circular(999),
                   child: Ink(
                     decoration: BoxDecoration(
-                      color: selected == value ? AppColors.navy : AppColors.surface,
+                      color: selected == value
+                          ? AppColors.primary
+                          : AppColors.surface,
                       borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: selected == value ? AppColors.navy : AppColors.borderLight),
+                      border: Border.all(
+                        color: selected == value
+                            ? AppColors.primary
+                            : AppColors.borderLight,
+                      ),
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
                     child: Text(
                       label,
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 13,
-                        color: selected == value ? Colors.white : AppColors.textSecondary,
+                        color: selected == value
+                            ? Colors.white
+                            : AppColors.textSecondary,
                       ),
                     ),
                   ),
@@ -787,7 +1078,12 @@ class EdFilterChips extends StatelessWidget {
 }
 
 class EdSearchField extends StatelessWidget {
-  const EdSearchField({super.key, required this.hint, required this.onChanged, this.suffix});
+  const EdSearchField({
+    super.key,
+    required this.hint,
+    required this.onChanged,
+    this.suffix,
+  });
 
   final String hint;
   final ValueChanged<String> onChanged;
@@ -827,7 +1123,14 @@ class EdDocPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.navy)),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: AppColors.navy,
+            ),
+          ),
           const Divider(height: 20, color: AppColors.border),
           for (final row in rows)
             Padding(
@@ -835,8 +1138,22 @@ class EdDocPanel extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(row.label, style: const TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w700)),
-                  Text(row.value, textDirection: TextDirection.ltr, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+                  Text(
+                    row.label,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.muted,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    row.value,
+                    textDirection: TextDirection.ltr,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -864,8 +1181,24 @@ class EdDebtBanner extends StatelessWidget {
         children: [
           const Icon(Icons.warning_amber_rounded, color: AppColors.danger),
           const SizedBox(width: 10),
-          const Expanded(child: Text('الديون', style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.danger))),
-          Text(amount, textDirection: TextDirection.ltr, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: AppColors.danger)),
+          const Expanded(
+            child: Text(
+              'الديون',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: AppColors.danger,
+              ),
+            ),
+          ),
+          Text(
+            amount,
+            textDirection: TextDirection.ltr,
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 18,
+              color: AppColors.danger,
+            ),
+          ),
         ],
       ),
     );
@@ -918,15 +1251,38 @@ class EdSideNavItem extends StatelessWidget {
                       title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: selected ? AppColors.text : AppColors.textSecondary),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        color: selected
+                            ? AppColors.text
+                            : AppColors.textSecondary,
+                      ),
                     ),
                     if (subtitle != null && subtitle!.isNotEmpty)
-                      Text(subtitle!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: AppColors.muted, fontWeight: FontWeight.w600)),
+                      Text(
+                        subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.muted,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                   ],
                 ),
               ),
               if (trailing != null)
-                Text(trailing!, textDirection: TextDirection.ltr, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: accent)),
+                Text(
+                  trailing!,
+                  textDirection: TextDirection.ltr,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: accent,
+                  ),
+                ),
             ],
           ),
         ),
@@ -944,7 +1300,7 @@ class EdPrimaryButton extends StatelessWidget {
     this.fullWidth = true,
     this.icon,
     this.gradient = false,
-    this.height = 54,
+    this.height = 50,
   });
 
   final String label;
@@ -960,9 +1316,20 @@ class EdPrimaryButton extends StatelessWidget {
     final enabled = !loading && onPressed != null;
 
     Widget child = loading
-        ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+        ? const SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              color: Colors.white,
+            ),
+          )
         : DefaultTextStyle(
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15),
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+            ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
@@ -986,7 +1353,7 @@ class EdPrimaryButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppColors.radius),
             gradient: enabled && gradient ? AppColors.buttonGradient : null,
             color: enabled
-                ? (gradient ? null : AppColors.navy)
+                ? (gradient ? null : AppColors.primary)
                 : AppColors.border,
             boxShadow: enabled && gradient ? AppColors.buttonShadow : null,
           ),
@@ -1056,16 +1423,41 @@ class EdNavCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, height: 1.25)),
+                    Text(
+                      title,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                        height: 1.25,
+                      ),
+                    ),
                     if (subtitle != null && subtitle!.isNotEmpty) ...[
                       const SizedBox(height: 4),
-                      Text(subtitle!, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w600)),
+                      Text(
+                        subtitle!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.muted,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ],
                 ),
               ),
               if (trailing != null)
-                Text(trailing!, style: TextStyle(color: accent, fontWeight: FontWeight.w800, fontSize: 12))
+                Text(
+                  trailing!,
+                  style: TextStyle(
+                    color: accent,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                  ),
+                )
               else
                 Icon(Icons.arrow_back_ios_new_rounded, size: 14, color: accent),
             ],
@@ -1077,7 +1469,12 @@ class EdNavCard extends StatelessWidget {
 }
 
 class EdResumeBanner extends StatelessWidget {
-  const EdResumeBanner({super.key, required this.message, required this.actionLabel, required this.onAction});
+  const EdResumeBanner({
+    super.key,
+    required this.message,
+    required this.actionLabel,
+    required this.onAction,
+  });
 
   final String message;
   final String actionLabel;
@@ -1097,8 +1494,19 @@ class EdResumeBanner extends StatelessWidget {
         children: [
           const Icon(Icons.save_outlined, color: AppColors.warning, size: 22),
           const SizedBox(width: 10),
-          Expanded(child: Text(message, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
-          TextButton(onPressed: onAction, child: Text(actionLabel, style: const TextStyle(fontWeight: FontWeight.w800))),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+            ),
+          ),
+          TextButton(
+            onPressed: onAction,
+            child: Text(
+              actionLabel,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
         ],
       ),
     );
@@ -1106,7 +1514,12 @@ class EdResumeBanner extends StatelessWidget {
 }
 
 class EdBottomActionBar extends StatelessWidget {
-  const EdBottomActionBar({super.key, required this.label, required this.onPressed, this.icon = Icons.receipt_long_rounded});
+  const EdBottomActionBar({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.icon = Icons.receipt_long_rounded,
+  });
 
   final String label;
   final VoidCallback onPressed;
@@ -1128,10 +1541,12 @@ class EdBottomActionBar extends StatelessWidget {
           icon: Icon(icon),
           label: Text(label),
           style: FilledButton.styleFrom(
-            backgroundColor: AppColors.navy,
+            backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppColors.radius)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppColors.radius),
+            ),
           ),
         ),
       ),
@@ -1161,83 +1576,103 @@ class EdOrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      clipBehavior: Clip.antiAlias,
-      borderRadius: BorderRadius.circular(AppColors.radiusLg),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppColors.radiusLg),
-        child: Ink(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppColors.radiusLg),
-            border: Border.all(color: AppColors.borderLight),
-            boxShadow: AppColors.cardShadow,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                height: 4,
-                color: statusColor,
-              ),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
+    final hasCustomer = customer.trim().isNotEmpty && customer.trim() != '—';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: AppColors.card(radius: 14),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Icon(
+                    Icons.shopping_bag_outlined,
+                    color: statusColor,
+                    size: 21,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        hasCustomer ? customer : 'طلب #$id',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.text,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        id > 0 ? 'طلب #$id · $date' : 'بانتظار الإرسال · $date',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
+                    Text(
+                      amount,
+                      textDirection: TextDirection.ltr,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.text,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
                     Container(
-                      width: 44,
-                      height: 44,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: statusColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: statusColor.withValues(alpha: 0.15)),
+                        borderRadius: BorderRadius.circular(99),
                       ),
-                      child: Icon(Icons.shopping_bag_outlined, color: statusColor, size: 22),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('طلب #$id', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: AppColors.navy)),
-                          const SizedBox(height: 4),
-                          Text('$customer · $date', style: const TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: statusColor.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(color: statusColor.withValues(alpha: 0.2)),
-                            ),
-                            child: Text(statusLabel, style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.w800)),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(amount, textDirection: TextDirection.ltr, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: AppColors.navy)),
-                        const SizedBox(height: 8),
-                        Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceAlt,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.borderLight),
-                          ),
-                          child: Icon(Icons.arrow_back_ios_new_rounded, size: 12, color: statusColor),
+                      child: Text(
+                        statusLabel,
+                        style: TextStyle(
+                          color: statusColor,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
                         ),
-                      ],
+                      ),
                     ),
                   ],
                 ),
-              ),
-            ],
+                const SizedBox(width: 4),
+                const Icon(
+                  Icons.chevron_left_rounded,
+                  size: 20,
+                  color: AppColors.mutedLight,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1246,7 +1681,14 @@ class EdOrderCard extends StatelessWidget {
 }
 
 class EdPanelCard extends StatelessWidget {
-  const EdPanelCard({super.key, required this.title, required this.child, this.subtitle, this.icon, this.iconColor});
+  const EdPanelCard({
+    super.key,
+    required this.title,
+    required this.child,
+    this.subtitle,
+    this.icon,
+    this.iconColor,
+  });
 
   final String title;
   final String? subtitle;
@@ -1257,22 +1699,18 @@ class EdPanelCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppColors.radiusXl),
-        border: Border.all(color: AppColors.borderLight),
-        boxShadow: AppColors.cardShadow,
-      ),
+      decoration: AppColors.card(),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            height: 4,
-            color: iconColor ?? AppColors.accentTeal,
-          ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(EdSpacing.xl, EdSpacing.lg, EdSpacing.xl, EdSpacing.md),
+            padding: const EdgeInsets.fromLTRB(
+              EdSpacing.xl,
+              EdSpacing.lg,
+              EdSpacing.xl,
+              EdSpacing.md,
+            ),
             child: Row(
               children: [
                 if (icon != null)
@@ -1281,20 +1719,39 @@ class EdPanelCard extends StatelessWidget {
                     height: 44,
                     margin: const EdgeInsetsDirectional.only(end: EdSpacing.md),
                     decoration: BoxDecoration(
-                      color: (iconColor ?? AppColors.accentTeal).withValues(alpha: 0.1),
+                      color: (iconColor ?? AppColors.primary).withValues(
+                        alpha: 0.1,
+                      ),
                       borderRadius: BorderRadius.circular(AppColors.radiusSm),
-                      border: Border.all(color: AppColors.borderLight),
                     ),
-                    child: Icon(icon, color: iconColor ?? AppColors.accentTeal, size: 22),
+                    child: Icon(
+                      icon,
+                      color: iconColor ?? AppColors.primary,
+                      size: 22,
+                    ),
                   ),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.text,
+                        ),
+                      ),
                       if (subtitle != null) ...[
                         const SizedBox(height: 2),
-                        Text(subtitle!, style: const TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w600)),
+                        Text(
+                          subtitle!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.muted,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ],
                     ],
                   ),
@@ -1311,7 +1768,12 @@ class EdPanelCard extends StatelessWidget {
 }
 
 class EdLineRow extends StatelessWidget {
-  const EdLineRow({super.key, required this.title, required this.subtitle, required this.amount});
+  const EdLineRow({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.amount,
+  });
 
   final String title;
   final String subtitle;
@@ -1334,13 +1796,30 @@ class EdLineRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                Text(subtitle, style: const TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w600)),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.muted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
           ),
-          Text(amount, textDirection: TextDirection.ltr, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+          Text(
+            amount,
+            textDirection: TextDirection.ltr,
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+          ),
         ],
       ),
     );
@@ -1348,7 +1827,13 @@ class EdLineRow extends StatelessWidget {
 }
 
 class EdQtyStepper extends StatelessWidget {
-  const EdQtyStepper({super.key, required this.value, required this.onDec, required this.onInc, this.compact = false});
+  const EdQtyStepper({
+    super.key,
+    required this.value,
+    required this.onDec,
+    required this.onInc,
+    this.compact = false,
+  });
 
   final String value;
   final VoidCallback onDec;
@@ -1362,7 +1847,16 @@ class EdQtyStepper extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         _btn(Icons.remove_rounded, onDec, size),
-        Expanded(child: Text(value, textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w800, fontSize: compact ? 13 : 15))),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: compact ? 13 : 15,
+            ),
+          ),
+        ),
         _btn(Icons.add_rounded, onInc, size),
       ],
     );
@@ -1375,7 +1869,11 @@ class EdQtyStepper extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
-        child: SizedBox(width: size, height: size, child: Icon(icon, size: size * 0.5, color: AppColors.navy)),
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: Icon(icon, size: size * 0.5, color: AppColors.navy),
+        ),
       ),
     );
   }
@@ -1387,61 +1885,87 @@ class EdLoginAside extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.navy,
-      ),
-      padding: const EdgeInsets.all(40),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 56,
-            height: 4,
-            color: AppColors.goldLine,
-          ),
-          const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+      decoration: const BoxDecoration(gradient: AppColors.brandGradient),
+      child: LayoutBuilder(
+        builder: (context, c) => SingleChildScrollView(
+          padding: const EdgeInsets.all(48),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: (c.maxHeight - 96).clamp(0, double.infinity),
             ),
-            child: Image.asset('assets/logo.png', width: 56, height: 56),
+            child: _content(),
           ),
-          const SizedBox(height: 20),
-          Text('Edari', style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 1)),
-          const SizedBox(height: 8),
-          const Text('بوابة المندوب', style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-          const SizedBox(height: 12),
-          Text('كشوف حساب · منتجات · طلبات · تقارير', style: TextStyle(color: Colors.white.withValues(alpha: 0.78), fontWeight: FontWeight.w600, fontSize: 14)),
-          const SizedBox(height: 32),
-          _feature(Icons.account_tree_rounded, 'كشوف حساب تفصيلية'),
-          _feature(Icons.storefront_rounded, 'طلبات وفواتير'),
-          _feature(Icons.bar_chart_rounded, 'تقارير مبيعات'),
-        ],
+        ),
       ),
+    );
+  }
+
+  Widget _content() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Image.asset('assets/logo.png', width: 52, height: 52),
+        ),
+        const SizedBox(height: 28),
+        const Text(
+          'بوابة المندوب',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 34,
+            fontWeight: FontWeight.w800,
+            height: 1.2,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'كل ما يحتاجه المندوب في الميدان — في تطبيق واحد.',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.8),
+            fontWeight: FontWeight.w600,
+            fontSize: 16,
+          ),
+        ),
+        const SizedBox(height: 36),
+        _feature(Icons.receipt_long_rounded, 'وصولات وسندات قبض مع الطباعة'),
+        _feature(Icons.menu_book_rounded, 'كشوف حساب الزبائن والأرصدة'),
+        _feature(Icons.shopping_bag_rounded, 'طلبات المنتجات والفواتير'),
+        _feature(Icons.cloud_off_rounded, 'يعمل دون إنترنت ويُرسل تلقائياً'),
+      ],
     );
   }
 
   Widget _feature(IconData icon, String text) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Row(
         children: [
           Container(
-            width: 36,
-            height: 36,
+            width: 38,
+            height: 38,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.1),
+              color: Colors.white.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.goldLine.withValues(alpha: 0.25)),
             ),
-            child: Icon(icon, color: AppColors.goldLine, size: 18),
+            child: Icon(icon, color: Colors.white, size: 19),
           ),
           const SizedBox(width: 12),
-          Text(text, style: TextStyle(color: Colors.white.withValues(alpha: 0.92), fontWeight: FontWeight.w600, fontSize: 14)),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.95),
+                fontWeight: FontWeight.w600,
+                fontSize: 15,
+              ),
+            ),
+          ),
         ],
       ),
     );

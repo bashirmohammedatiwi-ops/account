@@ -162,8 +162,8 @@ class _ProductImageBlock extends StatelessWidget {
               imageUrl: product.imageUrl!,
               fit: BoxFit.contain,
               memCacheWidth: wide ? 480 : 320,
-              placeholder: (_, __) => const Center(child: CircularProgressIndicator(strokeWidth: 2, color: EdCommerceTheme.accent)),
-              errorWidget: (_, __, ___) => const Icon(Icons.inventory_2_outlined, size: 56, color: AppColors.muted),
+              placeholder: (_, _) => const Center(child: CircularProgressIndicator(strokeWidth: 2, color: EdCommerceTheme.accent)),
+              errorWidget: (_, _, _) => const Icon(Icons.inventory_2_outlined, size: 56, color: AppColors.muted),
             )
           : const Center(child: Icon(Icons.inventory_2_outlined, size: 56, color: AppColors.muted)),
     );
@@ -198,7 +198,7 @@ class _ProductInfoBlock extends StatelessWidget {
               color: EdCommerceTheme.accent,
               borderRadius: BorderRadius.circular(999),
             ),
-            child: const Text('في الفاتورة', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white)),
+            child: const Text('في الفاتورة', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white)),
           ),
         Text(product.name, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.35)),
         const SizedBox(height: 8),
@@ -217,7 +217,7 @@ class _ProductInfoBlock extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('سعر الجملة', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                const Text('سعر الجملة', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
                 Text(fmtMoney(product.price), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: EdCommerceTheme.accent)),
               ],
             ),
@@ -225,7 +225,7 @@ class _ProductInfoBlock extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                const Text('المجموع', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                const Text('المجموع', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
                 Text(fmtMoney(lineTotal), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.navy)),
               ],
             ),
@@ -248,7 +248,7 @@ class _ProductInfoBlock extends StatelessWidget {
         children: [
           Icon(icon, size: 12, color: AppColors.muted),
           const SizedBox(width: 4),
-          Text(text, textDirection: mono ? TextDirection.ltr : TextDirection.rtl, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+          Text(text, textDirection: mono ? TextDirection.ltr : TextDirection.rtl, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
         ],
       ),
     );

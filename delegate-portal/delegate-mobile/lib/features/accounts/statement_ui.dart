@@ -84,7 +84,7 @@ class EdStatementDebtField extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('الديون', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted)),
+                const Text('الديون', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted)),
                 Text(
                   fmtNumAlways(amount),
                   textDirection: TextDirection.ltr,
@@ -141,7 +141,7 @@ class EdStatementDocPanel extends StatelessWidget {
               children: [
                 Icon(Icons.receipt_long_rounded, size: 14, color: Colors.white70),
                 SizedBox(width: 8),
-                Text('كشف حساب', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white70)),
+                Text('كشف حساب', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white70)),
               ],
             ),
           ),
@@ -168,7 +168,7 @@ class EdStatementDocPanel extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('كشف حساب', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: EdAccountsTheme.accent)),
+                          const Text('كشف حساب', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: EdAccountsTheme.accent)),
                           const SizedBox(height: 4),
                           Text(
                             name,
@@ -196,13 +196,13 @@ class EdStatementDocPanel extends StatelessWidget {
                     address,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: AppColors.textSecondary),
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.textSecondary),
                   ),
                 ],
                 const SizedBox(height: 4),
                 Text(
                   period,
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary, height: 1.4),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary, height: 1.4),
                 ),
                 const SizedBox(height: 12),
                 LayoutBuilder(
@@ -271,7 +271,7 @@ class _StmtStatBox extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.muted)),
+          Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted)),
           const SizedBox(height: 4),
           Text(
             value,
@@ -404,7 +404,7 @@ class _EdStatementMovesHeader extends StatelessWidget {
             borderRadius: BorderRadius.circular(999),
             border: Border.all(color: EdAccountsTheme.line),
           ),
-          child: Text('$moveCount حركة', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: EdAccountsTheme.accent)),
+          child: Text('$moveCount حركة', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: EdAccountsTheme.accent)),
         ),
       ],
     );
@@ -470,13 +470,13 @@ class EdStatementMoveCard extends StatelessWidget {
                         if (!line.isOpening && line.date != null)
                           Text(
                             fmtDate(line.date),
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted),
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
                           ),
                         if (line.isOpening)
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(color: EdAccountsTheme.accentSoft, borderRadius: BorderRadius.circular(999)),
-                            child: const Text('رصيد مدور', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: EdAccountsTheme.accent)),
+                            child: const Text('رصيد مدور', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: EdAccountsTheme.accent)),
                           ),
                       ],
                     ),
@@ -489,7 +489,7 @@ class EdStatementMoveCard extends StatelessWidget {
                       const SizedBox(height: 6),
                       Text(
                         'الفرع 2: ${line.branch2}',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
                       ),
                     ],
                     const SizedBox(height: 12),
@@ -600,7 +600,7 @@ class _TypeTag extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: EdAccountsTheme.line),
       ),
-      child: Text(txTypeLabel(line), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.withValues(alpha: 0.9))),
+      child: Text(txTypeLabel(line), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: c.withValues(alpha: 0.9))),
     );
   }
 }
@@ -864,7 +864,7 @@ class EdStatementDataTable extends StatelessWidget {
   Widget _th(String text) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 9),
-      child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: EdAccountsTheme.tableHeadText, fontSize: 11, fontWeight: FontWeight.w700)),
+      child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: EdAccountsTheme.tableHeadText, fontSize: 12, fontWeight: FontWeight.w700)),
     );
   }
 

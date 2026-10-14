@@ -1,7 +1,7 @@
 name: edari_delegate
 description: Edari Delegate — تطبيق المندوب للآيباد والهاتف
 publish_to: 'none'
-version: 1.2.45+52
+version: 1.3.0+53
 
 environment:
   sdk: ^3.11.0
@@ -17,7 +17,6 @@ dependencies:
   dio: ^5.8.0+1
   flutter_secure_storage: ^9.2.4
   shared_preferences: ^2.5.3
-  google_fonts: ^6.2.1
   intl: ^0.20.2
   cached_network_image: ^3.4.1
   path_provider: ^2.1.5
@@ -57,3 +56,18 @@ flutter:
   uses-material-design: true
   assets:
     - assets/logo.png
+  fonts:
+    - family: Cairo
+      fonts:
+        - asset: assets/fonts/Cairo-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Cairo-Regular.ttf
+          weight: 500
+        - asset: assets/fonts/Cairo-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Cairo-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Cairo-Bold.ttf
+          weight: 800
+        - asset: assets/fonts/Cairo-Black.ttf
+          weight: 900

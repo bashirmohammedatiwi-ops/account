@@ -10,6 +10,12 @@ import '../../core/theme/app_colors.dart';
 import '../../core/widgets/ed_page_scroll.dart';
 import '../../core/widgets/adaptive_shell.dart';
 import '../../core/widgets/ed_components.dart';
+import '../../core/widgets/ed_kit.dart';
+import '../../core/api/api_exception.dart';
+import '../../core/offline/connectivity_service.dart';
+import '../../core/offline/sync_center.dart';
+import '../../core/offline/sync_engine.dart';
+import '../../core/utils/formatters.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -63,80 +69,48 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final config = ref.watch(appConfigProvider);
     final initial = (agent?.name ?? 'م').characters.first;
 
+    final sync = ref.watch(syncStatusProvider);
+    final conn = ref.watch(connectivityProvider);
+    final roleLine = agent == null || agent.delegateRoleLabel.isEmpty
+        ? ''
+        : agent.isSecondary && agent.parentAgentName.isNotEmpty
+            ? '${agent.delegateRoleLabel} · يتبع ${agent.parentAgentName}'
+            : agent.isPrimary && agent.secondaryCount > 0
+                ? '${agent.delegateRoleLabel} · ${agent.secondaryCount} مندوب ثانوي'
+                : agent.delegateRoleLabel;
+
     return AppPage(
-      title: 'الحساب',
-      kicker: 'الإعدادات',
-      showBack: true,
-      onBack: () => context.go('/home'),
+      title: 'الإعدادات',
+      subtitle: 'الحساب والمزامنة والطابعة',
       child: ListView(
         primary: false,
         physics: edPageScrollPhysics,
-        padding: EdgeInsets.fromLTRB(20, 12, 20, EdPageInsets.bottom(context)),
+        padding: EdgeInsets.fromLTRB(0, 20, 0, EdPageInsets.bottom(context, extra: 20)),
         children: [
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(AppColors.radiusLg),
-              border: Border.all(color: AppColors.borderLight),
-              boxShadow: AppColors.cardShadow,
-            ),
-            clipBehavior: Clip.antiAlias,
+          EdContent(
+            maxWidth: 760,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.centerRight,
-                      end: Alignment.centerLeft,
-                      colors: [Color(0xFF0A1020), Color(0xFF152238), Color(0xFF1A3352)],
-                    ),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.person_outline_rounded, size: 16, color: Colors.white70),
-                      SizedBox(width: 8),
-                      Text('حساب المندوب', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white70)),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(20),
+                EdCard(
+                  padding: const EdgeInsets.all(18),
                   child: Row(
                     children: [
-                      Container(
-                        width: 52,
-                        height: 52,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: AppColors.surfaceAlt,
-                          border: Border.all(color: AppColors.accentTeal.withValues(alpha: 0.35)),
-                        ),
-                        child: Text(initial, style: const TextStyle(color: AppColors.navy, fontSize: 20, fontWeight: FontWeight.w800)),
+                      CircleAvatar(
+                        radius: 28,
+                        backgroundColor: AppColors.primarySoft,
+                        child: Text(initial, style: const TextStyle(color: AppColors.primary, fontSize: 22, fontWeight: FontWeight.w800)),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(agent?.name ?? '—', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.navy, fontSize: 17, fontWeight: FontWeight.w800)),
-                            Text(agent?.username ?? '', style: const TextStyle(color: AppColors.muted, fontWeight: FontWeight.w600, fontSize: 13)),
-                            if ((agent?.delegateRoleLabel ?? '').isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                agent!.isSecondary && agent.parentAgentName.isNotEmpty
-                                    ? '${agent.delegateRoleLabel} · يتبع ${agent.parentAgentName}'
-                                    : agent.isPrimary && agent.secondaryCount > 0
-                                        ? '${agent.delegateRoleLabel} · ${agent.secondaryCount} مندوب ثانوي'
-                                        : agent.delegateRoleLabel,
-                                style: TextStyle(
-                                  color: agent.isSecondary ? AppColors.warning : AppColors.accentTeal,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
-                                ),
-                              ),
+                            Text(agent?.name ?? '—', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.text, fontSize: 18, fontWeight: FontWeight.w800)),
+                            Text(agent?.username ?? '', textDirection: TextDirection.ltr, style: const TextStyle(color: AppColors.muted, fontWeight: FontWeight.w600, fontSize: 13)),
+                            if (roleLine.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              EdPill(label: roleLine, color: agent!.isSecondary ? AppColors.warning : AppColors.primary),
                             ],
                           ],
                         ),
@@ -144,128 +118,192 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          EdPanelCard(
-            title: 'خادم Edari',
-            subtitle: config.isCustom ? 'عنوان مخصّص' : 'العنوان الافتراضي',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (_editingServer) ...[
-                  TextField(
-                    controller: _serverCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'عنوان الخادم',
-                      hintText: 'http://host:port',
-                      prefixIcon: Icon(Icons.dns_outlined),
-                    ),
-                    keyboardType: TextInputType.url,
-                    textDirection: TextDirection.ltr,
-                  ),
-                  if (_serverError != null) ...[
-                    const SizedBox(height: 8),
-                    Text(_serverError!, style: const TextStyle(color: AppColors.danger, fontWeight: FontWeight.w600)),
-                  ],
-                  const SizedBox(height: 12),
-                  Row(
+                const SizedBox(height: 16),
+                EdPanelCard(
+                  title: 'المزامنة والعمل دون إنترنت',
+                  subtitle: 'البيانات تُحفظ على الجهاز وتُرسل تلقائياً عند الاتصال',
+                  icon: Icons.cloud_sync_outlined,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(
-                        child: EdPrimaryButton(label: 'حفظ', loading: _savingServer, onPressed: _saveServer),
+                      Row(
+                        children: [
+                          const Text('الحالة', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+                          const Spacer(),
+                          const SyncStatusChip(),
+                        ],
                       ),
-                      const SizedBox(width: 10),
-                      OutlinedButton(
-                        onPressed: _savingServer ? null : () => setState(() => _editingServer = false),
-                        child: const Text('إلغاء'),
+                      const Divider(height: 22),
+                      _infoRow(Icons.update_rounded, 'آخر تحديث', sync.lastSyncAt != null ? relativeTimeAr(sync.lastSyncAt!) : '—'),
+                      const SizedBox(height: 10),
+                      _infoRow(Icons.download_done_rounded, 'آخر تنزيل كامل', sync.lastPrefetchAt != null ? relativeTimeAr(sync.lastPrefetchAt!) : 'لم يتم بعد'),
+                      const SizedBox(height: 10),
+                      _infoRow(Icons.outbox_outlined, 'بانتظار الإرسال', '${sync.pendingCount + sync.failedCount}'),
+                      if (sync.prefetching) ...[
+                        const SizedBox(height: 14),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(99),
+                          child: LinearProgressIndicator(value: sync.prefetchProgress, minHeight: 6, backgroundColor: AppColors.surfaceAlt),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(sync.prefetchLabel ?? 'جارٍ التنزيل…', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted)),
+                      ],
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          FilledButton.icon(
+                            onPressed: () => showSyncCenter(context),
+                            icon: const Icon(Icons.sync_rounded, size: 19),
+                            label: const Text('مركز المزامنة'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: !conn.isOnline || sync.prefetching
+                                ? null
+                                : () async {
+                                    try {
+                                      await ref.read(syncEngineProvider).prefetchForOffline(force: true);
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('تم تنزيل البيانات — يمكنك العمل دون إنترنت')),
+                                        );
+                                      }
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.displayMessage)));
+                                      }
+                                    }
+                                  },
+                            icon: const Icon(Icons.download_rounded, size: 19),
+                            label: const Text('تنزيل البيانات الآن'),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ] else ...[
-                  SelectableText(
-                    config.serverUrl,
-                    textDirection: TextDirection.ltr,
-                    style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.navy),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => setState(() => _editingServer = true),
-                          icon: const Icon(Icons.edit_outlined, size: 18),
-                          label: const Text('تعديل'),
+                ),
+                const SizedBox(height: 16),
+                EdPanelCard(
+                  title: 'خادم Edari',
+                  subtitle: config.isCustom ? 'عنوان مخصّص' : 'العنوان الافتراضي',
+                  icon: Icons.dns_outlined,
+                  child: _serverSection(config),
+                ),
+                const SizedBox(height: 16),
+                if (!kIsWeb) ...[
+                  EdPanelCard(
+                    title: 'الطابعة الحرارية',
+                    subtitle: 'اختر الطابعة مرة واحدة للطباعة',
+                    icon: Icons.print_outlined,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Text(
+                          'اربط طابعة 80mm من هنا — تُحفظ تلقائياً ولا تحتاج إعادة الاختيار في كل مرة.',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.muted),
                         ),
-                      ),
-                      if (config.isCustom) ...[
-                        const SizedBox(width: 10),
-                        OutlinedButton(
-                          onPressed: _resetServer,
-                          child: const Text('افتراضي'),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: () => context.push('/settings/printer'),
+                          icon: const Icon(Icons.print_outlined, size: 18),
+                          label: const Text('إعدادات الطابعة'),
                         ),
                       ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                EdPanelCard(
+                  title: 'عن التطبيق',
+                  icon: Icons.info_outline_rounded,
+                  child: Column(
+                    children: [
+                      _infoRow(Icons.verified_outlined, 'الإصدار', appVersion),
+                      const Divider(height: 20),
+                      _infoRow(Icons.phone_android_outlined, 'التطبيق', 'Edari Delegate'),
                     ],
                   ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          if (!kIsWeb)
-            EdPanelCard(
-              title: 'الطابعة الحرارية',
-              subtitle: 'اختر الطابعة مرة واحدة للطباعة',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    'اربط طابعة 80mm من هنا — تُحفظ تلقائياً ولا تحتاج إعادة الاختيار في كل مرة.',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.muted),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: () => context.push('/settings/printer'),
-                    icon: const Icon(Icons.print_outlined, size: 18),
-                    label: const Text('إعدادات الطابعة'),
-                  ),
-                ],
-              ),
-            ),
-          if (!kIsWeb) const SizedBox(height: 16),
-          EdPanelCard(
-            title: 'عن التطبيق',
-            child: Column(
-              children: [
-                _infoRow(Icons.verified_outlined, 'الإصدار', '1.2.2'),
-                const Divider(height: 20),
-                _infoRow(Icons.phone_android_outlined, 'المنصة', 'Edari Delegate'),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          OutlinedButton.icon(
-            onPressed: () async {
-              final ok = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('تسجيل الخروج'),
-                  content: const Text('هل تريد تسجيل الخروج من حساب المندوب؟'),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
-                    FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('خروج')),
-                  ],
                 ),
-              );
-              if (ok != true || !context.mounted) return;
-              await ref.read(authProvider.notifier).logout();
-              if (context.mounted) context.go('/login');
-            },
-            icon: const Icon(Icons.logout_rounded, color: AppColors.danger),
-            label: const Text('تسجيل الخروج', style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 24),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(side: BorderSide(color: AppColors.danger.withValues(alpha: 0.35))),
+                  onPressed: () async {
+                    final ok = await confirmLogout(context, ref);
+                    if (!ok || !context.mounted) return;
+                    await ref.read(authProvider.notifier).logout();
+                    if (context.mounted) context.go('/login');
+                  },
+                  icon: const Icon(Icons.logout_rounded, color: AppColors.danger),
+                  label: const Text('تسجيل الخروج', style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _serverSection(AppConfig config) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_editingServer) ...[
+          TextField(
+            controller: _serverCtrl,
+            decoration: const InputDecoration(
+              labelText: 'عنوان الخادم',
+              hintText: 'http://host:port',
+              prefixIcon: Icon(Icons.dns_outlined),
+            ),
+            keyboardType: TextInputType.url,
+            textDirection: TextDirection.ltr,
+          ),
+          if (_serverError != null) ...[
+            const SizedBox(height: 8),
+            Text(_serverError!, style: const TextStyle(color: AppColors.danger, fontWeight: FontWeight.w600)),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: EdPrimaryButton(label: 'حفظ', loading: _savingServer, onPressed: _saveServer),
+              ),
+              const SizedBox(width: 10),
+              OutlinedButton(
+                onPressed: _savingServer ? null : () => setState(() => _editingServer = false),
+                child: const Text('إلغاء'),
+              ),
+            ],
+          ),
+        ] else ...[
+          SelectableText(
+            config.serverUrl,
+            textDirection: TextDirection.ltr,
+            style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.text),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => setState(() => _editingServer = true),
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  label: const Text('تعديل'),
+                ),
+              ),
+              if (config.isCustom) ...[
+                const SizedBox(width: 10),
+                OutlinedButton(
+                  onPressed: _resetServer,
+                  child: const Text('افتراضي'),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ],
     );
   }
 
@@ -274,9 +312,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       children: [
         Icon(icon, size: 20, color: AppColors.muted),
         const SizedBox(width: 12),
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.muted)),
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
         const Spacer(),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.navy)),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.text)),
       ],
     );
   }

@@ -11,18 +11,8 @@ class EdModernBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final gradient = switch (variant) {
-      EdBackdropVariant.home => AppColors.homeSkyGradient,
-      EdBackdropVariant.accounts => const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFFF8FBFF), Color(0xFFF0F4FA), Color(0xFFEEF2F9)],
-        ),
-    };
-    return DecoratedBox(
-      decoration: BoxDecoration(gradient: gradient),
-      child: const SizedBox.expand(),
-    );
+    // خلفية موحّدة مسطّحة لكل الصفحات.
+    return const ColoredBox(color: AppColors.bg, child: SizedBox.expand());
   }
 }
 
@@ -32,7 +22,7 @@ enum EdBackdropVariant { home, accounts }
 class EdCardDecorStrip extends StatelessWidget {
   const EdCardDecorStrip({
     super.key,
-    this.colors = const [Color(0xFF0A1020), Color(0xFF152238), Color(0xFF1A3352)],
+    this.colors = const [Color(0xFF0B1B3F), Color(0xFF123F99)],
     this.height = 10,
     this.child,
   });

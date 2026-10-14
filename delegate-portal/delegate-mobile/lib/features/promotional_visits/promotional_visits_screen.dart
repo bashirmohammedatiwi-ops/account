@@ -59,7 +59,7 @@ class _PromotionalVisitsScreenState extends ConsumerState<PromotionalVisitsScree
     }
     setState(() => _submitting = true);
     try {
-      await ref.read(apiClientProvider).createPromotionalVisit(
+      final visit = await ref.read(apiClientProvider).createPromotionalVisit(
             governorateCode: _governorate!.code,
             areaName: area,
             shopName: shop,
@@ -77,7 +77,10 @@ class _PromotionalVisitsScreenState extends ConsumerState<PromotionalVisitsScree
         _governorate = null;
         _outcome = null;
       });
-      _snack('أُرسلت الزيارة الترويجية للوحة التحكم', success: true);
+      _snack(
+        visit.id < 0 ? 'حُفظت الزيارة على الجهاز — ستُرسل تلقائياً عند عودة الاتصال' : 'أُرسلت الزيارة الترويجية للوحة التحكم',
+        success: true,
+      );
     } catch (e) {
       _snack(e is ApiException ? e.message : '$e');
     } finally {
@@ -119,7 +122,7 @@ class _PromotionalVisitsScreenState extends ConsumerState<PromotionalVisitsScree
     final layout = EdLayout.of(context);
 
     return AppPage(
-      title: 'الزيادات الترويجية',
+      title: 'الزيارات الترويجية',
       kicker: 'ترويج المنتجات',
       subtitle: 'تسجيل زيارة المحل أو المركز',
       showBack: true,
@@ -170,7 +173,8 @@ class _PromotionalVisitsScreenState extends ConsumerState<PromotionalVisitsScree
               child: const Text('المحافظة', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textSecondary)),
             ),
             DropdownButtonFormField<IraqGovernorate>(
-              value: _governorate,
+              key: ValueKey('gov-${_governorate?.code}'),
+              initialValue: _governorate,
               decoration: const InputDecoration(hintText: 'اختر المحافظة'),
               items: meta.governorates.map((g) => DropdownMenuItem(value: g, child: Text(g.name))).toList(),
               onChanged: (v) => setState(() => _governorate = v),
@@ -192,7 +196,8 @@ class _PromotionalVisitsScreenState extends ConsumerState<PromotionalVisitsScree
               child: const Text('الحالة بعد الترويج', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textSecondary)),
             ),
             DropdownButtonFormField<VisitOutcome>(
-              value: _outcome,
+              key: ValueKey('outcome-${_outcome?.code}'),
+              initialValue: _outcome,
               decoration: const InputDecoration(hintText: 'نتيجة الزيارة'),
               items: meta.outcomes.map((o) => DropdownMenuItem(value: o, child: Text(o.label))).toList(),
               onChanged: (v) => setState(() => _outcome = v),

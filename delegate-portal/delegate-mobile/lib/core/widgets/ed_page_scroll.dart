@@ -8,13 +8,14 @@ import 'phone_ui.dart';
 class EdPageInsets {
   EdPageInsets._();
 
-  static const double phoneDockHeight = 64;
+  /// الشريط السفلي جزء من Scaffold الغلاف — المحتوى لا يمتد تحته.
+  static const double phoneDockHeight = 0;
 
   static double bottom(BuildContext context, {double extra = 12}) {
     final safe = MediaQuery.paddingOf(context).bottom;
     final layout = EdLayout.of(context);
-    if (layout.isWide) return safe + extra;
-    return safe + phoneDockHeight + extra;
+    if (layout.isWide) return safe + extra + 12;
+    return safe + phoneDockHeight + extra + 12;
   }
 
   static EdgeInsets pageBottom(BuildContext context, {double extra = 12}) {
@@ -69,7 +70,7 @@ class EdInlinePageHeader extends StatelessWidget {
                 if (kicker != null && kicker!.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(kicker!, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                    child: Text(kicker!, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
                   ),
                 Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.2)),
                 if (subtitle != null && subtitle!.isNotEmpty)

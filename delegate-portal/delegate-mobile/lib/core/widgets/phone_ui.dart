@@ -5,7 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../layout/breakpoints.dart';
 import '../theme/app_colors.dart';
 
-const kPhoneBottomInset = 100.0;
+/// مسافة أسفل المحتوى على الهاتف (الشريط السفلي خارج منطقة المحتوى).
+const kPhoneBottomInset = 28.0;
 
 const _tabRoots = {
   '/home',
@@ -85,7 +86,7 @@ class EdPhoneHeader extends StatelessWidget {
                           padding: const EdgeInsets.only(bottom: 4),
                           child: Text(
                             kicker!,
-                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted),
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted),
                           ),
                         ),
                       Text(
@@ -212,7 +213,7 @@ class EdPhoneServiceCard extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(999),
                                   border: Border.all(color: app.iconColor.withValues(alpha: 0.2)),
                                 ),
-                                child: Text(app.badge!, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: app.iconColor)),
+                                child: Text(app.badge!, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: app.iconColor)),
                               ),
                           ],
                         ),
@@ -228,7 +229,7 @@ class EdPhoneServiceCard extends StatelessWidget {
                           app.hint,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted),
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
                         ),
                       ],
                     ),
@@ -406,7 +407,7 @@ class EdPhoneStatsCard extends StatelessWidget {
           ),
           Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: color, height: 1)),
           const SizedBox(height: 3),
-          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted)),
+          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
         ],
       ),
     );
@@ -471,7 +472,7 @@ class EdPhoneStatsRow extends StatelessWidget {
             children: [
               Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color, height: 1)),
               const SizedBox(height: 2),
-              Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
+              Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.muted)),
             ],
           ),
         ],
@@ -582,7 +583,7 @@ class EdPhoneHomeHero extends StatelessWidget {
                       ),
                       child: const Text(
                         'بوابة المندوب',
-                        style: TextStyle(color: AppColors.accentTeal, fontSize: 11, fontWeight: FontWeight.w800),
+                        style: TextStyle(color: AppColors.accentTeal, fontSize: 12, fontWeight: FontWeight.w800),
                       ),
                     ),
                   ],
@@ -616,92 +617,107 @@ class EdPhoneHomeHero extends StatelessWidget {
   }
 }
 
-/// شريط تنقل سفلي
+/// شريط تنقل سفلي — مسطّح بحد علوي رفيع (نمط iOS/Material 3).
 class EdPhoneDock extends StatelessWidget {
-  const EdPhoneDock({super.key, required this.selected, required this.onSelect});
+  const EdPhoneDock({
+    super.key,
+    required this.selected,
+    required this.onSelect,
+    this.moreBadge = false,
+    this.receiptLabel = 'سند قبض',
+    this.receiptBadge,
+  });
 
   final int selected;
   final ValueChanged<int> onSelect;
-
-  static const _items = [
-    (icon: Icons.home_rounded, activeIcon: Icons.home, label: 'الرئيسية'),
-    (icon: Icons.menu_book_outlined, activeIcon: Icons.menu_book_rounded, label: 'الحسابات'),
-    (icon: Icons.inventory_2_outlined, activeIcon: Icons.inventory_2_rounded, label: 'المنتجات'),
-    (icon: Icons.shopping_bag_outlined, activeIcon: Icons.shopping_bag_rounded, label: 'الطلبات'),
-    (icon: Icons.grid_view_rounded, activeIcon: Icons.apps_rounded, label: 'المزيد'),
-  ];
+  final bool moreBadge;
+  final String receiptLabel;
+  final String? receiptBadge;
 
   @override
   Widget build(BuildContext context) {
-  return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.transparent,
+    final items = [
+      (icon: Icons.space_dashboard_outlined, activeIcon: Icons.space_dashboard_rounded, label: 'الرئيسية'),
+      (icon: Icons.menu_book_outlined, activeIcon: Icons.menu_book_rounded, label: 'الحسابات'),
+      (icon: Icons.receipt_long_outlined, activeIcon: Icons.receipt_long_rounded, label: receiptLabel),
+      (icon: Icons.inventory_2_outlined, activeIcon: Icons.inventory_2_rounded, label: 'المنتجات'),
+      (icon: Icons.grid_view_outlined, activeIcon: Icons.grid_view_rounded, label: 'المزيد'),
+    ];
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(top: BorderSide(color: AppColors.border)),
       ),
       child: SafeArea(
         top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: AppColors.surface.withValues(alpha: 0.96),
-              borderRadius: BorderRadius.circular(26),
-              border: Border.all(color: AppColors.borderLight),
-              boxShadow: AppColors.dockShadow,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-              child: Row(
-                children: List.generate(_items.length, (i) {
-                  final item = _items[i];
-                  final active = i == selected;
-                  return Expanded(
-                    child: GestureDetector(
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        onSelect(i);
-                      },
-                      behavior: HitTestBehavior.opaque,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 240),
-                        curve: Curves.easeOutCubic,
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 240),
-                              curve: Curves.easeOutCubic,
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: active ? AppColors.accentTeal.withValues(alpha: 0.12) : Colors.transparent,
-                                borderRadius: BorderRadius.circular(16),
-                                border: active ? Border.all(color: AppColors.accentTeal.withValues(alpha: 0.2)) : null,
-                              ),
-                              child: Icon(
-                                active ? item.activeIcon : item.icon,
-                                size: 22,
-                                color: active ? AppColors.accentTeal : AppColors.mutedLight,
+        child: SizedBox(
+          height: 62,
+          child: Row(
+            children: List.generate(items.length, (i) {
+              final item = items[i];
+              final active = i == selected;
+              final color = active ? AppColors.primary : AppColors.muted;
+              return Expanded(
+                child: InkResponse(
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    onSelect(i);
+                  },
+                  radius: 36,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeOutCubic,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: active ? AppColors.primarySoft : Colors.transparent,
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                            child: Icon(active ? item.activeIcon : item.icon, size: 22, color: color),
+                          ),
+                          if (i == 2 && receiptBadge != null)
+                            Positioned(
+                              top: -4,
+                              right: 4,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(color: AppColors.danger, borderRadius: BorderRadius.circular(99)),
+                                child: Text(receiptBadge!, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: Colors.white)),
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              item.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                color: active ? AppColors.navy : AppColors.mutedLight,
+                          if (i == items.length - 1 && moreBadge)
+                            Positioned(
+                              top: 2,
+                              right: 12,
+                              child: Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle),
                               ),
                             ),
-                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        item.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                          color: active ? AppColors.text : AppColors.muted,
                         ),
                       ),
-                    ),
-                  );
-                }),
-              ),
-            ),
+                    ],
+                  ),
+                ),
+              );
+            }),
           ),
         ),
       ),

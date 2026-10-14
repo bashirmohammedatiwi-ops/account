@@ -165,11 +165,11 @@ class EdShopCustomerBar extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('اسم الزبون', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                const Text('اسم الزبون', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
                 const SizedBox(height: 2),
                 Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.navy)),
                 if (meta.isNotEmpty)
-                  Text(meta, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                  Text(meta, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
               ],
             ),
           ),
@@ -182,7 +182,7 @@ class EdShopCustomerBar extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               child: Ink(
                 decoration: BoxDecoration(
-                  color: AppColors.navy,
+                  color: AppColors.primary,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -277,7 +277,7 @@ class EdShopToolbar extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               child: Ink(
                 decoration: BoxDecoration(
-                  color: AppColors.navy,
+                  color: AppColors.primary,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const SizedBox(
@@ -424,7 +424,7 @@ class EdShopProductDetailPanel extends StatelessWidget {
                       borderRadius: BorderRadius.circular(999),
                       border: Border.all(color: EdCommerceTheme.accent.withValues(alpha: 0.2)),
                     ),
-                    child: const Text('في الفاتورة', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: EdCommerceTheme.accent)),
+                    child: const Text('في الفاتورة', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: EdCommerceTheme.accent)),
                   ),
               ],
             ),
@@ -474,7 +474,7 @@ class EdShopProductDetailPanel extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('سعر الجملة', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                              const Text('سعر الجملة', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.muted)),
                               const SizedBox(height: 4),
                               Text(fmtMoney(product.price), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: EdCommerceTheme.accent)),
                             ],
@@ -493,7 +493,7 @@ class EdShopProductDetailPanel extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('المجموع', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                              const Text('المجموع', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.muted)),
                               const SizedBox(height: 4),
                               Text(fmtMoney(lineTotal), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF1E293B))),
                             ],
@@ -535,7 +535,7 @@ class EdShopProductDetailPanel extends StatelessWidget {
           Text(
             text,
             textDirection: mono ? TextDirection.ltr : TextDirection.rtl,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
           ),
         ],
       ),
@@ -549,8 +549,8 @@ Widget _productImage(Product product) {
       imageUrl: product.imageUrl!,
       fit: BoxFit.contain,
       memCacheWidth: 280,
-      placeholder: (_, __) => const Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))),
-      errorWidget: (_, __, ___) => const Icon(Icons.inventory_2_outlined, size: 48, color: AppColors.muted),
+      placeholder: (_, _) => const Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))),
+      errorWidget: (_, _, _) => const Icon(Icons.inventory_2_outlined, size: 48, color: AppColors.muted),
     );
   }
   return const Icon(Icons.inventory_2_outlined, size: 48, color: AppColors.muted);
@@ -611,10 +611,7 @@ class _EdShopQtyRowState extends State<EdShopQtyRow> {
     super.dispose();
   }
 
-  String _textForAmount(num v) {
-    if (v == v.roundToDouble()) return '${v.round()}';
-    return v.toString();
-  }
+  String _textForAmount(num v) => formatAmountInput(v);
 
   void _startEdit() {
     setState(() {
@@ -627,8 +624,7 @@ class _EdShopQtyRowState extends State<EdShopQtyRow> {
   }
 
   void _commit() {
-    final raw = WesternDigitsFormatter.toWestern(_ctrl.text.trim()).replaceAll(',', '');
-    final parsed = num.tryParse(raw);
+    final parsed = parseAmount(_ctrl.text);
     if (parsed != null) {
       widget.onSetValue(parsed.clamp(0, 999999));
     }
@@ -662,7 +658,7 @@ class _EdShopQtyRowState extends State<EdShopQtyRow> {
               color: fg.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(999),
             ),
-            child: Text(widget.label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: fg)),
+            child: Text(widget.label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: fg)),
           ),
           const SizedBox(height: 10),
           Row(
@@ -674,11 +670,11 @@ class _EdShopQtyRowState extends State<EdShopQtyRow> {
                         controller: _ctrl,
                         focusNode: _focus,
                         textAlign: TextAlign.center,
-                        keyboardType: EdNumericFieldConfig.decimal.keyboardType,
-                        inputFormatters: EdNumericFieldConfig.decimal.inputFormatters,
-                        textDirection: EdNumericFieldConfig.decimal.textDirection,
-                        enableSuggestions: EdNumericFieldConfig.decimal.enableSuggestions,
-                        autocorrect: EdNumericFieldConfig.decimal.autocorrect,
+                        keyboardType: EdNumericFieldConfig.groupedDecimal.keyboardType,
+                        inputFormatters: EdNumericFieldConfig.groupedDecimal.inputFormatters,
+                        textDirection: EdNumericFieldConfig.groupedDecimal.textDirection,
+                        enableSuggestions: EdNumericFieldConfig.groupedDecimal.enableSuggestions,
+                        autocorrect: EdNumericFieldConfig.groupedDecimal.autocorrect,
                         textInputAction: TextInputAction.done,
                         style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: fg),
                         decoration: InputDecoration(
@@ -809,8 +805,8 @@ class EdShopProductTile extends StatelessWidget {
                             imageUrl: product.imageUrl!,
                             fit: BoxFit.contain,
                             memCacheWidth: 200,
-                            placeholder: (_, __) => const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
-                            errorWidget: (_, __, ___) => const Icon(Icons.inventory_2_outlined, color: AppColors.muted, size: 32),
+                            placeholder: (_, _) => const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
+                            errorWidget: (_, _, _) => const Icon(Icons.inventory_2_outlined, color: AppColors.muted, size: 32),
                           )
                         : const Icon(Icons.inventory_2_outlined, color: AppColors.muted, size: 32),
                   ),
@@ -980,7 +976,7 @@ class EdShopOrderDock extends StatelessWidget {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: AppColors.navy,
+                color: AppColors.primary,
                 borderRadius: BorderRadius.circular(14),
               ),
               alignment: Alignment.center,
@@ -1004,7 +1000,7 @@ class EdShopOrderDock extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
                 child: Ink(
                   decoration: BoxDecoration(
-                    color: AppColors.navy,
+                    color: AppColors.primary,
                     borderRadius: BorderRadius.circular(14),
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),

@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,8 +19,10 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final _userCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
+  // تعبئة مسبقة في وضع التطوير فقط (--dart-define=EDARI_DEV_USER/EDARI_DEV_PASS).
+  final _userCtrl = TextEditingController(text: kDebugMode ? const String.fromEnvironment('EDARI_DEV_USER') : '');
+  bool _obscure = true;
+  final _passCtrl = TextEditingController(text: kDebugMode ? const String.fromEnvironment('EDARI_DEV_PASS') : '');
   bool _loading = false;
   String? _error;
 
@@ -95,28 +98,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           Container(
             padding: EdgeInsets.fromLTRB(EdSpacing.page, top + 40, EdSpacing.page, 48),
             decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topRight,
-                end: Alignment.bottomLeft,
-                colors: [Color(0xFF0A1020), Color(0xFF123044), Color(0xFF0F766E)],
-              ),
+              gradient: AppColors.brandGradient,
               borderRadius: BorderRadius.vertical(bottom: Radius.circular(AppColors.radius2xl)),
             ),
             child: Column(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-                  ),
-                  child: Image.asset('assets/logo.png', width: 64, height: 64),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+                  child: Image.asset('assets/logo.png', width: 56, height: 56),
                 ),
-                const SizedBox(height: EdSpacing.xl),
-                const Text('Edari', style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w800, letterSpacing: 1.2)),
-                const SizedBox(height: 8),
-                Text('بوابة المندوب', style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 16, fontWeight: FontWeight.w600)),
+                const SizedBox(height: EdSpacing.lg),
+                const Text('بوابة المندوب', style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                Text('Edari Delegate', style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 14, fontWeight: FontWeight.w600)),
               ],
             ),
           ),
@@ -128,7 +123,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 title: 'تسجيل الدخول',
                 subtitle: 'أدخل بيانات حساب المندوب',
                 icon: Icons.lock_outline_rounded,
-                iconColor: AppColors.accentTeal,
                 child: _fields(),
               ),
             ),
@@ -170,8 +164,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         EdLabeledField(
           label: 'كلمة المرور',
           controller: _passCtrl,
-          obscureText: true,
+          obscureText: _obscure,
           prefixIcon: Icons.lock_outline_rounded,
+          suffix: GestureDetector(
+            onTap: () => setState(() => _obscure = !_obscure),
+            child: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20, color: AppColors.muted),
+          ),
           onSubmitted: (_) => _submit(),
         ),
         if (_error != null) ...[

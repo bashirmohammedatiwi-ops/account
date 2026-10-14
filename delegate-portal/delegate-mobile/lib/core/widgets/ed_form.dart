@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_colors.dart';
+import '../utils/amount_words.dart';
 import '../utils/numeric_input.dart';
 import 'ed_components.dart';
 
@@ -29,39 +30,29 @@ class EdFormCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppColors.radiusXl),
-        border: Border.all(color: AppColors.borderLight),
-        boxShadow: AppColors.cardShadow,
-      ),
+      decoration: AppColors.card(radius: AppColors.radiusLg),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            height: 4,
-            color: AppColors.navy,
-          ),
-          Container(
-            padding: const EdgeInsets.fromLTRB(EdSpacing.xl, EdSpacing.lg, EdSpacing.xl, EdSpacing.md),
+            padding: const EdgeInsets.fromLTRB(EdSpacing.xl, EdSpacing.lg, EdSpacing.xl, EdSpacing.lg),
             decoration: const BoxDecoration(
-              color: AppColors.surfaceAlt,
+              color: AppColors.surface,
               border: Border(bottom: BorderSide(color: AppColors.borderLight)),
             ),
             child: Row(
               children: [
                 if (icon != null)
                   Container(
-                    width: 48,
-                    height: 48,
+                    width: 42,
+                    height: 42,
                     margin: const EdgeInsetsDirectional.only(end: EdSpacing.md),
                     decoration: BoxDecoration(
-                      color: (iconColor ?? AppColors.accentTeal).withValues(alpha: 0.1),
+                      color: (iconColor ?? AppColors.primary).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(AppColors.radiusSm),
-                      border: Border.all(color: AppColors.borderLight),
                     ),
-                    child: Icon(icon, color: iconColor ?? AppColors.accentTeal, size: 24),
+                    child: Icon(icon, color: iconColor ?? AppColors.primary, size: 22),
                   ),
                 Expanded(
                   child: Column(
@@ -69,7 +60,7 @@ class EdFormCard extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.navy, height: 1.2),
+                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.text, height: 1.25),
                       ),
                       if (subtitle != null) ...[
                         const SizedBox(height: 2),
@@ -81,7 +72,7 @@ class EdFormCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (trailing != null) trailing!,
+                ?trailing,
               ],
             ),
           ),
@@ -108,7 +99,7 @@ class EdFormSectionTitle extends StatelessWidget {
         children: [
           Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textSecondary)),
           if (subtitle != null)
-            Text(subtitle!, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.mutedLight)),
+            Text(subtitle!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.mutedLight)),
         ],
       ),
     );
@@ -148,7 +139,7 @@ class EdPickerField extends StatelessWidget {
           child: Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textSecondary)),
         ),
         Material(
-          color: _hasValue ? accentColor.withValues(alpha: 0.06) : AppColors.inputFill,
+          color: _hasValue ? accentColor.withValues(alpha: 0.05) : AppColors.surface,
           borderRadius: BorderRadius.circular(AppColors.radius),
           child: InkWell(
             onTap: onTap,
@@ -157,12 +148,12 @@ class EdPickerField extends StatelessWidget {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(AppColors.radius),
                 border: Border.all(
-                  color: _hasValue ? accentColor.withValues(alpha: 0.35) : AppColors.borderLight,
-                  width: _hasValue ? 1.5 : 1,
+                  color: _hasValue ? accentColor.withValues(alpha: 0.45) : AppColors.borderStrong,
+                  width: _hasValue ? 1.4 : 1,
                 ),
               ),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: EdSpacing.lg, vertical: EdSpacing.lg),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 child: Row(
                   children: [
                     Container(
@@ -188,7 +179,7 @@ class EdPickerField extends StatelessWidget {
                             ),
                           ),
                           if (_hasValue && subtitle != null)
-                            Text(subtitle!, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted)),
+                            Text(subtitle!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted)),
                         ],
                       ),
                     ),
@@ -221,7 +212,40 @@ class EdLabeledField extends StatelessWidget {
     this.textDirection,
     this.enableSuggestions = true,
     this.autocorrect = true,
+    this.showAmountWords = false,
+    this.amountSuffix,
   });
+
+  /// حقل مبلغ: فواصل المراتب أثناء الكتابة + المبلغ كتابةً أسفل الحقل.
+  factory EdLabeledField.money({
+    Key? key,
+    required String label,
+    required TextEditingController controller,
+    String? hint = '0',
+    IconData? prefixIcon,
+    Widget? suffix,
+    ValueChanged<String>? onSubmitted,
+    bool showWords = true,
+    String currency = 'د.ع',
+  }) {
+    final cfg = EdNumericFieldConfig.money;
+    return EdLabeledField(
+      key: key,
+      label: label,
+      controller: controller,
+      hint: hint,
+      keyboardType: cfg.keyboardType,
+      inputFormatters: cfg.inputFormatters,
+      prefixIcon: prefixIcon,
+      suffix: suffix,
+      onSubmitted: onSubmitted,
+      textDirection: cfg.textDirection,
+      enableSuggestions: cfg.enableSuggestions,
+      autocorrect: cfg.autocorrect,
+      showAmountWords: showWords,
+      amountSuffix: currency,
+    );
+  }
 
   factory EdLabeledField.integer({
     Key? key,
@@ -320,6 +344,12 @@ class EdLabeledField extends StatelessWidget {
   final TextDirection? textDirection;
   final bool enableSuggestions;
   final bool autocorrect;
+  /// يعرض المبلغ كتابةً بالعربية أسفل الحقل.
+  final bool showAmountWords;
+  /// وحدة تظهر داخل الحقل (مثل د.ع).
+  final String? amountSuffix;
+
+  bool get _isMoney => amountSuffix != null;
 
   @override
   Widget build(BuildContext context) {
@@ -340,13 +370,46 @@ class EdLabeledField extends StatelessWidget {
           textDirection: textDirection,
           enableSuggestions: enableSuggestions,
           autocorrect: autocorrect,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: AppColors.navy),
+          // المبلغ يُحاذى جهة التسمية (يمين) والعملة في الطرف الآخر.
+          textAlign: _isMoney ? TextAlign.right : TextAlign.start,
+          style: _isMoney
+              ? const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 19,
+                  color: AppColors.navy,
+                  letterSpacing: 0.4,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                )
+              : const TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: AppColors.navy),
           decoration: InputDecoration(
             hintText: hint,
             prefixIcon: prefixIcon != null ? Icon(prefixIcon, size: 20) : null,
             suffix: suffix,
+            suffixText: _isMoney && suffix == null ? amountSuffix : null,
+            suffixStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.muted),
           ),
         ),
+        if (showAmountWords)
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder: (context, value, _) {
+              final amount = parseAmount(value.text);
+              final words = amount == null || amount == 0 ? '' : amountInArabicWords(amount);
+              return AnimatedSize(
+                duration: const Duration(milliseconds: 160),
+                alignment: AlignmentDirectional.topStart,
+                child: words.isEmpty
+                    ? const SizedBox(width: double.infinity)
+                    : Padding(
+                        padding: const EdgeInsetsDirectional.only(top: 6, start: 4, end: 4),
+                        child: Text(
+                          words,
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.accentTeal, height: 1.35),
+                        ),
+                      ),
+              );
+            },
+          ),
       ],
     );
   }
@@ -467,7 +530,7 @@ class EdListTileCard extends StatelessWidget {
                           ),
                           child: Text(
                             badge!,
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: badgeColor ?? AppColors.muted),
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: badgeColor ?? AppColors.muted),
                           ),
                         ),
                       ],
@@ -509,7 +572,7 @@ class EdStatusBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
-      child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: color)),
+      child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: color)),
     );
   }
 }

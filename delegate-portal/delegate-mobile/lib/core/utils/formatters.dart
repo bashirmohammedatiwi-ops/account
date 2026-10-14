@@ -102,3 +102,22 @@ String displayOrderStatusLabel({String? status, String? statusLabel}) {
   if (label != null && label.isNotEmpty) return label;
   return orderStatusLabel(status);
 }
+
+/// وقت نسبي مختصر بالعربية: «الآن»، «قبل 5 د»، «قبل ساعتين»، «أمس 14:20».
+String relativeTimeAr(DateTime t, {DateTime? now}) {
+  final n = now ?? DateTime.now();
+  final d = n.difference(t);
+  if (d.inSeconds < 45) return 'الآن';
+  if (d.inMinutes < 60) {
+    final m = d.inMinutes < 1 ? 1 : d.inMinutes;
+    return m == 1 ? 'قبل دقيقة' : m == 2 ? 'قبل دقيقتين' : m <= 10 ? 'قبل $m دقائق' : 'قبل $m دقيقة';
+  }
+  if (d.inHours < 24 && n.day == t.day) {
+    final h = d.inHours;
+    return h == 1 ? 'قبل ساعة' : h == 2 ? 'قبل ساعتين' : h <= 10 ? 'قبل $h ساعات' : 'قبل $h ساعة';
+  }
+  final hm = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+  final yesterday = DateTime(n.year, n.month, n.day).subtract(const Duration(days: 1));
+  if (t.year == yesterday.year && t.month == yesterday.month && t.day == yesterday.day) return 'أمس $hm';
+  return '${t.day.toString().padLeft(2, '0')}/${t.month.toString().padLeft(2, '0')} $hm';
+}

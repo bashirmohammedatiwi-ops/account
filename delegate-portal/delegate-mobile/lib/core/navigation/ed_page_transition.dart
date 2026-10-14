@@ -36,3 +36,19 @@ Widget edTabTransition(Widget child, Animation<double> animation) {
     ),
   );
 }
+
+/// صفحات داخل الغلاف — تلاشٍ سريع بدل الانزلاق (الشريط الجانبي ثابت).
+Page<void> edShellPage(GoRouterState state, Widget child) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    child: child,
+    transitionDuration: const Duration(milliseconds: 180),
+    reverseTransitionDuration: const Duration(milliseconds: 140),
+    transitionsBuilder: (context, animation, secondaryAnimation, pageChild) {
+      return FadeTransition(
+        opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+        child: pageChild,
+      );
+    },
+  );
+}

@@ -68,7 +68,7 @@ class _StatementPanelState extends ConsumerState<StatementPanel> {
         loading: () => const LoadingView(message: 'جاري تحميل الكشف...'),
         error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(statementProvider(widget.accSeq))),
           data: (stmt) => RefreshIndicator(
-          color: AppColors.navy,
+          color: AppColors.primary,
           onRefresh: () async => ref.invalidate(statementProvider(widget.accSeq)),
           child: Builder(
             builder: (context) {

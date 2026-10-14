@@ -9,10 +9,13 @@ import '../api/delegate_api.dart';
 import '../api/api_exception.dart';
 import '../api/login_api.dart';
 import '../config/app_config_notifier.dart';
+import '../offline/offline_db.dart';
 import 'data_refresh.dart';
 
 const _tokenKey = 'delegateToken';
 const _agentKey = 'delegateAgent';
+/// المندوب الذي تعود له النسخة المحلية الحالية — لمسحها عند دخول مندوب آخر.
+const _cacheOwnerKey = 'delegateCacheOwner';
 
 class AuthState {
   const AuthState({this.token, this.agent, this.loading = false});
@@ -89,6 +92,10 @@ class AuthNotifier extends Notifier<AuthState> {
         return;
       }
 
+      // جلسات سابقة للتحديث: نسجّل مالك النسخة المحلية إن لم يكن مسجّلاً.
+      if (await _read(_cacheOwnerKey) == null) {
+        await _write(_cacheOwnerKey, '${agent.id}');
+      }
       state = AuthState(token: token, agent: agent, loading: false);
       ref.read(delegateDataRefreshProvider)();
       unawaited(_refreshAgent(epoch, token, fallbackAgent: agent));
@@ -144,6 +151,22 @@ class AuthNotifier extends Notifier<AuthState> {
       final config = ref.read(appConfigProvider);
       final result = await performLogin(config, username.trim(), password);
       await ref.read(apiClientProvider).resetReceiptCachesForSession();
+      final previousOwner = await _read(_cacheOwnerKey);
+      final newOwner = '${result.agent.id}';
+      if (previousOwner != newOwner) {
+        final db = OfflineDb.instance;
+        final unsent = await db.pendingOutboxCount() + await db.failedOutboxCount();
+        if (previousOwner != null && unsent > 0) {
+          // لا نحذف عمل مندوب آخر لم يُرسل، ولا نرسله باسم مندوب مختلف.
+          throw ApiException(
+            'على هذا الجهاز $unsent عملية لم تُرسل بعد لمندوب آخر. '
+            'سجّل الدخول بحسابه أولاً وأرسلها من «مركز المزامنة».',
+          );
+        }
+        // مندوب آخر (أو جلسة قديمة غير معروفة المالك): لا نعرض زبائنه أو سنداته.
+        await db.clearCacheEntries();
+      }
+      await _write(_cacheOwnerKey, newOwner);
       await _write(_tokenKey, result.token);
       await _write(_agentKey, jsonEncode(result.agent.toJson()));
       state = AuthState(token: result.token, agent: result.agent, loading: false);

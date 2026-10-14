@@ -4,62 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_provider.dart';
-import '../theme/app_colors.dart';
 import 'connectivity_service.dart';
 import 'live_refresh.dart';
 import 'sync_engine.dart';
-
-class OfflineBanner extends ConsumerWidget {
-  const OfflineBanner({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final connectivity = ref.watch(connectivityProvider);
-    final sync = ref.watch(syncStatusProvider);
-
-    if (connectivity.isOnline && !sync.syncing && sync.pendingCount == 0) {
-      return const SizedBox.shrink();
-    }
-
-    final offline = !connectivity.isOnline;
-    final color = offline ? AppColors.warning : AppColors.accentTeal;
-    final icon = offline ? Icons.cloud_off_rounded : Icons.cloud_sync_rounded;
-    final message = offline
-        ? 'وضع بدون إنترنت — البيانات محفوظة محلياً'
-        : sync.syncing
-            ? 'جاري مزامنة البيانات...'
-            : 'بانتظار الإرسال: ${sync.pendingCount}';
-
-    return Material(
-      color: color.withValues(alpha: 0.12),
-      child: InkWell(
-        onTap: () {
-          if (!offline) ref.read(syncEngineProvider).fullSync(deepCatalog: true);
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            children: [
-              Icon(icon, size: 18, color: color),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  message,
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: color),
-                ),
-              ),
-              if (!offline && !sync.syncing && sync.pendingCount > 0)
-                TextButton(
-                  onPressed: () => ref.read(syncEngineProvider).syncPending(),
-                  child: const Text('إرسال الآن'),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class SyncBootstrap extends ConsumerStatefulWidget {
   const SyncBootstrap({super.key, required this.child});
@@ -70,11 +17,16 @@ class SyncBootstrap extends ConsumerStatefulWidget {
   ConsumerState<SyncBootstrap> createState() => _SyncBootstrapState();
 }
 
+/// يدير التحديث الحي: كل [_pollInterval] أثناء فتح التطبيق، وفوراً عند العودة إليه
+/// أو عند رجوع الاتصال — فتظهر تغييرات لوحة التحكم خلال ثوانٍ دون سحب للتحديث.
 class _SyncBootstrapState extends ConsumerState<SyncBootstrap> with WidgetsBindingObserver {
-  static const _pollInterval = Duration(seconds: 20);
+  static const _pollInterval = Duration(seconds: 30);
+  /// لا نكرر التحديث إن حدث قبل أقل من هذه المدة (مثلاً عند العودة السريعة للتطبيق).
+  static const _minGap = Duration(seconds: 8);
 
-  bool _wasOnline = true;
   Timer? _pollTimer;
+  DateTime? _lastRefresh;
+  bool _foreground = true;
 
   @override
   void initState() {
@@ -92,24 +44,28 @@ class _SyncBootstrapState extends ConsumerState<SyncBootstrap> with WidgetsBindi
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
     if (state == AppLifecycleState.resumed) {
-      _refreshLiveData();
+      _refreshLiveData(force: true);
     }
   }
 
-  void _refreshLiveData() {
+  void _refreshLiveData({bool force = false}) {
+    if (!_foreground) return;
     if (!ref.read(authProvider).isAuthenticated) return;
+    final now = DateTime.now();
+    if (!force && _lastRefresh != null && now.difference(_lastRefresh!) < _minGap) return;
+    _lastRefresh = now;
     unawaited(refreshDelegateLiveData(ref));
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(connectivityProvider, (prev, next) {
-      if (!_wasOnline && next.isOnline) {
-        ref.read(syncEngineProvider).fullSync(deepCatalog: true);
-        _refreshLiveData();
+    ref.listen(connectivityProvider.select((s) => s.isOnline), (prev, online) {
+      if (prev == false && online && ref.read(authProvider).isAuthenticated) {
+        _lastRefresh = DateTime.now();
+        unawaited(ref.read(syncEngineProvider).onReconnected());
       }
-      _wasOnline = next.isOnline;
     });
 
     return widget.child;

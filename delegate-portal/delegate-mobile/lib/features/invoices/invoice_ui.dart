@@ -89,19 +89,19 @@ class EdInvoiceDocPanel extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('شركة ديما الحياة', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: EdAccountsTheme.accent)),
+                      const Text('شركة ديما الحياة', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: EdAccountsTheme.accent)),
                       Text(
                         '${inv['kindLabel'] ?? 'فاتورة مبيعات'}',
                         style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, height: 1.35, color: AppColors.navy),
                       ),
                       Text(
                         'رقم ${inv['num'] ?? '—'} · ${fmtDate(inv['date']?.toString())}${((inv['year'] ?? '').toString().trim().isEmpty) ? '' : ' · سنة ${inv['year']}'}',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary, height: 1.45),
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary, height: 1.45),
                       ),
                       if (remarks.isNotEmpty)
                         Text(
                           remarks,
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted, height: 1.45),
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted, height: 1.45),
                         ),
                     ],
                   ),
@@ -187,7 +187,7 @@ class EdInvoiceLinesSection extends StatelessWidget {
                 borderRadius: BorderRadius.circular(999),
                 border: Border.all(color: EdAccountsTheme.line),
               ),
-              child: Text('${lines.length} بند', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: EdAccountsTheme.accent)),
+              child: Text('${lines.length} بند', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: EdAccountsTheme.accent)),
             ),
           ],
         ),
@@ -270,11 +270,11 @@ class EdInvoiceLinesTable extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('${line['matName'] ?? line['name'] ?? '—'}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, height: 1.3)),
+              Text('${line['matName'] ?? line['name'] ?? '—'}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, height: 1.3)),
               if (remarks.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 3),
-                  child: Text(remarks, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.muted)),
+                  child: Text(remarks, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.muted)),
                 ),
             ],
           ),
@@ -298,7 +298,7 @@ class EdInvoiceLinesTable extends StatelessWidget {
           child: Text(
             label,
             textAlign: TextAlign.right,
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: highlight ? AppColors.navy : AppColors.textSecondary),
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: highlight ? AppColors.navy : AppColors.textSecondary),
           ),
         ),
         _cell(''),
@@ -321,7 +321,7 @@ class EdInvoiceLinesTable extends StatelessWidget {
     return Container(
       color: EdAccountsTheme.tableHead,
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-      child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: EdAccountsTheme.tableHeadText, fontSize: 10, fontWeight: FontWeight.w800)),
+      child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: EdAccountsTheme.tableHeadText, fontSize: 11, fontWeight: FontWeight.w800)),
     );
   }
 

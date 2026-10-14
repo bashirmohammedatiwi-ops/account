@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:uuid/uuid.dart';
 
+import '../utils/formatters.dart';
 import 'offline_db.dart';
 
 class OutboxEntry {
@@ -30,6 +31,37 @@ class OutboxEntry {
   final int retries;
   final String status;
   final String? error;
+
+  bool get isFailed => status == 'failed';
+
+  /// وصف مقروء لنوع العملية.
+  String get label => switch (entityType) {
+        'order' => 'طلب',
+        'order_delete' => 'حذف طلب',
+        'receipt' => 'سند قبض',
+        'receipt_delete' => 'حذف سند قبض',
+        'delivery_receipt' => 'وصل قبض',
+        'delivery_delete' => 'حذف وصل قبض',
+        'delivery_printed' => 'تأكيد طباعة وصل',
+        'delivery_handover' => 'تأكيد استلام وصل',
+        'customer_request' => 'زبون جديد',
+        'customer_request_delete' => 'حذف طلب زبون',
+        'promo_visit' => 'زيارة ترويجية',
+        'promo_delete' => 'حذف زيارة',
+        _ => 'عملية',
+      };
+
+  /// تفاصيل مختصرة (اسم الزبون/المبلغ) من البيانات المحفوظة.
+  String get summary {
+    final opt = optimisticJson ?? const {};
+    final b = body ?? const {};
+    final parts = <String>[];
+    final name = '${opt['customerName'] ?? opt['name'] ?? opt['shopName'] ?? b['name'] ?? b['shopName'] ?? ''}'.trim();
+    if (name.isNotEmpty) parts.add(name);
+    final amount = opt['amount'] ?? opt['totalAmount'] ?? b['amount'];
+    if (amount is num && amount != 0) parts.add('${fmtMoney(amount)} د.ع');
+    return parts.join(' · ');
+  }
 
   factory OutboxEntry.fromRow(Map<String, Object?> row) => OutboxEntry(
         id: row['id'] as String,
@@ -68,7 +100,7 @@ class OutboxStore {
       if (existing.isEmpty) {
         bodyWithId['clientRequestId'] = _uuid.v4();
       } else if (entityType == 'order') {
-        final queuedEntries = await this.pending();
+        final queuedEntries = await pending();
         for (final entry in queuedEntries) {
           if (entry.entityType != 'order') continue;
           final queued = '${entry.body?['clientRequestId'] ?? ''}'.trim();
@@ -98,9 +130,21 @@ class OutboxStore {
     return rows.map(OutboxEntry.fromRow).toList();
   }
 
+  Future<List<OutboxEntry>> all() async {
+    final rows = await _db.queryAllOutbox();
+    return rows.map(OutboxEntry.fromRow).toList();
+  }
+
   Future<int> pendingCount() async => _db.pendingOutboxCount();
+
+  Future<int> failedCount() async => _db.failedOutboxCount();
 
   Future<void> markDone(String id) async => _db.deleteOutbox(id);
 
-  Future<void> markFailed(String id, String error) async => _db.bumpOutboxRetry(id, error);
+  /// رفض من الخادم — بعد [failAfter] محاولات يتوقف الإرسال التلقائي ويظهر للمندوب.
+  Future<void> markFailed(String id, String error, {int failAfter = 0}) async =>
+      _db.bumpOutboxRetry(id, error, failAfter: failAfter);
+
+  /// إعادة عنصر مرفوض إلى قائمة الإرسال.
+  Future<void> retry(String id) async => _db.setOutboxStatus(id, 'pending', resetRetries: true);
 }

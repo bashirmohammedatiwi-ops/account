@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'app_colors.dart';
 
@@ -9,21 +8,24 @@ abstract final class AppTheme {
     final base = ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
+      fontFamily: 'Cairo',
       colorScheme: ColorScheme.fromSeed(
-        seedColor: AppColors.navy,
-        primary: AppColors.navy,
-        secondary: AppColors.accentTeal,
+        seedColor: AppColors.primary,
+        primary: AppColors.primary,
+        secondary: AppColors.navy,
         surface: AppColors.surface,
         error: AppColors.danger,
       ),
-      scaffoldBackgroundColor: Colors.white,
+      scaffoldBackgroundColor: AppColors.bg,
       cardColor: AppColors.surface,
       dividerColor: AppColors.borderLight,
       splashColor: AppColors.accentTeal.withValues(alpha: 0.08),
       highlightColor: AppColors.accentTeal.withValues(alpha: 0.05),
     );
 
-    final textTheme = GoogleFonts.cairoTextTheme(base.textTheme).apply(
+    // خط Cairo مضمَّن في التطبيق — لا يحتاج إنترنت عند أول تشغيل.
+    final textTheme = base.textTheme.apply(
+      fontFamily: 'Cairo',
       bodyColor: AppColors.text,
       displayColor: AppColors.text,
     );
@@ -59,7 +61,7 @@ abstract final class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.inputFill,
+        fillColor: AppColors.surface,
         floatingLabelBehavior: FloatingLabelBehavior.auto,
         labelStyle: textTheme.labelLarge?.copyWith(
           color: AppColors.textSecondary,
@@ -74,10 +76,10 @@ abstract final class AppTheme {
         suffixIconColor: AppColors.muted,
         border: inputBorder,
         enabledBorder: inputBorder.copyWith(
-          borderSide: const BorderSide(color: AppColors.borderLight, width: 1),
+          borderSide: const BorderSide(color: AppColors.borderStrong, width: 1),
         ),
         focusedBorder: inputBorder.copyWith(
-          borderSide: const BorderSide(color: AppColors.borderFocus, width: 2),
+          borderSide: const BorderSide(color: AppColors.borderFocus, width: 1.6),
         ),
         errorBorder: inputBorder.copyWith(
           borderSide: const BorderSide(color: AppColors.danger, width: 1),
@@ -85,15 +87,15 @@ abstract final class AppTheme {
         focusedErrorBorder: inputBorder.copyWith(
           borderSide: const BorderSide(color: AppColors.danger, width: 2),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: AppColors.navy,
+          backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
           disabledBackgroundColor: AppColors.border,
           disabledForegroundColor: AppColors.muted,
-          minimumSize: const Size(0, 54),
+          minimumSize: const Size(0, 50),
           padding: const EdgeInsets.symmetric(horizontal: 24),
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppColors.radius)),
@@ -103,8 +105,9 @@ abstract final class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.navy,
-          side: const BorderSide(color: AppColors.border),
-          minimumSize: const Size(0, 50),
+          side: const BorderSide(color: AppColors.borderStrong),
+          backgroundColor: AppColors.surface,
+          minimumSize: const Size(0, 46),
           padding: const EdgeInsets.symmetric(horizontal: 20),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppColors.radius)),
           textStyle: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
@@ -124,7 +127,7 @@ abstract final class AppTheme {
         ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: AppColors.surfaceAlt,
+        backgroundColor: AppColors.surface,
         selectedColor: AppColors.accentSoft,
         labelStyle: textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
         side: const BorderSide(color: AppColors.border),
@@ -134,8 +137,14 @@ abstract final class AppTheme {
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppColors.radius)),
-        backgroundColor: AppColors.navy,
+        backgroundColor: AppColors.navySoft,
+        contentTextStyle: textTheme.bodyMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
       ),
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(color: AppColors.navySoft, borderRadius: BorderRadius.circular(8)),
+        textStyle: textTheme.bodySmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(color: AppColors.primary),
       dialogTheme: DialogThemeData(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppColors.radiusXl)),
         backgroundColor: AppColors.surface,
