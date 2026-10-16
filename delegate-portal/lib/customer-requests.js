@@ -56,10 +56,16 @@ function findAccount(seqOrNum) {
 }
 
 function assertAgentAssignedTree(agentId, treeAccSeq) {
-  const row = db.prepare(`
+  const hasTree = (id) => !!db.prepare(`
     SELECT account_seq FROM agent_trees WHERE agent_id = ? AND account_seq = ?
-  `).get(agentId, String(treeAccSeq));
-  if (!row) throw new Error('اختر شجرة من شجراتك المعتمدة');
+  `).get(id, String(treeAccSeq));
+  if (hasTree(agentId)) return;
+  // المندوب الثانوي يعمل على شجرات رئيسيه (مثل /trees و agentAllowedSeqs).
+  const agent = db.prepare('SELECT delegate_role, parent_agent_id FROM agents WHERE id = ?').get(Number(agentId));
+  if (String(agent?.delegate_role || '').toLowerCase() === 'secondary' && agent?.parent_agent_id && hasTree(agent.parent_agent_id)) {
+    return;
+  }
+  throw new Error('اختر شجرة من شجراتك المعتمدة');
 }
 
 function logEvent(requestId, { actorType, actorId, fromStatus, toStatus, note }) {

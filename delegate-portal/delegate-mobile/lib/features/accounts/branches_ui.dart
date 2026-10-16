@@ -7,6 +7,7 @@ import '../../core/widgets/adaptive_shell.dart';
 import '../../core/widgets/ed_components.dart';
 import '../../core/widgets/ed_kit.dart';
 import '../../core/widgets/ed_page_scroll.dart';
+import '../../core/widgets/governorate_ui.dart';
 import '../../models/models.dart';
 import 'account_ui.dart';
 import 'accounts_theme.dart';
@@ -21,6 +22,11 @@ class EdBranchesContent extends StatelessWidget {
     required this.onSearchChanged,
     required this.onFilterChanged,
     required this.onBranchTap,
+    this.governorateBar,
+    this.selecting = false,
+    this.selected = const {},
+    this.onBranchLongPress,
+    this.onGovernorateTap,
   });
 
   final AccountTree tree;
@@ -30,6 +36,14 @@ class EdBranchesContent extends StatelessWidget {
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<String> onFilterChanged;
   final ValueChanged<BranchAccount> onBranchTap;
+  /// شريط فلتر المحافظات (يُعرض تحت البحث).
+  final Widget? governorateBar;
+  /// وضع التحديد للتصنيف الجماعي.
+  final bool selecting;
+  final Set<String> selected;
+  final ValueChanged<BranchAccount>? onBranchLongPress;
+  /// الضغط على شارة المحافظة — للمندوب الرئيسي فقط (null = للعرض).
+  final ValueChanged<BranchAccount>? onGovernorateTap;
 
   @override
   Widget build(BuildContext context) {
@@ -51,6 +65,10 @@ class EdBranchesContent extends StatelessWidget {
                 onSearchChanged: onSearchChanged,
                 onFilterChanged: onFilterChanged,
               ),
+              if (governorateBar != null) ...[
+                const SizedBox(height: 12),
+                governorateBar!,
+              ],
               const SizedBox(height: 18),
               _BranchSectionTitle(
                 count: filtered.length,
@@ -72,7 +90,7 @@ class EdBranchesContent extends StatelessWidget {
           )
         else
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(pad, 0, pad, EdPageInsets.bottom(context, extra: 20)),
+            padding: EdgeInsets.fromLTRB(pad, 0, pad, EdPageInsets.bottom(context, extra: selecting ? 96 : 20)),
             sliver: DecoratedSliver(
               decoration: AppColors.card(),
               sliver: SliverList(
@@ -84,6 +102,11 @@ class EdBranchesContent extends StatelessWidget {
                       _BranchRow(
                         branch: filtered[i],
                         onTap: () => onBranchTap(filtered[i]),
+                        onLongPress: onBranchLongPress == null ? null : () => onBranchLongPress!(filtered[i]),
+                        onGovernorateTap:
+                            onGovernorateTap == null || selecting ? null : () => onGovernorateTap!(filtered[i]),
+                        selecting: selecting,
+                        selected: selected.contains(filtered[i].seq),
                         first: i == 0,
                         last: i == filtered.length - 1,
                       ),
@@ -101,10 +124,23 @@ class EdBranchesContent extends StatelessWidget {
 
 /// صف زبون: الحرف الأول، الاسم والرقم، الحالة والرصيد.
 class _BranchRow extends StatelessWidget {
-  const _BranchRow({required this.branch, required this.onTap, required this.first, required this.last});
+  const _BranchRow({
+    required this.branch,
+    required this.onTap,
+    required this.first,
+    required this.last,
+    this.onLongPress,
+    this.onGovernorateTap,
+    this.selecting = false,
+    this.selected = false,
+  });
 
   final BranchAccount branch;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  final VoidCallback? onGovernorateTap;
+  final bool selecting;
+  final bool selected;
   final bool first;
   final bool last;
 
@@ -124,23 +160,42 @@ class _BranchRow extends StatelessWidget {
       bottom: last ? const Radius.circular(AppColors.radiusLg) : Radius.zero,
     );
 
+    final showGov = branch.governorateName != null || onGovernorateTap != null;
+
     return Material(
-      color: Colors.transparent,
+      color: selected ? kGovernorateColor.withValues(alpha: 0.07) : Colors.transparent,
       borderRadius: radius,
       child: InkWell(
         borderRadius: radius,
         onTap: onTap,
+        onLongPress: onLongPress,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: style.bg,
-                child: Text(
-                  name.isEmpty ? '؟' : name.characters.first,
-                  style: TextStyle(fontWeight: FontWeight.w800, color: style.fg, fontSize: 15),
-                ),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 160),
+                child: selecting
+                    ? Container(
+                        key: const ValueKey('check'),
+                        width: 40,
+                        height: 40,
+                        alignment: Alignment.center,
+                        child: Icon(
+                          selected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                          size: 26,
+                          color: selected ? kGovernorateColor : AppColors.mutedLight,
+                        ),
+                      )
+                    : CircleAvatar(
+                        key: const ValueKey('avatar'),
+                        radius: 20,
+                        backgroundColor: style.bg,
+                        child: Text(
+                          name.isEmpty ? '؟' : name.characters.first,
+                          style: TextStyle(fontWeight: FontWeight.w800, color: style.fg, fontSize: 15),
+                        ),
+                      ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -160,6 +215,10 @@ class _BranchRow extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
                       ),
+                    if (showGov) ...[
+                      const SizedBox(height: 4),
+                      EdGovernorateBadge(branch: branch, onTap: onGovernorateTap),
+                    ],
                   ],
                 ),
               ),
@@ -181,8 +240,10 @@ class _BranchRow extends StatelessWidget {
                   EdPill(label: status, color: style.fg),
                 ],
               ),
-              const SizedBox(width: 6),
-              const Icon(Icons.chevron_left_rounded, size: 20, color: AppColors.mutedLight),
+              if (!selecting) ...[
+                const SizedBox(width: 6),
+                const Icon(Icons.chevron_left_rounded, size: 20, color: AppColors.mutedLight),
+              ],
             ],
           ),
         ),

@@ -139,6 +139,7 @@ class InvoiceDraftNotifier extends Notifier<Map<int, DraftLine>> {
               if (customer!.requestId != null) 'requestId': customer!.requestId,
               if (customer!.isPending) 'isPending': true,
               if (customer!.pendingLabel != null) 'pendingLabel': customer!.pendingLabel,
+              if (customer!.governorateCode != null) 'governorateCode': customer!.governorateCode,
             },
       'draft': draft,
       'productCache': cache,

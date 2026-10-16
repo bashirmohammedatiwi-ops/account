@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/delegate_api.dart';
 import '../theme/app_colors.dart';
+import 'governorate_ui.dart';
 import '../utils/debounce.dart';
 import '../utils/branch_search.dart';
 import '../../models/models.dart';
@@ -73,6 +74,8 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
   String _search = '';
   bool _remoteSearchActive = false;
   bool _pickableSearchActive = false;
+  /// فلتر المحافظة داخل الشجرة (null = الكل).
+  String? _gov;
   final _debounce = Debouncer();
   final _searchCtrl = TextEditingController();
 
@@ -220,9 +223,24 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
   }
 
   List<BranchAccount> get _filteredBranches {
-    final list = _branches ?? [];
+    final list = (_branches ?? []).where((b) => b.matchesGovernorate(_gov)).toList();
     if (_search.isEmpty || _pickableSearchActive || _remoteSearchActive) return list;
     return filterBranchesForSearch(list, _search);
+  }
+
+  Widget _governorateBar() {
+    final all = _branches ?? const <BranchAccount>[];
+    final counts = countByGovernorate(all);
+    if (counts.keys.every((k) => k == kUnclassifiedGovernorate)) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: EdGovernorateFilterBar(
+        counts: counts,
+        total: all.where((b) => b.hasPostedAccount).length,
+        selected: _gov != null && (counts[_gov] ?? 0) > 0 ? _gov : null,
+        onSelected: (code) => setState(() => _gov = code),
+      ),
+    );
   }
 
   @override
@@ -257,6 +275,7 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
                       onPressed: () => setState(() {
                         _tree = null;
                         _branches = null;
+                        _gov = null;
                         _search = '';
                         _searchCtrl.clear();
                         _remoteSearchActive = false;
@@ -306,6 +325,7 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
                   },
                 ),
               ),
+            if (_tree != null && !_loading && _error == null) _governorateBar(),
             const SizedBox(height: 8),
             Flexible(
               child: _loading
@@ -431,6 +451,10 @@ class _CustomerPickerSheetState extends ConsumerState<_CustomerPickerSheet> {
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
                         ),
+                        if (b.governorateName != null) ...[
+                          const SizedBox(height: 3),
+                          EdGovernorateBadge(branch: b),
+                        ],
                       ],
                     ),
                   ),

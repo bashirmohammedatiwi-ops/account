@@ -48,6 +48,7 @@ class OutboxEntry {
         'customer_request_delete' => 'حذف طلب زبون',
         'promo_visit' => 'زيارة ترويجية',
         'promo_delete' => 'حذف زيارة',
+        'customer_governorate' => 'تصنيف محافظة',
         _ => 'عملية',
       };
 
@@ -56,6 +57,12 @@ class OutboxEntry {
     final opt = optimisticJson ?? const {};
     final b = body ?? const {};
     final parts = <String>[];
+    if (entityType == 'customer_governorate') {
+      final seqs = b['seqs'];
+      final count = seqs is List ? seqs.length : 0;
+      final gov = '${opt['governorateName'] ?? ''}'.trim();
+      return [if (count > 0) '$count زبون', gov.isEmpty ? 'إزالة التصنيف' : gov].join(' ← ');
+    }
     final name = '${opt['customerName'] ?? opt['name'] ?? opt['shopName'] ?? b['name'] ?? b['shopName'] ?? ''}'.trim();
     if (name.isNotEmpty) parts.add(name);
     final amount = opt['amount'] ?? opt['totalAmount'] ?? b['amount'];

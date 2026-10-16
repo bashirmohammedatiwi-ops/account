@@ -161,6 +161,7 @@ function migrateCommerceSchema(db) {
   migrateDeliveryReceipts(db);
   migrateAgentHierarchy(db);
   migrateClientRequestIds(db);
+  migrateCustomerGovernorates(db);
   const branchCount = db.prepare('SELECT COUNT(*) AS c FROM catalog_branches').get().c;
   if (!branchCount) {
     db.prepare(`
@@ -502,8 +503,23 @@ function migrateClientRequestIds(db) {
   `);
 }
 
+/** تصنيف زبائن الفريق حسب المحافظة — يملكه المندوب الرئيسي ويراه الثانويون التابعون له. */
+function migrateCustomerGovernorates(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_customer_governorates (
+      owner_agent_id INTEGER NOT NULL,
+      account_seq TEXT NOT NULL,
+      governorate_code TEXT NOT NULL,
+      updated_by_agent_id INTEGER,
+      updated_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (owner_agent_id, account_seq)
+    )
+  `);
+}
+
 module.exports = {
   migrateCommerceSchema,
+  migrateCustomerGovernorates,
   migrateShorjaOrderFields,
   migrateReceipts,
   migrateCustomerRequests,

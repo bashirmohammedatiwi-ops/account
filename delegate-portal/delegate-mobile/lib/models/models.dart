@@ -125,6 +125,8 @@ class BranchAccount {
     this.requestId,
     this.isPending = false,
     this.pendingLabel,
+    this.governorateCode,
+    this.governorateName,
   });
 
   final String seq;
@@ -139,8 +141,35 @@ class BranchAccount {
   final int? requestId;
   final bool isPending;
   final String? pendingLabel;
+  /// محافظة الزبون حسب تصنيف المندوب الرئيسي للفريق (null = غير مصنّف).
+  final String? governorateCode;
+  final String? governorateName;
 
   bool get hasPostedAccount => seq.isNotEmpty && !isPending;
+
+  /// يطابق فلتر المحافظة: null = الكل، [kUnclassifiedGovernorate] = غير المصنّفين.
+  bool matchesGovernorate(String? code) {
+    if (code == null) return true;
+    if (code == kUnclassifiedGovernorate) return governorateCode == null;
+    return governorateCode == code;
+  }
+
+  BranchAccount withGovernorate(String? code) => BranchAccount(
+        seq: seq,
+        accountNum: accountNum,
+        name1: name1,
+        bal: bal,
+        name2: name2,
+        address: address,
+        debtAmount: debtAmount,
+        debtStatus: debtStatus,
+        summary: summary,
+        requestId: requestId,
+        isPending: isPending,
+        pendingLabel: pendingLabel,
+        governorateCode: code,
+        governorateName: code == null ? null : iraqGovernorateName(code),
+      );
 
   String? get summaryLabel => summary?['label']?.toString();
 
@@ -165,8 +194,51 @@ class BranchAccount {
         requestId: json['requestId'] as int? ?? (json['request_id'] as int?),
         isPending: json['isPending'] == true,
         pendingLabel: json['pendingLabel']?.toString() ?? json['pending_label']?.toString(),
+        governorateCode: _nonEmpty(json['governorateCode']),
+        governorateName: _nonEmpty(json['governorateName']) ?? iraqGovernorateNameOrNull(_nonEmpty(json['governorateCode'])),
       );
 }
+
+String? _nonEmpty(Object? v) {
+  final s = v?.toString().trim() ?? '';
+  return s.isEmpty ? null : s;
+}
+
+/// قيمة فلتر «غير مصنّف» في فلتر المحافظات.
+const kUnclassifiedGovernorate = '__none__';
+
+/// محافظات العراق (نفس ترتيب الخادم) — متاحة دون اتصال من أول تشغيل.
+const kIraqGovernorates = <IraqGovernorate>[
+  IraqGovernorate(code: 'BGD', name: 'بغداد'),
+  IraqGovernorate(code: 'BAS', name: 'البصرة'),
+  IraqGovernorate(code: 'NIN', name: 'نينوى'),
+  IraqGovernorate(code: 'ERB', name: 'أربيل'),
+  IraqGovernorate(code: 'SUL', name: 'السليمانية'),
+  IraqGovernorate(code: 'KRK', name: 'كركوك'),
+  IraqGovernorate(code: 'DIY', name: 'ديالى'),
+  IraqGovernorate(code: 'ANB', name: 'الأنبار'),
+  IraqGovernorate(code: 'BAB', name: 'بابل'),
+  IraqGovernorate(code: 'KAR', name: 'كربلاء'),
+  IraqGovernorate(code: 'NAJ', name: 'النجف'),
+  IraqGovernorate(code: 'DHI', name: 'ذي قار'),
+  IraqGovernorate(code: 'MAY', name: 'ميسان'),
+  IraqGovernorate(code: 'WAS', name: 'واسط'),
+  IraqGovernorate(code: 'SAL', name: 'صلاح الدين'),
+  IraqGovernorate(code: 'MUT', name: 'المثنى'),
+  IraqGovernorate(code: 'QAD', name: 'القادسية'),
+  IraqGovernorate(code: 'DOH', name: 'دهوك'),
+  IraqGovernorate(code: 'HAL', name: 'حلبجة'),
+];
+
+String? iraqGovernorateNameOrNull(String? code) {
+  if (code == null) return null;
+  for (final g in kIraqGovernorates) {
+    if (g.code == code) return g.name;
+  }
+  return null;
+}
+
+String iraqGovernorateName(String code) => iraqGovernorateNameOrNull(code) ?? code;
 
 class StatementLine {
   const StatementLine({

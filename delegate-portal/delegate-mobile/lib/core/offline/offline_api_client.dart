@@ -366,6 +366,7 @@ class OfflineApiClient {
         if (a.requestId != null) 'requestId': a.requestId,
         if (a.isPending) 'isPending': true,
         if (a.pendingLabel != null) 'pendingLabel': a.pendingLabel,
+        if (a.governorateCode != null) 'governorateCode': a.governorateCode,
       };
     }
     await _cache.setJson(OfflineKeys.searchIndex, bySeq.values.toList());
@@ -506,6 +507,7 @@ class OfflineApiClient {
             if (branch.requestId != null) 'requestId': branch.requestId,
             if (branch.isPending) 'isPending': true,
             if (branch.pendingLabel != null) 'pendingLabel': branch.pendingLabel,
+            if (branch.governorateCode != null) 'governorateCode': branch.governorateCode,
           },
         )
         .toList();
@@ -559,7 +561,9 @@ class OfflineApiClient {
     cacheKey: OfflineKeys.children(seq),
     onlineFetch: () async {
       final data = await _api.requestJson('GET', '/accounts/$seq/children', query: leaves ? {'view': 'leaves'} : null);
-      final raw = (data['children'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final raw = await _overlayPendingGovernorates(
+        (data['children'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+      );
       await _cache.setJson(OfflineKeys.children(seq), raw);
       final accounts = raw.map(BranchAccount.fromJson).toList();
       await _indexAccounts(accounts);
@@ -599,7 +603,9 @@ class OfflineApiClient {
       cacheKey: OfflineKeys.pickable(treeSeq),
       onlineFetch: () async {
         final data = await _api.requestJson('GET', '/accounts/$treeSeq/pickable-customers');
-        final raw = (data['customers'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        final raw = await _overlayPendingGovernorates(
+          (data['customers'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+        );
         final merged = await _mergeLocalPendingPickable(treeSeq, raw);
         await _cache.setJson(OfflineKeys.pickable(treeSeq), merged);
         final accounts = merged.map(BranchAccount.fromJson).toList();
@@ -608,6 +614,102 @@ class OfflineApiClient {
       },
       offlineRead: () => _readPickableWithLocalPending(treeSeq),
     );
+  }
+
+  /// يصنّف زبوناً أو أكثر حسب المحافظة (المندوب الرئيسي). [code] = null يزيل التصنيف.
+  ///
+  /// يظهر التغيير فوراً على الجهاز؛ على الشبكة الضعيفة أو دون اتصال يُحفظ ويُرسل تلقائياً.
+  Future<void> setCustomerGovernorate(List<String> seqs, String? code) async {
+    final list = seqs.where((s) => s.isNotEmpty).toSet().toList();
+    if (list.isEmpty) return;
+    final body = <String, dynamic>{'seqs': list, 'governorateCode': code};
+
+    Future<void> queue() async {
+      await _enqueue(
+        method: 'PUT',
+        path: '/customer-governorates',
+        entityType: 'customer_governorate',
+        body: body,
+        optimisticJson: {'governorateName': code == null ? '' : iraqGovernorateName(code)},
+      );
+      await _applyGovernorateLocally(list, code);
+      _ref.read(syncEngineProvider).scheduleRetry();
+    }
+
+    // تصنيف سابق ما زال بانتظار الإرسال: نحافظ على الترتيب بإضافة هذا خلفه.
+    if (!_online || await _hasPendingGovernorates()) return queue();
+    try {
+      await _api.requestJson('PUT', '/customer-governorates', body: body).timeout(const Duration(seconds: 10));
+      await _applyGovernorateLocally(list, code);
+    } on TimeoutException {
+      // العملية متكررة الأثر (idempotent) — إعادة إرسالها آمنة.
+      await queue();
+    } on ApiException catch (e) {
+      final s = e.statusCode;
+      if (s == 401 || (s != null && s < 500 && s != 408 && s != 429)) rethrow;
+      await queue();
+    } on DioException catch (e) {
+      final s = e.response?.statusCode;
+      if (s == 401) throw ApiException('انتهت الجلسة', statusCode: 401);
+      if (s != null && s < 500 && s != 408 && s != 429) throw ApiException(_apiNetworkMessage(e), statusCode: s);
+      await queue();
+    }
+  }
+
+  Future<List<OutboxEntry>> _pendingGovernorateEntries() async =>
+      (await _outbox.all()).where((e) => e.entityType == 'customer_governorate' && !e.isFailed).toList();
+
+  Future<bool> _hasPendingGovernorates() async => (await _pendingGovernorateEntries()).isNotEmpty;
+
+  /// يطبّق التصنيفات المعلّقة على بيانات الخادم حتى لا «يرجع» التصنيف قبل وصوله.
+  Future<List<Map<String, dynamic>>> _overlayPendingGovernorates(List<Map<String, dynamic>> rows) async {
+    final entries = await _pendingGovernorateEntries();
+    if (entries.isEmpty) return rows;
+    final overlay = <String, String?>{};
+    for (final e in entries) {
+      final seqs = e.body?['seqs'];
+      if (seqs is! List) continue;
+      final code = e.body?['governorateCode'] as String?;
+      for (final s in seqs) {
+        overlay['$s'] = code;
+      }
+    }
+    return rows.map((row) {
+      final seq = '${row['seq'] ?? ''}';
+      if (!overlay.containsKey(seq)) return row;
+      final code = overlay[seq];
+      return {...row, 'governorateCode': code, 'governorateName': code == null ? null : iraqGovernorateName(code)};
+    }).toList();
+  }
+
+  /// يحدّث كل النسخ المحلية التي تعرض هؤلاء الزبائن (قوائم الأشجار، منتقي الزبائن، فهرس البحث).
+  Future<void> _applyGovernorateLocally(List<String> seqs, String? code) async {
+    final target = seqs.toSet();
+    final name = code == null ? null : iraqGovernorateName(code);
+
+    Future<void> patch(String key) async {
+      final raw = await _cache.getJson(key);
+      if (raw is! List) return;
+      var changed = false;
+      final next = raw.map((e) {
+        final m = Map<String, dynamic>.from(e as Map);
+        if (!target.contains('${m['seq'] ?? ''}')) return m;
+        changed = true;
+        return {...m, 'governorateCode': code, 'governorateName': name};
+      }).toList();
+      if (changed) await _cache.setJson(key, next);
+    }
+
+    final trees = await _cache.getJson(OfflineKeys.trees);
+    if (trees is List) {
+      for (final t in trees) {
+        final seq = '${(t as Map)['seq'] ?? ''}';
+        if (seq.isEmpty) continue;
+        await patch(OfflineKeys.children(seq));
+        await patch(OfflineKeys.pickable(seq));
+      }
+    }
+    await patch(OfflineKeys.searchIndex);
   }
 
   Future<AccountStatement> getStatement(String seq) => _withCache(

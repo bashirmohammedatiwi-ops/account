@@ -20,6 +20,7 @@ const {
 const { getInvoiceForExport, canAgentAccessInvoice } = require('../lib/invoices');
 const { buildStatementPdf, buildInvoicePdf } = require('../lib/pdf-export');
 const { queryAgentSalesReport } = require('../lib/sales-reports');
+const { attachGovernorates, assignGovernorates, canEditGovernorates } = require('../lib/customer-governorates');
 
 const router = express.Router();
 
@@ -126,7 +127,12 @@ router.get('/accounts/:seq/children', authAgent, (req, res) => {
     rootSeq,
     includeGroupPath: useLeaves
   }));
-  res.json({ ok: true, children, view: useLeaves ? 'leaves' : 'direct' });
+  res.json({
+    ok: true,
+    children: attachGovernorates(req.agent.id, children),
+    view: useLeaves ? 'leaves' : 'direct',
+    canEditGovernorates: canEditGovernorates(req.agent.id)
+  });
 });
 
 router.get('/accounts/:seq/pickable-customers', authAgent, (req, res) => {
@@ -136,7 +142,7 @@ router.get('/accounts/:seq/pickable-customers', authAgent, (req, res) => {
     const customers = q.length >= 2
       ? searchPickableCustomers(req.agent.id, req.params.seq, q)
       : listPickableCustomers(req.agent.id, req.params.seq);
-    res.json({ ok: true, customers });
+    res.json({ ok: true, customers: attachGovernorates(req.agent.id, customers) });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
@@ -277,8 +283,19 @@ router.get('/search', authAgent, (req, res) => {
 
   res.json({
     ok: true,
-    results: merged.slice(0, 60)
+    results: attachGovernorates(req.agent.id, merged.slice(0, 60))
   });
+});
+
+/** تصنيف زبون أو أكثر حسب المحافظة (المندوب الرئيسي فقط). governorateCode = null يزيل التصنيف. */
+router.put('/customer-governorates', authAgent, (req, res) => {
+  const { seqs, governorateCode } = req.body || {};
+  try {
+    const result = assignGovernorates(req.agent.id, seqs, governorateCode ?? null);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(err.status || 400).json({ ok: false, error: err.message });
+  }
 });
 
 module.exports = router;
