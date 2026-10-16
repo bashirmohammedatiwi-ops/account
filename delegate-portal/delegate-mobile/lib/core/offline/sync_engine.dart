@@ -29,11 +29,13 @@ class SyncStatus {
 
   final bool syncing;
   final int pendingCount;
+
   /// عمليات رفضها الخادم عدة مرات — تنتظر قرار المندوب.
   final int failedCount;
   final DateTime? lastSyncAt;
   final String? lastError;
   final bool prefetching;
+
   /// 0..1 أثناء تنزيل البيانات للعمل دون اتصال.
   final double? prefetchProgress;
   final String? prefetchLabel;
@@ -50,18 +52,17 @@ class SyncStatus {
     double? prefetchProgress,
     String? prefetchLabel,
     DateTime? lastPrefetchAt,
-  }) =>
-      SyncStatus(
-        syncing: syncing ?? this.syncing,
-        pendingCount: pendingCount ?? this.pendingCount,
-        failedCount: failedCount ?? this.failedCount,
-        lastSyncAt: lastSyncAt ?? this.lastSyncAt,
-        lastError: clearError ? null : (lastError ?? this.lastError),
-        prefetching: prefetching ?? this.prefetching,
-        prefetchProgress: (prefetching ?? this.prefetching) ? (prefetchProgress ?? this.prefetchProgress) : null,
-        prefetchLabel: (prefetching ?? this.prefetching) ? (prefetchLabel ?? this.prefetchLabel) : null,
-        lastPrefetchAt: lastPrefetchAt ?? this.lastPrefetchAt,
-      );
+  }) => SyncStatus(
+    syncing: syncing ?? this.syncing,
+    pendingCount: pendingCount ?? this.pendingCount,
+    failedCount: failedCount ?? this.failedCount,
+    lastSyncAt: lastSyncAt ?? this.lastSyncAt,
+    lastError: clearError ? null : (lastError ?? this.lastError),
+    prefetching: prefetching ?? this.prefetching,
+    prefetchProgress: (prefetching ?? this.prefetching) ? (prefetchProgress ?? this.prefetchProgress) : null,
+    prefetchLabel: (prefetching ?? this.prefetching) ? (prefetchLabel ?? this.prefetchLabel) : null,
+    lastPrefetchAt: lastPrefetchAt ?? this.lastPrefetchAt,
+  );
 }
 
 class SyncStatusNotifier extends Notifier<SyncStatus> {
@@ -112,8 +113,10 @@ class SyncEngine {
   SyncEngine(this._ref);
 
   static const lastPrefetchPrefsKey = 'edari_last_offline_prefetch';
+
   /// بعد هذا العدد من الرفض من الخادم يتوقف الإرسال التلقائي ويُعرض للمندوب.
   static const maxServerRejections = 5;
+
   /// أقل مدة بين تنزيلين تلقائيين للنسخة الكاملة.
   static const autoPrefetchInterval = Duration(hours: 6);
 
@@ -123,6 +126,42 @@ class SyncEngine {
   Future<void>? _prefetchInFlight;
 
   bool get _online => _ref.read(connectivityProvider).isOnline;
+
+  /// فواصل إعادة المحاولة التلقائية على الشبكة الضعيفة (تتصاعد ثم تثبت على الأخيرة).
+  static const retryDelays = [
+    Duration(seconds: 4),
+    Duration(seconds: 8),
+    Duration(seconds: 15),
+    Duration(seconds: 30),
+    Duration(seconds: 60),
+  ];
+
+  Timer? _retryTimer;
+  int _retryStep = 0;
+
+  /// يجدول محاولة إرسال قريبة مع تباعد متزايد — دون انتظار دورة التحديث (30 ثانية)
+  /// أو عودة الاتصال الكاملة. آمن للاستدعاء المتكرر.
+  void scheduleRetry({bool reset = false}) {
+    if (reset) _retryStep = 0;
+    if (_retryTimer?.isActive ?? false) return;
+    final delay = retryDelays[_retryStep.clamp(0, retryDelays.length - 1)];
+    if (_retryStep < retryDelays.length - 1) _retryStep++;
+    _retryTimer = Timer(delay, () async {
+      _retryTimer = null;
+      if (!_ref.read(authProvider).isAuthenticated) return;
+      if (!_online) await _ref.read(connectivityProvider.notifier).probe();
+      if (_online) {
+        await syncPending();
+      } else {
+        await _ref.read(syncStatusProvider.notifier).refreshPendingCount();
+      }
+      if (_ref.read(syncStatusProvider).pendingCount > 0) {
+        scheduleRetry();
+      } else {
+        _retryStep = 0;
+      }
+    });
+  }
 
   /// يرسل العمليات المحفوظة محلياً بالترتيب. يتوقف عند انقطاع الشبكة دون احتساب محاولة.
   Future<void> syncPending() async {
@@ -157,6 +196,9 @@ class SyncEngine {
       final entries = await outbox.pending();
       String? lastError;
       for (final entry in entries) {
+        if (entry.entityType == 'order' && client.isOrderInFlight('${entry.body?['clientRequestId'] ?? ''}')) {
+          continue;
+        }
         try {
           await _processEntry(api, entry);
           await _dropOutboxOptimistic(entry);
@@ -193,8 +235,11 @@ class SyncEngine {
       await notifier.refreshPendingCount();
       if (lastError == null) {
         notifier.markSynced();
+        _retryStep = 0;
       } else {
         notifier.setError(lastError);
+        // إعادة سريعة متدرجة بدل انتظار دورة التحديث التالية.
+        scheduleRetry();
       }
       if (sent > 0) _ref.read(delegateDataRefreshProvider)();
     } finally {
@@ -237,8 +282,10 @@ class SyncEngine {
   /// تلقائياً مرة كل [autoPrefetchInterval]، أو فوراً عند [force].
   /// [statements] ينزّل كشف حساب كل زبون أيضاً (أبطأ).
   Future<void> prefetchForOffline({bool force = false, bool statements = false}) {
-    return _prefetchInFlight ??= _prefetchImpl(force: force, statements: statements)
-        .whenComplete(() => _prefetchInFlight = null);
+    return _prefetchInFlight ??= _prefetchImpl(
+      force: force,
+      statements: statements,
+    ).whenComplete(() => _prefetchInFlight = null);
   }
 
   Future<void> _prefetchImpl({required bool force, required bool statements}) async {
@@ -249,8 +296,7 @@ class SyncEngine {
     final prefs = await SharedPreferences.getInstance();
     if (!force) {
       final last = prefs.getInt(lastPrefetchPrefsKey);
-      if (last != null &&
-          DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(last)) < autoPrefetchInterval) {
+      if (last != null && DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(last)) < autoPrefetchInterval) {
         return;
       }
     }
@@ -290,7 +336,11 @@ class SyncEngine {
       final trees = await client.cacheOnly(() => client.getTrees()) ?? const <AccountTree>[];
       final leaves = <BranchAccount>[];
       for (var i = 0; i < trees.length; i++) {
-        notifier.setPrefetch(active: true, progress: 0.1 + 0.25 * (i / trees.length), label: 'الزبائن: ${trees[i].name1}');
+        notifier.setPrefetch(
+          active: true,
+          progress: 0.1 + 0.25 * (i / trees.length),
+          label: 'الزبائن: ${trees[i].name1}',
+        );
         await safe(() async {
           final children = await client.getChildren(trees[i].seq);
           leaves.addAll(children);
@@ -422,10 +472,7 @@ class SyncEngine {
         await api.markDeliveryReceiptPrinted(_idFromPath(entry.path));
         return;
       case 'delivery_handover':
-        await api.markDeliveryHandoverReceived(
-          _idFromPath(entry.path),
-          note: entry.body?['note'] as String?,
-        );
+        await api.markDeliveryHandoverReceived(_idFromPath(entry.path), note: entry.body?['note'] as String?);
         return;
       case 'customer_request':
         final body = entry.body!;
@@ -461,18 +508,18 @@ class SyncEngine {
   }
 
   List<OrderLine> _parseOrderLines(List raw) => raw.map((e) {
-        final m = Map<String, dynamic>.from(e as Map);
-        return OrderLine(
-          productId: m['productId'] as int? ?? 0,
-          matName: '${m['matName'] ?? ''}',
-          quant: m['quant'] as num? ?? 0,
-          bonus: m['bonus'] as num? ?? 0,
-          tester: m['tester'] as num? ?? 0,
-          unitPrice: m['unitPrice'] as num? ?? m['price'] as num? ?? 0,
-          barcode: m['barcode'] as String?,
-          lineTotal: m['lineTotal'] as num?,
-        );
-      }).toList();
+    final m = Map<String, dynamic>.from(e as Map);
+    return OrderLine(
+      productId: m['productId'] as int? ?? 0,
+      matName: '${m['matName'] ?? ''}',
+      quant: m['quant'] as num? ?? 0,
+      bonus: m['bonus'] as num? ?? 0,
+      tester: m['tester'] as num? ?? 0,
+      unitPrice: m['unitPrice'] as num? ?? m['price'] as num? ?? 0,
+      barcode: m['barcode'] as String?,
+      lineTotal: m['lineTotal'] as num?,
+    );
+  }).toList();
 
   int _idFromPath(String path) {
     final parts = path.split('/').where((p) => p.isNotEmpty);

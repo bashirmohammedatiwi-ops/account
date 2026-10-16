@@ -12,7 +12,7 @@ const {
   groupProductsByShade
 } = require('../lib/products');
 const {
-  createOrder,
+  createAndSubmitOrder,
   updateOrder,
   submitOrder,
   listOrders,
@@ -82,7 +82,7 @@ router.post('/orders', authAgent, (req, res) => {
     return res.status(403).json({ ok: false, error: err.message });
   }
   try {
-    let order = createOrder(req.agent.id, {
+    const order = createAndSubmitOrder(req.agent.id, {
       customerAccSeq,
       customerRequestId,
       catalogBranchId,
@@ -91,9 +91,6 @@ router.post('/orders', authAgent, (req, res) => {
       clientRequestId,
       submit: !!submit
     });
-    if (submit && order?.rawStatus === 'draft') {
-      order = submitOrder(order.id, req.agent.id);
-    }
     res.json({ ok: true, order });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });

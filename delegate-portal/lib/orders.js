@@ -550,6 +550,13 @@ function findRecentDuplicateOrder(agentId, data) {
   return null;
 }
 
+/** مسودة بقيت بلا بنود من محاولة سابقة متقطعة — تُكمل من إعادة الإرسال بدل أن تعلق. */
+function fillEmptyDraftLines(orderId, lines) {
+  if (!lines?.length) return;
+  const count = db.prepare('SELECT COUNT(*) AS c FROM order_lines WHERE order_id = ?').get(orderId).c;
+  if (!count) replaceLines(orderId, lines);
+}
+
 function createOrder(agentId, data) {
   const clientRequestId = String(data.clientRequestId || '').trim();
   if (clientRequestId) {
@@ -557,6 +564,7 @@ function createOrder(agentId, data) {
       SELECT id, status FROM orders WHERE agent_id = ? AND client_request_id = ? LIMIT 1
     `).get(agentId, clientRequestId);
     if (existing) {
+      if (existing.status === 'draft') fillEmptyDraftLines(existing.id, data.lines);
       if (data.submit && existing.status === 'draft') {
         return submitOrder(existing.id, agentId) || loadOrder(existing.id);
       }
@@ -608,6 +616,22 @@ function createOrder(agentId, data) {
   if (data.lines?.length) replaceLines(id, data.lines);
   logEvent(id, { fromStatus: '', toStatus: 'draft', actorType: 'agent', actorId: agentId, note: 'إنشاء طلب' });
   return loadOrder(id);
+}
+
+/**
+ * إنشاء الطلب وبنوده وإرساله كعملية واحدة: إن فشل أي جزء لا تبقى مسودة فارغة
+ * تحمل clientRequestId فتعلق إعادة الإرسال من التطبيق على الشبكة الضعيفة.
+ */
+const createAndSubmitOrderTx = db.transaction((agentId, data) => {
+  let order = createOrder(agentId, data);
+  if (data.submit && order?.rawStatus === 'draft') {
+    order = submitOrder(order.id, agentId);
+  }
+  return order;
+});
+
+function createAndSubmitOrder(agentId, data) {
+  return createAndSubmitOrderTx(agentId, data);
 }
 
 function updateOrder(orderId, agentId, data) {
@@ -867,6 +891,7 @@ module.exports = {
   statusLabel,
   loadOrder,
   createOrder,
+  createAndSubmitOrder,
   createShorjaOrder,
   updateOrder,
   submitOrder,

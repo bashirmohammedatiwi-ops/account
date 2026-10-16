@@ -318,7 +318,7 @@ class _EdOrderInvoiceSheetState extends ConsumerState<EdOrderInvoiceSheet> {
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(order.id < 0 ? 'حُفظ الطلب على الجهاز — سيُرسل تلقائياً عند عودة الاتصال' : 'تم إرسال الطلب'),
+          content: Text(order.id < 0 ? 'حُفظ الطلب على الجهاز ✓ الشبكة ضعيفة — سيُرسل تلقائياً ويظهر في «طلباتي»' : 'تم إرسال الطلب'),
         ));
         context.go('/orders');
       }
