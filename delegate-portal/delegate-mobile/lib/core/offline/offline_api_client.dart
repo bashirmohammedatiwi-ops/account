@@ -413,7 +413,7 @@ class OfflineApiClient {
 
   Future<void> _resolveOrderOutbox(String clientRequestId) async {
     if (clientRequestId.isEmpty) return;
-    final entries = await _outbox.pending();
+    final entries = await _outbox.all();
     for (final entry in entries) {
       if (entry.entityType != 'order') continue;
       final cr = _orderClientRequestId(entry.body ?? {});
@@ -719,7 +719,7 @@ class OfflineApiClient {
               ? cachedJson.map((e) => Map<String, dynamic>.from(e as Map)).toList()
               : <Map<String, dynamic>>[];
           final keepLocalIds = await _pendingOutboxLocalIdsFor('order');
-          final synced = _syncOrdersWithServer(raw, cachedRaw, keepLocalIds: keepLocalIds);
+          final synced = await _labelLocalRows(_syncOrdersWithServer(raw, cachedRaw, keepLocalIds: keepLocalIds));
           await _cache.setJson(cacheKey, synced);
           return synced.map((e) => Order.fromJson(e)).toList();
         },
@@ -737,14 +737,23 @@ class OfflineApiClient {
 
   Future<Order> getOrder(int id) async {
     if (id < 0) {
+      Map<String, dynamic>? found;
       final raw = await _cache.getJson(OfflineKeys.orders);
       if (raw is List) {
         for (final e in raw) {
           final m = Map<String, dynamic>.from(e as Map);
-          if (m['id'] == id) return Order.fromJson(m);
+          if (_rowId(m['id']) == id) found = m;
         }
       }
-      throw ApiException('الطلب غير موجود محلياً');
+      // احتياط: الصف موجود في صندوق الإرسال حتى لو استُبدلت القائمة المخزّنة.
+      if (found == null) {
+        for (final e in await _outbox.all()) {
+          final opt = e.optimisticJson;
+          if (opt != null && _rowId(opt['id']) == id) found = Map<String, dynamic>.from(opt);
+        }
+      }
+      if (found != null) return Order.fromJson((await _labelLocalRows([found])).first);
+      throw ApiException('الطلب غير موجود محلياً — ربما أُرسل بالفعل، حدّث «طلباتي»');
     }
     return _withCache(
       cacheKey: OfflineKeys.orderDetail(id),
@@ -776,6 +785,7 @@ class OfflineApiClient {
     required String? notes,
     required List<OrderLine> lines,
     String? clientRequestId,
+    String? displayCustomerName,
   }) async {
     final id = (clientRequestId != null && clientRequestId.isNotEmpty) ? clientRequestId : _clientRequestId();
     final body = {
@@ -796,6 +806,8 @@ class OfflineApiClient {
       'createdAt': DateTime.now().toIso8601String(),
       'totalAmount': total,
       'notes': notes,
+      if ((displayCustomerName ?? '').trim().isNotEmpty) 'customerName': displayCustomerName!.trim(),
+      if (customerAccSeq != null && customerAccSeq.isNotEmpty) 'customerAccSeq': customerAccSeq,
       'localPending': true,
       'lines': lines.map((l) => l.toJson()).toList(),
       'clientRequestId': id,
@@ -921,8 +933,10 @@ class OfflineApiClient {
     return _api.getSalesReport(treeSeq: treeSeq, dateFrom: dateFrom, dateTo: dateTo, limit: limit, offset: offset);
   }
 
+  /// معرّفات العناصر المحلية التي لم تصل الخادم بعد (بانتظار الإرسال أو رفضها الخادم).
+  /// المرفوضة تبقى ظاهرة في القوائم حتى يعيد المندوب إرسالها أو يحذفها — لا تختفي بصمت.
   Future<Set<int>> _pendingOutboxLocalIds() async {
-    final entries = await _outbox.pending();
+    final entries = await _outbox.all();
     final ids = <int>{};
     for (final entry in entries) {
       final opt = entry.optimisticJson;
@@ -934,7 +948,7 @@ class OfflineApiClient {
   }
 
   Future<Set<int>> _pendingOutboxLocalIdsFor(String entityType) async {
-    final entries = await _outbox.pending();
+    final entries = await _outbox.all();
     final ids = <int>{};
     for (final entry in entries) {
       if (entry.entityType != entityType) continue;
@@ -960,7 +974,7 @@ class OfflineApiClient {
         .map((r) => _rowInt(r['deliveryReceiptId'] ?? r['delivery_receipt_id']))
         .where((id) => id > 0)
         .toSet();
-    final entries = await _outbox.pending();
+    final entries = await _outbox.all();
     final keepLocalIds = <int>{};
 
     for (final entry in entries) {
@@ -990,10 +1004,36 @@ class OfflineApiClient {
     final cachedRaw = cachedJson is List
         ? cachedJson.map((e) => Map<String, dynamic>.from(e as Map)).toList()
         : <Map<String, dynamic>>[];
-    final synced = _syncReceiptsWithServer(online, cachedRaw, keepLocalIds: keepLocalIds);
+    final synced = await _labelLocalRows(_syncReceiptsWithServer(online, cachedRaw, keepLocalIds: keepLocalIds));
     await _cache.setJson(cacheKey, synced);
     await _reconcileStaleLocalOrders();
     await _ref.read(syncStatusProvider.notifier).refreshPendingCount();
+  }
+
+  /// يحدّث حالة الصفوف المحلية حسب قائمة الإرسال: «بانتظار الإرسال» أو «لم يُرسل».
+  Future<List<Map<String, dynamic>>> _labelLocalRows(List<Map<String, dynamic>> rows) async {
+    final entries = await _outbox.all();
+    final byLocalId = <int, OutboxEntry>{};
+    for (final e in entries) {
+      final id = _rowId(e.optimisticJson?['id']);
+      if (id != 0) byLocalId[id] = e;
+    }
+    if (byLocalId.isEmpty) return rows;
+    return rows.map((row) {
+      final entry = byLocalId[_rowId(row['id'])];
+      if (entry == null) return row;
+      return {
+        ...row,
+        if (entry.isFailed) ...{
+          'status': 'rejected',
+          'statusLabel': 'لم يُرسل — راجع مركز المزامنة',
+          'syncError': entry.error ?? '',
+        } else ...{
+          'status': row['status'] == 'rejected' ? 'pending' : row['status'],
+          'statusLabel': 'بانتظار الإرسال',
+        },
+      };
+    }).toList();
   }
 
   Future<void> _reconcileStaleLocalOrders() async {
@@ -1004,7 +1044,7 @@ class OfflineApiClient {
         <Map<String, dynamic>>[];
     final onlineCrIds = online.map(_orderClientRequestId).where((s) => s.isNotEmpty).toSet();
 
-    final entries = await _outbox.pending();
+    final entries = await _outbox.all();
     final keepLocalIds = <int>{};
     for (final entry in entries) {
       if (entry.entityType != 'order') continue;
@@ -1022,7 +1062,7 @@ class OfflineApiClient {
     final cachedRaw = cachedJson is List
         ? cachedJson.map((e) => Map<String, dynamic>.from(e as Map)).toList()
         : <Map<String, dynamic>>[];
-    final synced = _syncOrdersWithServer(online, cachedRaw, keepLocalIds: keepLocalIds);
+    final synced = await _labelLocalRows(_syncOrdersWithServer(online, cachedRaw, keepLocalIds: keepLocalIds));
     await _cache.setJson(OfflineKeys.orders, synced);
   }
 
@@ -1060,7 +1100,7 @@ class OfflineApiClient {
               ? cachedJson.map((e) => Map<String, dynamic>.from(e as Map)).toList()
               : <Map<String, dynamic>>[];
           final keepLocalIds = await _pendingOutboxLocalIds();
-          final synced = _syncReceiptsWithServer(raw, cachedRaw, keepLocalIds: keepLocalIds);
+          final synced = await _labelLocalRows(_syncReceiptsWithServer(raw, cachedRaw, keepLocalIds: keepLocalIds));
           await _cache.setJson(cacheKey, synced);
           return _parseReceiptList(synced);
         },

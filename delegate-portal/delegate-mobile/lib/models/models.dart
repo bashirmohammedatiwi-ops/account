@@ -443,6 +443,7 @@ class Order {
     this.notes,
     this.totalAmount,
     this.lines = const [],
+    this.syncError,
   });
 
   final int id;
@@ -455,6 +456,11 @@ class Order {
   final String? notes;
   final num? totalAmount;
   final List<OrderLine> lines;
+  /// سبب رفض الخادم لطلب محفوظ محلياً (إن وُجد).
+  final String? syncError;
+
+  /// طلب على الجهاز لم يصل الخادم بعد.
+  bool get isLocal => id < 0;
 
   factory Order.fromJson(Map<String, dynamic> json) => Order(
         id: _jsonInt(json['id']),
@@ -466,6 +472,7 @@ class Order {
         catalogBranchName: json['catalogBranchName'] as String? ?? json['catalog_branch_name'] as String?,
         notes: json['notes'] as String?,
         totalAmount: json['totalAmount'] as num? ?? json['total_amount'] as num?,
+        syncError: (json['syncError'] as String?)?.trim().isEmpty ?? true ? null : json['syncError'] as String,
         lines: (json['lines'] as List? ?? []).map((e) {
           final m = Map<String, dynamic>.from(e as Map);
           return OrderLine(

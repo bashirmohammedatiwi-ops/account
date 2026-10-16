@@ -10,6 +10,7 @@ import '../../core/auth/auth_session.dart';
 import '../../core/api/delegate_api.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_provider.dart';
+import '../../core/offline/sync_center.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
@@ -305,6 +306,7 @@ class _EdOrderInvoiceSheetState extends ConsumerState<EdOrderInvoiceSheet> {
             notes: draftNotifier.notes,
             lines: lines,
             clientRequestId: clientRequestId,
+            displayCustomerName: customer.name1,
           );
       draftNotifier.clear();
       final agentId = ref.read(authProvider).agent?.id;
@@ -614,12 +616,65 @@ class OrderDetailBody extends ConsumerWidget {
         loading: () => const LoadingView(),
         error: (e, _) => ErrorView(message: e.displayMessage, onRetry: () => ref.invalidate(orderDetailProvider(id))),
         data: (order) {
-          return EdOrderInvoiceDetailView(
+          final detail = EdOrderInvoiceDetailView(
             order: order,
             statusLabel: displayOrderStatusLabel(status: order.status, statusLabel: order.statusLabel),
             statusColor: AppTheme.orderStatusColor(order.status),
           );
+          if (!order.isLocal) return detail;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _LocalOrderBanner(order: order),
+              Expanded(child: detail),
+            ],
+          );
         },
+      ),
+    );
+  }
+}
+
+/// طلب محفوظ على الجهاز: يوضح أنه لم يصل الخادم بعد، وسبب الرفض إن وُجد.
+class _LocalOrderBanner extends StatelessWidget {
+  const _LocalOrderBanner({required this.order});
+
+  final Order order;
+
+  @override
+  Widget build(BuildContext context) {
+    final failed = order.syncError != null;
+    final color = failed ? AppColors.danger : AppColors.warning;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppColors.radius),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(failed ? Icons.error_outline_rounded : Icons.schedule_send_rounded, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  failed ? 'لم يُرسل هذا الطلب — رفضه الخادم' : 'الطلب محفوظ على الجهاز وسيُرسل تلقائياً',
+                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: color),
+                ),
+                if (failed)
+                  Text(order.syncError!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: () => showSyncCenter(context),
+            child: Text(failed ? 'معالجة' : 'التفاصيل'),
+          ),
+        ],
       ),
     );
   }
